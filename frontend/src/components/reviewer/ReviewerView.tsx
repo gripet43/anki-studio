@@ -1214,20 +1214,36 @@ export const ReviewerView: React.FC = () => {
                 isDark ? 'border-white/[0.06]' : 'border-[#ECECF2]'
               }`}
             >
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
-                  onClick={() => appActions.toggleSuspendCurrentReviewCard()}
-                  className={`h-8 rounded-xl border text-[11px] font-medium cursor-pointer ${
+                  type="button"
+                  onClick={() => appActions.buryCurrentReviewCard()}
+                  className={`h-8 rounded-xl border text-[11px] font-medium cursor-pointer transition-colors ${
                     isDark
                       ? 'bg-[#1A1B22] border-white/[0.08] text-[#C8C8D2] hover:bg-white/10'
                       : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#EFEFF4]'
                   }`}
+                  title={isZh ? '搁置此卡片至明日复习' : 'Bury card until tomorrow'}
+                >
+                  {isZh ? '搁置卡片' : 'Bury'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => appActions.toggleSuspendCurrentReviewCard()}
+                  className={`h-8 rounded-xl border text-[11px] font-medium cursor-pointer transition-colors ${
+                    isDark
+                      ? 'bg-[#1A1B22] border-white/[0.08] text-[#C8C8D2] hover:bg-white/10'
+                      : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#EFEFF4]'
+                  }`}
+                  title={isZh ? '长期暂停此卡片，移出学习队列' : 'Suspend card indefinitely'}
                 >
                   {currentCard.suspended ? t('unsuspendCardBtn') : t('suspendCardBtn')}
                 </button>
 
                 {confirmingDelete ? (
                   <button
+                    type="button"
                     onClick={() => {
                       setConfirmingDelete(false);
                       appActions.deleteCurrentReviewCard();
@@ -1238,6 +1254,7 @@ export const ReviewerView: React.FC = () => {
                   </button>
                 ) : (
                   <button
+                    type="button"
                     onClick={() => setConfirmingDelete(true)}
                     className="h-8 rounded-xl border text-[11px] font-medium cursor-pointer bg-[var(--status-danger-soft)] border-[var(--status-danger)]/30 text-[var(--status-danger)] hover:opacity-90"
                   >

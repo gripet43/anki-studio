@@ -234,6 +234,8 @@ class MockCol:
         self.removed_notes = []
         self.suspended_cids = []
         self.unsuspended_cids = []
+        self.buried_cids = []
+        self.unburied_cids = []
         self.set_due_date_calls = []
 
         col_self = self
@@ -268,6 +270,20 @@ class MockCol:
             @staticmethod
             def unsuspend_cards(cids):
                 col_self.unsuspended_cids.extend(cids)
+                for cid in cids:
+                    if cid in col_self._cards:
+                        col_self._cards[cid].queue = 2
+
+            @staticmethod
+            def bury_cards(cids, manual=True):
+                col_self.buried_cids.extend(cids)
+                for cid in cids:
+                    if cid in col_self._cards:
+                        col_self._cards[cid].queue = -3 if manual else -2
+
+            @staticmethod
+            def unbury_cards(cids):
+                col_self.unburied_cids.extend(cids)
                 for cid in cids:
                     if cid in col_self._cards:
                         col_self._cards[cid].queue = 2
@@ -591,6 +607,18 @@ class BridgeRouterAuditTest(unittest.TestCase):
         batch_del = self._call("batch_action", {"actionType": "delete", "cardIds": ["202"]})
         self.assertEqual(batch_del["status"], "success")
         self.assertIn(102, self.mock_col.removed_notes)
+
+        # Test toggle_bury and batch bury / unbury
+        bury_res = self._call("toggle_bury", {"cardId": "201", "bury": True})
+        self.assertEqual(bury_res["status"], "success")
+        self.assertIn(201, self.mock_col.buried_cids)
+
+        batch_bury = self._call("batch_action", {"actionType": "bury", "cardIds": ["201"]})
+        self.assertEqual(batch_bury["status"], "success")
+
+        batch_unbury = self._call("batch_action", {"actionType": "unbury", "cardIds": ["201"]})
+        self.assertEqual(batch_unbury["status"], "success")
+        self.assertIn(201, self.mock_col.unburied_cids)
 
     def test_08_copy_to_clipboard_bridge(self):
         """Verify copy_to_clipboard bridge action handles empty and valid strings gracefully."""

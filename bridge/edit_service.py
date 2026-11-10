@@ -274,6 +274,22 @@ class EditService:
 
         return {"changed": True, "cardIds": [str(c) for c in card_ids], "suspended": suspend}
 
+    def toggle_bury_card(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Buries (postpones until tomorrow) or unburies one or more cards."""
+        col = self.col
+        card_ids = [int(cid) for cid in data.get("cardIds", []) if str(cid).isdigit()]
+        if "cardId" in data and str(data["cardId"]).isdigit():
+            card_ids.append(int(data["cardId"]))
+
+        bury = bool(data.get("bury", True))
+        if col and card_ids:
+            if bury:
+                col.sched.bury_cards(card_ids, manual=True)
+            else:
+                col.sched.unbury_cards(card_ids)
+
+        return {"changed": True, "cardIds": [str(c) for c in card_ids], "buried": bury}
+
     def delete_cards(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Deletes notes corresponding to given cardIds or noteIds."""
         col = self.col

@@ -30,6 +30,7 @@ export const StatsView: React.FC = () => {
   const learnPct = (maturityBreakdown.learning / totalCards) * 100;
   const newPct = (maturityBreakdown.newCards / totalCards) * 100;
   const suspPct = (maturityBreakdown.suspended / totalCards) * 100;
+  const buriedPct = ((maturityBreakdown.buried || 0) / totalCards) * 100;
 
   const formatPctLabel = (count: number, rawPct: number) => {
     if (count === 0) return '0%';
@@ -190,13 +191,14 @@ export const StatsView: React.FC = () => {
           </div>
 
           <div className="my-4 space-y-3">
-            {/* Seamless 100% full-width stacked progress bar including suspended */}
+            {/* Seamless 100% full-width stacked progress bar including suspended & buried */}
             <div className="w-full h-3 rounded-full overflow-hidden flex bg-[#ECECF2] dark:bg-[#2A2C36]">
               <div style={{ width: `${maturePct}%` }} className="bg-[var(--status-success)]" title="Mature" />
               <div style={{ width: `${youngPct}%`, backgroundColor: brandHex }} title="Young" />
               <div style={{ width: `${learnPct}%` }} className="bg-[var(--status-warning)]" title="Learning" />
               <div style={{ width: `${newPct}%` }} className="bg-[var(--status-info)]" title="New" />
-              <div style={{ width: `${suspPct}%` }} className="bg-[#8E8E93]/70" title="Suspended" />
+              <div style={{ width: `${suspPct}%` }} className="bg-[#FF9F0A]" title="Suspended" />
+              <div style={{ width: `${buriedPct}%` }} className="bg-[#8E8E93]/70" title="Buried" />
             </div>
 
             <div className="space-y-2 pt-1 text-[12px]">
@@ -240,13 +242,23 @@ export const StatsView: React.FC = () => {
                 </span>
               </div>
 
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#FF9F0A]" />
+                  <span>{isZh ? '已暂停 (Suspended)' : 'Suspended'}</span>
+                </span>
+                <span className="font-medium font-mono text-[#FF9F0A]">
+                  {maturityBreakdown.suspended.toLocaleString()} ({formatPctLabel(maturityBreakdown.suspended, suspPct)})
+                </span>
+              </div>
+
               <div className="flex items-center justify-between text-[#8E8E93]">
                 <span className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#8E8E93]" />
-                  <span>{isZh ? '已挂起 (Suspended)' : 'Suspended'}</span>
+                  <span>{isZh ? '已搁置 (Buried)' : 'Buried'}</span>
                 </span>
                 <span className="font-medium font-mono">
-                  {maturityBreakdown.suspended.toLocaleString()} ({formatPctLabel(maturityBreakdown.suspended, suspPct)})
+                  {(maturityBreakdown.buried || 0).toLocaleString()} ({formatPctLabel(maturityBreakdown.buried || 0, buriedPct)})
                 </span>
               </div>
             </div>

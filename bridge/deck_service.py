@@ -261,6 +261,7 @@ class DeckService:
             m_row = col.db.first(
                 "SELECT "
                 "coalesce(sum(case when queue = -1 then 1 else 0 end), 0), "
+                "coalesce(sum(case when queue in (-2, -3) then 1 else 0 end), 0), "
                 "coalesce(sum(case when queue >= 0 and type = 0 then 1 else 0 end), 0), "
                 "coalesce(sum(case when queue >= 0 and type in (1, 3) then 1 else 0 end), 0), "
                 "coalesce(sum(case when queue >= 0 and type = 2 and ivl < 21 then 1 else 0 end), 0), "
@@ -268,10 +269,11 @@ class DeckService:
                 "FROM cards"
             )
             suspended_cnt = int(m_row[0] or 0) if m_row else 0
-            new_cnt = int(m_row[1] or 0) if m_row else 0
-            learning_cnt = int(m_row[2] or 0) if m_row else 0
-            young_cnt = int(m_row[3] or 0) if m_row else 0
-            mature_cnt = int(m_row[4] or 0) if m_row else 0
+            buried_cnt = int(m_row[1] or 0) if m_row else 0
+            new_cnt = int(m_row[2] or 0) if m_row else 0
+            learning_cnt = int(m_row[3] or 0) if m_row else 0
+            young_cnt = int(m_row[4] or 0) if m_row else 0
+            mature_cnt = int(m_row[5] or 0) if m_row else 0
 
             # 2. Next 30 Days Forecast
             due_rows = col.db.all(
@@ -348,7 +350,8 @@ class DeckService:
                     "young": young_cnt,
                     "mature": mature_cnt,
                     "suspended": suspended_cnt,
-                    "total": new_cnt + learning_cnt + young_cnt + mature_cnt + suspended_cnt,
+                    "buried": buried_cnt,
+                    "total": new_cnt + learning_cnt + young_cnt + mature_cnt + suspended_cnt + buried_cnt,
                 },
                 "forecast30d": forecast_30d,
                 "retentionCurve": retention_curve,
@@ -647,6 +650,7 @@ class DeckService:
                 "young": 0,
                 "mature": 0,
                 "suspended": 0,
+                "buried": 0,
                 "total": 0,
             },
             "forecast30d": [

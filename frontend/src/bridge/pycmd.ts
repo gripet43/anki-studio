@@ -129,6 +129,7 @@ export interface AdvancedStatsData {
     young: number;
     mature: number;
     suspended: number;
+    buried: number;
     total: number;
   };
   forecast30d: ForecastDayItem[];
@@ -244,6 +245,7 @@ export interface ReviewCardItem {
   difficulty: number;
   lastReviewText: string;
   suspended: boolean;
+  buried?: boolean;
   flags: number;
   predictions: {
     again: string;

@@ -89,8 +89,8 @@ class ReviewService:
                 escaped_name = deck_obj["name"].replace('"', '\\"')
                 deck_clause = f'deck:"{escaped_name}" '
 
-        due_cids = list(col.find_cards(f"{deck_clause}(is:due OR is:learn)"))
-        new_cids = list(col.find_cards(f"{deck_clause}is:new"))
+        due_cids = list(col.find_cards(f"{deck_clause}(is:due OR is:learn) -is:suspended -is:buried"))
+        new_cids = list(col.find_cards(f"{deck_clause}is:new -is:suspended -is:buried"))
         combined_cids = []
         seen = set()
         for cid in due_cids + new_cids:
@@ -100,7 +100,7 @@ class ReviewService:
 
         is_preview_only = False
         if not combined_cids and include_preview:
-            all_cids = list(col.find_cards(f"{deck_clause}-is:suspended"))
+            all_cids = list(col.find_cards(f"{deck_clause}-is:suspended -is:buried"))
             combined_cids = all_cids[:limit]
             is_preview_only = True
 
@@ -340,6 +340,7 @@ class ReviewService:
                 "difficulty": difficulty,
                 "lastReviewText": last_review_text,
                 "suspended": card.queue == -1,
+                "buried": card.queue in (-2, -3),
                 "flags": int(card.flags & 7),
                 "predictions": predictions,
                 "history": history,

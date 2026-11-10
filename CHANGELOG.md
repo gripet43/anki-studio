@@ -15,6 +15,19 @@
 
 ## [Unreleased]
 
+- **[Antigravity] 彻底纠正「已暂停 (Suspended)」与「已搁置 (Buried)」状态混淆及系统全链路重构**：
+  - **原因定位**：
+    1. 概念与文案倒置：此前在 Reviewer 暂停卡片时错误提示「已挂起卡片并跳过本轮复习」，将永久性移出学习队列的「暂停 (Suspend)」与推迟至次日恢复的「搁置 (Bury)」严重混淆，且使用了非标黑话「挂起」。
+    2. 检索污染：`search_service.py` 筛选 `new` (`is:new`) 与 `review` (`is:review -is:due`) 时未排除 `-is:suspended -is:buried`，因 Anki 底层卡片暂停后仍保留原有卡片类型（`type=0` 或 `type=2`），导致已暂停/搁置卡片被混入待学卡片库；`review_service.py` 中抽取新卡时也同样因未排除而拉入了被暂停的新卡。
+    3. 能力缺失与统计账目偏差：缺少原生的 `toggle_bury`（搁置/取消搁置）桥接与卡库批量取消搁置操作；成熟度统计未统计 `queue in (-2, -3)` 导致总卡片数对不上。
+  - **修复措施**：
+    1. **术语全量归正**：全界面彻底清除「挂起/已挂起」，规范对齐 Anki 官方标准：`已暂停 (Suspended)` 与 `已搁置 (Buried)`。
+    2. **检索与会话绝对去污染**：在 [`bridge/search_service.py`](bridge/search_service.py) 中将 `due`、`new`、`review` 统一追加 `-is:suspended -is:buried`，确保各状态绝对互斥精准；在 [`bridge/review_service.py`](bridge/review_service.py) 中严格封堵暂停/搁置卡片流入复习队列。
+    3. **补齐原生搁置/取消搁置能力**：在 [`bridge/edit_service.py`](bridge/edit_service.py) 与 [`bridge/router.py`](bridge/router.py) 中新增 `toggle_bury`（直连 `col.sched.bury_cards / unbury_cards`）；在 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx) 工具抽屉中独立提供「搁置卡片 (推迟至明日)」、「暂停卡片 (长期移出)」与「删除卡片」三向独立操作；在卡库批量操作栏中，对选中的已搁置卡片支持一键「取消搁置 (Unbury)」。
+    4. **统计看板对齐**：在 [`bridge/deck_service.py`](bridge/deck_service.py) 与 [`frontend/src/components/stats/StatsView.tsx`](frontend/src/components/stats/StatsView.tsx) 中新增 `buried` 独立统计指标与灰色标记条，与 Anki 官方 Rust 统计规范 100% 对齐。
+    5. **单测防护**：在 [`tests/test_bridge.py`](tests/test_bridge.py) 中补充 `toggle_bury`、`batch_action(bury/unbury)` 以及状态互斥断言，全部 12 项测试与前端 Bundle 审计 100% 通过。
+  - **修改文件**：[`bridge/search_service.py`](bridge/search_service.py), [`bridge/review_service.py`](bridge/review_service.py), [`bridge/edit_service.py`](bridge/edit_service.py), [`bridge/deck_service.py`](bridge/deck_service.py), [`bridge/router.py`](bridge/router.py), [`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts), [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx), [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx), [`frontend/src/components/stats/StatsView.tsx`](frontend/src/components/stats/StatsView.tsx), [`frontend/src/i18n/translations.ts`](frontend/src/i18n/translations.ts), [`tests/test_bridge.py`](tests/test_bridge.py)。
+
 - **[Antigravity] 修复连续打卡「本周活跃天数」统计口径跨周污染的 Bug**：
   - **原因定位**：连续打卡卡片副标题中的「本周 {active} / {total}」指标此前在 [`bridge/deck_service.py`](bridge/deck_service.py) 中直接采用滚动 7 天窗口（`range(7)` 即今天及过去 6 天），而非自然周（周一至周日）的已过天数。当用户拥有较长连续打卡（如 18 天打卡）并在周二查看时，滚动 7 天将上周三至周日的打卡天数全部计入，导致周二仅过两天却出现「本周 7 / 7」的逻辑荒谬。
   - **修复措施**：

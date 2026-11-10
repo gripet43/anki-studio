@@ -252,7 +252,9 @@ const DICT = {
     addTagBtn: '+ 添加',
     reviewHistoryLabel: '复习历史',
     suspendCardBtn: '暂停卡片',
-    unsuspendCardBtn: '恢复卡片',
+    unsuspendCardBtn: '取消暂停',
+    buryCardBtn: '搁置卡片 (推迟至明日)',
+    unburyCardBtn: '取消搁置',
     deleteCardBtn: '删除卡片',
 
     // Library & Cmd+K
@@ -270,8 +272,10 @@ const DICT = {
     emptyLibrarySub: '你可以点击上方「重置筛选」查看全部卡片，或新建卡片',
     loadMoreCards: '加载更多卡片（已加载 {loaded} / {total} 张）',
     selectedCountBadge: '已选 {n} 张',
-    batchSuspend: '暂停 / 挂起',
-    batchUnsuspend: '取消暂停 (恢复)',
+    batchSuspend: '暂停',
+    batchUnsuspend: '取消暂停',
+    batchBury: '搁置至明日',
+    batchUnbury: '取消搁置',
     batchAddTag: '加标签',
     batchResetProgress: '重置进度',
     batchMoveDeck: '移动牌组',
@@ -439,6 +443,8 @@ const DICT = {
     reviewHistoryLabel: 'Review Log',
     suspendCardBtn: 'Suspend',
     unsuspendCardBtn: 'Unsuspend',
+    buryCardBtn: 'Bury Card',
+    unburyCardBtn: 'Unbury',
     deleteCardBtn: 'Delete Card',
 
     // Library & Cmd+K
@@ -458,6 +464,8 @@ const DICT = {
     selectedCountBadge: '{n} selected',
     batchSuspend: 'Suspend',
     batchUnsuspend: 'Unsuspend',
+    batchBury: 'Bury',
+    batchUnbury: 'Unbury',
     batchAddTag: 'Add Tag',
     batchResetProgress: 'Reset',
     batchMoveDeck: 'Move Deck',

@@ -56,9 +56,9 @@ class SearchService:
 
         status = data.get("status", "all")
         if status == "due":
-            query_parts.append("(is:due OR is:learn)")
+            query_parts.append("(is:due OR is:learn) -is:suspended -is:buried")
         elif status == "new":
-            query_parts.append("is:new")
+            query_parts.append("is:new -is:suspended -is:buried")
         elif status == "completed":
             query_parts.append("rated:1")
         elif status == "suspended":
@@ -66,7 +66,7 @@ class SearchService:
         elif status == "buried":
             query_parts.append("is:buried")
         elif status == "review":
-            query_parts.append("is:review -is:due")
+            query_parts.append("is:review -is:due -is:suspended -is:buried")
 
         tag = data.get("tag")
         if tag and tag != "all":
@@ -151,6 +151,10 @@ class SearchService:
             col.sched.suspend_cards(card_ids)
         elif action_type == "unsuspend":
             col.sched.unsuspend_cards(card_ids)
+        elif action_type == "bury":
+            col.sched.bury_cards(card_ids, manual=True)
+        elif action_type == "unbury":
+            col.sched.unbury_cards(card_ids)
         elif action_type == "delete":
             nids = set()
             for cid in card_ids:
@@ -289,8 +293,8 @@ class SearchService:
     def _determine_card_status(col, card) -> str:
         """
         Status classification:
-        - queue == -1 -> 'suspended' (已暂停 / 已挂起)
-        - queue in (-2, -3) -> 'buried' (已搁置 / 暂缓)
+        - queue == -1 -> 'suspended' (已暂停)
+        - queue in (-2, -3) -> 'buried' (已搁置)
         - type == 0 or queue == 0 -> 'new'
         - queue in (1, 3) (learning / day-learning) -> 'due'
         - queue == 2 and due <= col.sched.today -> 'due'

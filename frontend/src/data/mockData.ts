@@ -39,6 +39,7 @@ export const EMPTY_ADVANCED_STATS: AdvancedStatsData = {
     young: 0,
     mature: 0,
     suspended: 0,
+    buried: 0,
     total: 0,
   },
   forecast30d: Array.from({ length: 30 }).map((_, i) => ({

@@ -201,6 +201,8 @@ export const LibraryView: React.FC = () => {
   const selectedObjects = libraryCards.filter((c) => selectedCardIds.includes(c.id));
   const allSelectedSuspended =
     selectedObjects.length > 0 && selectedObjects.every((c) => c.suspended);
+  const allSelectedBuried =
+    selectedObjects.length > 0 && selectedObjects.every((c) => c.buried || c.status === 'buried');
 
   const handleConfirmBatchTag = () => {
     if (!batchTagInput.trim()) return;
@@ -231,7 +233,7 @@ export const LibraryView: React.FC = () => {
         new: '新卡片',
         completed: '今日已完成',
         review: '未到期复习卡',
-        suspended: '已暂停 (已挂起)',
+        suspended: '已暂停',
         buried: '已搁置',
       }
     : {
@@ -1305,14 +1307,33 @@ export const LibraryView: React.FC = () => {
               {t('selectedCountBadge', { n: selectedCardIds.length })}
             </span>
 
-            <button
-              onClick={() =>
-                appActions.executeBatchAction(allSelectedSuspended ? 'unsuspend' : 'suspend')
-              }
-              className="text-[13px] font-medium hover:text-[var(--brand-text)] cursor-pointer transition-colors"
-            >
-              {allSelectedSuspended ? t('batchUnsuspend') : t('batchSuspend')}
-            </button>
+            {allSelectedBuried ? (
+              <button
+                onClick={() => appActions.executeBatchAction('unbury')}
+                className="text-[13px] font-medium hover:text-[var(--brand-text)] cursor-pointer transition-colors"
+              >
+                {t('batchUnbury')}
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() =>
+                    appActions.executeBatchAction(allSelectedSuspended ? 'unsuspend' : 'suspend')
+                  }
+                  className="text-[13px] font-medium hover:text-[var(--brand-text)] cursor-pointer transition-colors"
+                >
+                  {allSelectedSuspended ? t('batchUnsuspend') : t('batchSuspend')}
+                </button>
+                {!allSelectedSuspended && (
+                  <button
+                    onClick={() => appActions.executeBatchAction('bury')}
+                    className="text-[13px] font-medium hover:text-[var(--brand-text)] cursor-pointer transition-colors"
+                  >
+                    {t('batchBury')}
+                  </button>
+                )}
+              </>
+            )}
 
             <button
               onClick={() =>

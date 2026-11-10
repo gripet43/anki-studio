@@ -1488,7 +1488,7 @@ export const appActions = {
             status: (nextSuspended ? 'suspended' : 'due') as LibraryCardItem['status'],
             dueText: nextSuspended
               ? state.resolvedLang === 'zh-CN'
-                ? '已挂起'
+                ? '已暂停'
                 : 'Suspended'
               : c.dueText,
           }
@@ -1508,13 +1508,55 @@ export const appActions = {
       });
       showToast(
         state.resolvedLang === 'zh-CN'
-          ? `已挂起卡片「${currentCard.front}」并跳过本轮复习`
+          ? `已暂停卡片「${currentCard.front}」（已移出学习队列）`
           : `Suspended "${currentCard.front}"`
       );
     } else {
       await appActions.saveInlineCardUpdate({ suspended: false });
-      showToast(state.resolvedLang === 'zh-CN' ? '已恢复卡片' : 'Unsuspended card');
+      showToast(state.resolvedLang === 'zh-CN' ? '已取消暂停（已恢复卡片）' : 'Unsuspended card');
     }
+  },
+
+  buryCurrentReviewCard: async () => {
+    const state = getAppState();
+    const currentCard = state.reviewQueue[state.currentCardIndex];
+    if (!currentCard) return;
+
+    if (isAnkiNativeEnv()) {
+      try {
+        await callAnki('toggle_bury', {
+          cardId: currentCard.id,
+          bury: true,
+        });
+      } catch {}
+    }
+
+    const nextLib = state.libraryCards.map((c) =>
+      c.id === currentCard.id
+        ? {
+            ...c,
+            buried: true,
+            status: 'buried' as LibraryCardItem['status'],
+            dueText: state.resolvedLang === 'zh-CN' ? '已搁置' : 'Buried',
+          }
+        : c
+    );
+
+    const nextQueue = state.reviewQueue.filter((c) => c.id !== currentCard.id);
+    const nextIdx = Math.min(state.currentCardIndex, Math.max(0, nextQueue.length - 1));
+    setAppState({
+      reviewQueue: nextQueue,
+      libraryCards: nextLib,
+      currentCardIndex: nextIdx,
+      isSessionComplete: nextQueue.length === 0,
+      isCardFlipped: false,
+      cardShownAtMs: Date.now(),
+    });
+    showToast(
+      state.resolvedLang === 'zh-CN'
+        ? `已搁置卡片「${currentCard.front}」至明日`
+        : `Buried "${currentCard.front}" until tomorrow`
+    );
   },
 
   enterInlineEdit(field: string = '释义', openInspector = true) {
@@ -1834,7 +1876,7 @@ export const appActions = {
   },
 
   async executeBatchAction(
-    actionType: 'suspend' | 'unsuspend' | 'addTag' | 'resetProgress' | 'moveDeck' | 'delete',
+    actionType: 'suspend' | 'unsuspend' | 'bury' | 'unbury' | 'addTag' | 'resetProgress' | 'moveDeck' | 'delete',
     payload?: { tag?: string; targetDeckId?: string; targetDeckName?: string }
   ) {
     const ids = state.selectedCardIds;
@@ -1862,15 +1904,34 @@ export const appActions = {
                 ...c,
                 suspended: shouldSuspend,
                 status: (shouldSuspend ? 'suspended' : 'due') as LibraryCardItem['status'],
-                dueText: shouldSuspend ? (isZh ? '已挂起' : 'Suspended') : isZh ? '到期 今天' : 'Due Today',
+                dueText: shouldSuspend ? (isZh ? '已暂停' : 'Suspended') : isZh ? '到期 今天' : 'Due Today',
               }
             : c
         ),
       }));
       showToast(
         isZh
-          ? `已批量${shouldSuspend ? '挂起' : '恢复'} ${ids.length} 张卡片`
+          ? `已批量${shouldSuspend ? '暂停' : '取消暂停'} ${ids.length} 张卡片`
           : `${shouldSuspend ? 'Suspended' : 'Unsuspended'} ${ids.length} cards`
+      );
+    } else if (actionType === 'bury' || actionType === 'unbury') {
+      const shouldBury = actionType === 'bury';
+      setAppState((prev) => ({
+        libraryCards: prev.libraryCards.map((c) =>
+          ids.includes(c.id)
+            ? {
+                ...c,
+                buried: shouldBury,
+                status: (shouldBury ? 'buried' : 'due') as LibraryCardItem['status'],
+                dueText: shouldBury ? (isZh ? '已搁置' : 'Buried') : isZh ? '到期 今天' : 'Due Today',
+              }
+            : c
+        ),
+      }));
+      showToast(
+        isZh
+          ? `已批量${shouldBury ? '搁置至次日' : '取消搁置'} ${ids.length} 张卡片`
+          : `${shouldBury ? 'Buried' : 'Unburied'} ${ids.length} cards`
       );
     } else if (actionType === 'delete') {
       setAppState((prev) => ({

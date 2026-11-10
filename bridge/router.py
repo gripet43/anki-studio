@@ -199,6 +199,9 @@ class BridgeRouter:
     def action_toggle_suspend(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.edit_service.toggle_suspend_card(data)
 
+    def action_toggle_bury(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.edit_service.toggle_bury_card(data)
+
     def action_delete_cards(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.edit_service.delete_cards(data)
 
