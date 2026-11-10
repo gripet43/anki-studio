@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+- **[Antigravity] 设置中心主题色卡片极简重构**：
+  - 将原「现代 SaaS 强调色系统」卡片标题精简为标准「主题色」（Theme Color）。
+  - 彻底移除标题下方多余的选中说明（如「当前选中：经典蓝 · Anki Studio 官方固定品牌色」）以及右上角色阶预览胶囊组件，标题直连 8 色选择栅格，视觉极致轻盈。
+  - 修改文件：[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)。
+
 - **[Antigravity] 全局弹窗冗余快捷键提示与占位元素降噪清理**：
   - **搜索面板（CommandPaletteModal）**：移除搜索栏右侧多余的 `Esc` 按键胶囊，清除底部「↑↓ 导航 · ↵ 在编辑器中修改 · Esc 关闭」快捷键提示条，结果统计数字保持右对齐。修改文件：[`frontend/src/components/search/CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)。
   - **系统设置（SettingsModal）**：移除左上角标题下方的系统版本徽标（`macOS · 26.09.4`），移除左侧导航底部的「完成 (Esc)」按钮，在弹窗右上角增设统一标准 `✕` 关闭按钮。修改文件：[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)。

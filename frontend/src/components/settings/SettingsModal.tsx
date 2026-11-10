@@ -279,37 +279,15 @@ export const SettingsModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* 8 Curated Modern SaaS Accent Colors Card */}
+              {/* Theme Color Card */}
               <div className={`rounded-xl border p-4 space-y-3.5 ${cardSurface}`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-[13px] font-semibold">
-                      {isZh ? '现代 SaaS 强调色系统' : 'Curated SaaS Accent Palette'}
-                    </div>
-                    <div className={`text-[11px] ${subText} mt-0.5`}>
-                      {isZh
-                        ? `当前选中：${currentAccentMeta.shortNameZh} · ${currentAccentMeta.descZh}`
-                        : `Active: ${currentAccentMeta.shortNameEn} · ${currentAccentMeta.descEn}`}
-                    </div>
-                  </div>
-                  {/* Live mini preview of the 4-level heatmap & soft badge */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)]">
-                      {isZh ? '全局色阶预览' : 'Scale Preview'}
-                    </span>
-                    {currentScale.heatmap.map((hmHex, idx) => (
-                      <span
-                        key={idx}
-                        className="w-3 h-3 rounded-[3px]"
-                        style={{ backgroundColor: hmHex }}
-                      />
-                    ))}
-                  </div>
+                <div className="text-[13px] font-semibold">
+                  {isZh ? '主题色' : 'Theme Color'}
                 </div>
 
                 <div
                   role="radiogroup"
-                  aria-label={isZh ? '强调色选择' : 'Accent Color Palette'}
+                  aria-label={isZh ? '主题色' : 'Theme Color'}
                   className="grid grid-cols-4 gap-2.5"
                 >
                   {ACCENT_COLOR_LIST.map((a) => {
