@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatShortcut, translate } from '../../i18n/translations';
-import { appActions, LibraryCardItem, ReviewCardItem, setAppState, useAppStore } from '../../stores/useAppStore';
+import { appActions, LibraryCardItem, ReviewCardItem, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
 import { renderMathAndRichHtml } from '../../utils/mathRenderer';
 import { getAccentScale } from '../../utils/themeTokens';
+import { ImageOcclusionEditorModal } from './ImageOcclusionEditorModal';
 import { TowerWysiwygEditor } from './TowerWysiwygEditor';
 
 const FRONT_ALIASES = ['正面', 'Front', 'Text', '文字', '问题', 'Question', 'Word', 'Expression'];
@@ -46,6 +47,7 @@ export const CardEditorModal: React.FC = () => {
   const [showTagInput, setShowTagInput] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+  const [ioEditorOpen, setIoEditorOpen] = useState(false);
 
   // Track original snapshot for dirty check
   const [originalSnapshot, setOriginalSnapshot] = useState<{
@@ -149,7 +151,9 @@ export const CardEditorModal: React.FC = () => {
     setShowMoreFields(false);
     setSubmitting(false);
     setConfirmDiscardOpen(false);
-  }, [quickAddOpen, editingCardData, decks]);
+    // `decks` is intentionally NOT a dependency: any background refresh replaces
+    // the array reference and used to silently wipe the user's unsaved draft.
+  }, [quickAddOpen, editingCardData]);
 
   // Click outside deck dropdown to close
   useEffect(() => {
@@ -263,9 +267,8 @@ export const CardEditorModal: React.FC = () => {
         }
         mergedFields[frontFieldName] = formattedFront;
         mergedFields[backFieldName] = formattedBack;
-
-        if (!mergedFields['正面']) mergedFields['正面'] = formattedFront;
-        if (!mergedFields['背面'] && !mergedFields['释义']) mergedFields['背面'] = formattedBack;
+        // Do not inject Chinese field names into notes whose model uses
+        // Text / Back Extra / Front / Question etc.: that corrupts the note.
 
         await appActions.saveCardEdits({
           cardId: editingCardData.id,
@@ -402,19 +405,59 @@ export const CardEditorModal: React.FC = () => {
             {/* Note Type / Cloze Indicator Badge */}
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${
-                isCloze
+                front.includes('anki-io-wrap')
+                  ? 'bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/30'
+                  : isCloze
                   ? 'bg-[var(--brand-soft)] text-[var(--brand-text)]'
                   : isDark
                   ? 'bg-white/5 text-[#8E8E93]'
                   : 'bg-black/5 text-[#8E8E93]'
               }`}
             >
-              {isCloze ? (isZh ? 'Cloze 挖空模板' : 'Cloze Type') : (isZh ? '问答卡片' : 'Basic Type')}
+              {front.includes('anki-io-wrap')
+                ? isZh
+                  ? '图片遮挡模板'
+                  : 'Image Occlusion'
+                : isCloze
+                ? isZh
+                  ? 'Cloze 挖空模板'
+                  : 'Cloze Type'
+                : isZh
+                ? '问答卡片'
+                : 'Basic Type'}
             </span>
           </div>
 
-          {/* Right Close Button */}
+          {/* Right Action & Close Buttons */}
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIoEditorOpen(true)}
+              className={`h-7 px-2.5 rounded-lg border text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                front.includes('anki-io-wrap')
+                  ? 'bg-[#F59E0B]/15 border-[#F59E0B]/40 text-[#F59E0B] hover:bg-[#F59E0B]/25'
+                  : isDark
+                  ? 'border-[#343644] bg-[#21222E] hover:border-[var(--brand-border)] text-[#D8D8E0]'
+                  : 'border-[#E0E0E6] bg-[#F4F4F6] hover:border-[var(--brand-border)] text-[#3A3A3C]'
+              }`}
+              title={isZh ? '打开图片遮挡制卡工作台 (Image Occlusion)' : 'Open Image Occlusion Studio'}
+            >
+              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path d="m21 15-5-5L5 21" />
+              </svg>
+              <span>
+                {front.includes('anki-io-wrap')
+                  ? isZh
+                    ? '编辑图片遮挡'
+                    : 'Edit Occlusion'
+                  : isZh
+                  ? '图片遮挡'
+                  : 'Image Occlusion'}
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={handleAttemptClose}
@@ -719,6 +762,26 @@ export const CardEditorModal: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Visual Image Occlusion Studio Modal */}
+        <ImageOcclusionEditorModal
+          open={ioEditorOpen}
+          initialFrontHtml={front}
+          isDark={isDark}
+          isZh={isZh}
+          brandHex={brandHex}
+          onSaveImageFile={appActions.pasteImageFromClipboard}
+          onClose={() => setIoEditorOpen(false)}
+          onApply={(generatedHtml, rectCount) => {
+            setFront(generatedHtml);
+            setIoEditorOpen(false);
+            showToast(
+              isZh
+                ? `已生成图片遮挡图层（共 ${rectCount} 张联动挖空卡）`
+                : `Inserted Image Occlusion (${rectCount} sibling cards)`
+            );
+          }}
+        />
       </div>
     </div>
   );

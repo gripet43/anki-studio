@@ -159,6 +159,29 @@ export function renderMathAndRichHtml(
   if (!rawHtml) return '';
   let html = String(rawHtml);
 
+  // Format Image Occlusion rectangles (<span class="anki-io-rect" ...>{{c1::...}}</span>)
+  if (html.includes('anki-io-rect')) {
+    const ioRegex =
+      /<span\b([^>]*?\bclass\s*=\s*["'][^"']*\banki-io-rect\b[^"']*["'][^>]*)>\s*\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}\s*<\/span>/gi;
+    const styleAttrRegex = /\bstyle\s*=\s*(["'])(.*?)\1/i;
+    const ioMode = html.includes('data-io-mode="hide-one"') ? 'hide-one' : 'hide-all';
+
+    html = html.replace(ioRegex, (_, attrsStr: string, cNum: string) => {
+      const styleMatch = styleAttrRegex.exec(attrsStr || '');
+      const posStyle = styleMatch ? styleMatch[2].trim().replace(/;$/, '') : 'position:absolute';
+      if (maskClozeAsQuestion) {
+        if (cNum === '1') {
+          return `<span class="anki-io-rect-resolved anki-io-target" data-io-rect="${cNum}" style="${posStyle};background:#F59E0B;border:2px solid #FFFFFF;box-shadow:0 4px 14px rgba(245,158,11,0.45);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#FFFFFF;font-size:11px;font-weight:800;line-height:1;user-select:none;z-index:3;">? #${cNum}</span>`;
+        }
+        if (ioMode === 'hide-all') {
+          return `<span class="anki-io-rect-resolved anki-io-masked" data-io-rect="${cNum}" style="${posStyle};background:#334155;border:1.5px solid rgba(255,255,255,0.65);border-radius:6px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.78);font-size:10px;font-weight:700;line-height:1;user-select:none;z-index:2;">#${cNum}</span>`;
+        }
+        return `<span class="anki-io-rect-resolved anki-io-hidden" data-io-rect="${cNum}" style="${posStyle};opacity:0;pointer-events:none;"></span>`;
+      }
+      return `<span class="anki-io-rect-resolved anki-io-revealed" data-io-rect="${cNum}" style="${posStyle};background:rgba(16,185,129,0.16);border:2px solid #10B981;border-radius:6px;pointer-events:none;z-index:3;"><span style="position:absolute;top:-1px;left:-1px;background:#10B981;color:#FFFFFF;font-size:9px;font-weight:700;padding:1px 4px;border-radius:4px 0 4px 0;line-height:1.1;">#${cNum}</span></span>`;
+    });
+  }
+
   // Format raw {{c1::answer::hint}} Cloze syntax (e.g., in QuickAdd live preview or table view)
   if (CLOZE_PREVIEW_RE.test(html)) {
     html = html.replace(CLOZE_PREVIEW_RE, (_, _cNum, cAns, cHint) => {

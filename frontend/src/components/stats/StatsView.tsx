@@ -20,9 +20,29 @@ export const StatsView: React.FC = () => {
 
   const subText = 'text-[#8E8E93]';
 
-  const { maturityBreakdown, forecast30d, retentionCurve, hourlyDistribution } = advancedStats;
+  const {
+    maturityBreakdown,
+    forecast30d,
+    retentionCurve,
+    hourlyDistribution,
+    answerButtons,
+    trueRetention,
+    dailyLoad,
+  } = advancedStats;
   const maxForecast = Math.max(1, ...forecast30d.map((d) => d.total));
   const maxHourly = Math.max(1, ...hourlyDistribution.map((h) => h.count));
+
+  const buttonRows = [
+    { key: 'again', value: answerButtons.again, zh: '重来 Again', en: 'Again', color: 'var(--status-danger)' },
+    { key: 'hard', value: answerButtons.hard, zh: '困难 Hard', en: 'Hard', color: 'var(--status-warning)' },
+    { key: 'good', value: answerButtons.good, zh: '记住 Good', en: 'Good', color: brandHex },
+    { key: 'easy', value: answerButtons.easy, zh: '简单 Easy', en: 'Easy', color: 'var(--status-success)' },
+  ];
+  const maxButton = Math.max(1, ...buttonRows.map((r) => r.value));
+  const againPct = answerButtons.total > 0
+    ? Math.round((answerButtons.again / answerButtons.total) * 100)
+    : 0;
+  const formatRate = (rate: number, total: number) => (total > 0 ? `${rate}%` : '--');
 
   const totalCards = Math.max(1, maturityBreakdown.total);
   const maturePct = (maturityBreakdown.mature / totalCards) * 100;
@@ -122,6 +142,9 @@ export const StatsView: React.FC = () => {
                 {isZh
                   ? '基于 FSRS 稳定度计算的每日到期卡片量（深色：成熟卡 · 浅色：年轻卡）'
                   : 'Daily due cards scheduled by FSRS (Dark: Mature · Light: Young)'}
+                <span className="ml-2 font-semibold text-[var(--brand-text)]">
+                  {isZh ? `· 日均负载 ${dailyLoad} 张` : `· Daily load ${dailyLoad}`}
+                </span>
               </p>
             </div>
             <div className="flex items-center gap-4 text-[11px]">
@@ -373,6 +396,119 @@ export const StatsView: React.FC = () => {
             <span>16:00</span>
             <span>20:00</span>
             <span>23:00</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Third Row: Anki official "Answer Buttons" + "True Retention" metrics */}
+      <section className="grid grid-cols-12 gap-4">
+        {/* 5. Answer Buttons — reveals card-quality and scheduling problems */}
+        <div className={`col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs ${cardSurface}`}>
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h2 className="text-[15px] font-bold">
+                {isZh ? '答题按钮分布 (Answer Buttons)' : 'Answer Buttons'}
+              </h2>
+              <p className={`text-[11px] ${subText} mt-0.5`}>
+                {isZh
+                  ? `近 1 年 ${answerButtons.total.toLocaleString()} 次作答 · Hard / Good / Easy 计为通过`
+                  : `${answerButtons.total.toLocaleString()} answers in the last year · Hard/Good/Easy = pass`}
+              </p>
+            </div>
+            <span className="shrink-0 px-2.5 py-1 rounded-lg bg-[var(--status-danger-soft)] text-[var(--status-danger)] text-[11px] font-semibold">
+              Again {againPct}%
+            </span>
+          </div>
+
+          <div className="space-y-2.5">
+            {buttonRows.map((row) => {
+              const pct = answerButtons.total > 0
+                ? Math.round((row.value / answerButtons.total) * 100)
+                : 0;
+              return (
+                <div key={row.key} className="flex items-center gap-3 text-[11px]">
+                  <span className={`w-[78px] shrink-0 ${subText}`}>{isZh ? row.zh : row.en}</span>
+                  <div className="flex-1 h-2 rounded-full bg-[#ECECF2] dark:bg-[#2A2C36] overflow-hidden">
+                    <div
+                      style={{ width: `${(row.value / maxButton) * 100}%`, backgroundColor: row.color }}
+                      className="h-full rounded-full transition-all"
+                    />
+                  </div>
+                  <span className="w-[76px] text-right font-mono font-semibold whitespace-nowrap">
+                    {row.value.toLocaleString()} <span className={subText}>({pct}%)</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 pt-3 grid grid-cols-2 gap-3 text-[11px] border-t border-black/[0.04] dark:border-white/[0.06]">
+            <div className="flex items-center justify-between gap-2">
+              <span className={subText}>{isZh ? '年轻卡通过率' : 'Young pass rate'}</span>
+              <span className="font-semibold font-mono">
+                {formatRate(answerButtons.young.rate, answerButtons.young.total)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className={subText}>{isZh ? '成熟卡通过率' : 'Mature pass rate'}</span>
+              <span className="font-semibold font-mono">
+                {formatRate(answerButtons.mature.rate, answerButtons.mature.total)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 6. True Retention — Anki's official FSRS calibration metric */}
+        <div className={`col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs ${cardSurface}`}>
+          <div>
+            <h2 className="text-[15px] font-bold">
+              {isZh ? '真实留存率 (True Retention)' : 'True Retention'}
+            </h2>
+            <p className={`text-[11px] ${subText} mt-0.5`}>
+              {isZh
+                ? '官方口径：每天每卡只计首次作答，Again 记失败；用于校准 FSRS 目标留存率'
+                : 'Anki official: first review per card per day, Again = fail; calibrates FSRS desired retention'}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 my-4">
+            {[
+              { key: 'last30d', titleZh: '近 30 天', titleEn: 'Last 30 days', data: trueRetention.last30d },
+              { key: 'allTime', titleZh: '全部历史', titleEn: 'All time', data: trueRetention.allTime },
+            ].map((block) => (
+              <div
+                key={block.key}
+                className="rounded-xl border border-black/[0.05] dark:border-white/[0.08] px-4 py-3"
+              >
+                <div className={`text-[11px] ${subText}`}>{isZh ? block.titleZh : block.titleEn}</div>
+                <div className="text-[26px] leading-tight font-bold font-mono" style={{ color: brandHex }}>
+                  {formatRate(block.data.overall.rate, block.data.overall.total)}
+                </div>
+                <div className={`text-[10px] ${subText} mt-0.5`}>
+                  {block.data.overall.pass.toLocaleString()} / {block.data.overall.total.toLocaleString()}
+                  {isZh ? ' 次首次作答' : ' first reviews'}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-1.5 text-[11px] pt-3 border-t border-black/[0.04] dark:border-white/[0.06]">
+            <div className="flex items-center justify-between gap-2">
+              <span className={subText}>{isZh ? '年轻卡 (<21天) · 近30天 / 全部' : 'Young (<21d) · 30d / all'}</span>
+              <span className="font-semibold font-mono whitespace-nowrap">
+                {formatRate(trueRetention.last30d.young.rate, trueRetention.last30d.young.total)}
+                {' / '}
+                {formatRate(trueRetention.allTime.young.rate, trueRetention.allTime.young.total)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className={subText}>{isZh ? '成熟卡 (≥21天) · 近30天 / 全部' : 'Mature (≥21d) · 30d / all'}</span>
+              <span className="font-semibold font-mono whitespace-nowrap">
+                {formatRate(trueRetention.last30d.mature.rate, trueRetention.last30d.mature.total)}
+                {' / '}
+                {formatRate(trueRetention.allTime.mature.rate, trueRetention.allTime.mature.total)}
+              </span>
+            </div>
           </div>
         </div>
       </section>

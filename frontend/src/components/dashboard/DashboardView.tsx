@@ -804,17 +804,51 @@ export const DashboardView: React.FC = () => {
                       </svg>
                       <span>{t('lowEnergyBtn')}</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => appActions.openCustomStudyModal('mistakes')}
+                      className="btn-secondary !h-10 !px-3.5 text-[#8E8E93] hover:text-current flex items-center gap-1.5"
+                      title={isZh ? '错题集重练 / 旗标专练 / 考前突击' : 'Mistake Drill & Custom Study'}
+                    >
+                      <svg
+                        className="w-3.5 h-3.5 text-[var(--brand-text)] shrink-0"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <circle cx="12" cy="12" r="4" />
+                      </svg>
+                      <span>{isZh ? '专项特训' : 'Custom Study'}</span>
+                    </button>
                   </>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setAppState({ activeTab: 'library' })}
-                    className={`btn-secondary !h-10 !px-5 ${
-                      syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
-                    }`}
-                  >
-                    {resolvedLang === 'zh-CN' ? '浏览卡片库' : 'Browse Library'}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => appActions.openCustomStudyModal('mistakes')}
+                      style={{ backgroundColor: brandHex }}
+                      className={`btn-primary !h-10 !px-5 flex items-center gap-1.5 ${
+                        syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
+                      }`}
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <circle cx="12" cy="12" r="10" />
+                        <circle cx="12" cy="12" r="4" />
+                      </svg>
+                      <span>{isZh ? '错题与专项特训' : 'Custom Study'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAppState({ activeTab: 'library' })}
+                      className={`btn-secondary !h-10 !px-5 ${
+                        syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
+                      }`}
+                    >
+                      {resolvedLang === 'zh-CN' ? '浏览卡片库' : 'Browse Library'}
+                    </button>
+                  </>
                 )}
 
                 {isSyncPending ? (

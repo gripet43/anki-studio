@@ -13,6 +13,7 @@ Anki Modern OS — Standard .ankiaddon Packaging Script (Part 3 Task 6)
 3. Strictly excludes `node_modules/`, `frontend/`, `tests/`, `scripts/`, `__pycache__/`, `.git/`, `.DS_Store`, `meta.json`.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -29,6 +30,18 @@ TOP_LEVEL_FILES = [
     "config.json",
     "config.md",
 ]
+
+# Runtime state that must never ship inside a published .ankiaddon: these keys
+# carry real card text, card IDs and the user's study history.
+PRIVATE_CONFIG_KEYS = {
+    "last_rescue_receipt",
+    "rescue_history",
+    "vacation_state",
+    "vacation_history",
+    "vacation_frozen_dates",
+    "custom_nickname",
+    "safety_ticket",
+}
 
 EXCLUDED_NAMES = {
     "__pycache__",
@@ -69,7 +82,15 @@ def create_ankiaddon_package() -> Path:
             filepath = ADDON_ROOT / filename
             if not filepath.exists():
                 raise FileNotFoundError(f"Required top-level file missing: {filepath}")
-            zf.write(filepath, arcname=filename)
+            if filename == "config.json":
+                # config.json doubles as the add-on's default/schema template.
+                # Ship a sanitized copy so private study data never leaks.
+                raw = json.loads(filepath.read_text(encoding="utf-8"))
+                for key in PRIVATE_CONFIG_KEYS:
+                    raw.pop(key, None)
+                zf.writestr(filename, json.dumps(raw, ensure_ascii=False, indent=2))
+            else:
+                zf.write(filepath, arcname=filename)
             included_files.append(filename)
 
         # 2. bridge/*.py
@@ -88,11 +109,18 @@ def create_ankiaddon_package() -> Path:
         for file_path in sorted(web_dir.rglob("*")):
             if file_path.is_dir():
                 continue
-            if any(part in EXCLUDED_NAMES or part.endswith(".pyc") for part in file_path.parts):
+            rel = file_path.relative_to(ADDON_ROOT)
+            # Exclude on the *relative* path: absolute .parts made any parent
+            # folder named "frontend"/"tests"/"scripts" silently drop every
+            # web asset and produce a package with no UI at all.
+            if any(part in EXCLUDED_NAMES or part.endswith(".pyc") for part in rel.parts):
                 continue
-            rel_path = file_path.relative_to(ADDON_ROOT).as_posix()
+            rel_path = rel.as_posix()
             zf.write(file_path, arcname=rel_path)
             included_files.append(rel_path)
+
+    if "web/index.html" not in included_files:
+        raise RuntimeError("Packaged bundle is missing web/index.html; refusing to emit a broken add-on")
 
     print(f"[build_ankiaddon] Packaged {len(included_files)} runtime files -> {OUTPUT_ARCHIVE}")
     return OUTPUT_ARCHIVE

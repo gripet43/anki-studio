@@ -480,16 +480,22 @@ export const IcuRescueModal: React.FC = () => {
                             </div>
                             <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-black/[0.025] dark:bg-white/[0.03]">
                               <span className="text-[#8E8E93]">{isZh ? '丢失校验' : 'Lost'}</span>
-                              <span className="font-mono font-semibold text-[var(--status-success)]">
-                                0
+                              <span
+                                className={`font-mono font-semibold ${
+                                  (item.lostCards ?? 0) > 0
+                                    ? 'text-[var(--status-danger)]'
+                                    : 'text-[var(--status-success)]'
+                                }`}
+                              >
+                                {(item.lostCards ?? 0).toLocaleString()}
                               </span>
                             </div>
                             <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-black/[0.025] dark:bg-white/[0.03]">
                               <span className="text-[#8E8E93]">
-                                {isZh ? '记忆间隔' : 'Intervals'}
+                                {isZh ? '改期张数' : 'Rescheduled'}
                               </span>
                               <span className="font-mono font-semibold text-[var(--brand-text)]">
-                                100%
+                                {(item.rescheduledCount ?? 0).toLocaleString()}
                               </span>
                             </div>
                           </div>
@@ -509,9 +515,9 @@ export const IcuRescueModal: React.FC = () => {
                             </div>
 
                             <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                              {item.dayDistribution.map((day) => {
+                              {(item.dayDistribution || []).map((day) => {
                                 const maxCount = Math.max(
-                                  ...item.dayDistribution.map((d) => d.count),
+                                  ...(item.dayDistribution || []).map((d) => d.count),
                                   1
                                 );
                                 const pct = Math.min(100, Math.round((day.count / maxCount) * 100));

@@ -24,17 +24,38 @@ import re
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .safety import (
+    begin_ticket,
+    begin_undo_group,
+    capture_schedule,
+    end_undo_group,
+    finish_ticket,
+    quick_integrity_check,
+    reconcile_pending_ticket,
+    restore_schedule,
+    try_native_backup,
+    verify_restoration,
+)
+
 # Cumulative streak-freeze dates live at the top level of the add-on config so they
 # survive repeated vacations instead of being overwritten with each new vacation_state.
 FROZEN_DATES_KEY = "vacation_frozen_dates"
 
 
 def effective_frozen_dates(cfg: Dict[str, Any]) -> List[str]:
-    """Returns all streak-freeze dates ever granted, with a legacy config fallback."""
+    """Returns all streak-freeze dates ever granted, with a legacy config fallback.
+
+    Configs written before the freeze-lifecycle fix kept `frozen_dates` on
+    vacation_state even after the user cancelled the vacation. A cancelled
+    vacation grants no streak protection, so those stale dates must be ignored.
+    """
     if FROZEN_DATES_KEY in cfg:
         raw = cfg.get(FROZEN_DATES_KEY) or []
     else:
-        raw = (cfg.get("vacation_state") or {}).get("frozen_dates") or []
+        state = cfg.get("vacation_state") or {}
+        if state.get("cancelled_at"):
+            return []
+        raw = state.get("frozen_dates") or []
     return sorted({str(d) for d in raw})
 
 
@@ -52,6 +73,8 @@ class VacationService:
         self._get_mw = mw_getter or (lambda: None)
         self._get_config = config_getter or (lambda: {})
         self._write_config = config_writer or (lambda cfg: cfg)
+        self.last_recovery: Optional[Dict[str, Any]] = None
+        self._warning_consumed = False
 
     @property
     def col(self):
@@ -134,109 +157,36 @@ class VacationService:
             return None
         return self.end_vacation({"reason": "auto_expired"})
 
+    def reconcile_safety_ticket(self) -> Optional[Dict[str, Any]]:
+        """Restores a half-finished bulk operation left behind by a crash."""
+        recovery = reconcile_pending_ticket(
+            self._get_config, self._write_config, self.col
+        )
+        if recovery is not None:
+            self.last_recovery = recovery
+            self._warning_consumed = False
+        return recovery
+
+    def safety_warning(self) -> Optional[Dict[str, Any]]:
+        """Exposes one crash-recovery notice to the UI (consumed once)."""
+        if self._warning_consumed or not self.last_recovery:
+            return None
+        self._warning_consumed = True
+        return self.last_recovery
+
     def get_or_reconstruct_receipt(self) -> Optional[Dict[str, Any]]:
-        """Returns existing rescue receipt, or reconstructs active distribution evidence from the collection."""
-        cfg = self._get_config()
-        last_receipt = cfg.get("last_rescue_receipt")
-        if last_receipt and isinstance(last_receipt, dict) and last_receipt.get("dayDistribution"):
-            return last_receipt
+        """Returns the stored rescue receipt only; never invents one on a read path.
 
-        col = self.col
-        if col is None:
-            return None
-
-        try:
-            sched_today = getattr(col.sched, "today", None) if hasattr(col, "sched") else None
-            if sched_today is None:
-                crt = getattr(col, "crt", int(time.time()))
-                sched_today = int((time.time() - crt) // 86400)
-
-            total_cards = 0
-            if hasattr(col, "card_count"):
-                try:
-                    total_cards = col.card_count()
-                except Exception:
-                    pass
-            if not total_cards and hasattr(col, "db"):
-                r = col.db.first("SELECT count(*) FROM cards")
-                total_cards = int(r[0]) if r else 0
-
-            days = 7
-            today_date = datetime.date.today()
-            weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-
-            day_counts = {d: 0 for d in range(1, days + 1)}
-            card_samples = []
-            rescheduled_cids = []
-
-            if hasattr(col, "db"):
-                rows = col.db.all(
-                    "SELECT c.id, c.did, c.ivl, c.due, (c.due - ?) as day_off, n.flds "
-                    "FROM cards c JOIN notes n ON c.nid = n.id "
-                    "WHERE c.queue in (2, 3) AND c.due > ? AND c.due <= ? + 7 "
-                    "ORDER BY c.due ASC",
-                    sched_today, sched_today, sched_today
-                )
-                for r in rows:
-                    cid, did, ivl, due, day_off, flds = r
-                    day_off = max(1, min(days, int(day_off)))
-                    day_counts[day_off] = day_counts.get(day_off, 0) + 1
-                    rescheduled_cids.append(str(cid))
-
-                    if len(card_samples) < 30:
-                        deck_name = "Default"
-                        if hasattr(col, "decks") and hasattr(col.decks, "name"):
-                            try:
-                                deck_name = col.decks.name(did) or "Default"
-                            except Exception:
-                                pass
-                        front_text = ""
-                        if flds:
-                            front_text = re.sub(r"<[^>]*>", "", str(flds).split("\x1f")[0]).strip()
-                        target_date = today_date + datetime.timedelta(days=day_off)
-                        card_samples.append({
-                            "id": str(cid),
-                            "front": front_text[:100] if front_text else f"卡片 #{cid}",
-                            "deckName": deck_name,
-                            "intervalDays": int(ivl or 0),
-                            "dayOffset": day_off,
-                            "newDueDate": f"{target_date.month}月{target_date.day}日",
-                        })
-
-            total_window_cards = sum(day_counts.values())
-            if total_window_cards == 0:
-                return None
-
-            day_distribution = []
-            for d in range(1, days + 1):
-                target_date = today_date + datetime.timedelta(days=d)
-                w_name = weekday_names[target_date.weekday()]
-                rel_label = "明天" if d == 1 else ("后天" if d == 2 else w_name)
-                day_distribution.append({
-                    "dayOffset": d,
-                    "date": target_date.isoformat(),
-                    "dateLabel": f"{target_date.month}月{target_date.day}日 ({rel_label})",
-                    "count": day_counts.get(d, 0),
-                })
-
-            receipt = {
-                "id": "rescue_active",
-                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "totalCardsBefore": total_cards,
-                "totalCardsAfter": total_cards,
-                "lostCards": 0,
-                "rescheduledCount": total_window_cards,
-                "mode": "amortize",
-                "days": 7,
-                "dayDistribution": day_distribution,
-                "cardSamples": card_samples,
-                "rescheduledCids": rescheduled_cids,
-                "canUndo": len(rescheduled_cids) > 0,
-            }
-            self._write_config({"last_rescue_receipt": receipt})
+        The previous implementation inferred "rescheduled" cards from cards due in
+        the next 7 days, fabricated a canUndo receipt and persisted it from a GET
+        action. Undoing that receipt dragged unrelated, perfectly normal cards
+        back into today's queue. Receipts are created exclusively by
+        rescue_backlog() and must carry the IDs of cards it actually rescheduled.
+        """
+        receipt = self._get_config().get("last_rescue_receipt")
+        if isinstance(receipt, dict) and receipt.get("rescheduledCids"):
             return receipt
-        except Exception:
-            return None
+        return None
 
     @staticmethod
     def _safe_int(val: Any, default: int, min_val: int = 1, max_val: int = 365) -> int:
@@ -262,7 +212,9 @@ class VacationService:
                     return f'deck:"{escaped}" '
             except Exception:
                 pass
-            return ""
+            # Never degrade to an empty clause: that would silently turn a
+            # deck-scoped reschedule into a collection-wide one.
+            return 'deck:"__anki_studio_unknown_deck__" '
         escaped = raw.replace('"', '\\"')
         return f'deck:"{escaped}" '
 
@@ -363,6 +315,12 @@ class VacationService:
         frozen_deck_limits: Dict[str, int] = {}
 
         if col is not None:
+            # One native undo entry for the whole operation. Without merging,
+            # each per-card update_card creates its own undo step and a user can
+            # never undo the batch (Anki caps the undo stack).
+            undo_target = begin_undo_group(col, "Anki Studio · 开启休假")
+            try_native_backup(self.mw, col)
+
             # 1. Optionally freeze new card limits across deck configs
             if freeze_new:
                 frozen_deck_limits = self._freeze_new_card_limits(col)
@@ -377,6 +335,7 @@ class VacationService:
                     col.save()
                 except Exception:
                     pass
+            end_undo_group(col, undo_target)
 
         vacation_id = f"vac-{int(datetime.datetime.now().timestamp())}"
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -507,6 +466,7 @@ class VacationService:
             return {"success": False, "message": "当前没有正在生效的休假记录。"}
 
         col = self.col
+        undo_target = begin_undo_group(col, "Anki Studio · 撤销休假") if col is not None else None
         shifted_cids = vacation_cfg.get("shifted_cids", [])
         snapshot = vacation_cfg.get("shifted_card_snapshot") or {}
         restored_card_count = 0
@@ -534,6 +494,7 @@ class VacationService:
         frozen_deck_limits = vacation_cfg.get("frozen_deck_limits", {})
         if col is not None and frozen_deck_limits:
             self._restore_new_card_limits(col, frozen_deck_limits)
+        end_undo_group(col, undo_target)
 
         cancelled_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         updated_state = dict(vacation_cfg)
@@ -596,9 +557,14 @@ class VacationService:
         if col is None:
             return {"success": False, "count": 0, "error": "Collection unavailable"}
 
+        schedule_snapshot: Dict[str, Dict[str, Any]] = {}
+        ticket: Optional[Dict[str, Any]] = None
+        undo_target: Optional[int] = None
         try:
             deck_filter = self._build_deck_search_clause(col, deck_id)
-            query = f"{deck_filter}is:due"
+            # Anki's Set Due Date turns learning/new cards into review cards and
+            # rewrites their interval. Only real review cards may be rescheduled.
+            query = f"{deck_filter}is:due is:review"
             cids = col.find_cards(query) if hasattr(col, "find_cards") else []
 
             if not cids:
@@ -609,6 +575,16 @@ class VacationService:
                     "days": days,
                     "message": "当前队列中没有积压的到期卡片，无需急救。",
                 }
+
+            # --- Card safety guard: capture before any write -----------------
+            schedule_snapshot = capture_schedule(col, list(cids))
+            receipt_id = f"rescue_{int(time.time())}"
+            ticket = begin_ticket(
+                self._write_config, "rescue_backlog", receipt_id, schedule_snapshot
+            )
+            undo_target = begin_undo_group(col, "Anki Studio · 进度减负")
+            backup_created = try_native_backup(self.mw, col)
+            # -----------------------------------------------------------------
 
             # Pre-audit card count
             total_before = 0
@@ -741,8 +717,11 @@ class VacationService:
                 else f"已成功将 {len(cids)} 张卡片整体顺延 {days} 天。"
             )
 
+            undo_merged = end_undo_group(col, undo_target)
+            physical_ok, physical_note = quick_integrity_check(col)
+
             receipt = {
-                "id": f"rescue_{int(time.time())}",
+                "id": receipt_id,
                 "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                 "totalCardsBefore": total_before,
                 "totalCardsAfter": total_after,
@@ -753,6 +732,18 @@ class VacationService:
                 "dayDistribution": day_distribution,
                 "cardSamples": card_samples,
                 "rescheduledCids": [str(c) for c in cids],
+                # Per-card pre-write snapshot: the undo path must restore these
+                # exact fields, not flatten every card to today.
+                "scheduleSnapshot": schedule_snapshot,
+                "safety": {
+                    "ticketId": ticket["id"],
+                    "snapshotChecksum": ticket["checksum"],
+                    "backupCreated": backup_created,
+                    "undoMerged": undo_merged,
+                    "integrityOk": physical_ok,
+                    "integrityNote": physical_note,
+                },
+                "state": "done",
                 "canUndo": True,
                 "status": "active",
             }
@@ -766,10 +757,13 @@ class VacationService:
             if len(rescue_history) > 30:
                 rescue_history = rescue_history[:30]
 
+            # Persist the receipt BEFORE closing the ticket: if the process dies
+            # in between, the pending ticket can still find its snapshot.
             self._write_config({
                 "last_rescue_receipt": receipt,
                 "rescue_history": rescue_history,
             })
+            finish_ticket(self._write_config, ticket, "done")
 
             return {
                 "success": True,
@@ -782,6 +776,20 @@ class VacationService:
                 "rescueHistory": rescue_history,
             }
         except Exception as e:
+            # A failed bulk reschedule must not leave half of the cards moved.
+            if schedule_snapshot:
+                try:
+                    restore_schedule(col, schedule_snapshot)
+                    if hasattr(col, "save"):
+                        col.save()
+                except Exception:
+                    pass
+            if ticket is not None:
+                try:
+                    finish_ticket(self._write_config, ticket, "rolled_back")
+                except Exception:
+                    pass
+            end_undo_group(col, undo_target)
             return {"success": False, "count": 0, "error": str(e)}
 
     # ---- Undo Backlog Rescue (一键撤销急救·原样复原) ----
@@ -790,7 +798,13 @@ class VacationService:
         """Restores cards from the last rescue operation back into today's due queue."""
         cfg = self._get_config()
         receipt = cfg.get("last_rescue_receipt")
-        if not receipt or not receipt.get("canUndo"):
+        if (
+            not isinstance(receipt, dict)
+            or not receipt.get("canUndo")
+            or not receipt.get("rescheduledCids")
+            or not str(receipt.get("id", "")).startswith("rescue_")
+            or receipt.get("id") == "rescue_active"
+        ):
             return {"success": False, "message": "当前没有可撤销的急救记录，或已撤销。"}
 
         raw_cids = receipt.get("rescheduledCids", [])
@@ -799,14 +813,40 @@ class VacationService:
         if col is None or not cids:
             return {"success": False, "message": "无可操作的卡片数据。"}
 
+        snapshot = receipt.get("scheduleSnapshot") or {}
         try:
-            # '0' (no '!') returns cards to today's queue while keeping their interval.
-            # The '!' suffix would rewrite the interval and break FSRS/SM-2 memory state.
-            if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
-                col.sched.set_due_date(list(cids), "0")
-            elif hasattr(col, "db"):
-                sched_today = getattr(col.sched, "today", 0) if hasattr(col, "sched") else 0
-                col.db.execute("UPDATE cards SET due = ? WHERE id IN (" + ",".join(str(c) for c in cids) + ")", sched_today)
+            undo_target = begin_undo_group(col, "Anki Studio · 撤销减负")
+            restored, failed, mismatches = 0, [], []
+            if snapshot:
+                # Exact per-card restoration. Never flatten cards to today.
+                restored, failed = restore_schedule(col, snapshot)
+                mismatches = verify_restoration(col, snapshot)
+                if failed or mismatches:
+                    end_undo_group(col, undo_target)
+                    return {
+                        "success": False,
+                        "message": (
+                            f"撤销未通过逐卡校验：{len(failed)} 张回写失败、"
+                            f"{len(mismatches)} 张字段不一致，已停止操作以保护卡片。"
+                        ),
+                        "verification": {
+                            "restored": restored,
+                            "failed": failed,
+                            "mismatches": mismatches,
+                        },
+                    }
+                restored_count = restored
+            else:
+                # Legacy receipts written before round 2 have no snapshot.
+                # '0' without '!' at least keeps intervals intact.
+                if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
+                    col.sched.set_due_date(list(cids), "0")
+                elif hasattr(col, "db"):
+                    sched_today = getattr(col.sched, "today", 0) if hasattr(col, "sched") else 0
+                    col.db.execute("UPDATE cards SET due = ? WHERE id IN (" + ",".join(str(c) for c in cids) + ")", sched_today)
+                restored_count = len(cids)
+            end_undo_group(col, undo_target)
+            physical_ok, physical_note = quick_integrity_check(col)
 
             if hasattr(col, "sched") and hasattr(col.sched, "reset"):
                 try:
@@ -829,7 +869,15 @@ class VacationService:
 
             receipt["canUndo"] = False
             receipt["status"] = "undone"
+            receipt["state"] = "undone"
             receipt["undoneAt"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            receipt["safety"] = {
+                **(receipt.get("safety") or {}),
+                "undoVerified": bool(snapshot) and not failed and not mismatches,
+                "restoredCount": restored_count,
+                "integrityOk": physical_ok,
+                "integrityNote": physical_note,
+            }
 
             rescue_history = list(cfg.get("rescue_history", []))
             for item in rescue_history:
@@ -846,8 +894,14 @@ class VacationService:
 
             return {
                 "success": True,
-                "count": len(cids),
-                "message": f"已成功撤销削峰急救，{len(cids)} 张卡片已全数退回今日待复习队列。",
+                "count": restored_count,
+                "message": f"已成功撤销削峰急救，{restored_count} 张卡片已逐卡恢复原排期。",
+                "verification": {
+                    "restored": restored,
+                    "failed": failed,
+                    "mismatches": mismatches,
+                    "exact": bool(snapshot),
+                },
                 "receipt": receipt,
                 "rescueHistory": rescue_history,
             }

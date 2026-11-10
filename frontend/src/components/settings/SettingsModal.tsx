@@ -16,7 +16,7 @@ import {
 } from '../../stores/useAppStore';
 import { ACCENT_COLOR_LIST, ACCENT_THEMES, getAccentScale } from '../../utils/themeTokens';
 
-type SettingsTab = 'appearance' | 'shortcuts' | 'sync' | 'native' | 'about';
+type SettingsTab = 'appearance' | 'shortcuts' | 'sync' | 'maintenance' | 'native' | 'about';
 
 export const SettingsModal: React.FC = () => {
   const {
@@ -36,6 +36,10 @@ export const SettingsModal: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(settingsInitialTab || 'appearance');
   const [nicknameDraft, setNicknameDraft] = useState(customNickname || '');
+  const [runningTool, setRunningTool] = useState<string | null>(null);
+  const [dbReport, setDbReport] = useState<any | null>(null);
+  const [emptyReport, setEmptyReport] = useState<any | null>(null);
+  const [mediaReport, setMediaReport] = useState<any | null>(null);
 
   const isZh = resolvedLang === 'zh-CN';
   const isDark = theme === 'dark' || theme === 'oled';
@@ -134,6 +138,17 @@ export const SettingsModal: React.FC = () => {
       icon: (
         <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'maintenance',
+      label: isZh ? '数据与维护' : 'Data & Tools',
+      icon: (
+        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <ellipse cx="12" cy="5" rx="9" ry="3" />
+          <path d="M3 5V19A9 3 0 0 0 21 19V5" />
+          <path d="M3 12A9 3 0 0 0 21 12" />
         </svg>
       ),
     },
@@ -603,6 +618,286 @@ export const SettingsModal: React.FC = () => {
                     ? '启动时自动检测同步，并在后台静默监听集合变动，保证多端进度实时一致、数据安全无缝。'
                     : 'Syncs automatically on launch and listens for background database updates in real-time.'}
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3.5: Import / Export & System Maintenance Tools */}
+          {activeTab === 'maintenance' && (
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-[17px] font-bold tracking-tight">
+                  {isZh ? '数据导入/导出与系统维护' : 'Import / Export & Maintenance'}
+                </h3>
+                <p className={`text-[12px] ${subText} mt-0.5`}>
+                  {isZh
+                    ? '管理 .apkg / .colpkg 牌组包导入导出，以及数据库校验、空白卡片与冗余媒体清理'
+                    : 'Import or export .apkg packages, verify SQLite integrity, and clean empty cards or unused media'}
+                </p>
+              </div>
+
+              {/* Section 1: Import & Export (.apkg / .colpkg / .txt) */}
+              <div className={`rounded-xl border p-4 space-y-3 ${cardSurface}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[13px] font-semibold">
+                      {isZh ? '牌组包导入与集合导出' : 'Import & Export Packages'}
+                    </div>
+                    <div className={`text-[11px] ${subText} mt-0.5`}>
+                      {isZh
+                        ? '直接调用 Anki 原生文件引擎，完整支持 .apkg、.colpkg 及 CSV/TXT 词表'
+                        : 'Full compatibility with .apkg decks, .colpkg backups, and text/CSV files'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => appActions.triggerNativeImport()}
+                    className={`p-3.5 rounded-xl border text-left flex items-center justify-between cursor-pointer transition-all ${
+                      isDark
+                        ? 'bg-[#161720] border-[#2E303E] hover:border-[var(--brand)]'
+                        : 'bg-white border-[#E5E5EA] hover:border-[var(--brand)]'
+                    }`}
+                  >
+                    <div>
+                      <div className="text-[13px] font-bold text-[var(--brand-text)]">
+                        {isZh ? '导入卡片包 (.apkg)' : 'Import Package (.apkg)'}
+                      </div>
+                      <div className={`text-[11px] ${subText} mt-0.5`}>
+                        {isZh ? '从本地导入第三方牌组或备份' : 'Import deck package or text file'}
+                      </div>
+                    </div>
+                    <span className="text-[16px] text-[var(--brand-text)]">↓</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => appActions.triggerNativeExport()}
+                    className={`p-3.5 rounded-xl border text-left flex items-center justify-between cursor-pointer transition-all ${
+                      isDark
+                        ? 'bg-[#161720] border-[#2E303E] hover:border-[var(--brand)]'
+                        : 'bg-white border-[#E5E5EA] hover:border-[var(--brand)]'
+                    }`}
+                  >
+                    <div>
+                      <div className="text-[13px] font-bold">
+                        {isZh ? '导出牌组 / 集合备份' : 'Export Deck / Backup'}
+                      </div>
+                      <div className={`text-[11px] ${subText} mt-0.5`}>
+                        {isZh ? '打包分享牌组或导出含进度备份' : 'Export .apkg deck or .colpkg backup'}
+                      </div>
+                    </div>
+                    <span className="text-[16px] text-[#8E8E93]">↑</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 2: System Maintenance & Diagnostics */}
+              <div className={`rounded-xl border p-4 space-y-3.5 ${cardSurface}`}>
+                <div className="text-[13px] font-semibold">
+                  {isZh ? '系统维护与健康诊断' : 'System Maintenance & Diagnostics'}
+                </div>
+
+                {/* Tool A: Check Database */}
+                <div
+                  className={`p-3.5 rounded-xl border space-y-2.5 ${
+                    isDark ? 'bg-[#161720] border-[#2C2E3C]' : 'bg-white border-[#EAECEF]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[13px] font-semibold">
+                        {isZh ? '1. 检查并优化数据库 (Check Database)' : '1. Check & Optimize Database'}
+                      </div>
+                      <div className={`text-[11px] ${subText} mt-0.5`}>
+                        {isZh
+                          ? '执行 SQLite 完整性校验与索引重构 (ANALYZE)，确保学习记录安全无损'
+                          : 'Verify SQLite integrity and rebuild query statistics'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={runningTool === 'check_db'}
+                      onClick={async () => {
+                        setRunningTool('check_db');
+                        const res = await appActions.runMaintenanceAction('check_db');
+                        setDbReport(res);
+                        setRunningTool(null);
+                      }}
+                      className="btn-secondary !h-8 !px-3.5 !text-[12px] shrink-0"
+                    >
+                      {runningTool === 'check_db'
+                        ? isZh
+                          ? '检查中...'
+                          : 'Checking...'
+                        : isZh
+                        ? '立即检查'
+                        : 'Check DB'}
+                    </button>
+                  </div>
+
+                  {dbReport && (
+                    <div className="pt-2 border-t border-black/5 dark:border-white/5 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <span className="text-[var(--status-success)] font-semibold">
+                        ✓ {dbReport.message}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Tool B: Empty Cards Check & Cleanup */}
+                <div
+                  className={`p-3.5 rounded-xl border space-y-2.5 ${
+                    isDark ? 'bg-[#161720] border-[#2C2E3C]' : 'bg-white border-[#EAECEF]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[13px] font-semibold">
+                        {isZh ? '2. 清理空白与失效卡片 (Empty Cards)' : '2. Scan & Clean Empty Cards'}
+                      </div>
+                      <div className={`text-[11px] ${subText} mt-0.5`}>
+                        {isZh
+                          ? '扫描正面为空或删减 Cloze 挖空序号后遗留的空白子卡片'
+                          : 'Detect and clean blank cards or orphaned Cloze sibling cards'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {emptyReport && emptyReport.emptyCount > 0 && (
+                        <button
+                          type="button"
+                          disabled={runningTool === 'clean_empty_cards'}
+                          onClick={async () => {
+                            setRunningTool('clean_empty_cards');
+                            const res = await appActions.runMaintenanceAction('clean_empty_cards');
+                            setEmptyReport(res);
+                            setRunningTool(null);
+                          }}
+                          className="h-8 px-3 rounded-xl bg-[var(--status-danger)] text-white text-[11px] font-semibold cursor-pointer"
+                        >
+                          {isZh
+                            ? `清理 ${emptyReport.emptyCount} 张空卡`
+                            : `Clean ${emptyReport.emptyCount}`}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={runningTool === 'check_empty_cards'}
+                        onClick={async () => {
+                          setRunningTool('check_empty_cards');
+                          const res = await appActions.runMaintenanceAction('check_empty_cards');
+                          setEmptyReport(res);
+                          setRunningTool(null);
+                        }}
+                        className="btn-secondary !h-8 !px-3.5 !text-[12px]"
+                      >
+                        {runningTool === 'check_empty_cards'
+                          ? isZh
+                            ? '扫描中...'
+                            : 'Scanning...'
+                          : isZh
+                          ? '扫描空卡'
+                          : 'Scan Empty'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {emptyReport && (
+                    <div className="pt-2 border-t border-black/5 dark:border-white/5 text-[11px] flex items-center justify-between">
+                      <span
+                        className={
+                          emptyReport.emptyCount > 0
+                            ? 'text-[var(--status-warning)] font-semibold'
+                            : 'text-[var(--status-success)] font-semibold'
+                        }
+                      >
+                        {emptyReport.emptyCount > 0 ? '● ' : '✓ '}
+                        {emptyReport.message}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Tool C: Media Check & Unused Cleanup */}
+                <div
+                  className={`p-3.5 rounded-xl border space-y-2.5 ${
+                    isDark ? 'bg-[#161720] border-[#2C2E3C]' : 'bg-white border-[#EAECEF]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[13px] font-semibold">
+                        {isZh ? '3. 媒体文件检查与冗余清理 (Check Media)' : '3. Check Media & Unused Files'}
+                      </div>
+                      <div className={`text-[11px] ${subText} mt-0.5`}>
+                        {isZh
+                          ? '比对 collection.media 目录与卡片引用，定位未使用的孤立图片/音频或缺失文件'
+                          : 'Compare collection.media against note fields for unused or missing files'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {mediaReport && mediaReport.unusedCount > 0 && (
+                        <button
+                          type="button"
+                          disabled={runningTool === 'clean_unused_media'}
+                          onClick={async () => {
+                            setRunningTool('clean_unused_media');
+                            const res = await appActions.runMaintenanceAction('clean_unused_media');
+                            setMediaReport(res);
+                            setRunningTool(null);
+                          }}
+                          className="h-8 px-3 rounded-xl bg-[var(--status-danger)] text-white text-[11px] font-semibold cursor-pointer"
+                        >
+                          {isZh
+                            ? `清理 ${mediaReport.unusedCount} 个冗余文件`
+                            : `Clean ${mediaReport.unusedCount} Unused`}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={runningTool === 'check_media'}
+                        onClick={async () => {
+                          setRunningTool('check_media');
+                          const res = await appActions.runMaintenanceAction('check_media');
+                          setMediaReport(res);
+                          setRunningTool(null);
+                        }}
+                        className="btn-secondary !h-8 !px-3.5 !text-[12px]"
+                      >
+                        {runningTool === 'check_media'
+                          ? isZh
+                            ? '扫描中...'
+                            : 'Scanning...'
+                          : isZh
+                          ? '检查媒体'
+                          : 'Check Media'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {mediaReport && (
+                    <div className="pt-2 border-t border-black/5 dark:border-white/5 text-[11px] space-y-1">
+                      <div
+                        className={
+                          mediaReport.unusedCount > 0 || mediaReport.missingCount > 0
+                            ? 'text-[var(--status-warning)] font-semibold'
+                            : 'text-[var(--status-success)] font-semibold'
+                        }
+                      >
+                        {mediaReport.unusedCount > 0 || mediaReport.missingCount > 0 ? '● ' : '✓ '}
+                        {mediaReport.message}
+                      </div>
+                      {Array.isArray(mediaReport.unusedFiles) && mediaReport.unusedFiles.length > 0 && (
+                        <div className={`${subText} truncate`}>
+                          {isZh ? '未引用示例：' : 'Unused sample: '}
+                          {mediaReport.unusedFiles.slice(0, 5).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

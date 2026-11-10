@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ANKI_FLAG_PALETTE, CardFlagColor } from '../../bridge/pycmd';
 import { formatShortcut, translate } from '../../i18n/translations';
 import { appActions, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
 import { renderMathAndRichHtml } from '../../utils/mathRenderer';
@@ -49,8 +50,20 @@ export const ReviewerView: React.FC = () => {
   const [addingTag, setAddingTag] = useState(false);
   const [selectedSlashIdx, setSelectedSlashIdx] = useState(0);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [flagPopoverOpen, setFlagPopoverOpen] = useState(false);
 
   const activeInputRef = useRef<HTMLInputElement>(null);
+  const flagMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (flagMenuRef.current && !flagMenuRef.current.contains(e.target as Node)) {
+        setFlagPopoverOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
 
   const hasDraftChanges = useMemo(() => {
     const allKeys = Array.from(
@@ -64,6 +77,7 @@ export const ReviewerView: React.FC = () => {
 
   useEffect(() => {
     setConfirmingDelete(false);
+    setFlagPopoverOpen(false);
     if (currentCard) {
       const fMap =
         currentCard.fields && Object.keys(currentCard.fields).length > 0
@@ -161,8 +175,29 @@ export const ReviewerView: React.FC = () => {
         return;
       }
 
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      const target = e.target as HTMLElement | null;
+      // CardEditorModal uses a contentEditable DIV, which is not in the tag
+      // whitelist: typing a space or digit used to flip/grade the card instead.
+      if (
+        target?.isContentEditable ||
+        target?.closest('input, textarea, select, [contenteditable="true"]')
+      ) {
+        return;
+      }
+
+      // 7-Color Flag Shortcuts: Cmd+1..7 (or Ctrl+1..7) toggles flag 1..7, Cmd+0 clears flag
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && /^[0-7]$/.test(e.key)) {
+        e.preventDefault();
+        const flagVal = parseInt(e.key, 10) as CardFlagColor;
+        appActions.setCurrentReviewCardFlag(flagVal, true);
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        appActions.exitReview();
+        return;
+      }
 
       if (e.key === ' ') {
         e.preventDefault();
@@ -448,6 +483,9 @@ export const ReviewerView: React.FC = () => {
       ? currentCard.fieldOrder
       : Object.keys(fieldsDraft);
 
+  const activeFlagNum = ((currentCard.flags || 0) & 7) as CardFlagColor;
+  const activeFlagSpec = activeFlagNum !== 0 ? ANKI_FLAG_PALETTE[activeFlagNum] : null;
+
   return (
     <div className={`fixed inset-0 z-30 flex flex-col select-none overflow-hidden transition-colors ${screenBg}`}>
       {/* Ultra-thin Top Progress Bar */}
@@ -557,6 +595,103 @@ export const ReviewerView: React.FC = () => {
                   {showShortcutHints && <kbd className="text-[10px] opacity-70 font-mono">R</kbd>}
                 </button>
               )}
+
+              {/* 7-Color Flag Quick Picker Button & Popover */}
+              <div ref={flagMenuRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setFlagPopoverOpen((prev) => !prev)}
+                  title={
+                    isZh
+                      ? `卡片旗标 (${formatShortcut('Cmd 1-7', platform)})`
+                      : `Card Flag (${formatShortcut('Cmd 1-7', platform)})`
+                  }
+                  style={
+                    activeFlagSpec
+                      ? {
+                          backgroundColor: activeFlagSpec.bgSoft,
+                          borderColor: activeFlagSpec.borderHex,
+                          color: activeFlagSpec.hex,
+                        }
+                      : undefined
+                  }
+                  className={`h-8 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
+                    activeFlagSpec ? '' : headerBtnSurface
+                  }`}
+                >
+                  <svg
+                    className="w-3.5 h-3.5 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill={activeFlagSpec ? 'currentColor' : 'none'}
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                    <line x1="4" y1="22" x2="4" y2="15" />
+                  </svg>
+                  {activeFlagSpec && (
+                    <span>{isZh ? activeFlagSpec.shortZh : activeFlagSpec.shortEn}</span>
+                  )}
+                </button>
+
+                {flagPopoverOpen && (
+                  <div
+                    className={`absolute right-0 top-10 z-50 w-[210px] rounded-2xl border shadow-2xl p-2 space-y-0.5 backdrop-blur-xl ${
+                      isDark
+                        ? 'bg-[#181922]/96 border-[#2E303E] text-white'
+                        : 'bg-white/96 border-[#E5E5EA] text-[#1D1D1F]'
+                    }`}
+                  >
+                    <div className="px-2.5 py-1 text-[10px] text-[#8E8E93] flex items-center justify-between">
+                      <span>{isZh ? '7 色旗标标记' : '7-Color Flags'}</span>
+                      <span className="font-mono">{formatShortcut('Cmd 1-7', platform)}</span>
+                    </div>
+                    {([1, 2, 3, 4, 5, 6, 7] as Array<Exclude<CardFlagColor, 0>>).map((fNum) => {
+                      const spec = ANKI_FLAG_PALETTE[fNum];
+                      const isSel = activeFlagNum === fNum;
+                      return (
+                        <button
+                          key={fNum}
+                          type="button"
+                          onClick={() => {
+                            appActions.setCurrentReviewCardFlag(fNum, true);
+                            setFlagPopoverOpen(false);
+                          }}
+                          className={`w-full px-2.5 py-1.5 rounded-xl text-[12px] flex items-center justify-between cursor-pointer transition-colors ${
+                            isSel
+                              ? 'bg-black/5 dark:bg-white/10 font-semibold'
+                              : 'hover:bg-black/5 dark:hover:bg-white/5'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: spec.hex }}
+                            />
+                            <span>{isZh ? spec.labelZh : spec.labelEn}</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-[#8E8E93]">
+                            {isSel ? '✓' : fNum}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {activeFlagNum > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          appActions.setCurrentReviewCardFlag(0, false);
+                          setFlagPopoverOpen(false);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded-xl text-[11px] text-[#8E8E93] hover:text-[var(--status-danger)] flex items-center justify-between cursor-pointer border-t border-black/5 dark:border-white/5 mt-1 pt-1.5"
+                      >
+                        <span>{isZh ? '清除旗标' : 'Clear Flag'}</span>
+                        <span className="font-mono text-[10px]">0</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={() => {
@@ -751,6 +886,26 @@ export const ReviewerView: React.FC = () => {
                       {isCardFlipped ? t('answerSideBadge') : t('questionSideBadge')}
                     </span>
 
+                    {activeFlagSpec && (
+                      <button
+                        type="button"
+                        onClick={() => appActions.setCurrentReviewCardFlag(0, false)}
+                        title={isZh ? '点击清除旗标' : 'Click to clear flag'}
+                        style={{
+                          backgroundColor: activeFlagSpec.bgSoft,
+                          borderColor: activeFlagSpec.borderHex,
+                          color: activeFlagSpec.hex,
+                        }}
+                        className="px-2 py-0.5 rounded-md border text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: activeFlagSpec.hex }}
+                        />
+                        <span>{isZh ? activeFlagSpec.shortZh : activeFlagSpec.shortEn}</span>
+                      </button>
+                    )}
+
                     {currentCard.audioFiles &&
                       currentCard.audioFiles.map((audioFile) => (
                         <button
@@ -800,7 +955,7 @@ export const ReviewerView: React.FC = () => {
                   return (
                     <div className="mb-6 select-text cursor-text">
                       <div
-                        className={`${frontTypographyClass} whitespace-pre-wrap break-words [&_img]:max-h-52 [&_img]:rounded-xl [&_img]:my-2`}
+                        className={`${frontTypographyClass} whitespace-pre-wrap break-words [&_img]:max-h-64 [&_img]:rounded-xl [&_img]:my-2 [&_.anki-io-wrap_img]:!my-0 [&_.anki-io-wrap_img]:!max-h-80`}
                         dangerouslySetInnerHTML={{
                           __html: renderMathAndRichHtml(frontHtmlContent, !isCardFlipped),
                         }}
@@ -947,166 +1102,166 @@ export const ReviewerView: React.FC = () => {
           } backdrop-blur-md ${inspectorOpen ? '-translate-x-28' : ''}`}
         >
           <div className="w-[560px] max-w-full h-[58px]">
-                {!isCardFlipped ? (
-                  /* Unflipped: Full 560px width so clicking center or center-right lands directly on "Good" after flip! */
-                  <button
-                    onClick={() => appActions.flipCard()}
-                    style={{ backgroundColor: brandHex }}
-                    className={`w-[560px] h-[58px] px-6 rounded-2xl hover:opacity-95 text-white font-semibold text-[15px] shadow-xl flex items-center ${
-                      showShortcutHints ? 'justify-between' : 'justify-center'
-                    } cursor-pointer transition-all active:scale-[0.99]`}
-                  >
-                    <span>{t('showAnswerBtn')}</span>
-                    {showShortcutHints && (
-                      <kbd className="px-2.5 py-1 rounded-lg bg-white/20 text-[12px] font-mono">
-                        Space / Enter
-                      </kbd>
-                    )}
-                  </button>
-                ) : optionKeyHeld ? (
-                  /* 4-Level FSRS Mode: 560px 4-column grid */
-                  <div className="grid grid-cols-4 gap-3 w-[560px] h-[58px]">
-                    <button
-                      onClick={() => appActions.answerCurrentCard(1)}
-                      className={`h-[58px] px-4 rounded-2xl border flex items-center ${
-                        showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                      } cursor-pointer transition-all bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger)]`}
-                    >
-                      <div className={showShortcutHints ? 'text-left' : 'text-center'}>
-                        <div className="text-[13px] font-semibold">{t('rateAgain')}</div>
-                        <div className="text-[11px] opacity-75">
-                          {currentCard.predictions.again}
-                        </div>
-                      </div>
-                      {showShortcutHints && (
-                        <kbd className="px-2 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[11px] font-mono">
-                          1
-                        </kbd>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => appActions.answerCurrentCard(2)}
-                      className={`h-[58px] px-4 rounded-2xl border flex items-center ${
-                        showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                      } cursor-pointer transition-all bg-[var(--status-warning-soft)] border-[var(--status-warning)]/35 hover:border-[var(--status-warning)] text-[var(--status-warning)]`}
-                    >
-                      <div className={showShortcutHints ? 'text-left' : 'text-center'}>
-                        <div className="text-[13px] font-semibold">{t('rateHard')}</div>
-                        <div className="text-[11px] opacity-75">
-                          {currentCard.predictions.hard}
-                        </div>
-                      </div>
-                      {showShortcutHints && (
-                        <kbd className="px-2 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[11px] font-mono">
-                          2
-                        </kbd>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => appActions.answerCurrentCard(3)}
-                      className={`h-[58px] px-4 rounded-2xl border flex items-center ${
-                        showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                      } cursor-pointer transition-all bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success)]`}
-                    >
-                      <div className={showShortcutHints ? 'text-left' : 'text-center'}>
-                        <div className="text-[13px] font-semibold">{t('rateGood')}</div>
-                        <div className="text-[11px] opacity-75">
-                          {currentCard.predictions.good}
-                        </div>
-                      </div>
-                      {showShortcutHints && (
-                        <kbd className="px-2 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[11px] font-mono">
-                          3
-                        </kbd>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => appActions.answerCurrentCard(4)}
-                      className={`h-[58px] px-4 rounded-2xl border flex items-center ${
-                        showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                      } cursor-pointer transition-all bg-[var(--status-info-soft)] border-[var(--status-info)]/35 hover:border-[var(--status-info)] text-[var(--status-info)]`}
-                    >
-                      <div className={showShortcutHints ? 'text-left' : 'text-center'}>
-                        <div className="text-[13px] font-semibold">{t('rateEasy')}</div>
-                        <div className="text-[11px] opacity-75">
-                          {currentCard.predictions.easy}
-                        </div>
-                      </div>
-                      {showShortcutHints && (
-                        <kbd className="px-2 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[11px] font-mono">
-                          4
-                        </kbd>
-                      )}
-                    </button>
-                  </div>
-                ) : (
-                  /* Item #5: Asymmetric Ergonomic Binary Mode (`w-[170px]` Again + `w-[374px]` Good = 560px with 16px gap) */
-                  <div className="w-[560px] h-[58px] flex items-center gap-4">
-                    <button
-                      onClick={() => appActions.answerCurrentCard(1)}
-                      className={`w-[170px] h-[58px] px-5 rounded-2xl border flex items-center ${
-                        showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                      } cursor-pointer transition-all active:scale-[0.98] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger)]`}
-                    >
-                      <div className={showShortcutHints ? 'text-left' : 'text-center'}>
-                        <div className="text-[14px] font-semibold">{t('rateAgain')}</div>
-                        <div className="text-[11px] opacity-75 mt-0.5">
-                          {currentCard.predictions.again}
-                        </div>
-                      </div>
-                      {showShortcutHints && (
-                        <kbd className="w-6 h-6 rounded-md bg-black/10 dark:bg-white/[0.06] flex items-center justify-center text-[11px] font-mono">
-                          1
-                        </kbd>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => appActions.answerCurrentCard(3)}
-                      className={`w-[374px] h-[58px] px-6 rounded-2xl border flex items-center ${
-                        showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                      } cursor-pointer transition-all active:scale-[0.98] bg-[var(--brand-soft)] border-[var(--brand-border)] hover:border-[var(--brand)] text-[var(--brand-text)]`}
-                    >
-                      <div className={showShortcutHints ? 'text-left' : 'text-center'}>
-                        <div className="text-[15px] font-bold">{t('rateGood')}</div>
-                        <div className="text-[11px] opacity-80 mt-0.5">
-                          {currentCard.predictions.good}
-                        </div>
-                      </div>
-                      {showShortcutHints && (
-                        <kbd className="px-2.5 h-6 rounded-md bg-black/10 dark:bg-white/[0.08] flex items-center justify-center text-[11px] font-mono">
-                          2 / Enter
-                        </kbd>
-                      )}
-                    </button>
-                  </div>
+            {!isCardFlipped ? (
+              /* Unflipped: Full 560px width so clicking center or center-right lands directly on "Good" after flip! */
+              <button
+                onClick={() => appActions.flipCard()}
+                style={{ backgroundColor: brandHex }}
+                className={`w-[560px] h-[58px] px-6 rounded-2xl hover:opacity-95 text-white font-semibold text-[15px] shadow-xl flex items-center ${
+                  showShortcutHints ? 'justify-between' : 'justify-center'
+                } cursor-pointer transition-all active:scale-[0.99]`}
+              >
+                <span>{t('showAnswerBtn')}</span>
+                {showShortcutHints && (
+                  <kbd className="px-2.5 py-1 rounded-lg bg-white/20 text-[12px] font-mono">
+                    Space / Enter
+                  </kbd>
                 )}
-              </div>
-
-              {showShortcutHints && (
+              </button>
+            ) : optionKeyHeld ? (
+              /* 4-Level FSRS Mode: 560px 4-column grid */
+              <div className="grid grid-cols-4 gap-3 w-[560px] h-[58px]">
                 <button
-                  type="button"
-                  onClick={() => setAppState((prev) => ({ optionKeyHeld: !prev.optionKeyHeld }))}
-                  className="mt-3.5 text-[11px] text-[#8E8E93] hover:text-[var(--brand-text)] cursor-pointer"
+                  onClick={() => appActions.answerCurrentCard(1)}
+                  className={`h-[58px] px-4 rounded-2xl border flex items-center ${
+                    showShortcutHints ? 'justify-between' : 'justify-center text-center'
+                  } cursor-pointer transition-all bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger)]`}
                 >
-                  {formatShortcut(
-                    isCardFlipped
-                      ? '按住 Option 展开四档评分 (1重来 / 2困难 / 3记得 / 4简单) · 原地连击即可流式完成复习 · Cmd Z 撤销'
-                      : 'Space / Enter 翻开答案 · R 音频 · Cmd Z 撤销',
-                    platform
+                  <div className={showShortcutHints ? 'text-left' : 'text-center'}>
+                    <div className="text-[13px] font-semibold">{t('rateAgain')}</div>
+                    <div className="text-[11px] opacity-75">
+                      {currentCard.predictions.again}
+                    </div>
+                  </div>
+                  {showShortcutHints && (
+                    <kbd className="px-2 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[11px] font-mono">
+                      1
+                    </kbd>
                   )}
                 </button>
+
+                <button
+                  onClick={() => appActions.answerCurrentCard(2)}
+                  className={`h-[58px] px-4 rounded-2xl border flex items-center ${
+                    showShortcutHints ? 'justify-between' : 'justify-center text-center'
+                  } cursor-pointer transition-all bg-[var(--status-warning-soft)] border-[var(--status-warning)]/35 hover:border-[var(--status-warning)] text-[var(--status-warning)]`}
+                >
+                  <div className={showShortcutHints ? 'text-left' : 'text-center'}>
+                    <div className="text-[13px] font-semibold">{t('rateHard')}</div>
+                    <div className="text-[11px] opacity-75">
+                      {currentCard.predictions.hard}
+                    </div>
+                  </div>
+                  {showShortcutHints && (
+                    <kbd className="px-2 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[11px] font-mono">
+                      2
+                    </kbd>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => appActions.answerCurrentCard(3)}
+                  className={`h-[58px] px-4 rounded-2xl border flex items-center ${
+                    showShortcutHints ? 'justify-between' : 'justify-center text-center'
+                  } cursor-pointer transition-all bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success)]`}
+                >
+                  <div className={showShortcutHints ? 'text-left' : 'text-center'}>
+                    <div className="text-[13px] font-semibold">{t('rateGood')}</div>
+                    <div className="text-[11px] opacity-75">
+                      {currentCard.predictions.good}
+                    </div>
+                  </div>
+                  {showShortcutHints && (
+                    <kbd className="px-2 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[11px] font-mono">
+                      3
+                    </kbd>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => appActions.answerCurrentCard(4)}
+                  className={`h-[58px] px-4 rounded-2xl border flex items-center ${
+                    showShortcutHints ? 'justify-between' : 'justify-center text-center'
+                  } cursor-pointer transition-all bg-[var(--status-info-soft)] border-[var(--status-info)]/35 hover:border-[var(--status-info)] text-[var(--status-info)]`}
+                >
+                  <div className={showShortcutHints ? 'text-left' : 'text-center'}>
+                    <div className="text-[13px] font-semibold">{t('rateEasy')}</div>
+                    <div className="text-[11px] opacity-75">
+                      {currentCard.predictions.easy}
+                    </div>
+                  </div>
+                  {showShortcutHints && (
+                    <kbd className="px-2 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[11px] font-mono">
+                      4
+                    </kbd>
+                  )}
+                </button>
+              </div>
+            ) : (
+              /* Item #5: Asymmetric Ergonomic Binary Mode (`w-[170px]` Again + `w-[374px]` Good = 560px with 16px gap) */
+              <div className="w-[560px] h-[58px] flex items-center gap-4">
+                <button
+                  onClick={() => appActions.answerCurrentCard(1)}
+                  className={`w-[170px] h-[58px] px-5 rounded-2xl border flex items-center ${
+                    showShortcutHints ? 'justify-between' : 'justify-center text-center'
+                  } cursor-pointer transition-all active:scale-[0.98] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger)]`}
+                >
+                  <div className={showShortcutHints ? 'text-left' : 'text-center'}>
+                    <div className="text-[14px] font-semibold">{t('rateAgain')}</div>
+                    <div className="text-[11px] opacity-75 mt-0.5">
+                      {currentCard.predictions.again}
+                    </div>
+                  </div>
+                  {showShortcutHints && (
+                    <kbd className="w-6 h-6 rounded-md bg-black/10 dark:bg-white/[0.06] flex items-center justify-center text-[11px] font-mono">
+                      1
+                    </kbd>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => appActions.answerCurrentCard(3)}
+                  className={`w-[374px] h-[58px] px-6 rounded-2xl border flex items-center ${
+                    showShortcutHints ? 'justify-between' : 'justify-center text-center'
+                  } cursor-pointer transition-all active:scale-[0.98] bg-[var(--brand-soft)] border-[var(--brand-border)] hover:border-[var(--brand)] text-[var(--brand-text)]`}
+                >
+                  <div className={showShortcutHints ? 'text-left' : 'text-center'}>
+                    <div className="text-[15px] font-bold">{t('rateGood')}</div>
+                    <div className="text-[11px] opacity-80 mt-0.5">
+                      {currentCard.predictions.good}
+                    </div>
+                  </div>
+                  {showShortcutHints && (
+                    <kbd className="px-2.5 h-6 rounded-md bg-black/10 dark:bg-white/[0.08] flex items-center justify-center text-[11px] font-mono">
+                      2 / Enter
+                    </kbd>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {showShortcutHints && (
+            <button
+              type="button"
+              onClick={() => setAppState((prev) => ({ optionKeyHeld: !prev.optionKeyHeld }))}
+              className="mt-3.5 text-[11px] text-[#8E8E93] hover:text-[var(--brand-text)] cursor-pointer"
+            >
+              {formatShortcut(
+                isCardFlipped
+                  ? '按住 Option 展开四档评分 (1重来 / 2困难 / 3记得 / 4简单) · Cmd+1~7 标记旗标 · Cmd Z 撤销'
+                  : 'Space / Enter 翻开答案 · Cmd+1~7 标记旗标 · R 音频 · Cmd Z 撤销',
+                platform
               )}
-            </footer>
+            </button>
           )}
+        </footer>
+      )}
 
         {/* RIGHT INSPECTOR DRAWER (Light & Dark Adapted) */}
         {inspectorOpen && (
           <aside className={`absolute right-0 top-0 bottom-0 w-[300px] backdrop-blur-xl border-l p-6 flex flex-col justify-between z-40 ${inspectorSurface}`}>
-            <div className="space-y-6">
+            <div className="space-y-5 overflow-y-auto pr-0.5">
               <div className="flex items-center justify-between">
                 <h3 className="text-[14px] font-semibold">{t('cardInfoTitle')}</h3>
                 <button
@@ -1115,6 +1270,60 @@ export const ReviewerView: React.FC = () => {
                 >
                   ✕
                 </button>
+              </div>
+
+              {/* 7-Color Flag Picker inside Inspector */}
+              <div>
+                <div className="flex items-center justify-between text-[11px] text-[#8E8E93] mb-2">
+                  <span>{isZh ? '7 色旗标' : 'Card Flag'}</span>
+                  <span className="font-mono text-[10px]">
+                    {activeFlagSpec
+                      ? isZh
+                        ? activeFlagSpec.labelZh
+                        : activeFlagSpec.labelEn
+                      : formatShortcut('Cmd 1-7', platform)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-1">
+                  {([1, 2, 3, 4, 5, 6, 7] as Array<Exclude<CardFlagColor, 0>>).map((fNum) => {
+                    const spec = ANKI_FLAG_PALETTE[fNum];
+                    const isSel = activeFlagNum === fNum;
+                    return (
+                      <button
+                        key={fNum}
+                        type="button"
+                        onClick={() => appActions.setCurrentReviewCardFlag(fNum, true)}
+                        title={`${isZh ? spec.labelZh : spec.labelEn} (${formatShortcut(`Cmd+${fNum}`, platform)})`}
+                        className={`w-7 h-7 rounded-xl border flex items-center justify-center cursor-pointer transition-all ${
+                          isSel
+                            ? 'scale-110 ring-2 ring-offset-1 dark:ring-offset-[#121318]'
+                            : 'opacity-75 hover:opacity-100'
+                        }`}
+                        style={{
+                          backgroundColor: spec.bgSoft,
+                          borderColor: isSel ? spec.hex : spec.borderHex,
+                        }}
+                      >
+                        <span
+                          className="w-2.5 h-2.5 rounded-full"
+                          style={{ backgroundColor: spec.hex }}
+                        />
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => appActions.setCurrentReviewCardFlag(0, false)}
+                    title={isZh ? '清除旗标 (Cmd+0)' : 'Clear Flag (Cmd+0)'}
+                    className={`w-7 h-7 rounded-xl border text-[11px] flex items-center justify-center cursor-pointer transition-colors ${
+                      activeFlagNum === 0
+                        ? 'opacity-40'
+                        : 'text-[#8E8E93] hover:text-[var(--status-danger)] border-black/10 dark:border-white/10'
+                    }`}
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
 
               {/* Deck Selector */}

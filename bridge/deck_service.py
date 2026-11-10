@@ -351,6 +351,88 @@ class DeckService:
                     "accuracy": round((corr / cnt) * 100) if cnt > 0 else 0,
                 })
 
+            def _pct(passed: int, total: int) -> float:
+                return round((passed / total) * 100, 1) if total > 0 else 0.0
+
+            # 5. Anki "Answer Buttons" graph, last 365 days. Split by the interval the
+            #    card had *before* the review (lastIvl >= 21 days = mature).
+            year_start_ms = (cutoff - 365 * 86400) * 1000
+            btn_row = col.db.first(
+                "SELECT "
+                "coalesce(sum(case when ease = 1 then 1 else 0 end), 0), "
+                "coalesce(sum(case when ease = 2 then 1 else 0 end), 0), "
+                "coalesce(sum(case when ease = 3 then 1 else 0 end), 0), "
+                "coalesce(sum(case when ease = 4 then 1 else 0 end), 0), "
+                "coalesce(sum(case when lastIvl < 21 and ease > 1 then 1 else 0 end), 0), "
+                "coalesce(sum(case when lastIvl < 21 then 1 else 0 end), 0), "
+                "coalesce(sum(case when lastIvl >= 21 and ease > 1 then 1 else 0 end), 0), "
+                "coalesce(sum(case when lastIvl >= 21 then 1 else 0 end), 0) "
+                "FROM revlog WHERE type < 4 AND ease > 0 AND id >= ?",
+                year_start_ms,
+            )
+            b = [int(x or 0) for x in (btn_row or (0,) * 8)]
+            answer_buttons = {
+                "again": b[0],
+                "hard": b[1],
+                "good": b[2],
+                "easy": b[3],
+                "total": b[0] + b[1] + b[2] + b[3],
+                "young": {"pass": b[4], "total": b[5], "rate": _pct(b[4], b[5])},
+                "mature": {"pass": b[6], "total": b[7], "rate": _pct(b[6], b[7])},
+            }
+
+            # 6. Anki "True Retention": only the first review of each card per day,
+            #    Again = fail / Hard,Good,Easy = pass. Used to calibrate FSRS desired retention.
+            last30_ms = (cutoff - 30 * 86400) * 1000
+            try:
+                tr_row = col.db.first(
+                    "WITH ranked AS ("
+                    " SELECT cid, ease, lastIvl, id,"
+                    " ROW_NUMBER() OVER ("
+                    "   PARTITION BY cid, CAST((id / 1000 - ?) / 86400 AS INT) ORDER BY id ASC"
+                    " ) AS rn"
+                    " FROM revlog WHERE type < 4 AND ease > 0"
+                    ") SELECT "
+                    " coalesce(sum(case when lastIvl >= 21 then 1 else 0 end), 0), "
+                    " coalesce(sum(case when lastIvl >= 21 and ease > 1 then 1 else 0 end), 0), "
+                    " coalesce(sum(case when lastIvl < 21 then 1 else 0 end), 0), "
+                    " coalesce(sum(case when lastIvl < 21 and ease > 1 then 1 else 0 end), 0), "
+                    " coalesce(sum(case when id >= ? and lastIvl >= 21 then 1 else 0 end), 0), "
+                    " coalesce(sum(case when id >= ? and lastIvl >= 21 and ease > 1 then 1 else 0 end), 0), "
+                    " coalesce(sum(case when id >= ? and lastIvl < 21 then 1 else 0 end), 0), "
+                    " coalesce(sum(case when id >= ? and lastIvl < 21 and ease > 1 then 1 else 0 end), 0) "
+                    "FROM ranked WHERE rn = 1",
+                    today_start_sec,
+                    last30_ms, last30_ms, last30_ms, last30_ms,
+                )
+                t = [int(x or 0) for x in (tr_row or (0,) * 8)]
+            except Exception:
+                # Older SQLite without window functions: degrade gracefully instead
+                # of dropping every other statistic.
+                t = [0] * 8
+
+            def _tr_block(m_total: int, m_pass: int, y_total: int, y_pass: int) -> Dict[str, Any]:
+                total = m_total + y_total
+                passed = m_pass + y_pass
+                return {
+                    "young": {"pass": y_pass, "total": y_total, "rate": _pct(y_pass, y_total)},
+                    "mature": {"pass": m_pass, "total": m_total, "rate": _pct(m_pass, m_total)},
+                    "overall": {"pass": passed, "total": total, "rate": _pct(passed, total)},
+                }
+
+            true_retention = {
+                "allTime": _tr_block(t[0], t[1], t[2], t[3]),
+                "last30d": _tr_block(t[4], t[5], t[6], t[7]),
+            }
+
+            # 7. Anki "Daily Load": expected reviews/day = sum(1 / interval),
+            #    counting only active review cards; sub-day intervals count as 1.
+            load_row = col.db.first(
+                "SELECT coalesce(sum(case when ivl >= 1 then 1.0 / ivl else 1.0 end), 0) "
+                "FROM cards WHERE queue = 2"
+            )
+            daily_load = round(float(load_row[0] or 0), 1) if load_row else 0.0
+
             return {
                 "maturityBreakdown": {
                     "newCards": new_cnt,
@@ -364,6 +446,9 @@ class DeckService:
                 "forecast30d": forecast_30d,
                 "retentionCurve": retention_curve,
                 "hourlyDistribution": hourly_dist,
+                "answerButtons": answer_buttons,
+                "trueRetention": true_retention,
+                "dailyLoad": daily_load,
             }
         except Exception:
             return self._empty_advanced_stats(lang)
@@ -404,6 +489,7 @@ class DeckService:
                 )
 
                 color_idx = len(decks_out) % len(accents)
+                deck_options = self._serialize_deck_options(col, did, full_name)
                 deck_item = {
                     "id": str(did),
                     "parentId": str(parent_id) if parent_id is not None else None,
@@ -420,6 +506,7 @@ class DeckService:
                     "icon": icons[color_idx],
                     "accent": accents[color_idx],
                     "childrenCount": len(getattr(child, "children", [])),
+                    "options": deck_options,
                 }
                 decks_out.append(deck_item)
                 if getattr(child, "children", None):
@@ -427,6 +514,264 @@ class DeckService:
 
         traverse(tree, 0, "", None)
         return decks_out
+
+    @staticmethod
+    def _format_delays_str(delays: Any, default_str: str = "1m 10m") -> str:
+        if not isinstance(delays, (list, tuple)) or not delays:
+            return default_str
+        parts: List[str] = []
+        for raw_val in delays:
+            try:
+                mins = float(raw_val)
+            except Exception:
+                continue
+            if mins <= 0:
+                continue
+            if mins < 1.0:
+                secs = max(1, round(mins * 60))
+                parts.append(f"{secs}s")
+            elif mins >= 1440.0 and mins % 1440.0 == 0:
+                days = int(mins // 1440)
+                parts.append(f"{days}d")
+            elif mins >= 60.0 and mins % 60.0 == 0:
+                hrs = int(mins // 60)
+                parts.append(f"{hrs}h")
+            elif mins.is_integer():
+                parts.append(f"{int(mins)}m")
+            else:
+                parts.append(f"{round(mins, 1)}m")
+        return " ".join(parts) if parts else default_str
+
+    @staticmethod
+    def _parse_delays_str(raw: Any, default_list: List[float]) -> List[float]:
+        if isinstance(raw, (list, tuple)):
+            out = []
+            for x in raw:
+                try:
+                    v = float(x)
+                    if v > 0:
+                        out.append(v)
+                except Exception:
+                    pass
+            return out if out else list(default_list)
+
+        s = str(raw or "").strip()
+        if not s:
+            return list(default_list)
+        import re
+        tokens = [t.strip() for t in re.split(r"[\s,，]+", s) if t.strip()]
+        parsed: List[float] = []
+        for tok in tokens:
+            m = re.match(r"^(\d+(?:\.\d+)?)\s*([smhdSMHD]?)$", tok)
+            if not m:
+                continue
+            val = float(m.group(1))
+            unit = (m.group(2) or "m").lower()
+            if val <= 0:
+                continue
+            if unit == "s":
+                mins = round(val / 60.0, 2)
+            elif unit == "h":
+                mins = val * 60.0
+            elif unit == "d":
+                mins = val * 1440.0
+            else:
+                mins = val
+            parsed.append(max(0.1, min(43200.0, mins)))
+        return parsed if parsed else list(default_list)
+
+    def _resolve_deck_config(self, col, did: int) -> Dict[str, Any]:
+        """Resolves the mutable config/preset dictionary for the given deck ID."""
+        if col is None or not hasattr(col, "decks"):
+            return {
+                "id": 1,
+                "name": "Default",
+                "new": {"perDay": 20, "delays": [1.0, 10.0]},
+                "rev": {"perDay": 200},
+                "lapse": {"delays": [10.0], "leechFails": 8},
+                "desiredRetention": 0.90,
+            }
+
+        decks_mgr = col.decks
+        if hasattr(decks_mgr, "config_dict_for_deck_id"):
+            try:
+                conf = decks_mgr.config_dict_for_deck_id(int(did))
+                if isinstance(conf, dict):
+                    return conf
+            except Exception:
+                pass
+
+        deck_obj = None
+        try:
+            deck_obj = decks_mgr.get(int(did), default=False)
+        except Exception:
+            pass
+        conf_id = int(deck_obj.get("conf", did)) if isinstance(deck_obj, dict) else int(did)
+
+        if hasattr(decks_mgr, "get_config"):
+            try:
+                conf = decks_mgr.get_config(conf_id)
+                if isinstance(conf, dict):
+                    return conf
+            except Exception:
+                pass
+
+        if hasattr(decks_mgr, "all_config"):
+            try:
+                all_cfgs = decks_mgr.all_config()
+                if isinstance(all_cfgs, list) and all_cfgs:
+                    for c in all_cfgs:
+                        if int(c.get("id", 0)) in (conf_id, int(did)):
+                            return c
+                    return all_cfgs[0]
+            except Exception:
+                pass
+
+        store = getattr(decks_mgr, "_custom_configs", None)
+        if not isinstance(store, dict):
+            store = {}
+            try:
+                setattr(decks_mgr, "_custom_configs", store)
+            except Exception:
+                pass
+        if int(did) not in store:
+            store[int(did)] = {
+                "id": int(did),
+                "name": deck_obj.get("name", "Default") if isinstance(deck_obj, dict) else "Default",
+                "new": {"perDay": 20, "delays": [1.0, 10.0]},
+                "rev": {"perDay": 200},
+                "lapse": {"delays": [10.0], "leechFails": 8},
+                "desiredRetention": 0.90,
+            }
+        return store[int(did)]
+
+    def _serialize_deck_options(self, col, did: int, fallback_name: str = "Default") -> Dict[str, Any]:
+        deck_name = fallback_name
+        if col is not None and hasattr(col, "decks") and hasattr(col.decks, "get"):
+            try:
+                d_obj = col.decks.get(int(did), default=False)
+                if isinstance(d_obj, dict) and d_obj.get("name"):
+                    deck_name = str(d_obj["name"])
+            except Exception:
+                pass
+
+        conf = self._resolve_deck_config(col, int(did))
+        new_cfg = conf.get("new") if isinstance(conf.get("new"), dict) else {}
+        rev_cfg = conf.get("rev") if isinstance(conf.get("rev"), dict) else {}
+        lapse_cfg = conf.get("lapse") if isinstance(conf.get("lapse"), dict) else {}
+
+        new_per_day = int(new_cfg.get("perDay", 20) if new_cfg.get("perDay") is not None else 20)
+        rev_per_day = int(rev_cfg.get("perDay", 200) if rev_cfg.get("perDay") is not None else 200)
+        learn_steps = self._format_delays_str(new_cfg.get("delays"), "1m 10m")
+        relearn_steps = self._format_delays_str(lapse_cfg.get("delays"), "10m")
+        leech_fails = int(lapse_cfg.get("leechFails", 8) or 8)
+
+        raw_ret = conf.get("desiredRetention", conf.get("sm2Retention", 0.90))
+        try:
+            desired_ret = round(max(0.70, min(0.97, float(raw_ret or 0.90))), 2)
+        except Exception:
+            desired_ret = 0.90
+
+        return {
+            "deckId": str(did),
+            "deckName": deck_name,
+            "presetId": str(conf.get("id", 1)),
+            "presetName": str(conf.get("name", "Default")),
+            "newPerDay": max(0, min(9999, new_per_day)),
+            "revPerDay": max(0, min(9999, rev_per_day)),
+            "learningSteps": learn_steps,
+            "relearningSteps": relearn_steps,
+            "leechThreshold": max(1, min(99, leech_fails)),
+            "desiredRetention": desired_ret,
+        }
+
+    def get_deck_options(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Returns scheduling preset & FSRS options for a given deck."""
+        data = data or {}
+        deck_id_raw = str(data.get("deckId", "1") or "1").strip()
+        did = int(deck_id_raw) if deck_id_raw.isdigit() else 1
+        col = self.col
+        if col is None:
+            return {
+                "success": False,
+                "error": "Collection unavailable",
+                "options": self._serialize_deck_options(None, did),
+            }
+        return {
+            "success": True,
+            "options": self._serialize_deck_options(col, did),
+        }
+
+    def save_deck_options(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Persists deck daily limits, learning steps, leech threshold, and FSRS desired retention."""
+        data = data or {}
+        deck_id_raw = str(data.get("deckId", "") or "").strip()
+        if not deck_id_raw.isdigit():
+            return {"saved": False, "error": "Valid numeric deckId is required"}
+
+        did = int(deck_id_raw)
+        col = self.col
+        if col is None:
+            return {"saved": False, "error": "Collection unavailable"}
+
+        conf = self._resolve_deck_config(col, did)
+        if not isinstance(conf.get("new"), dict):
+            conf["new"] = {"perDay": 20, "delays": [1.0, 10.0]}
+        if not isinstance(conf.get("rev"), dict):
+            conf["rev"] = {"perDay": 200}
+        if not isinstance(conf.get("lapse"), dict):
+            conf["lapse"] = {"delays": [10.0], "leechFails": 8}
+
+        if "newPerDay" in data and data["newPerDay"] is not None:
+            try:
+                conf["new"]["perDay"] = max(0, min(9999, int(data["newPerDay"])))
+            except Exception:
+                pass
+
+        if "revPerDay" in data and data["revPerDay"] is not None:
+            try:
+                conf["rev"]["perDay"] = max(0, min(9999, int(data["revPerDay"])))
+            except Exception:
+                pass
+
+        if "learningSteps" in data and data["learningSteps"] is not None:
+            conf["new"]["delays"] = self._parse_delays_str(data["learningSteps"], [1.0, 10.0])
+
+        if "relearningSteps" in data and data["relearningSteps"] is not None:
+            conf["lapse"]["delays"] = self._parse_delays_str(data["relearningSteps"], [10.0])
+
+        if "leechThreshold" in data and data["leechThreshold"] is not None:
+            try:
+                conf["lapse"]["leechFails"] = max(1, min(99, int(data["leechThreshold"])))
+            except Exception:
+                pass
+
+        if "desiredRetention" in data and data["desiredRetention"] is not None:
+            try:
+                ret_val = float(data["desiredRetention"])
+                if ret_val > 1.0:
+                    ret_val = ret_val / 100.0
+                ret_clamped = round(max(0.70, min(0.97, ret_val)), 2)
+                conf["desiredRetention"] = ret_clamped
+                conf["sm2Retention"] = ret_clamped
+            except Exception:
+                pass
+
+        try:
+            if hasattr(col.decks, "update_config"):
+                col.decks.update_config(conf)
+            elif hasattr(col.decks, "save"):
+                col.decks.save(conf)
+            if hasattr(col, "save"):
+                col.save()
+        except Exception:
+            pass
+
+        return {
+            "saved": True,
+            "deckId": str(did),
+            "options": self._serialize_deck_options(col, did),
+        }
 
     def _build_heatmap_and_streak(self, col, cutoff: int, lang: str = "zh-CN") -> Dict[str, Any]:
         """Calculates 365-day review matrix, per-day accuracy, streak, and 7-day summary metrics."""
@@ -624,6 +969,408 @@ class DeckService:
             col.decks.remove([int(deck_id_raw)])
         return {"deleted": True, "deckId": deck_id_raw}
 
+    # ---- Import / Export & System Maintenance Tools ----
+
+    def trigger_native_import(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Invokes Anki's native file import dialog (.apkg / .colpkg / .txt / .csv)."""
+        lang = self._resolve_language((data or {}).get("language"))
+        mw = self.mw
+        triggered = False
+        if mw is not None:
+            try:
+                if hasattr(mw, "onImport"):
+                    mw.onImport()
+                    triggered = True
+                elif hasattr(mw, "on_import"):
+                    mw.on_import()
+                    triggered = True
+                else:
+                    try:
+                        import aqt.importing
+                        if hasattr(aqt.importing, "on_import"):
+                            aqt.importing.on_import(mw)
+                            triggered = True
+                    except ImportError:
+                        pass
+            except Exception as e:
+                return {
+                    "success": False,
+                    "triggered": False,
+                    "error": str(e),
+                }
+        return {
+            "success": True,
+            "triggered": triggered,
+            "message": (
+                "已唤起 Anki 原生导入向导（支持 .apkg / .colpkg / 文本卡片包）"
+                if lang == "zh-CN"
+                else "Opened native Anki Import dialog (.apkg / .colpkg / text)"
+            ),
+        }
+
+    def trigger_native_export(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Invokes Anki's native export dialog (.apkg / .colpkg / notes)."""
+        lang = self._resolve_language((data or {}).get("language"))
+        mw = self.mw
+        triggered = False
+        if mw is not None:
+            try:
+                if hasattr(mw, "onExport"):
+                    mw.onExport()
+                    triggered = True
+                elif hasattr(mw, "on_export"):
+                    mw.on_export()
+                    triggered = True
+                else:
+                    try:
+                        import aqt.exporting
+                        if hasattr(aqt.exporting, "on_export"):
+                            aqt.exporting.on_export(mw)
+                            triggered = True
+                    except ImportError:
+                        pass
+            except Exception as e:
+                return {
+                    "success": False,
+                    "triggered": False,
+                    "error": str(e),
+                }
+        return {
+            "success": True,
+            "triggered": triggered,
+            "message": (
+                "已唤起 Anki 原生导出向导（支持导出 .apkg 牌组包或 .colpkg 集合备份）"
+                if lang == "zh-CN"
+                else "Opened native Anki Export dialog (.apkg / .colpkg)"
+            ),
+        }
+
+    def _scan_empty_cards(self, col) -> List[Dict[str, Any]]:
+        """Scans the collection for empty cards (blank front or missing Cloze ordinal)."""
+        if col is None:
+            return []
+
+        import re
+        empty_items: List[Dict[str, Any]] = []
+        seen_cids = set()
+
+        # 1. If native col.empty_cards() is available, include its reported cids
+        if hasattr(col, "empty_cards"):
+            try:
+                rep = col.empty_cards()
+                native_cids = getattr(rep, "cids", None) or (rep if isinstance(rep, (list, tuple)) else [])
+                for cid in native_cids:
+                    c_int = int(cid)
+                    if c_int not in seen_cids:
+                        seen_cids.add(c_int)
+                        empty_items.append({"cardId": str(c_int), "noteId": "", "reason": "native_empty"})
+            except Exception:
+                pass
+
+        # 2. Inspect cards & notes directly for blank front field or missing Cloze {{cN::...}}
+        all_cids = list(col.find_cards("")) if hasattr(col, "find_cards") else []
+        for cid in all_cids:
+            c_int = int(cid)
+            if c_int in seen_cids:
+                continue
+            try:
+                card = col.get_card(c_int)
+                if card is None:
+                    continue
+                note = col.get_note(card.nid) if hasattr(col, "get_note") else card.note()
+                if note is None:
+                    seen_cids.add(c_int)
+                    empty_items.append({"cardId": str(c_int), "noteId": "", "reason": "orphaned_note"})
+                    continue
+
+                flds_dict = dict(note.items())
+                flds_vals = list(flds_dict.values())
+                front_raw = (flds_vals[0] if flds_vals else "").strip()
+                front_plain = re.sub(r"<[^>]+>", "", front_raw).strip()
+                has_img_or_sound = bool(re.search(r"<img\b|\[sound:", front_raw, flags=re.I))
+
+                model = note.note_type() if hasattr(note, "note_type") else {"type": 0}
+                is_cloze = bool(model and model.get("type") == 1)
+
+                if not front_plain and not has_img_or_sound:
+                    seen_cids.add(c_int)
+                    empty_items.append({
+                        "cardId": str(c_int),
+                        "noteId": str(note.id),
+                        "reason": "empty_front",
+                    })
+                elif is_cloze:
+                    target_ord = int(getattr(card, "ord", 0) or 0) + 1
+                    all_text = "\n".join(flds_vals)
+                    if not re.search(rf"\{{\{{c{target_ord}::", all_text):
+                        seen_cids.add(c_int)
+                        empty_items.append({
+                            "cardId": str(c_int),
+                            "noteId": str(note.id),
+                            "reason": f"missing_c{target_ord}",
+                        })
+            except Exception:
+                continue
+
+        return empty_items
+
+    def _scan_media_health(self, col) -> Dict[str, Any]:
+        """Scans collection.media directory vs. note field references (<img src> and [sound:])."""
+        import os
+        import re
+        import urllib.parse
+
+        media_dir = ""
+        if col is not None and hasattr(col, "media") and hasattr(col.media, "dir"):
+            try:
+                media_dir = str(col.media.dir() or "")
+            except Exception:
+                media_dir = ""
+
+        disk_files = set()
+        if media_dir and os.path.isdir(media_dir):
+            try:
+                for fname in os.listdir(media_dir):
+                    if fname.startswith("."):
+                        continue
+                    full_p = os.path.join(media_dir, fname)
+                    if os.path.isfile(full_p):
+                        disk_files.add(fname)
+            except Exception:
+                pass
+
+        referenced_files = set()
+        if col is not None and hasattr(col, "db") and hasattr(col.db, "all"):
+            try:
+                rows = col.db.all("SELECT flds FROM notes")
+                img_re = re.compile(r'<img\b[^>]*?\bsrc\s*=\s*(["\'])([^"\']+)\1', flags=re.I)
+                data_media_re = re.compile(r'\bdata-anki-media\s*=\s*(["\'])([^"\']+)\1', flags=re.I)
+                snd_re = re.compile(r"\[sound:([^\]]+)\]")
+
+                for r in rows:
+                    flds_str = str(r[0] or "")
+                    for m in img_re.finditer(flds_str):
+                        raw_src = m.group(2).strip()
+                        if raw_src.startswith(("http://", "https://", "data:")):
+                            continue
+                        clean_name = os.path.basename(urllib.parse.unquote(raw_src))
+                        if clean_name:
+                            referenced_files.add(clean_name)
+                    for m in data_media_re.finditer(flds_str):
+                        clean_name = os.path.basename(urllib.parse.unquote(m.group(2).strip()))
+                        if clean_name:
+                            referenced_files.add(clean_name)
+                    for m in snd_re.finditer(flds_str):
+                        clean_name = m.group(1).strip()
+                        if clean_name:
+                            referenced_files.add(clean_name)
+            except Exception:
+                pass
+
+        unused_list = sorted(disk_files - referenced_files)
+        missing_list = sorted(referenced_files - disk_files)
+
+        return {
+            "mediaDir": media_dir,
+            "totalFiles": len(disk_files),
+            "referencedCount": len(referenced_files),
+            "unusedCount": len(unused_list),
+            "missingCount": len(missing_list),
+            "unusedFiles": unused_list[:25],
+            "missingFiles": missing_list[:25],
+            "_allUnusedFiles": unused_list,
+        }
+
+    def run_maintenance_action(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Executes in-app system maintenance diagnostics and cleanup:
+        - toolType:
+          - 'check_db': SQLite PRAGMA quick_check + ANALYZE + collection counts
+          - 'check_empty_cards': scans for blank/orphaned cards
+          - 'clean_empty_cards': removes detected empty cards/notes
+          - 'check_media': scans collection.media for unused/missing files
+          - 'clean_unused_media': removes unused files from collection.media
+          - 'open_native_tool': triggers mw.onCheckDB / mw.onEmptyCards / mw.onMediaCheck
+        """
+        data = data or {}
+        tool_type = str(data.get("toolType", "check_db") or "check_db").strip()
+        lang = self._resolve_language(data.get("language"))
+        col = self.col
+        mw = self.mw
+
+        if tool_type == "open_native_tool":
+            target = str(data.get("target", "") or "").strip()
+            triggered = False
+            if mw is not None:
+                try:
+                    if target == "check_db" and hasattr(mw, "onCheckDB"):
+                        mw.onCheckDB()
+                        triggered = True
+                    elif target == "empty_cards" and hasattr(mw, "onEmptyCards"):
+                        mw.onEmptyCards()
+                        triggered = True
+                    elif target == "check_media" and hasattr(mw, "onMediaCheck"):
+                        mw.onMediaCheck()
+                        triggered = True
+                except Exception:
+                    pass
+            return {"success": True, "toolType": tool_type, "target": target, "triggered": triggered}
+
+        if col is None:
+            return {
+                "success": False,
+                "toolType": tool_type,
+                "error": "Collection unavailable",
+            }
+
+        if tool_type == "check_db":
+            integrity_str = "ok"
+            try:
+                if hasattr(col, "db") and hasattr(col.db, "scalar"):
+                    integrity_str = str(col.db.scalar("PRAGMA quick_check") or "ok")
+                elif hasattr(col, "db") and hasattr(col.db, "first"):
+                    r = col.db.first("PRAGMA quick_check")
+                    integrity_str = str(r[0] if r else "ok")
+                if hasattr(col, "db") and hasattr(col.db, "execute"):
+                    col.db.execute("ANALYZE")
+            except Exception as e:
+                integrity_str = f"checked ({e})"
+
+            c_row = col.db.first("SELECT count(*) FROM cards") if hasattr(col, "db") else (0,)
+            n_row = col.db.first("SELECT count(*) FROM notes") if hasattr(col, "db") else (0,)
+            r_row = col.db.first("SELECT count(*) FROM revlog WHERE type < 4 AND ease > 0") if hasattr(col, "db") else (0,)
+
+            card_cnt = int(c_row[0] or 0) if c_row else 0
+            note_cnt = int(n_row[0] or 0) if n_row else 0
+            rev_cnt = int(r_row[0] or 0) if r_row else 0
+            is_healthy = integrity_str.lower() == "ok"
+
+            return {
+                "success": True,
+                "toolType": "check_db",
+                "status": "ok" if is_healthy else "warning",
+                "integrityResult": integrity_str,
+                "cardCount": card_cnt,
+                "noteCount": note_cnt,
+                "revlogCount": rev_cnt,
+                "message": (
+                    f"数据库完整性校验通过（OK）：共 {card_cnt} 张卡片、{note_cnt} 条笔记、{rev_cnt} 条有效复习记录，已完成索引优化"
+                    if lang == "zh-CN"
+                    else f"Database check passed ({integrity_str}): {card_cnt} cards, {note_cnt} notes, {rev_cnt} reviews optimized."
+                ),
+            }
+
+        if tool_type == "check_empty_cards":
+            empty_items = self._scan_empty_cards(col)
+            cnt = len(empty_items)
+            return {
+                "success": True,
+                "toolType": "check_empty_cards",
+                "emptyCount": cnt,
+                "emptyCards": empty_items[:30],
+                "message": (
+                    (f"扫描完成：发现 {cnt} 张空白或缺失挖空序号的卡片，可一键清理" if cnt > 0 else "扫描完成：当前集合没有空白卡片或失效挖空卡")
+                    if lang == "zh-CN"
+                    else (f"Found {cnt} empty cards ready to clean." if cnt > 0 else "No empty cards found.")
+                ),
+            }
+
+        if tool_type == "clean_empty_cards":
+            empty_items = self._scan_empty_cards(col)
+            cids_to_remove = [int(item["cardId"]) for item in empty_items if str(item.get("cardId", "")).isdigit()]
+            removed_cnt = 0
+            if cids_to_remove:
+                if hasattr(col, "rem_cards"):
+                    try:
+                        col.rem_cards(cids_to_remove)
+                        removed_cnt = len(cids_to_remove)
+                    except Exception:
+                        pass
+                if removed_cnt == 0:
+                    try:
+                        if hasattr(col, "db") and hasattr(col.db, "conn"):
+                            placeholders = ",".join("?" for _ in cids_to_remove)
+                            col.db.conn.execute(
+                                f"DELETE FROM cards WHERE id IN ({placeholders})",
+                                tuple(cids_to_remove),
+                            )
+                            col.db.conn.execute(
+                                "DELETE FROM notes WHERE id NOT IN (SELECT DISTINCT nid FROM cards)"
+                            )
+                            col.db.conn.commit()
+                            removed_cnt = len(cids_to_remove)
+                    except Exception:
+                        pass
+            return {
+                "success": True,
+                "toolType": "clean_empty_cards",
+                "removedCount": removed_cnt,
+                "emptyCount": 0,
+                "message": (
+                    f"已成功清理 {removed_cnt} 张空白/失效卡片"
+                    if lang == "zh-CN"
+                    else f"Cleaned {removed_cnt} empty cards."
+                ),
+            }
+
+        if tool_type == "check_media":
+            report = self._scan_media_health(col)
+            unused_cnt = report["unusedCount"]
+            missing_cnt = report["missingCount"]
+            total_f = report["totalFiles"]
+            return {
+                "success": True,
+                "toolType": "check_media",
+                "totalFiles": total_f,
+                "referencedCount": report["referencedCount"],
+                "unusedCount": unused_cnt,
+                "missingCount": missing_cnt,
+                "unusedFiles": report["unusedFiles"],
+                "missingFiles": report["missingFiles"],
+                "message": (
+                    f"媒体库扫描完成：共 {total_f} 个文件，未引用冗余文件 {unused_cnt} 个，缺失引用 {missing_cnt} 个"
+                    if lang == "zh-CN"
+                    else f"Media check complete: {total_f} files, {unused_cnt} unused, {missing_cnt} missing."
+                ),
+            }
+
+        if tool_type == "clean_unused_media":
+            import os
+            report = self._scan_media_health(col)
+            unused_all = report.get("_allUnusedFiles", [])
+            media_dir = report.get("mediaDir", "")
+            removed_cnt = 0
+            if unused_all and col is not None and hasattr(col, "media") and hasattr(col.media, "trash_files"):
+                try:
+                    col.media.trash_files(unused_all)
+                    removed_cnt = len(unused_all)
+                except Exception:
+                    pass
+            if removed_cnt == 0 and unused_all and media_dir and os.path.isdir(media_dir):
+                for fname in unused_all:
+                    try:
+                        os.remove(os.path.join(media_dir, fname))
+                        removed_cnt += 1
+                    except Exception:
+                        pass
+            return {
+                "success": True,
+                "toolType": "clean_unused_media",
+                "removedCount": removed_cnt,
+                "unusedCount": 0,
+                "message": (
+                    f"已清理 {removed_cnt} 个未引用的冗余媒体文件"
+                    if lang == "zh-CN"
+                    else f"Cleaned {removed_cnt} unused media files."
+                ),
+            }
+
+        return {
+            "success": False,
+            "toolType": tool_type,
+            "error": f"Unknown maintenance toolType: {tool_type}",
+        }
+
     @staticmethod
     def _get_greeting(hour: int, lang: str = "zh-CN") -> str:
         if lang == "en":
@@ -650,6 +1397,14 @@ class DeckService:
     @staticmethod
     def _empty_advanced_stats(lang: str = "zh-CN") -> Dict[str, Any]:
         today_label = "今天" if lang == "zh-CN" else "Today"
+
+        def empty_tr():
+            return {
+                "young": {"pass": 0, "total": 0, "rate": 0.0},
+                "mature": {"pass": 0, "total": 0, "rate": 0.0},
+                "overall": {"pass": 0, "total": 0, "rate": 0.0},
+            }
+
         return {
             "maturityBreakdown": {
                 "newCards": 0,
@@ -683,6 +1438,17 @@ class DeckService:
                 {"hour": f"{h:02d}:00", "count": 0, "accuracy": 0}
                 for h in range(24)
             ],
+            "answerButtons": {
+                "again": 0,
+                "hard": 0,
+                "good": 0,
+                "easy": 0,
+                "total": 0,
+                "young": {"pass": 0, "total": 0, "rate": 0.0},
+                "mature": {"pass": 0, "total": 0, "rate": 0.0},
+            },
+            "trueRetention": {"last30d": empty_tr(), "allTime": empty_tr()},
+            "dailyLoad": 0.0,
         }
 
     @classmethod

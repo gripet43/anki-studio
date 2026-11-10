@@ -9,6 +9,7 @@ import { CommandPaletteModal } from './components/search/CommandPaletteModal';
 import { LibraryView } from './components/search/LibraryView';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { StatsView } from './components/stats/StatsView';
+import { CustomStudyModal } from './components/study/CustomStudyModal';
 import { VacationModal } from './components/vacation/VacationModal';
 import { IcuRescueModal } from './components/vacation/IcuRescueModal';
 import { appActions, getAppState, setAppState, showToast, useAppStore } from './stores/useAppStore';
@@ -65,6 +66,9 @@ export const App: React.FC = () => {
     };
 
     const onSyncFinished = () => {
+      // Always release the syncing flag first. Returning early during cold start
+      // left syncing=true forever, which then deadlocked every later sync attempt.
+      setAppState({ syncing: false });
       // Guard: cold start sync manages its own choreographed reveal
       if (getAppState().isInitialSyncing) return;
       const isZh = getAppState().resolvedLang === 'zh-CN';
@@ -198,6 +202,9 @@ export const App: React.FC = () => {
 
       {/* ICU Backlog Crisis Rescue & Evidence Modal */}
       <IcuRescueModal />
+
+      {/* Custom Study, Mistake Drill & Flag/Tag Cram Modal */}
+      <CustomStudyModal />
 
       {/* Top-Center Dynamic Island Toast Notification */}
       {toastMessage && (

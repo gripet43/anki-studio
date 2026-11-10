@@ -478,6 +478,12 @@ class BridgeRouterAuditTest(unittest.TestCase):
             config_writer=write_cfg,
         )
 
+    def tearDown(self):
+        try:
+            self.mock_col.db.conn.close()
+        except Exception:
+            pass
+
     def _call(self, action: str, data: dict = None) -> dict:
         cmd = "modern_anki:" + json.dumps({"action": action, "data": data or {}})
         raw = self.router.handle_pycmd(cmd)
@@ -960,13 +966,336 @@ class BridgeRouterAuditTest(unittest.TestCase):
 
         # 4. Undo of backlog rescue must never use the interval-rewriting '!' suffix.
         self.config_store["last_rescue_receipt"] = {
-            "id": "rescue-test", "canUndo": True,
+            "id": "rescue_test", "canUndo": True,
             "rescheduledCids": ["201"],
             "dayDistribution": [{"dayOffset": 1, "count": 1}],
         }
         self._call("undo_rescue", {})
         self.assertIn(([201], "0"), self.mock_col.set_due_date_calls)
         self.assertFalse(any("!" in str(call[1]) for call in self.mock_col.set_due_date_calls))
+
+    def test_14_legacy_cancelled_vacation_has_no_heatmap_freeze(self):
+        """A pre-fix config must not paint a frozen streak cell after a revert."""
+        # Exact shape of config.json / meta.json written by the old cancel_vacation:
+        # active=False and cancelled_at set, but frozen_dates still populated.
+        recent = [
+            (datetime.date.today() - datetime.timedelta(days=i)).isoformat()
+            for i in range(7)
+        ]
+        self.config_store["vacation_state"] = {
+            "id": "vac-legacy", "active": False,
+            "start_date": recent[0], "end_date": recent[0], "days": 1,
+            "reason": "身心休整", "freeze_new_cards": True,
+            "frozen_dates": list(recent), "frozen_deck_limits": {},
+            "shifted_cids": [], "shifted_card_count": 50,
+            "created_at": "2026-11-10 10:09",
+            "cancelled_at": "2026-11-10 10:39",
+        }
+        self.config_store.pop("vacation_frozen_dates", None)
+        dash = self._call("get_dashboard", {})["data"]
+        self.assertNotIn("bridgeWarning", dash)
+        self.assertFalse(dash["vacation"]["isActive"])
+        self.assertEqual(dash["vacation"]["frozenDates"], [])
+        # DashboardView shows "休假连胜冰冻保护中" only when a cell has this flag.
+        self.assertFalse(any(c.get("isStreakFrozen") for c in dash["heatmap"]["cells"]))
+
+        # A still-active legacy vacation must keep its freeze protection.
+        self.config_store["vacation_state"].pop("cancelled_at")
+        self.config_store["vacation_state"]["active"] = True
+        active = self._call("get_dashboard", {})["data"]
+        self.assertEqual(active["vacation"]["frozenDates"], sorted(recent))
+
+    def test_15_official_statistics_metrics(self):
+        """Anki-parity metrics: Answer Buttons, True Retention semantics, Daily Load."""
+        stats = self._call("get_statistics", {})["data"]
+        self.assertIn("answerButtons", stats)
+        self.assertIn("trueRetention", stats)
+        self.assertIn("dailyLoad", stats)
+
+        # Seed revlog: one genuine review, ease=3 (Good), lastIvl=2 (young), type=1.
+        btn = stats["answerButtons"]
+        self.assertEqual(btn["good"], 1)
+        self.assertEqual(btn["total"], 1)
+        self.assertEqual(btn["young"]["rate"], 100.0)
+        self.assertEqual(btn["mature"]["total"], 0)
+        self.assertEqual(stats["trueRetention"]["allTime"]["overall"]["total"], 1)
+        self.assertEqual(stats["trueRetention"]["allTime"]["overall"]["rate"], 100.0)
+
+        # Two active review cards with ivl 25 / 15 -> 1/25 + 1/15 = 0.1067 -> 0.1
+        self.assertAlmostEqual(stats["dailyLoad"], 0.1, places=1)
+
+        # A second review of the SAME card on the SAME day (Again) must be counted by
+        # Answer Buttons but ignored by True Retention ("first review per card per day").
+        now_ms = int(time.time() * 1000)
+        cur = self.mock_col.db.conn.cursor()
+        cur.execute(
+            "INSERT INTO revlog VALUES (?, 201, 0, 1, 1, 2, 2500, 1000, 1)",
+            (now_ms - 30000,),
+        )
+        # Manual rescheduling logs (type=4, ease=0) must never pollute any metric.
+        cur.execute(
+            "INSERT INTO revlog VALUES (?, 201, 0, 0, 5, 5, 0, 0, 4)",
+            (now_ms - 20000,),
+        )
+        self.mock_col.db.conn.commit()
+
+        stats2 = self._call("get_statistics", {})["data"]
+        tr2 = stats2["trueRetention"]["allTime"]["overall"]
+        self.assertEqual(tr2["total"], 1)
+        self.assertEqual(tr2["rate"], 100.0)
+        self.assertEqual(stats2["answerButtons"]["again"], 1)
+        self.assertEqual(stats2["answerButtons"]["total"], 2)
+        self.assertEqual(stats2["answerButtons"]["young"]["rate"], 50.0)
+
+    def test_16_full_audit_no_fake_success_or_fabricated_receipt(self):
+        """P0/P1 audit fixes: read paths stay read-only, failures are honest."""
+        # 1. A dashboard read must never invent or persist an undoable receipt.
+        self.config_store.pop("last_rescue_receipt", None)
+        self.config_store.pop("rescue_history", None)
+        dash = self._call("get_dashboard", {})["data"]
+        self.assertNotIn("bridgeWarning", dash)
+        self.assertNotIn("last_rescue_receipt", self.config_store)
+        self.assertIsNone(dash.get("lastRescueReceipt"))
+
+        # 2. Legacy fabricated receipts ("rescue_active") must be rejected.
+        self.config_store["last_rescue_receipt"] = {
+            "id": "rescue_active", "canUndo": True,
+            "rescheduledCids": ["201"],
+            "dayDistribution": [{"dayOffset": 1, "count": 1}],
+        }
+        self.assertFalse(self._call("undo_rescue", {})["data"]["success"])
+
+        # 3. A rating that never reached the scheduler must not claim success.
+        #    (anki.scheduler.v3 / aqt are unavailable in the unit-test runtime.)
+        ans = self._call("answer_card", {"cardId": "201", "ease": 3})["data"]
+        self.assertFalse(ans.get("answered", False))
+
+        # 4. A broken search query must not fall back to the whole collection.
+        orig_find = self.mock_col.find_cards
+
+        def broken(query):
+            if query == "":
+                return orig_find(query)
+            raise ValueError("malformed query")
+
+        self.mock_col.find_cards = broken
+        res = self._call("search_cards", {"query": "unclosed("})["data"]
+        self.assertEqual(res["cards"], [])
+        self.assertEqual(res["total"], 0)
+        self.mock_col.find_cards = orig_find
+
+        # 5. Unknown batch actions must fail loudly.
+        bad = self._call("batch_action", {"actionType": "noSuchAction", "cardIds": ["201"]})["data"]
+        self.assertFalse(bad["success"])
+
+        # 6. With no collection / main window, nothing may fake success.
+        null_router = BridgeRouter(
+            col_getter=lambda: None,
+            mw_getter=lambda: None,
+            config_getter=lambda: {},
+            config_writer=lambda p: p,
+        )
+
+        def call_null(action, payload):
+            raw = null_router.handle_pycmd(
+                "modern_anki:" + json.dumps({"action": action, "data": payload})
+            )
+            return json.loads(raw)["data"]
+
+        self.assertFalse(call_null("batch_action", {"actionType": "suspend", "cardIds": ["201"]})["success"])
+        for act, payload, key in (
+            ("update_card_inline", {"cardId": "201", "front": "x"}, "saved"),
+            ("save_pasted_image", {"base64Data": "aGVsbG8=", "ext": "png", "filename": "x.png"}, "saved"),
+            ("quick_add", {"front": "x", "back": "y"}, "created"),
+            ("save_deck_options", {"deckId": "1", "newPerDay": 25}, "saved"),
+            ("set_card_flag", {"cardId": "201", "flag": 1}, "changed"),
+        ):
+            self.assertFalse(call_null(act, payload).get(key, False), f"{act} must not fake success")
+        self.assertFalse(call_null("sync", {})["synced"])
+
+    def test_17_deck_options_flags_and_custom_study(self):
+        """Verify Deck Options (FSRS & daily limits), 7-Color Flags, and Custom Study / Mistake Drills."""
+        # 1. Deck Options: get_deck_options & save_deck_options + dashboard deck options exposure
+        opt_get = self._call("get_deck_options", {"deckId": "1"})["data"]
+        self.assertTrue(opt_get["success"])
+        self.assertEqual(opt_get["options"]["newPerDay"], 20)
+        self.assertEqual(opt_get["options"]["revPerDay"], 200)
+        self.assertAlmostEqual(opt_get["options"]["desiredRetention"], 0.90)
+
+        opt_save = self._call(
+            "save_deck_options",
+            {
+                "deckId": "1",
+                "newPerDay": 35,
+                "revPerDay": 300,
+                "learningSteps": "30s 10m 1d",
+                "relearningSteps": "15m",
+                "leechThreshold": 6,
+                "desiredRetention": 0.86,
+            },
+        )["data"]
+        self.assertTrue(opt_save["saved"])
+        self.assertEqual(opt_save["options"]["newPerDay"], 35)
+        self.assertEqual(opt_save["options"]["revPerDay"], 300)
+        self.assertEqual(opt_save["options"]["learningSteps"], "30s 10m 1d")
+        self.assertEqual(opt_save["options"]["relearningSteps"], "15m")
+        self.assertEqual(opt_save["options"]["leechThreshold"], 6)
+        self.assertAlmostEqual(opt_save["options"]["desiredRetention"], 0.86)
+
+        dash_decks = self._call("get_dashboard", {})["data"]["decks"]
+        deck_1 = next(d for d in dash_decks if d["id"] == "1")
+        self.assertIn("options", deck_1)
+        self.assertEqual(deck_1["options"]["newPerDay"], 35)
+        self.assertAlmostEqual(deck_1["options"]["desiredRetention"], 0.86)
+
+        # 2. 7-Color Flags: set_card_flag, search_cards flag filter, and batch_action(setFlag)
+        flag_res = self._call("set_card_flag", {"cardId": "201", "flag": 1})["data"]
+        self.assertTrue(flag_res["changed"])
+        self.assertEqual(flag_res["flag"], 1)
+        self.assertEqual(self.mock_col.get_card(201).flags & 7, 1)
+
+        search_red = self._call("search_cards", {"flag": "1"})["data"]
+        self.assertEqual(search_red["filteredCount"], 1)
+        self.assertEqual(search_red["cards"][0]["id"], "201")
+        self.assertEqual(search_red["cards"][0]["flags"], 1)
+
+        search_flagged = self._call("search_cards", {"flag": "flagged"})["data"]
+        self.assertEqual(search_flagged["filteredCount"], 1)
+
+        search_blue = self._call("search_cards", {"flag": "4"})["data"]
+        self.assertEqual(search_blue["filteredCount"], 0)
+
+        # Batch setFlag to 4 (Blue) on both cards
+        batch_flag = self._call(
+            "batch_action",
+            {"actionType": "setFlag", "cardIds": ["201", "202"], "flag": 4},
+        )["data"]
+        self.assertTrue(batch_flag["success"])
+        self.assertEqual(self.mock_col.get_card(201).flags & 7, 4)
+        self.assertEqual(self.mock_col.get_card(202).flags & 7, 4)
+
+        # Clear flag on 202
+        self._call("set_card_flag", {"cardId": "202", "flag": 0})
+        self.assertEqual(self.mock_col.get_card(202).flags & 7, 0)
+
+        # 3. Custom Study / Mistake Drill / Flag Cram / Review Ahead
+        now_ms = int(time.time() * 1000)
+        self.mock_col.db.conn.execute(
+            "INSERT INTO revlog VALUES (?, 202, 0, 1, 1, 15, 2500, 3500, 1)",
+            (now_ms - 5000,),
+        )
+        self.mock_col.db.conn.commit()
+        self.mock_col.get_card(202).lapses = 3
+
+        prev_mistakes = self._call(
+            "preview_custom_study",
+            {"preset": "mistakes", "days": 7, "limit": 20},
+        )["data"]
+        self.assertTrue(prev_mistakes["success"])
+        self.assertGreaterEqual(prev_mistakes["totalMatched"], 1)
+
+        cram_mistakes = self._call(
+            "start_custom_study",
+            {"preset": "mistakes", "days": 7, "limit": 20, "isPreviewOnly": True},
+        )["data"]
+        self.assertTrue(cram_mistakes["success"])
+        self.assertTrue(cram_mistakes["isPreviewOnly"])
+        self.assertIn("202", cram_mistakes["cardIds"])
+
+        # Flagged preset filtering for flag 4 (card 201)
+        cram_flagged = self._call(
+            "start_custom_study",
+            {"preset": "flagged", "flag": "4", "limit": 10},
+        )["data"]
+        self.assertTrue(cram_flagged["success"])
+        self.assertEqual(cram_flagged["cardIds"], ["201"])
+
+        # Review Ahead preset (look ahead 20 days -> includes card 202 with due=25 when today=10)
+        cram_ahead = self._call(
+            "start_custom_study",
+            {"preset": "ahead", "days": 20, "limit": 10},
+        )["data"]
+        self.assertTrue(cram_ahead["success"])
+        self.assertIn("201", cram_ahead["cardIds"])
+        self.assertIn("202", cram_ahead["cardIds"])
+
+    def test_18_image_occlusion_and_maintenance_tools(self):
+        """Verify Image Occlusion HTML rendering (hide-all vs hide-one, question vs answer) and Maintenance Tools."""
+        # 1. Image Occlusion rendering on Question side vs Answer side
+        io_html = (
+            '<div>心脏解剖图</div>'
+            '<div class="anki-io-wrap" data-io-mode="hide-all" style="position:relative;display:inline-block;">'
+            '<img src="heart_diagram.png" data-anki-media="heart_diagram.png" />'
+            '<span class="anki-io-rect" data-io-rect="1" style="position:absolute;left:10.00%;top:20.00%;width:30.00%;height:15.00%;">{{c1::左心室}}</span>'
+            '<span class="anki-io-rect" data-io-rect="2" style="position:absolute;left:55.00%;top:45.00%;width:25.00%;height:15.00%;">{{c2::主动脉弓}}</span>'
+            '</div>'
+        )
+        note101 = self.mock_col.get_note(101)
+        note101["正面"] = io_html
+        note101._is_cloze = True
+
+        rev_q = self._call("start_review", {"deckId": "1"})["data"]
+        card_io = rev_q["cards"][0]
+        # Question side (frontHtml): c1 is active target, c2 is masked (hide-all mode)
+        self.assertIn("anki-io-target", card_io["frontHtml"])
+        self.assertIn("? #1", card_io["frontHtml"])
+        self.assertIn("anki-io-masked", card_io["frontHtml"])
+        self.assertNotIn("左心室", card_io["frontHtml"])
+        self.assertNotIn("主动脉弓", card_io["frontHtml"])
+        # Answer side (frontAnswerHtml): c1 is revealed highlight frame, c2 is subtle dashed outline
+        self.assertIn("anki-io-revealed", card_io["frontAnswerHtml"])
+        self.assertIn("anki-io-other", card_io["frontAnswerHtml"])
+
+        # Test hide-one mode: c2 should be anki-io-hidden on question side
+        note101["正面"] = io_html.replace('data-io-mode="hide-all"', 'data-io-mode="hide-one"')
+        rev_q_hide_one = self._call("start_review", {"deckId": "1"})["data"]
+        card_io_one = rev_q_hide_one["cards"][0]
+        self.assertIn("anki-io-target", card_io_one["frontHtml"])
+        self.assertIn("anki-io-hidden", card_io_one["frontHtml"])
+
+        # 2. Import / Export native triggers
+        imp_res = self._call("trigger_native_import", {})["data"]
+        self.assertTrue(imp_res["success"])
+        exp_res = self._call("trigger_native_export", {})["data"]
+        self.assertTrue(exp_res["success"])
+
+        # 3. System Maintenance: Check Database (PRAGMA quick_check + ANALYZE + counts)
+        db_res = self._call("run_maintenance", {"toolType": "check_db"})["data"]
+        self.assertTrue(db_res["success"])
+        self.assertEqual(db_res["status"], "ok")
+        self.assertGreaterEqual(db_res["cardCount"], 2)
+        self.assertGreaterEqual(db_res["noteCount"], 2)
+
+        # 4. System Maintenance: Check & Clean Empty Cards
+        empty_res_0 = self._call("run_maintenance", {"toolType": "check_empty_cards"})["data"]
+        self.assertTrue(empty_res_0["success"])
+        self.assertEqual(empty_res_0["emptyCount"], 0)
+
+        # Simulate card 202 having a blank front field
+        note102 = self.mock_col.get_note(102)
+        note102["正面"] = "   "
+        empty_res_1 = self._call("run_maintenance", {"toolType": "check_empty_cards"})["data"]
+        self.assertEqual(empty_res_1["emptyCount"], 1)
+        self.assertEqual(empty_res_1["emptyCards"][0]["cardId"], "202")
+
+        clean_empty_res = self._call("run_maintenance", {"toolType": "clean_empty_cards"})["data"]
+        self.assertTrue(clean_empty_res["success"])
+        self.assertEqual(clean_empty_res["removedCount"], 1)
+
+        # 5. System Maintenance: Check & Clean Media
+        # Create one referenced file ("diagram.png") and one unused file ("orphan_unused.png") in temp_media
+        (Path(self.temp_media) / "diagram.png").write_bytes(b"referenced")
+        (Path(self.temp_media) / "orphan_unused.png").write_bytes(b"unused")
+        media_res = self._call("run_maintenance", {"toolType": "check_media"})["data"]
+        self.assertTrue(media_res["success"])
+        self.assertGreaterEqual(media_res["unusedCount"], 1)
+        self.assertIn("orphan_unused.png", media_res["unusedFiles"])
+
+        clean_media_res = self._call("run_maintenance", {"toolType": "clean_unused_media"})["data"]
+        self.assertTrue(clean_media_res["success"])
+        self.assertGreaterEqual(clean_media_res["removedCount"], 1)
+        self.assertFalse((Path(self.temp_media) / "orphan_unused.png").exists())
+        self.assertTrue((Path(self.temp_media) / "diagram.png").exists())
 
 
 if __name__ == "__main__":

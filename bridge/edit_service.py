@@ -3,7 +3,7 @@
 Anki Modern OS — Inline Edit, Card Inspector, Media Paste & Quick Add Service
 Supports zero-popup WYSIWYG inline field updates across arbitrary multi-field
 and Cloze note templates, tag management, deck relocation, card suspension/deletion,
-clipboard screenshot pasting into `collection.media`, and Quick Add card creation.
+7-color user flags, clipboard screenshot pasting into `collection.media`, and Quick Add card creation.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ class EditService:
         """
         col = self.col
         if col is None:
-            return {"saved": True, "savedAt": int(time.time() * 1000)}
+            return {"saved": False, "error": "Collection unavailable"}
 
         note_id = data.get("noteId")
         card_id = data.get("cardId")
@@ -131,6 +131,13 @@ class EditService:
             else:
                 col.sched.unsuspend_cards(target_cids)
 
+        if "flags" in data and target_cids:
+            try:
+                f_val = max(0, min(7, int(data["flags"] or 0)))
+                self.set_card_flag({"cardIds": [str(c) for c in target_cids], "flag": f_val})
+            except Exception:
+                pass
+
         return {
             "saved": True,
             "noteId": str(note.id),
@@ -162,10 +169,9 @@ class EditService:
         col = self.col
         if col is None:
             return {
-                "saved": True,
+                "saved": False,
                 "filename": filename,
-                "fileUrl": f"data:image/{safe_ext};base64,{raw_b64}",
-                "htmlTag": f'<img src="{filename}" />',
+                "error": "Collection unavailable: image was not written to media",
             }
 
         actual_name = filename
@@ -211,8 +217,9 @@ class EditService:
 
         col = self.col
         if col is None:
-            new_id = str(int(time.time() * 1000))
-            return {"created": True, "noteId": new_id, "cardId": new_id}
+            # Never mint a fake timestamp ID: the note does not exist in Anki and
+            # would disappear (or collide) on the next refresh.
+            return {"created": False, "error": "Collection unavailable"}
 
         target_did = 1
         if deck_id_raw and str(deck_id_raw).isdigit():
@@ -289,6 +296,61 @@ class EditService:
                 col.sched.unbury_cards(card_ids)
 
         return {"changed": True, "cardIds": [str(c) for c in card_ids], "buried": bury}
+
+    def set_card_flag(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Sets or clears the 7-color user flag (0..7) on one or more cards."""
+        col = self.col
+        card_ids = [int(cid) for cid in data.get("cardIds", []) if str(cid).isdigit()]
+        if "cardId" in data and str(data["cardId"]).isdigit():
+            cid_single = int(data["cardId"])
+            if cid_single not in card_ids:
+                card_ids.append(cid_single)
+
+        try:
+            raw_flag = int(data.get("flag", 0) or 0)
+        except Exception:
+            raw_flag = 0
+        flag = max(0, min(7, raw_flag))
+
+        if col is None or not card_ids:
+            return {
+                "changed": False,
+                "cardIds": [str(c) for c in card_ids],
+                "flag": flag,
+                "error": "Collection unavailable or no valid card IDs",
+            }
+
+        try:
+            if hasattr(col, "set_user_flag_for_cards"):
+                col.set_user_flag_for_cards(flag, card_ids)
+        except Exception:
+            pass
+
+        for cid in card_ids:
+            try:
+                card = col.get_card(int(cid))
+                if card is not None:
+                    prev_flags = int(getattr(card, "flags", 0) or 0)
+                    card.flags = (prev_flags & ~7) | (flag & 7)
+                    if hasattr(col, "update_card"):
+                        col.update_card(card)
+            except Exception:
+                pass
+            try:
+                if hasattr(col, "db") and hasattr(col.db, "conn"):
+                    col.db.conn.execute(
+                        "UPDATE cards SET flags = (coalesce(flags, 0) & ~7) | ? WHERE id = ?",
+                        (flag & 7, int(cid)),
+                    )
+                    col.db.conn.commit()
+            except Exception:
+                pass
+
+        return {
+            "changed": True,
+            "cardIds": [str(c) for c in card_ids],
+            "flag": flag,
+        }
 
     def delete_cards(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Deletes notes corresponding to given cardIds or noteIds."""

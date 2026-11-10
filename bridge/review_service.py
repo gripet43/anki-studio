@@ -21,6 +21,11 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 SOUND_TAG_RE = re.compile(r"\[sound:([^\]]+)\]")
 IMG_SRC_RE = re.compile(r'(<img\b[^>]*?\bsrc\s*=\s*)(["\'])([^"\']+)(\2)', flags=re.I)
 CLOZE_RE = re.compile(r"\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}")
+IO_RECT_SPAN_RE = re.compile(
+    r'<span\b([^>]*?\bclass\s*=\s*["\'][^"\']*\banki-io-rect\b[^"\']*["\'][^>]*)>\s*\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}\s*</span>',
+    flags=re.I,
+)
+STYLE_ATTR_RE = re.compile(r'\bstyle\s*=\s*(["\'])(.*?)\1', flags=re.I)
 
 
 class ReviewService:
@@ -115,6 +120,232 @@ class ReviewService:
             "cards": [c for c in cards_out if c is not None],
         }
 
+    def _collect_custom_study_cids(self, col, data: Dict[str, Any]) -> Tuple[List[int], bool]:
+        """
+        Collects and sorts candidate card IDs for Custom Study / Mistake Drills / Flag & Tag Cram:
+        - preset: 'mistakes' | 'flagged' | 'ahead' | 'extra_new' | 'custom'
+        - deckId: 'all' or numeric deck ID
+        - days: lookback days for 'mistakes' (default 7) or lookahead days for 'ahead' (default 3)
+        - flag: 'all' | 'flagged' | '1'..'7'
+        - tag: 'all' or specific tag
+        - cardScope: 'all' | 'due' | 'review' | 'new'
+        - sortOrder: 'lapses_desc' | 'ivl_asc' | 'random' | 'due_asc'
+        - isPreviewOnly: bool (default True for cram/drills)
+        """
+        preset = str(data.get("preset", "mistakes") or "mistakes").strip()
+        deck_id = data.get("deckId")
+        try:
+            days = max(1, min(90, int(data.get("days") or (7 if preset == "mistakes" else 3))))
+        except Exception:
+            days = 7 if preset == "mistakes" else 3
+
+        flag_filter = str(data.get("flag", "all") or "all").strip()
+        tag_filter = str(data.get("tag", "all") or "all").strip()
+        card_scope = str(data.get("cardScope", "all") or "all").strip()
+        sort_order = str(data.get("sortOrder", "") or "").strip()
+        if not sort_order:
+            sort_order = (
+                "lapses_desc"
+                if preset == "mistakes"
+                else ("due_asc" if preset in ("ahead", "extra_new") else "ivl_asc")
+            )
+
+        is_preview_only = bool(data.get("isPreviewOnly", True))
+
+        deck_clause = ""
+        target_dids: Optional[set] = None
+        if deck_id and str(deck_id) != "all" and str(deck_id).isdigit():
+            did_int = int(deck_id)
+            deck_obj = col.decks.get(did_int, default=False) if hasattr(col, "decks") else None
+            if deck_obj and deck_obj.get("name"):
+                escaped_name = str(deck_obj["name"]).replace('"', '\\"')
+                deck_clause = f'deck:"{escaped_name}" '
+            target_dids = {did_int}
+            if hasattr(col, "decks") and hasattr(col.decks, "children"):
+                try:
+                    for _, child_did in col.decks.children(did_int):
+                        target_dids.add(int(child_did))
+                except Exception:
+                    pass
+
+        base_cids = list(col.find_cards(deck_clause.strip())) if hasattr(col, "find_cards") else []
+        if not base_cids:
+            return [], is_preview_only
+
+        cutoff = getattr(col.sched, "day_cutoff", int(time.time()) + 86400) if hasattr(col, "sched") else int(time.time()) + 86400
+        today_sched = int(getattr(col.sched, "today", 0) or 0) if hasattr(col, "sched") else 0
+
+        mistake_cid_set: Optional[set] = None
+        if preset == "mistakes":
+            lookback_start_ms = (cutoff - days * 86400) * 1000
+            mistake_cid_set = set()
+            if hasattr(col, "db") and hasattr(col.db, "all"):
+                try:
+                    rows = col.db.all(
+                        "SELECT DISTINCT cid FROM revlog WHERE id >= ? AND type < 4 AND ease = 1",
+                        lookback_start_ms,
+                    )
+                    for r in rows:
+                        if r and r[0] is not None:
+                            mistake_cid_set.add(int(r[0]))
+                except Exception:
+                    pass
+
+        matched_cards: List[Tuple[int, Any]] = []
+        fallback_lapsed_cards: List[Tuple[int, Any]] = []
+
+        for cid in base_cids:
+            try:
+                card = col.get_card(int(cid))
+                if card is None:
+                    continue
+                if int(getattr(card, "queue", 0)) == -1:
+                    continue
+                if target_dids is not None and int(getattr(card, "did", 1)) not in target_dids:
+                    continue
+
+                c_flags = int(getattr(card, "flags", 0) or 0) & 7
+                if flag_filter == "flagged" and c_flags <= 0:
+                    continue
+                if flag_filter in ("0", "1", "2", "3", "4", "5", "6", "7") and c_flags != int(flag_filter):
+                    continue
+
+                if tag_filter and tag_filter != "all":
+                    note = card.note() if hasattr(card, "note") else None
+                    n_tags = list(getattr(note, "tags", []) or []) if note else []
+                    if tag_filter not in n_tags:
+                        continue
+
+                c_type = int(getattr(card, "type", 0) or 0)
+                c_queue = int(getattr(card, "queue", 0) or 0)
+                c_due = int(getattr(card, "due", 0) or 0)
+                c_lapses = int(getattr(card, "lapses", 0) or 0)
+
+                if preset == "mistakes":
+                    if mistake_cid_set is not None and int(cid) in mistake_cid_set:
+                        matched_cards.append((int(cid), card))
+                    elif c_lapses > 0:
+                        fallback_lapsed_cards.append((int(cid), card))
+                    else:
+                        note = card.note() if hasattr(card, "note") else None
+                        n_tags = list(getattr(note, "tags", []) or []) if note else []
+                        if any(k in t for t in n_tags for k in ("错题", "易错", "易忘", "leech")):
+                            fallback_lapsed_cards.append((int(cid), card))
+                elif preset == "flagged":
+                    # If user left both flag and tag as 'all' in flagged preset, default to any flagged OR tagged card
+                    if flag_filter == "all" and tag_filter == "all":
+                        if c_flags > 0:
+                            matched_cards.append((int(cid), card))
+                    else:
+                        matched_cards.append((int(cid), card))
+                elif preset == "ahead":
+                    if c_queue in (2, 3) or c_type == 2:
+                        if c_due <= today_sched + days:
+                            matched_cards.append((int(cid), card))
+                elif preset == "extra_new":
+                    if c_type == 0 or c_queue == 0:
+                        matched_cards.append((int(cid), card))
+                else:
+                    if card_scope == "due":
+                        if c_queue in (1, 3) or (c_queue == 2 and c_due <= today_sched):
+                            matched_cards.append((int(cid), card))
+                    elif card_scope == "new":
+                        if c_type == 0 or c_queue == 0:
+                            matched_cards.append((int(cid), card))
+                    elif card_scope == "review":
+                        if c_type == 2 or c_queue == 2:
+                            matched_cards.append((int(cid), card))
+                    else:
+                        matched_cards.append((int(cid), card))
+            except Exception:
+                continue
+
+        if preset == "mistakes" and not matched_cards and fallback_lapsed_cards:
+            matched_cards = fallback_lapsed_cards
+
+        if sort_order == "lapses_desc":
+            matched_cards.sort(
+                key=lambda item: (
+                    -int(getattr(item[1], "lapses", 0) or 0),
+                    int(getattr(item[1], "ivl", 0) or 0),
+                    item[0],
+                )
+            )
+        elif sort_order == "ivl_asc":
+            matched_cards.sort(
+                key=lambda item: (
+                    int(getattr(item[1], "ivl", 0) or 0),
+                    -int(getattr(item[1], "lapses", 0) or 0),
+                    item[0],
+                )
+            )
+        elif sort_order == "due_asc":
+            matched_cards.sort(
+                key=lambda item: (
+                    int(getattr(item[1], "due", 0) or 0),
+                    item[0],
+                )
+            )
+        elif sort_order == "random":
+            import random
+            rng = random.Random(int(time.time() * 1000) & 0xFFFFFFFF)
+            rng.shuffle(matched_cards)
+
+        return [cid for cid, _ in matched_cards], is_preview_only
+
+    def preview_custom_study(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Returns the live count of cards matching the custom study criteria before starting."""
+        data = data or {}
+        col = self.col
+        if col is None:
+            return {"success": False, "totalMatched": 0, "count": 0}
+        limit = max(1, min(200, int(data.get("limit") or 30)))
+        cids, is_preview = self._collect_custom_study_cids(col, data)
+        return {
+            "success": True,
+            "totalMatched": len(cids),
+            "count": min(limit, len(cids)),
+            "isPreviewOnly": is_preview,
+        }
+
+    def start_custom_study(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Builds and returns a curated review queue for Custom Study / Mistake Drills / Cramming."""
+        data = data or {}
+        col = self.col
+        lang = data.get("language") or self._get_lang()
+        if col is None:
+            return {
+                "success": False,
+                "cards": [],
+                "cardIds": [],
+                "totalMatched": 0,
+                "count": 0,
+                "isPreviewOnly": True,
+                "error": "Collection unavailable",
+            }
+
+        limit = max(1, min(200, int(data.get("limit") or 30)))
+        cids, is_preview_only = self._collect_custom_study_cids(col, data)
+        selected_cids = cids[:limit]
+        cards_out = [
+            c
+            for c in (
+                self._serialize_review_card(col, cid, lang, is_preview_only)
+                for cid in selected_cids
+            )
+            if c is not None
+        ]
+        return {
+            "success": True,
+            "preset": str(data.get("preset", "mistakes") or "mistakes"),
+            "deckId": str(data.get("deckId") or "all"),
+            "totalMatched": len(cids),
+            "count": len(cards_out),
+            "isPreviewOnly": is_preview_only,
+            "cardIds": [str(c["id"]) for c in cards_out],
+            "cards": cards_out,
+        }
+
     def play_audio(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Plays an audio file from Anki's collection.media using aqt.sound."""
         filename = str((data or {}).get("filename", "")).strip()
@@ -189,6 +420,59 @@ class ReviewService:
                 return f"{prefix}{quote}{file_uri}{suffix}"
 
             processed = IMG_SRC_RE.sub(_img_replacer, processed)
+
+        if "anki-io-rect" in processed and IO_RECT_SPAN_RE.search(processed):
+            target_idx = str(max(1, cloze_ord))
+            io_mode = "hide-one" if 'data-io-mode="hide-one"' in processed else "hide-all"
+
+            def _io_rect_replacer(match):
+                attrs_str, c_num, _c_ans, _c_hint = (
+                    match.group(1),
+                    match.group(2),
+                    match.group(3),
+                    match.group(4),
+                )
+                style_m = STYLE_ATTR_RE.search(attrs_str or "")
+                pos_style = style_m.group(2).strip().rstrip(";") if style_m else "position:absolute"
+                if is_question_side:
+                    if c_num == target_idx:
+                        return (
+                            f'<span class="anki-io-rect-resolved anki-io-target" data-io-rect="{c_num}" '
+                            f'style="{pos_style};background:#F59E0B;border:2px solid #FFFFFF;'
+                            f'box-shadow:0 4px 14px rgba(245,158,11,0.45);border-radius:6px;'
+                            f'display:flex;align-items:center;justify-content:center;color:#FFFFFF;'
+                            f'font-size:11px;font-weight:800;line-height:1;user-select:none;z-index:3;">'
+                            f'? #{c_num}</span>'
+                        )
+                    if io_mode == "hide-all":
+                        return (
+                            f'<span class="anki-io-rect-resolved anki-io-masked" data-io-rect="{c_num}" '
+                            f'style="{pos_style};background:#334155;border:1.5px solid rgba(255,255,255,0.65);'
+                            f'border-radius:6px;display:flex;align-items:center;justify-content:center;'
+                            f'color:rgba(255,255,255,0.78);font-size:10px;font-weight:700;line-height:1;'
+                            f'user-select:none;z-index:2;">#{c_num}</span>'
+                        )
+                    return (
+                        f'<span class="anki-io-rect-resolved anki-io-hidden" data-io-rect="{c_num}" '
+                        f'style="{pos_style};opacity:0;pointer-events:none;"></span>'
+                    )
+                else:
+                    if c_num == target_idx:
+                        return (
+                            f'<span class="anki-io-rect-resolved anki-io-revealed" data-io-rect="{c_num}" '
+                            f'style="{pos_style};background:rgba(16,185,129,0.16);border:2px solid #10B981;'
+                            f'box-shadow:0 0 0 2px rgba(16,185,129,0.22);border-radius:6px;pointer-events:none;z-index:3;">'
+                            f'<span style="position:absolute;top:-1px;left:-1px;background:#10B981;color:#FFFFFF;'
+                            f'font-size:9px;font-weight:700;padding:1px 4px;border-radius:4px 0 4px 0;line-height:1.1;">'
+                            f'#{c_num}</span></span>'
+                        )
+                    return (
+                        f'<span class="anki-io-rect-resolved anki-io-other" data-io-rect="{c_num}" '
+                        f'style="{pos_style};background:transparent;border:1px dashed rgba(148,163,184,0.55);'
+                        f'border-radius:6px;pointer-events:none;z-index:1;"></span>'
+                    )
+
+            processed = IO_RECT_SPAN_RE.sub(_io_rect_replacer, processed)
 
         if CLOZE_RE.search(processed):
             target_idx = str(max(1, cloze_ord))
@@ -431,8 +715,15 @@ class ReviewService:
             answer = col.sched.build_answer(card=card, states=states, rating=native_rating)
             answer.milliseconds_taken = min(max(elapsed_ms, 500), 60000)
             col.sched.answer_card(answer)
-        except Exception:
-            pass
+        except Exception as e:
+            # Never report a rating as recorded when the native scheduler failed:
+            # the card would silently vanish from the queue without a revlog row.
+            return {
+                "answered": False,
+                "cardId": str(card_id),
+                "ease": ease,
+                "error": str(e),
+            }
 
         return {
             "answered": True,

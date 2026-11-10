@@ -1,0 +1,19 @@
+# Optional development-only tooling for the card-safety test suite.
+#
+#   python3 -m pip install -r tests/requirements-dev.txt
+#
+# The suite is fully functional on the Python standard library alone:
+#   - test_card_safety.py / test_card_safety_round3.py: deterministic stateful
+#     sequences, fault injection, SIGKILL crash consistency, line-coverage gate
+# When installed, test_card_safety_round3.py additionally runs a Hypothesis
+# property-based seed search with automatic shrinking (HAS_HYPOTHESIS flag).
+# Branch coverage (as opposed to the standard-library line coverage gate) still
+# requires a dedicated coverage.py run:
+#
+#   python3 -m coverage run --branch -m unittest discover -s tests -p "test_*.py"
+#   python3 -m coverage report --include="bridge/*"
+#
+# These packages are NOT required by the add-on at runtime and are not packaged
+# into the .ankiaddon.
+hypothesis>=6.100
+coverage>=7.4

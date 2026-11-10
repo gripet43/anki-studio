@@ -60,6 +60,28 @@ export const EMPTY_ADVANCED_STATS: AdvancedStatsData = {
     count: 0,
     accuracy: 0,
   })),
+  answerButtons: {
+    again: 0,
+    hard: 0,
+    good: 0,
+    easy: 0,
+    total: 0,
+    young: { pass: 0, total: 0, rate: 0 },
+    mature: { pass: 0, total: 0, rate: 0 },
+  },
+  trueRetention: {
+    last30d: {
+      young: { pass: 0, total: 0, rate: 0 },
+      mature: { pass: 0, total: 0, rate: 0 },
+      overall: { pass: 0, total: 0, rate: 0 },
+    },
+    allTime: {
+      young: { pass: 0, total: 0, rate: 0 },
+      mature: { pass: 0, total: 0, rate: 0 },
+      overall: { pass: 0, total: 0, rate: 0 },
+    },
+  },
+  dailyLoad: 0,
 };
 
 export const EMPTY_DASHBOARD: DashboardData = {

@@ -81,10 +81,12 @@ class BridgeRouter:
 
         raw_payload = command[len(self.PREFIX):]
         try:
-            # Single point of truth for vacation expiry: the frontend never calls
-            # get_vacation_status, so reconcile before dispatching any action.
+            # Single point of truth for vacation expiry and crash recovery: the
+            # frontend never calls get_vacation_status, so reconcile before
+            # dispatching any action.
             try:
                 self.vacation_service.reconcile_expired_vacation()
+                self.vacation_service.reconcile_safety_ticket()
             except Exception:
                 pass
 
@@ -117,7 +119,11 @@ class BridgeRouter:
     # ---- Dashboard, Statistics & Deck Actions ----
 
     def action_get_dashboard(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        return self.deck_service.get_dashboard(data)
+        result = self.deck_service.get_dashboard(data)
+        warning = self.vacation_service.safety_warning()
+        if warning:
+            result["safetyWarning"] = warning
+        return result
 
     def action_get_statistics(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.deck_service.get_statistics(data)
@@ -130,6 +136,21 @@ class BridgeRouter:
 
     def action_delete_deck(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.deck_service.delete_deck(data)
+
+    def action_get_deck_options(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.deck_service.get_deck_options(data)
+
+    def action_save_deck_options(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.deck_service.save_deck_options(data)
+
+    def action_trigger_native_import(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.deck_service.trigger_native_import(data)
+
+    def action_trigger_native_export(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.deck_service.trigger_native_export(data)
+
+    def action_run_maintenance(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.deck_service.run_maintenance_action(data)
 
     # ---- User Preferences Persistence Actions (Part 3 #4) ----
 
@@ -183,6 +204,12 @@ class BridgeRouter:
     def action_get_review_queue(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.review_service.get_review_queue(data)
 
+    def action_preview_custom_study(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.review_service.preview_custom_study(data)
+
+    def action_start_custom_study(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.review_service.start_custom_study(data)
+
     def action_answer_card(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.review_service.answer_card(data)
 
@@ -208,6 +235,9 @@ class BridgeRouter:
 
     def action_toggle_bury(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.edit_service.toggle_bury_card(data)
+
+    def action_set_card_flag(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.edit_service.set_card_flag(data)
 
     def action_delete_cards(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.edit_service.delete_cards(data)
@@ -244,10 +274,12 @@ class BridgeRouter:
                     triggered_native = True
             except Exception as e:
                 print(f"[Anki Modern OS] Error triggering native sync: {e}")
+        # Report success only when a native sync was actually triggered; otherwise
+        # the UI would show "Synced" while AnkiWeb was never contacted.
         return {
-            "synced": True,
+            "synced": triggered_native,
             "triggeredNativeSync": triggered_native,
-            "syncedAt": int(time.time() * 1000),
+            "syncedAt": int(time.time() * 1000) if triggered_native else 0,
         }
 
     def action_sync_collection(self, data: Dict[str, Any]) -> Dict[str, Any]:

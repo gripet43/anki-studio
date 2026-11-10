@@ -80,14 +80,31 @@ class SearchService:
                 escaped_deck = deck_obj["name"].replace('"', '\\"')
                 query_parts.append(f'deck:"{escaped_deck}"')
 
+        flag_filter_raw = str(data.get("flag", "all") or "all").strip()
+        if flag_filter_raw == "flagged":
+            query_parts.append("-flag:0")
+        elif flag_filter_raw in ("0", "1", "2", "3", "4", "5", "6", "7"):
+            query_parts.append(f"flag:{flag_filter_raw}")
+
         anki_query = " ".join(query_parts).strip()
         offset = max(0, int(data.get("offset") or 0))
         limit = max(1, int(data.get("limit") or 200))
 
         try:
             cids = list(col.find_cards(anki_query))
-        except Exception:
-            cids = list(col.find_cards(""))
+        except Exception as e:
+            # A malformed query must never silently return the whole collection
+            # as if it were a filtered result set.
+            return {
+                "total": 0,
+                "filteredCount": 0,
+                "offset": offset,
+                "limit": limit,
+                "hasMore": False,
+                "cards": [],
+                "allTags": [],
+                "error": str(e),
+            }
 
         difficulty_filter = data.get("difficulty", "all")
         media_dir = ""
@@ -101,6 +118,10 @@ class SearchService:
         matched_index = 0
         has_more = False
         is_completed_query = (status == "completed")
+        has_python_post_filter = (
+            difficulty_filter in ("high", "medium", "low")
+            or flag_filter_raw != "all"
+        )
 
         for cid in cids:
             item = self._serialize_library_card(col, cid, media_dir, lang)
@@ -112,16 +133,20 @@ class SearchService:
                 item["dueText"] = "今日已完成" if lang == "zh-CN" else "Completed Today"
             if difficulty_filter in ("high", "medium", "low") and item["difficultyLevel"] != difficulty_filter:
                 continue
+            if flag_filter_raw == "flagged" and int(item.get("flags", 0)) <= 0:
+                continue
+            if flag_filter_raw in ("0", "1", "2", "3", "4", "5", "6", "7") and int(item.get("flags", 0)) != int(flag_filter_raw):
+                continue
             if matched_index >= offset:
                 if len(cards_out) < limit:
                     cards_out.append(item)
                 else:
                     has_more = True
-                    if difficulty_filter == "all":
+                    if not has_python_post_filter:
                         break
             matched_index += 1
 
-        total_filtered = len(cids) if difficulty_filter == "all" else matched_index
+        total_filtered = len(cids) if not has_python_post_filter else matched_index
         all_tags = list(col.tags.all()) if hasattr(col, "tags") else []
 
         return {
@@ -137,7 +162,7 @@ class SearchService:
     def batch_action(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Executes batch actions from the Library Floating Bar (Page 5 & Bug #10):
-        - actionType: 'suspend' | 'unsuspend' | 'addTag' | 'resetProgress' | 'moveDeck' | 'delete'
+        - actionType: 'suspend' | 'unsuspend' | 'bury' | 'unbury' | 'setFlag' | 'addTag' | 'resetProgress' | 'moveDeck' | 'delete'
         - cardIds: list of card IDs
         """
         col = self.col
@@ -145,7 +170,12 @@ class SearchService:
         card_ids = [int(cid) for cid in data.get("cardIds", []) if str(cid).isdigit()]
 
         if not col or not card_ids:
-            return {"success": True, "affected": len(card_ids), "actionType": action_type}
+            return {
+                "success": False,
+                "affected": 0,
+                "actionType": action_type,
+                "error": "Collection unavailable or no valid card IDs",
+            }
 
         if action_type == "suspend":
             col.sched.suspend_cards(card_ids)
@@ -155,6 +185,35 @@ class SearchService:
             col.sched.bury_cards(card_ids, manual=True)
         elif action_type == "unbury":
             col.sched.unbury_cards(card_ids)
+        elif action_type == "setFlag":
+            try:
+                flag_val = max(0, min(7, int(data.get("flag", 0) or 0)))
+            except Exception:
+                flag_val = 0
+            try:
+                if hasattr(col, "set_user_flag_for_cards"):
+                    col.set_user_flag_for_cards(flag_val, card_ids)
+            except Exception:
+                pass
+            for cid in card_ids:
+                try:
+                    c = col.get_card(int(cid))
+                    if c is not None:
+                        prev_f = int(getattr(c, "flags", 0) or 0)
+                        c.flags = (prev_f & ~7) | (flag_val & 7)
+                        if hasattr(col, "update_card"):
+                            col.update_card(c)
+                except Exception:
+                    pass
+                try:
+                    if hasattr(col, "db") and hasattr(col.db, "conn"):
+                        col.db.conn.execute(
+                            "UPDATE cards SET flags = (coalesce(flags, 0) & ~7) | ? WHERE id = ?",
+                            (flag_val & 7, int(cid)),
+                        )
+                        col.db.conn.commit()
+                except Exception:
+                    pass
         elif action_type == "delete":
             nids = set()
             for cid in card_ids:
@@ -195,8 +254,13 @@ class SearchService:
                 col._backend.schedule_cards_as_new(
                     ScheduleCardsAsNew(card_ids=card_ids, restore_position=True, reset_counts=True, log=True)
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                return {
+                    "success": False,
+                    "affected": 0,
+                    "actionType": action_type,
+                    "error": str(e),
+                }
         elif action_type == "moveDeck":
             target_did_raw = data.get("targetDeckId")
             target_deck_name = str(data.get("targetDeckName", "")).strip()
@@ -212,6 +276,13 @@ class SearchService:
 
             if resolved_did is not None:
                 col.set_deck(card_ids, resolved_did)
+        else:
+            return {
+                "success": False,
+                "affected": 0,
+                "actionType": action_type,
+                "error": f"Unknown actionType: {action_type}",
+            }
 
         return {
             "success": True,
@@ -283,6 +354,7 @@ class SearchService:
                 "status": card_status,
                 "suspended": card.queue == -1,
                 "buried": card.queue in (-2, -3),
+                "flags": int(getattr(card, "flags", 0) or 0) & 7,
                 "reps": int(card.reps or 0),
                 "intervalDays": int(card.ivl or 0),
             }
@@ -340,6 +412,19 @@ class SearchService:
                 return f"{prefix}{quote}{uri}{suffix}"
 
             s = IMG_SRC_RE.sub(_img, s)
+        if "anki-io-rect" in s:
+            s = re.sub(
+                r'<span\b([^>]*?\bclass\s*=\s*["\'][^"\']*\banki-io-rect\b[^"\']*["\'][^>]*)>\s*\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}\s*</span>',
+                lambda m: (
+                    f'<span{m.group(1).rstrip()[:-1]};background:rgba(245,158,11,0.78);border:1.5px solid #FFFFFF;'
+                    f'border-radius:4px;display:flex;align-items:center;justify-content:center;color:#FFFFFF;'
+                    f'font-size:9px;font-weight:700;line-height:1;">#{m.group(2)}</span>'
+                    if m.group(1).rstrip().endswith(('"', "'"))
+                    else f'<span{m.group(1)}>#{m.group(2)}</span>'
+                ),
+                s,
+                flags=re.I,
+            )
         s = CLOZE_RE.sub(lambda m: f'<span class="text-[#5E5CE6] font-semibold">{m.group(2)}</span>', s)
         return s.strip(), audios
 

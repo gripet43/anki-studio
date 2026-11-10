@@ -9,6 +9,145 @@ export interface BridgeResponse<T> {
   message?: string;
 }
 
+export interface DeckOptionsData {
+  deckId: string;
+  deckName: string;
+  presetId: string;
+  presetName: string;
+  newPerDay: number;
+  revPerDay: number;
+  learningSteps: string;
+  relearningSteps: string;
+  leechThreshold: number;
+  desiredRetention: number;
+}
+
+export type CardFlagColor = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export interface FlagColorSpec {
+  flag: Exclude<CardFlagColor, 0>;
+  hex: string;
+  bgSoft: string;
+  borderHex: string;
+  shortZh: string;
+  labelZh: string;
+  shortEn: string;
+  labelEn: string;
+}
+
+export const ANKI_FLAG_PALETTE: Record<Exclude<CardFlagColor, 0>, FlagColorSpec> = {
+  1: {
+    flag: 1,
+    hex: '#EF4444',
+    bgSoft: 'rgba(239, 68, 68, 0.14)',
+    borderHex: 'rgba(239, 68, 68, 0.38)',
+    shortZh: '红旗',
+    labelZh: '红旗 · 重点错题',
+    shortEn: 'Red',
+    labelEn: 'Red · Key Mistake',
+  },
+  2: {
+    flag: 2,
+    hex: '#F97316',
+    bgSoft: 'rgba(249, 115, 22, 0.14)',
+    borderHex: 'rgba(249, 115, 22, 0.38)',
+    shortZh: '橙旗',
+    labelZh: '橙旗 · 易混待查',
+    shortEn: 'Orange',
+    labelEn: 'Orange · Confusing',
+  },
+  3: {
+    flag: 3,
+    hex: '#10B981',
+    bgSoft: 'rgba(16, 185, 129, 0.14)',
+    borderHex: 'rgba(16, 185, 129, 0.38)',
+    shortZh: '绿旗',
+    labelZh: '绿旗 · 进阶巩固',
+    shortEn: 'Green',
+    labelEn: 'Green · Consolidate',
+  },
+  4: {
+    flag: 4,
+    hex: '#3B82F6',
+    bgSoft: 'rgba(59, 130, 246, 0.14)',
+    borderHex: 'rgba(59, 130, 246, 0.38)',
+    shortZh: '蓝旗',
+    labelZh: '蓝旗 · 核心考点',
+    shortEn: 'Blue',
+    labelEn: 'Blue · Core Point',
+  },
+  5: {
+    flag: 5,
+    hex: '#EC4899',
+    bgSoft: 'rgba(236, 72, 153, 0.14)',
+    borderHex: 'rgba(236, 72, 153, 0.38)',
+    shortZh: '粉旗',
+    labelZh: '粉旗 · 灵感拓展',
+    shortEn: 'Pink',
+    labelEn: 'Pink · Insight',
+  },
+  6: {
+    flag: 6,
+    hex: '#06B6D4',
+    bgSoft: 'rgba(6, 182, 212, 0.14)',
+    borderHex: 'rgba(6, 182, 212, 0.38)',
+    shortZh: '青旗',
+    labelZh: '青旗 · 背诵金句',
+    shortEn: 'Cyan',
+    labelEn: 'Cyan · Key Quote',
+  },
+  7: {
+    flag: 7,
+    hex: '#8B5CF6',
+    bgSoft: 'rgba(139, 92, 246, 0.14)',
+    borderHex: 'rgba(139, 92, 246, 0.38)',
+    shortZh: '紫旗',
+    labelZh: '紫旗 · 考前必看',
+    shortEn: 'Purple',
+    labelEn: 'Purple · Must Review',
+  },
+};
+
+export interface CustomStudyParams {
+  preset: 'mistakes' | 'flagged' | 'ahead' | 'extra_new' | 'custom';
+  deckId?: string;
+  days?: number;
+  flag?: string;
+  tag?: string;
+  cardScope?: 'all' | 'due' | 'review' | 'new';
+  sortOrder?: 'lapses_desc' | 'ivl_asc' | 'random' | 'due_asc';
+  limit?: number;
+  isPreviewOnly?: boolean;
+}
+
+export type MaintenanceToolType =
+  | 'check_db'
+  | 'check_empty_cards'
+  | 'clean_empty_cards'
+  | 'check_media'
+  | 'clean_unused_media'
+  | 'open_native_tool';
+
+export interface MaintenanceReportData {
+  success: boolean;
+  toolType: MaintenanceToolType;
+  status?: 'ok' | 'warning';
+  integrityResult?: string;
+  cardCount?: number;
+  noteCount?: number;
+  revlogCount?: number;
+  emptyCount?: number;
+  removedCount?: number;
+  totalFiles?: number;
+  referencedCount?: number;
+  unusedCount?: number;
+  missingCount?: number;
+  unusedFiles?: string[];
+  missingFiles?: string[];
+  message?: string;
+  error?: string;
+}
+
 export interface DeckItem {
   id: string;
   parentId?: string | null;
@@ -25,6 +164,7 @@ export interface DeckItem {
   icon: 'book' | 'code' | 'heart' | 'folder' | 'layers' | 'sparkles';
   accent: 'indigo' | 'blue' | 'emerald' | 'amber' | 'rose' | 'purple';
   childrenCount: number;
+  options?: DeckOptionsData;
 }
 
 export interface HeatmapCell {
@@ -122,6 +262,33 @@ export interface HourlyDistributionItem {
   accuracy: number;
 }
 
+export interface RetentionBucket {
+  pass: number;
+  total: number;
+  rate: number;
+}
+
+export interface AnswerButtonsData {
+  again: number;
+  hard: number;
+  good: number;
+  easy: number;
+  total: number;
+  young: RetentionBucket;
+  mature: RetentionBucket;
+}
+
+export interface TrueRetentionPeriod {
+  young: RetentionBucket;
+  mature: RetentionBucket;
+  overall: RetentionBucket;
+}
+
+export interface TrueRetentionData {
+  last30d: TrueRetentionPeriod;
+  allTime: TrueRetentionPeriod;
+}
+
 export interface AdvancedStatsData {
   maturityBreakdown: {
     newCards: number;
@@ -135,6 +302,9 @@ export interface AdvancedStatsData {
   forecast30d: ForecastDayItem[];
   retentionCurve: RetentionPoint[];
   hourlyDistribution: HourlyDistributionItem[];
+  answerButtons: AnswerButtonsData;
+  trueRetention: TrueRetentionData;
+  dailyLoad: number;
 }
 
 export interface EnvInfo {
@@ -152,6 +322,14 @@ export interface UserPreferences {
   collapsedDeckIds: string[];
   debugMode?: boolean;
   showShortcutHints?: boolean;
+}
+
+export interface SafetyWarning {
+  ticketId: string;
+  state: 'recovered' | 'partial' | 'orphaned';
+  restored: number;
+  failed: string[];
+  mismatches: string[];
 }
 
 export interface DashboardData {
@@ -203,6 +381,7 @@ export interface DashboardData {
     longestSessionMinutes: number;
   };
   advancedStats?: AdvancedStatsData;
+  safetyWarning?: SafetyWarning | null;
   lastRescueReceipt?: RescueReceipt | null;
   vacationHistory?: VacationHistoryItem[];
   rescueHistory?: RescueReceipt[];
@@ -281,6 +460,7 @@ export interface LibraryCardItem {
   ratedToday?: boolean;
   suspended: boolean;
   buried?: boolean;
+  flags?: number;
   reps: number;
   intervalDays: number;
   lastReviewText?: string;
@@ -305,8 +485,9 @@ export async function callAnki<T = any>(
       const timer = setTimeout(() => {
         if (!isSettled) {
           isSettled = true;
-          console.warn(`[Anki Bridge] Call to '${action}' timed out after ${timeoutMs}ms`);
-          resolve({} as T);
+          // Resolving with {} made every caller treat a dead bridge as a valid
+          // response; reject instead so catch blocks and success checks work.
+          reject(new Error(`Anki bridge '${action}' timed out after ${timeoutMs}ms`));
         }
       }, timeoutMs);
 
@@ -316,7 +497,7 @@ export async function callAnki<T = any>(
         clearTimeout(timer);
         try {
           if (!rawRes) {
-            resolve({} as T);
+            reject(new Error(`Anki bridge '${action}' returned an empty response`));
             return;
           }
           const res: BridgeResponse<T> = JSON.parse(rawRes);

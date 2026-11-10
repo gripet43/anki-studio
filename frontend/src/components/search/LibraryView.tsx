@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ANKI_FLAG_PALETTE, CardFlagColor } from '../../bridge/pycmd';
 import { translate } from '../../i18n/translations';
-import { appActions, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
+import {
+  appActions,
+  FlagFilterValue,
+  setAppState,
+  showToast,
+  useAppStore,
+} from '../../stores/useAppStore';
 import { getDeckColorByHash, renderMathAndRichHtml } from '../../utils/mathRenderer';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
 
@@ -20,6 +27,7 @@ export const LibraryView: React.FC = () => {
     libraryVisibleCount,
     filterStatus,
     filterDifficulty,
+    filterFlag,
     filterTag,
     filterDeckId,
     selectedCardIds,
@@ -34,9 +42,10 @@ export const LibraryView: React.FC = () => {
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
-  // Custom Modern Dropdown Popover States (Status, Difficulty, Tag, Deck)
+  // Custom Modern Dropdown Popover States (Status, Difficulty, Flag, Tag, Deck)
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [diffDropdownOpen, setDiffDropdownOpen] = useState(false);
+  const [flagDropdownOpen, setFlagDropdownOpen] = useState(false);
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const [tagSearchInput, setTagSearchInput] = useState('');
   const [deckDropdownOpen, setDeckDropdownOpen] = useState(false);
@@ -44,12 +53,13 @@ export const LibraryView: React.FC = () => {
 
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const diffDropdownRef = useRef<HTMLDivElement>(null);
+  const flagDropdownRef = useRef<HTMLDivElement>(null);
   const tagDropdownRef = useRef<HTMLDivElement>(null);
   const deckDropdownRef = useRef<HTMLDivElement>(null);
 
   // Interactive Batch Popover State
   const [activeBatchModal, setActiveBatchModal] = useState<
-    'none' | 'addTag' | 'moveDeck' | 'confirmDelete'
+    'none' | 'addTag' | 'moveDeck' | 'setFlag' | 'confirmDelete'
   >('none');
   const [batchTagInput, setBatchTagInput] = useState('');
   const [batchTargetDeckId, setBatchTargetDeckId] = useState(decks[0]?.id || '1');
@@ -68,6 +78,9 @@ export const LibraryView: React.FC = () => {
       }
       if (diffDropdownRef.current && !diffDropdownRef.current.contains(e.target as Node)) {
         setDiffDropdownOpen(false);
+      }
+      if (flagDropdownRef.current && !flagDropdownRef.current.contains(e.target as Node)) {
+        setFlagDropdownOpen(false);
       }
       if (tagDropdownRef.current && !tagDropdownRef.current.contains(e.target as Node)) {
         setTagDropdownOpen(false);
@@ -135,6 +148,29 @@ export const LibraryView: React.FC = () => {
     return map;
   }, [libraryCards]);
 
+  // Compute per-flag card counts for FlagSelectDropdown
+  const flagCountsMap = useMemo(() => {
+    const map: Record<string, number> = {
+      all: libraryCards.length,
+      flagged: 0,
+      '1': 0,
+      '2': 0,
+      '3': 0,
+      '4': 0,
+      '5': 0,
+      '6': 0,
+      '7': 0,
+    };
+    for (const c of libraryCards) {
+      const f = (c.flags || 0) & 7;
+      if (f > 0) {
+        map.flagged++;
+        map[String(f)] = (map[String(f)] || 0) + 1;
+      }
+    }
+    return map;
+  }, [libraryCards]);
+
   // Compute per-tag card counts for `TagSelectDropdown`
   const tagCountsMap = useMemo(() => {
     const map: Record<string, number> = {};
@@ -182,6 +218,14 @@ export const LibraryView: React.FC = () => {
     if (filterStatus === 'completed' && card.status !== 'completed' && !card.ratedToday) return false;
     if (filterStatus === 'review' && card.status !== 'review') return false;
     if (filterDifficulty !== 'all' && card.difficultyLevel !== filterDifficulty) return false;
+    if (filterFlag === 'flagged' && ((card.flags || 0) & 7) <= 0) return false;
+    if (
+      filterFlag !== 'all' &&
+      filterFlag !== 'flagged' &&
+      ((card.flags || 0) & 7) !== Number(filterFlag)
+    ) {
+      return false;
+    }
     if (filterTag !== 'all' && !card.tags.includes(filterTag)) return false;
     if (filterDeckId !== 'all' && card.deckId !== filterDeckId) return false;
     return true;
@@ -194,6 +238,7 @@ export const LibraryView: React.FC = () => {
   const hasActiveFilters =
     filterStatus !== 'all' ||
     filterDifficulty !== 'all' ||
+    filterFlag !== 'all' ||
     filterTag !== 'all' ||
     filterDeckId !== 'all' ||
     librarySearchQuery.trim().length > 0;
@@ -251,6 +296,10 @@ export const LibraryView: React.FC = () => {
     : { all: 'All', high: 'High', medium: 'Med', low: 'Low' };
 
   const activeDeckObj = decks.find((d) => d.id === filterDeckId);
+  const activeFlagSpec =
+    filterFlag in ANKI_FLAG_PALETTE
+      ? ANKI_FLAG_PALETTE[Number(filterFlag) as Exclude<CardFlagColor, 0>]
+      : null;
 
   return (
     <div className="flex-1 h-screen overflow-y-auto px-8 py-6 flex flex-col justify-between relative select-none">
@@ -273,9 +322,26 @@ export const LibraryView: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() =>
+                appActions.openCustomStudyModal(
+                  filterFlag !== 'all' || filterTag !== 'all' ? 'flagged' : 'mistakes',
+                  filterDeckId !== 'all' ? filterDeckId : undefined
+                )
+              }
+              className={`h-9 px-3.5 rounded-xl border text-[12px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors hover:border-[var(--brand-border)] ${cardSurface}`}
+            >
+              <svg className="w-3.5 h-3.5 text-[var(--brand-text)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="4" />
+              </svg>
+              <span>{isZh ? '专项特训' : 'Custom Study'}</span>
+            </button>
+
             <div
-              className={`h-9 w-[260px] px-3.5 rounded-xl border flex items-center gap-2 text-[12px] focus-within:border-[var(--brand)] ${cardSurface}`}
+              className={`h-9 w-[240px] px-3.5 rounded-xl border flex items-center gap-2 text-[12px] focus-within:border-[var(--brand)] ${cardSurface}`}
             >
               <svg
                 className="w-3.5 h-3.5 text-[#8E8E93]"
@@ -340,7 +406,7 @@ export const LibraryView: React.FC = () => {
           </div>
         </header>
 
-        {/* Faceted Filter Pills Bar — Item #8 Custom `TagSelectDropdown` & `DeckSelectDropdown` */}
+        {/* Faceted Filter Pills Bar — Status, Difficulty, 7-Color Flag, Tag, Deck */}
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2.5 flex-wrap">
             {/* Pill 1: Custom Modern StatusSelectDropdown */}
@@ -350,6 +416,7 @@ export const LibraryView: React.FC = () => {
                 onClick={() => {
                   setStatusDropdownOpen((prev) => !prev);
                   setDiffDropdownOpen(false);
+                  setFlagDropdownOpen(false);
                   setTagDropdownOpen(false);
                   setDeckDropdownOpen(false);
                 }}
@@ -439,6 +506,7 @@ export const LibraryView: React.FC = () => {
                 onClick={() => {
                   setDiffDropdownOpen((prev) => !prev);
                   setStatusDropdownOpen(false);
+                  setFlagDropdownOpen(false);
                   setTagDropdownOpen(false);
                   setDeckDropdownOpen(false);
                 }}
@@ -514,7 +582,149 @@ export const LibraryView: React.FC = () => {
               )}
             </div>
 
-            {/* Pill 3: Custom Modern TagSelectDropdown (Item #8) */}
+            {/* Pill 3: 7-Color FlagSelectDropdown */}
+            <div ref={flagDropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setFlagDropdownOpen((prev) => !prev);
+                  setStatusDropdownOpen(false);
+                  setDiffDropdownOpen(false);
+                  setTagDropdownOpen(false);
+                  setDeckDropdownOpen(false);
+                }}
+                style={
+                  activeFlagSpec
+                    ? {
+                        backgroundColor: activeFlagSpec.bgSoft,
+                        borderColor: activeFlagSpec.borderHex,
+                        color: activeFlagSpec.hex,
+                      }
+                    : undefined
+                }
+                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
+                  activeFlagSpec
+                    ? 'border'
+                    : filterFlag === 'flagged'
+                    ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)]'
+                    : `border hover:border-[var(--brand-border)] ${cardSurface}`
+                }`}
+              >
+                {activeFlagSpec ? (
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: activeFlagSpec.hex }}
+                  />
+                ) : (
+                  <svg className="w-3.5 h-3.5 opacity-70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                    <line x1="4" y1="22" x2="4" y2="15" />
+                  </svg>
+                )}
+                <span>
+                  {isZh ? '旗标' : 'Flag'} ·{' '}
+                  {filterFlag === 'all'
+                    ? statusLabels.all
+                    : filterFlag === 'flagged'
+                    ? isZh
+                      ? '任意有旗标'
+                      : 'Flagged'
+                    : activeFlagSpec
+                    ? isZh
+                      ? activeFlagSpec.shortZh
+                      : activeFlagSpec.shortEn
+                    : statusLabels.all}
+                </span>
+                <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+
+              {flagDropdownOpen && (
+                <div
+                  className={`absolute left-0 top-10 z-40 w-[225px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      appActions.searchLibraryDebounced({ flag: 'all' });
+                      setFlagDropdownOpen(false);
+                    }}
+                    className={`w-full px-3 py-2 rounded-xl text-[12px] flex items-center justify-between cursor-pointer transition-colors ${
+                      filterFlag === 'all'
+                        ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold'
+                        : isDark
+                        ? 'hover:bg-white/5'
+                        : 'hover:bg-[#F4F4F6]'
+                    }`}
+                  >
+                    <span>{isZh ? '全部卡片' : 'All Cards'}</span>
+                    <span className="px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/5 text-[10px] text-[#8E8E93]">
+                      {flagCountsMap.all}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      appActions.searchLibraryDebounced({ flag: 'flagged' });
+                      setFlagDropdownOpen(false);
+                    }}
+                    className={`w-full px-3 py-2 rounded-xl text-[12px] flex items-center justify-between cursor-pointer transition-colors ${
+                      filterFlag === 'flagged'
+                        ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold'
+                        : isDark
+                        ? 'hover:bg-white/5'
+                        : 'hover:bg-[#F4F4F6]'
+                    }`}
+                  >
+                    <span>{isZh ? '任意有旗标' : 'Any Flagged'}</span>
+                    <span className="px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/5 text-[10px] text-[#8E8E93]">
+                      {flagCountsMap.flagged}
+                    </span>
+                  </button>
+
+                  <div className="my-1 border-t border-black/5 dark:border-white/5" />
+
+                  {([1, 2, 3, 4, 5, 6, 7] as Array<Exclude<CardFlagColor, 0>>).map((fNum) => {
+                    const spec = ANKI_FLAG_PALETTE[fNum];
+                    const keyStr = String(fNum) as FlagFilterValue;
+                    const isSelected = filterFlag === keyStr;
+                    const cnt = flagCountsMap[keyStr] || 0;
+                    return (
+                      <button
+                        key={fNum}
+                        type="button"
+                        onClick={() => {
+                          appActions.searchLibraryDebounced({ flag: keyStr });
+                          setFlagDropdownOpen(false);
+                        }}
+                        className={`w-full px-3 py-2 rounded-xl text-[12px] flex items-center justify-between cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-black/5 dark:bg-white/10 font-semibold'
+                            : isDark
+                            ? 'hover:bg-white/5'
+                            : 'hover:bg-[#F4F4F6]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: spec.hex }}
+                          />
+                          <span>{isZh ? spec.labelZh : spec.labelEn}</span>
+                        </div>
+                        <span className="px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/5 text-[10px] text-[#8E8E93]">
+                          {cnt}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Pill 4: Custom Modern TagSelectDropdown (Item #8) */}
             <div ref={tagDropdownRef} className="relative">
               <button
                 type="button"
@@ -522,6 +732,7 @@ export const LibraryView: React.FC = () => {
                   setTagDropdownOpen((prev) => !prev);
                   setStatusDropdownOpen(false);
                   setDiffDropdownOpen(false);
+                  setFlagDropdownOpen(false);
                   setDeckDropdownOpen(false);
                 }}
                 className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
@@ -640,7 +851,7 @@ export const LibraryView: React.FC = () => {
               )}
             </div>
 
-            {/* Pill 4: Custom Modern DeckSelectDropdown */}
+            {/* Pill 5: Custom Modern DeckSelectDropdown */}
             <div ref={deckDropdownRef} className="relative">
               <button
                 type="button"
@@ -648,6 +859,7 @@ export const LibraryView: React.FC = () => {
                   setDeckDropdownOpen((prev) => !prev);
                   setStatusDropdownOpen(false);
                   setDiffDropdownOpen(false);
+                  setFlagDropdownOpen(false);
                   setTagDropdownOpen(false);
                 }}
                 className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
@@ -758,6 +970,7 @@ export const LibraryView: React.FC = () => {
                     query: '',
                     status: 'all',
                     difficulty: 'all',
+                    flag: 'all',
                     tag: 'all',
                     deckId: 'all',
                   });
@@ -833,6 +1046,7 @@ export const LibraryView: React.FC = () => {
                   setAppState({
                     filterStatus: 'all',
                     filterDifficulty: 'all',
+                    filterFlag: 'all',
                     filterTag: 'all',
                     filterDeckId: 'all',
                     librarySearchQuery: '',
@@ -840,6 +1054,8 @@ export const LibraryView: React.FC = () => {
                   appActions.searchLibraryDebounced({
                     query: '',
                     status: 'all',
+                    difficulty: 'all',
+                    flag: 'all',
                     tag: 'all',
                     deckId: 'all',
                   });
@@ -857,6 +1073,8 @@ export const LibraryView: React.FC = () => {
                 const isSelected = selectedCardIds.includes(card.id);
                 const isSuspended = card.suspended || card.status === 'suspended';
                 const isBuried = card.buried || card.status === 'buried';
+                const cardFlagNum = ((card.flags || 0) & 7) as CardFlagColor;
+                const cardFlagSpec = cardFlagNum !== 0 ? ANKI_FLAG_PALETTE[cardFlagNum] : null;
                 const topBarColor = getDeckColorByHash(card.deckId || card.deckName);
                 return (
                   <article
@@ -881,7 +1099,7 @@ export const LibraryView: React.FC = () => {
                       <div className="flex items-center gap-1.5 min-w-0">
                         {/* Deck Pill with Deck Color Indicator */}
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-medium max-w-[120px] truncate ${
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-medium max-w-[115px] truncate ${
                             isDark ? 'bg-white/5 text-[#A1A1A6]' : 'bg-[#F2F2F7] text-[#636366]'
                           }`}
                           title={card.fullDeckName || card.deckName}
@@ -892,6 +1110,23 @@ export const LibraryView: React.FC = () => {
                           />
                           <span className="truncate">{card.deckName}</span>
                         </span>
+
+                        {cardFlagSpec && (
+                          <span
+                            title={isZh ? cardFlagSpec.labelZh : cardFlagSpec.labelEn}
+                            style={{
+                              backgroundColor: cardFlagSpec.bgSoft,
+                              color: cardFlagSpec.hex,
+                            }}
+                            className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 shrink-0"
+                          >
+                            <span
+                              className="w-1.5 h-1.5 rounded-full shrink-0"
+                              style={{ backgroundColor: cardFlagSpec.hex }}
+                            />
+                            <span>{isZh ? cardFlagSpec.shortZh : cardFlagSpec.shortEn}</span>
+                          </span>
+                        )}
 
                         {/* Status Badge if special state */}
                         {isSuspended ? (
@@ -1054,7 +1289,7 @@ export const LibraryView: React.FC = () => {
                     <th className="py-3 px-4">{isZh ? '正面词条' : 'Front'}</th>
                     <th className="py-3 px-4">{isZh ? '背面释义' : 'Back'}</th>
                     <th className="py-3 px-4">{isZh ? '所属牌组' : 'Deck'}</th>
-                    <th className="py-3 px-4">{isZh ? '标签' : 'Tags'}</th>
+                    <th className="py-3 px-4">{isZh ? '旗标与标签' : 'Flag & Tags'}</th>
                     <th className="py-3 px-4">{t('masteryLabel')}</th>
                     <th className="py-3 px-4">{isZh ? '到期状态' : 'Due'}</th>
                     <th className="py-3 px-4 text-right w-20">{isZh ? '操作' : 'Action'}</th>
@@ -1065,6 +1300,8 @@ export const LibraryView: React.FC = () => {
                     const isSelected = selectedCardIds.includes(card.id);
                     const isSuspended = card.suspended || card.status === 'suspended';
                     const isBuried = card.buried || card.status === 'buried';
+                    const cardFlagNum = ((card.flags || 0) & 7) as CardFlagColor;
+                    const cardFlagSpec = cardFlagNum !== 0 ? ANKI_FLAG_PALETTE[cardFlagNum] : null;
                     const topBarColor = getDeckColorByHash(card.deckId || card.deckName);
                     return (
                       <tr
@@ -1108,7 +1345,22 @@ export const LibraryView: React.FC = () => {
                           </span>
                         </td>
                         <td className="py-3 px-4 text-[11px] text-[var(--brand-text)]">
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {cardFlagSpec && (
+                              <span
+                                style={{
+                                  backgroundColor: cardFlagSpec.bgSoft,
+                                  color: cardFlagSpec.hex,
+                                }}
+                                className="px-1.5 py-0.5 rounded-md font-semibold flex items-center gap-1"
+                              >
+                                <span
+                                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: cardFlagSpec.hex }}
+                                />
+                                <span>{isZh ? cardFlagSpec.shortZh : cardFlagSpec.shortEn}</span>
+                              </span>
+                            )}
                             {card.tags.slice(0, 2).map((tItem) => (
                               <span key={tItem} className="px-1.5 py-0.5 rounded-md bg-[var(--brand-soft)] text-[var(--brand-text)]">
                                 #{tItem}
@@ -1199,6 +1451,51 @@ export const LibraryView: React.FC = () => {
       {/* Floating Batch Operations Bar */}
       {selectedCardIds.length > 0 && (
         <div className="fixed bottom-6 left-[calc(50%+120px)] -translate-x-1/2 z-30 flex flex-col items-center gap-2.5">
+          {activeBatchModal === 'setFlag' && (
+            <div
+              className={`px-4 py-3 rounded-2xl border shadow-xl flex items-center gap-2 ${
+                isDark ? 'bg-[#1E1F28] border-[#323442] text-white' : 'bg-white border-[#E5E5EA] text-[#1D1D1F]'
+              }`}
+            >
+              <span className="text-[12px] text-[#8E8E93] mr-1">
+                {isZh ? '批量标记旗标：' : 'Set flag:'}
+              </span>
+              {([1, 2, 3, 4, 5, 6, 7] as Array<Exclude<CardFlagColor, 0>>).map((fNum) => {
+                const spec = ANKI_FLAG_PALETTE[fNum];
+                return (
+                  <button
+                    key={fNum}
+                    type="button"
+                    onClick={() => {
+                      appActions.executeBatchAction('setFlag', { flag: fNum });
+                      setActiveBatchModal('none');
+                    }}
+                    title={isZh ? spec.labelZh : spec.labelEn}
+                    style={{
+                      backgroundColor: spec.bgSoft,
+                      borderColor: spec.borderHex,
+                      color: spec.hex,
+                    }}
+                    className="h-7 px-2.5 rounded-xl border text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer hover:scale-105 transition-transform"
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: spec.hex }} />
+                    <span>{isZh ? spec.shortZh : spec.shortEn}</span>
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => {
+                  appActions.executeBatchAction('setFlag', { flag: 0 });
+                  setActiveBatchModal('none');
+                }}
+                className="h-7 px-2.5 rounded-xl border border-black/10 dark:border-white/10 text-[11px] text-[#8E8E93] hover:text-[var(--status-danger)] cursor-pointer"
+              >
+                {isZh ? '清除' : 'Clear'}
+              </button>
+            </div>
+          )}
+
           {activeBatchModal === 'addTag' && (
             <div
               className={`px-4 py-3 rounded-2xl border shadow-xl flex items-center gap-2.5 ${
@@ -1334,6 +1631,19 @@ export const LibraryView: React.FC = () => {
                 )}
               </>
             )}
+
+            <button
+              onClick={() =>
+                setActiveBatchModal((prev) => (prev === 'setFlag' ? 'none' : 'setFlag'))
+              }
+              className={`text-[13px] font-medium cursor-pointer transition-colors ${
+                activeBatchModal === 'setFlag'
+                  ? 'text-[var(--brand-text)] font-bold'
+                  : 'hover:text-[var(--brand-text)]'
+              }`}
+            >
+              {isZh ? '标旗' : 'Flag'}
+            </button>
 
             <button
               onClick={() =>

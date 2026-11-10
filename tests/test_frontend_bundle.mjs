@@ -201,6 +201,139 @@ assert(
   'Item #13: VacationModal, IcuRescueModal, and DashboardView must support active vacation Hero state, "享受你的假期 ^_^" prompt, <details>/<summary>, and non-blocking inline confirmation'
 );
 
+// Item #15: Parity with Anki's official statistics (Answer Buttons, True Retention, Daily Load)
+const deckSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'bridge/deck_service.py'), 'utf-8');
+const statsViewSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/stats/StatsView.tsx'),
+  'utf-8'
+);
+assert(
+  deckSrc.includes('answerButtons') &&
+    deckSrc.includes('trueRetention') &&
+    deckSrc.includes('dailyLoad') &&
+    deckSrc.includes('ROW_NUMBER() OVER') &&
+    statsViewSrc.includes('Answer Buttons') &&
+    statsViewSrc.includes('True Retention') &&
+    statsViewSrc.includes('dailyLoad'),
+  'Item #15: Bridge and StatsView must expose Anki official Answer Buttons, True Retention and Daily Load metrics'
+);
+
+// Item #16: Full-audit guardrails — read paths stay read-only, failures are honest
+const vacationServiceSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'bridge/vacation_service.py'), 'utf-8');
+const reviewSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'bridge/review_service.py'), 'utf-8');
+const searchSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'bridge/search_service.py'), 'utf-8');
+const editSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'bridge/edit_service.py'), 'utf-8');
+const pycmdSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'frontend/src/bridge/pycmd.ts'), 'utf-8');
+const buildSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'scripts/build_ankiaddon.py'), 'utf-8');
+const icuSrc2 = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/vacation/IcuRescueModal.tsx'),
+  'utf-8'
+);
+assert(
+  !vacationServiceSrc.includes('self._write_config({"last_rescue_receipt": receipt})') &&
+    vacationServiceSrc.includes('is:due is:review') &&
+    vacationServiceSrc.includes('__anki_studio_unknown_deck__') &&
+    !vacationServiceSrc.includes('set_due_date(cids, "0!")') &&
+    reviewSrc.includes('"answered": False') &&
+    !searchSrc.includes('cids = list(col.find_cards(""))') &&
+    searchSrc.includes('Unknown actionType') &&
+    !editSrc.includes('return {"saved": True, "savedAt"') &&
+    storeSrc.includes('dashValid') &&
+    !pycmdSrc.includes('resolve({} as T)') &&
+    pycmdSrc.includes('timed out after') &&
+    buildSrc.includes('PRIVATE_CONFIG_KEYS') &&
+    buildSrc.includes('rel.parts') &&
+    initPy.includes('gui_hooks.sync_will_start.append') &&
+    !icuSrc2.includes('100%'),
+  'Item #16: Full-audit fixes must not regress (no fabricated receipts, no fake successes, sanitized package, honest UI)'
+);
+
+// Item #17: Card-safety harness must remain wired into the test suite
+const safetyHarnessSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'tests/safety_harness.py'), 'utf-8');
+const safetyTestSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'tests/test_card_safety.py'), 'utf-8');
+assert(
+  safetyHarnessSrc.includes(':memory:') &&
+    safetyHarnessSrc.includes('CARD_BUSINESS_COLUMNS') &&
+    safetyHarnessSrc.includes('def compare(') &&
+    safetyTestSrc.includes('test_03_vacation_round_trip_is_zero_diff') &&
+    safetyTestSrc.includes('test_04_rescue_undo_round_trip_is_zero_diff') &&
+    safetyTestSrc.includes('test_08_pending_ticket_is_reconciled_after_a_crash') &&
+    fs.existsSync(path.resolve(ADDON_ROOT, 'bridge/safety.py')),
+  'Item #17: Card-safety harness, zero-diff baselines, crash reconciliation and the safety shell must stay in the suite'
+);
+
+// Item #18: Destructive operations must go through the safety shell
+assert(
+  vacationServiceSrc.includes('scheduleSnapshot') &&
+    vacationServiceSrc.includes('begin_ticket(') &&
+    vacationServiceSrc.includes('begin_undo_group(') &&
+    vacationServiceSrc.includes('verify_restoration(') &&
+    !vacationServiceSrc.includes('set_due_date(list(cids), "0!")'),
+  'Item #18: Bulk reschedule must capture a per-card snapshot, open a ticket, merge native undo and verify restoration'
+);
+
+// Item #19: Round-3 industrial verification and the recovery notice must stay wired
+const round3Src = fs.readFileSync(path.resolve(ADDON_ROOT, 'tests/test_card_safety_round3.py'), 'utf-8');
+assert(
+  round3Src.includes('signal.SIGKILL') &&
+    round3Src.includes('PRAGMA integrity_check') &&
+    round3Src.includes('injected mid-batch I/O failure') &&
+    round3Src.includes('HAS_HYPOTHESIS') &&
+    round3Src.includes('line_coverage_gate') &&
+    storeSrc.includes('safetyWarning') &&
+    pycmdSrc.includes('SafetyWarning'),
+  'Item #19: Fault injection, SIGKILL crash consistency, coverage gate and UI recovery notice must stay in the suite'
+);
+
+// Item #20: Deck Options (FSRS Presets), 7-Color Flags, and Custom Study / Mistake Drills
+const decksViewSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/decks/DecksView.tsx'),
+  'utf-8'
+);
+const customStudyModalSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/study/CustomStudyModal.tsx'),
+  'utf-8'
+);
+assert(
+  deckSrc.includes('get_deck_options') &&
+    deckSrc.includes('save_deck_options') &&
+    decksViewSrc.includes('saveDeckOptions') &&
+    decksViewSrc.includes('desiredRetention') &&
+    editSrc.includes('set_card_flag') &&
+    searchSrc.includes('setFlag') &&
+    reviewerSrc.includes('ANKI_FLAG_PALETTE') &&
+    reviewerSrc.includes('setCurrentReviewCardFlag') &&
+    librarySrc.includes('flagDropdownOpen') &&
+    reviewSrc.includes('start_custom_study') &&
+    customStudyModalSrc.includes('startCustomStudySession') &&
+    appSrc.includes('CustomStudyModal'),
+  'Item #20: Deck Options, 7-Color Flags, and Custom Study / Mistake Drills must be wired across backend and frontend'
+);
+
+// Item #21: Image Occlusion Studio & Import/Export + System Maintenance Tools
+const ioModalSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx'),
+  'utf-8'
+);
+const mathRendererSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/mathRenderer.ts'),
+  'utf-8'
+);
+assert(
+  ioModalSrc.includes('buildImageOcclusionHtml') &&
+    ioModalSrc.includes('parseExistingImageOcclusion') &&
+    ioModalSrc.includes('anki-io-wrap') &&
+    editorSrc.includes('ImageOcclusionEditorModal') &&
+    reviewSrc.includes('anki-io-rect-resolved') &&
+    mathRendererSrc.includes('anki-io-rect-resolved') &&
+    deckSrc.includes('trigger_native_import') &&
+    deckSrc.includes('trigger_native_export') &&
+    deckSrc.includes('run_maintenance_action') &&
+    settingsSrc.includes('triggerNativeImport') &&
+    settingsSrc.includes('runMaintenanceAction'),
+  'Item #21: Image Occlusion Studio and Import/Export + System Maintenance Tools must be wired across backend and frontend'
+);
+
 const jsBundle = fs.readFileSync(WEB_JS, 'utf-8');
 const cssBundle = fs.readFileSync(WEB_CSS, 'utf-8');
 assert(

@@ -59,8 +59,14 @@ class AnkiModernHost:
             from aqt import mw
             if mw and getattr(mw, "addonManager", None):
                 mw.addonManager.writeConfig(__name__, merged)
-        except Exception:
-            pass
+                # config.json is the add-on's default/schema template. Runtime
+                # state (receipts, real card text, vacation snapshots) belongs in
+                # meta.json only, otherwise it ships inside the .ankiaddon.
+                return merged
+        except Exception as e:
+            print(f"[Anki Modern OS] writeConfig failed: {e}")
+        # Outside the Anki runtime (unit tests / tooling) there is no
+        # addonManager, so keep a local fallback for preferences round-tripping.
         try:
             CONFIG_FILE.write_text(
                 json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -72,7 +78,7 @@ class AnkiModernHost:
     def initialize(self) -> None:
         try:
             from aqt import gui_hooks, mw
-            from aqt.qt import QAction, QKeySequence, QShortcut
+            from aqt.qt import QAction, QKeySequence
         except ImportError:
             # Outside Anki runtime (e.g., automated unit tests)
             return
@@ -87,6 +93,8 @@ class AnkiModernHost:
         gui_hooks.main_window_did_init.append(self._on_main_window_init)
 
         # 3. Register two-way lifecycle & ecosystem hooks
+        if hasattr(gui_hooks, "sync_will_start"):
+            gui_hooks.sync_will_start.append(self._on_sync_will_start)
         if hasattr(gui_hooks, "sync_did_finish"):
             gui_hooks.sync_did_finish.append(self._on_sync_did_finish)
         if hasattr(gui_hooks, "operation_did_execute"):
@@ -100,13 +108,17 @@ class AnkiModernHost:
 
         # 5. Layer 1 & Layer 2 Safety Net: Tools menu action & Fail-safe hotkeys (Ctrl+Opt+M / Ctrl+Alt+M)
         shortcut_hint = "Ctrl+Opt+M" if sys.platform.startswith("darwin") else "Ctrl+Alt+M"
+        # Qt swaps Ctrl/Meta on macOS: "Meta+Alt+M" is the documented ⌃⌥M there,
+        # while other platforms need a literal "Ctrl+Alt+M". Using one shared
+        # sequence also avoids QAction + QShortcut both firing (double toggle).
+        shortcut_seq = QKeySequence(
+            "Meta+Alt+M" if sys.platform.startswith("darwin") else "Ctrl+Alt+M"
+        )
         action = QAction(f"切换 Anki Studio / 原生界面 ({shortcut_hint})", mw)
-        action.setShortcut(QKeySequence("Ctrl+Alt+M"))
+        action.setShortcut(shortcut_seq)
         action.triggered.connect(self.toggle_modern_ui)
         mw.form.menuTools.addAction(action)
-
-        self._shortcut_ctrl_opt = QShortcut(QKeySequence("Meta+Alt+M"), mw)
-        self._shortcut_ctrl_opt.activated.connect(self.toggle_modern_ui)
+        self._modern_toggle_action = action
 
         # 6. Suppress duplicate native Qt sync progress modal dialogs & tooltips while Modern UI is active
         self._patch_anki_dialogs()
