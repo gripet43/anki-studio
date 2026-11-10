@@ -551,6 +551,16 @@ class BridgeRouterAuditTest(unittest.TestCase):
             today_stats["completed"] + today_stats["dueReview"] + today_stats["dueNew"],
         )
         self.assertEqual(dash["userName"], "Alex Profile")
+        
+        # Verify streak calendar week active days calculation
+        streak = dash["streak"]
+        self.assertEqual(streak["weekTotalDays"], 7)
+        self.assertGreaterEqual(streak["weekActiveDays"], 0)
+        self.assertLessEqual(streak["weekActiveDays"], 7)
+        # In current calendar week, active days cannot exceed elapsed days so far (weekday + 1)
+        import datetime
+        elapsed_week_days = datetime.date.today().weekday() + 1
+        self.assertLessEqual(streak["weekActiveDays"], elapsed_week_days)
 
     def test_07_preferences_and_batch_unsuspend_delete(self):
         """Bug #10 & Part 3 Task 4: Verify batch unsuspend/delete and preferences persistence."""

@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+- **[Antigravity] 修复连续打卡「本周活跃天数」统计口径跨周污染的 Bug**：
+  - **原因定位**：连续打卡卡片副标题中的「本周 {active} / {total}」指标此前在 [`bridge/deck_service.py`](bridge/deck_service.py) 中直接采用滚动 7 天窗口（`range(7)` 即今天及过去 6 天），而非自然周（周一至周日）的已过天数。当用户拥有较长连续打卡（如 18 天打卡）并在周二查看时，滚动 7 天将上周三至周日的打卡天数全部计入，导致周二仅过两天却出现「本周 7 / 7」的逻辑荒谬。
+  - **修复措施**：
+    1. 改为严格基于当前自然周（ISO 周一为起点，`weekday_idx = today_date.weekday()`）计算自周一至今日的已发生天数范围（`range(weekday_idx + 1)`）。
+    2. 遍历本周已过天数，检查当天复习记录（`day_map`）或休假冻结记录（`frozen_dates`），周二在周一与周二均打卡的情况下准确呈现「本周 2 / 7」，周日全勤时呈现「本周 7 / 7」。
+    3. 在 [`tests/test_bridge.py`](tests/test_bridge.py) 中加入 `weekActiveDays <= weekday + 1` 的自然周上限断言测试，12 项测试全部通过。
+  - **修改文件**：[`bridge/deck_service.py`](bridge/deck_service.py), [`tests/test_bridge.py`](tests/test_bridge.py)。
+
 - **[Antigravity] 主界面看板状态胶囊交互化与卡库联动筛选**：
   - **主界面胶囊按钮化**：将英雄区「待复习」、「新卡」、「已完成」3枚原本仅用于展示的标签重构为可点击的交互式微胶囊（`hover:opacity-85 hover:scale-[1.02] active:scale-95 cursor-pointer`）。
   - **卡库直连与筛选注入**：点击「待复习」自动切换至卡库并应用 `status: 'due'` 过滤；点击「新卡」自动切换并应用 `status: 'new'` 过滤；点击「已完成」自动切换并应用 `status: 'completed'`（底层直连 Anki `rated:1` 检索语义），卡库状态下拉列表同步增设「今日已完成」选项与状态标记。

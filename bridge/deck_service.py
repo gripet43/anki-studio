@@ -496,7 +496,17 @@ class DeckService:
         week_reviews = sum(day_map.get(364 - i, {"count": 0})["count"] for i in range(7))
         week_correct = sum(day_map.get(364 - i, {"correct": 0})["correct"] for i in range(7))
         prev_week_reviews = sum(day_map.get(364 - i, {"count": 0})["count"] for i in range(7, 14))
-        week_active_days = sum(1 for i in range(7) if day_map.get(364 - i, {"count": 0})["count"] > 0)
+
+        weekday_idx = today_date.weekday()
+        # Count active days in the current calendar week so far (Monday through today)
+        week_active_days = sum(
+            1
+            for i in range(weekday_idx + 1)
+            if (
+                day_map.get(364 - i, {"count": 0})["count"] > 0
+                or (today_date - datetime.timedelta(days=i)).isoformat() in frozen_dates
+            )
+        )
 
         retention_rate = round((week_correct / week_reviews) * 100) if week_reviews > 0 else 0
         if prev_week_reviews > 0:
