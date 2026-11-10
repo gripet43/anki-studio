@@ -204,25 +204,14 @@ export const CommandPaletteModal: React.FC = () => {
             )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {hasQuery && cmdKSearching && (
+          {hasQuery && cmdKSearching && (
+            <div className="flex items-center gap-2 shrink-0">
               <span className="text-[11px] text-[var(--brand-text)] font-medium flex items-center gap-1 mr-1">
                 <span className="w-2 h-2 rounded-full bg-[var(--brand)] animate-ping" />
                 <span>{resolvedLang === 'en' ? 'Searching...' : '检索中...'}</span>
               </span>
-            )}
-            <kbd
-              onClick={() => setAppState({ cmdKOpen: false })}
-              className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium cursor-pointer transition-colors ${
-                isDark
-                  ? 'bg-white/10 hover:bg-white/15 text-[#8E8E93] hover:text-white'
-                  : 'bg-black/5 hover:bg-black/10 text-[#8E8E93] hover:text-[#1D1D1F]'
-              }`}
-              title={isZh ? '关闭 (Esc)' : 'Close (Esc)'}
-            >
-              Esc
-            </kbd>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Modal Body: Clean Spotlight-grade Initial State or Search Results Grid */}
@@ -547,42 +536,12 @@ export const CommandPaletteModal: React.FC = () => {
         </div>
       )}
 
-        {/* Footer Hint Bar */}
+        {/* Footer Bar */}
         <div
-          className={`h-9 px-5 border-t flex items-center justify-between text-[11px] text-[#8E8E93] ${
+          className={`h-9 px-5 border-t flex items-center justify-end text-[11px] text-[#8E8E93] ${
             isDark ? 'border-[#262834] bg-[#14151B]' : 'border-[#EBEBF0] bg-[#FAFAFC]'
           }`}
         >
-          <div className="flex items-center gap-2">
-            {!hasQuery ? (
-              <>
-                <kbd className="font-mono px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 text-[10px]">↑↓</kbd>
-                <span>{isZh ? '选择' : 'Navigate'}</span>
-                <span className="opacity-40">·</span>
-                <kbd className="font-mono px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 text-[10px]">↵</kbd>
-                <span>{isZh ? '打开' : 'Inspect'}</span>
-                <span className="opacity-40">·</span>
-                <kbd className="font-mono px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 text-[10px]">Esc</kbd>
-                <span>{isZh ? '关闭' : 'Close'}</span>
-              </>
-            ) : displayedResults.length === 0 ? (
-              <>
-                <kbd className="font-mono px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 text-[10px]">Esc</kbd>
-                <span>{isZh ? '退出' : 'Close'}</span>
-              </>
-            ) : (
-              <>
-                <kbd className="font-mono px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 text-[10px]">↑↓</kbd>
-                <span>{isZh ? '导航' : 'Navigate'}</span>
-                <span className="opacity-40">·</span>
-                <kbd className="font-mono px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 text-[10px]">↵</kbd>
-                <span>{isZh ? '在编辑器中修改' : 'Edit'}</span>
-                <span className="opacity-40">·</span>
-                <kbd className="font-mono px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 text-[10px]">Esc</kbd>
-                <span>{isZh ? '关闭' : 'Close'}</span>
-              </>
-            )}
-          </div>
           <span>
             {hasQuery && displayedResults.length > 0
               ? resolvedLang === 'en'

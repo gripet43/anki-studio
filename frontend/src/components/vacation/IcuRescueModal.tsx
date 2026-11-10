@@ -613,17 +613,7 @@ export const IcuRescueModal: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <footer className="flex items-center justify-between gap-3 px-5 py-3.5 border-t border-black/5 dark:border-white/8 bg-black/[0.015] dark:bg-white/[0.015] shrink-0">
-          <span className="text-[11px] text-[#8E8E93]">
-            {activeTab === 'rescue'
-              ? isZh
-                ? '执行后将自动生成可逆存证并归档'
-                : 'Creates a reversible receipt upon execution'
-              : isZh
-              ? '所有操作均保留 100% 原始卡片与间隔数据'
-              : '100% of card data and intervals are preserved'}
-          </span>
-
+        <footer className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-black/5 dark:border-white/8 bg-black/[0.015] dark:bg-white/[0.015] shrink-0">
           <div className="flex items-center gap-2.5">
             <button
               type="button"

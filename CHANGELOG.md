@@ -15,6 +15,12 @@
 
 ## [Unreleased]
 
+- **[Antigravity] 全局弹窗冗余快捷键提示与占位元素降噪清理**：
+  - **搜索面板（CommandPaletteModal）**：移除搜索栏右侧多余的 `Esc` 按键胶囊，清除底部「↑↓ 导航 · ↵ 在编辑器中修改 · Esc 关闭」快捷键提示条，结果统计数字保持右对齐。修改文件：[`frontend/src/components/search/CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)。
+  - **系统设置（SettingsModal）**：移除左上角标题下方的系统版本徽标（`macOS · 26.09.4`），移除左侧导航底部的「完成 (Esc)」按钮，在弹窗右上角增设统一标准 `✕` 关闭按钮。修改文件：[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)。
+  - **进度减负（IcuRescueModal）**：移除底部常驻的「执行后将自动生成可逆存证并归档」解释文案，操作按钮自适应右对齐。修改文件：[`frontend/src/components/vacation/IcuRescueModal.tsx`](frontend/src/components/vacation/IcuRescueModal.tsx)。
+  - **卡片编辑器（CardEditorModal）**：移除底部「支持 Cmd+V 粘贴截图 · Cmd+Enter 保存 · Esc 取消」常驻快捷键文本，仅保留未保存修改状态警告，界面彻底回归干净纯粹。修改文件：[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)。
+
 - **[Antigravity] 侧栏底部工具胶囊对称重构与设置中心强调色栅格去截断优化**：
   - **侧边栏底部胶囊优化**：修复「休假模式」与「进度减负」按钮左右不对称的伪 Tab 切换错觉。消除正常状态下减负按钮因历史存证可撤销而被强制上色（`bg-[var(--brand-soft)]`）导致的视觉倾斜，规范两项工具的默认静止态（均采用无底色微动卡片、居中排版 `justify-center gap-1.5` 与对齐图标）；将休假激活态（`休假中 · Xd`）与待办洪峰警告态（`animate-pulse`）作为唯一的高亮分支；依循现代 Web 最佳实践补充 `role="toolbar"` 与焦点环无障碍支持。修改文件：[`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)。
   - **强调色栅格去截断与官方标识**：针对偏好设置中心「现代 SaaS 强调色系统」中按钮文字被长英文字段截断的问题（如 `经典蓝 · S...`），在 [`frontend/src/utils/themeTokens.ts`](frontend/src/utils/themeTokens.ts) 中为 8 套主题引入短标题系统（`shortNameZh` / `shortNameEn`），中文展示为纯粹的三字名称（如 `经典蓝`、`松石绿`、`雾海蓝`），彻底消除 `...` 截断；为官方固定品牌色（经典蓝 `#3076C3`）附加「官方」专属微标签；依循表单无障碍实践补充 `role="radiogroup"`、`role="radio"` 与 `aria-checked` 语义。修改文件：[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx), [`frontend/src/components/design-system/DesignSystemView.tsx`](frontend/src/components/design-system/DesignSystemView.tsx)。

@@ -171,19 +171,32 @@ export const SettingsModal: React.FC = () => {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`w-[800px] h-[560px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.35)] flex overflow-hidden transition-colors ${modalSurface}`}
+        className={`w-[800px] h-[560px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.35)] flex overflow-hidden transition-colors relative ${modalSurface}`}
       >
+        {/* Top Right Close Button */}
+        <button
+          type="button"
+          onClick={() => setAppState({ settingsOpen: false })}
+          className={`absolute top-4 right-4 z-20 w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+            isDark ? 'text-[#8E8E93] hover:text-white hover:bg-white/10' : 'text-[#8E8E93] hover:text-black hover:bg-black/5'
+          }`}
+          title={isZh ? '关闭 (Esc)' : 'Close (Esc)'}
+          aria-label={isZh ? '关闭' : 'Close'}
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+
         {/* Left Settings Sidebar (Apple System Settings 2-Column Architecture) */}
-        <div className={`w-[210px] shrink-0 border-r p-3.5 flex flex-col justify-between ${sidebarBg}`}>
+        <div className={`w-[210px] shrink-0 border-r p-3.5 flex flex-col ${sidebarBg}`}>
           <div className="space-y-4">
             {/* Header */}
             <div className="px-3 pt-2">
               <h2 className="text-[16px] font-bold tracking-tight">
                 {isZh ? '系统设置' : 'Preferences'}
               </h2>
-              <div className={`text-[11px] ${subText} mt-0.5`}>
-                {envInfo.platformBadge}
-              </div>
             </div>
 
             {/* Navigation Tabs */}
@@ -209,20 +222,6 @@ export const SettingsModal: React.FC = () => {
                 );
               })}
             </nav>
-          </div>
-
-          {/* Close button at bottom */}
-          <div className="px-1 pt-3 border-t border-black/5 dark:border-white/5">
-            <button
-              onClick={() => setAppState({ settingsOpen: false })}
-              className={`w-full py-1.5 rounded-lg border text-[12px] font-medium text-center transition-colors cursor-pointer ${
-                isDark
-                  ? 'border-[#2E2E3C] text-[#8E8E93] hover:text-white'
-                  : 'border-[#E5E5EA] text-[#6E6E73] hover:text-black'
-              }`}
-            >
-              {isZh ? '完成 (Esc)' : 'Done (Esc)'}
-            </button>
           </div>
         </div>
 

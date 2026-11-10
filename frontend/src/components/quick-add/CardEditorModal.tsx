@@ -632,20 +632,12 @@ export const CardEditorModal: React.FC = () => {
             isDark ? 'bg-[#13141C]' : 'bg-[#FAFAFC]'
           }`}
         >
-          {/* Left Tips */}
+          {/* Left Status */}
           <div className="flex items-center gap-3 text-[11px] text-[#8E8E93]">
-            {isEditMode && hasChanges ? (
+            {isEditMode && hasChanges && (
               <span className="text-[var(--status-warning)] font-medium flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]" />
                 <span>{isZh ? '有未保存修改' : 'Unsaved changes'}</span>
-              </span>
-            ) : (
-              <span className="flex items-center gap-2">
-                <span>{isZh ? '支持 Cmd+V 粘贴截图' : 'Paste screenshots with Cmd+V'}</span>
-                <span>·</span>
-                <span className="font-mono text-[var(--brand-text)]">{formatShortcut('Cmd+Enter', envInfo.platform)} {isZh ? '保存' : 'Save'}</span>
-                <span>·</span>
-                <span className="font-mono text-[#8E8E93]">Esc {isZh ? '取消' : 'Cancel'}</span>
               </span>
             )}
           </div>
