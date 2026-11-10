@@ -26,6 +26,8 @@ export const SyncStatusPill: React.FC = () => {
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);
 
+  const hasSynced = Boolean(lastSyncedTimestamp && lastSyncedTimestamp > 0);
+
   // Transition from syncing / initial check to ready state
   const isSyncActive = syncing || isInitialSyncing;
   const hoverTimeoutRef = useRef<any>(null);
@@ -102,7 +104,15 @@ export const SyncStatusPill: React.FC = () => {
         type="button"
         onClick={() => handleTriggerSync()}
         disabled={isSyncActive}
-        title={isZh ? '点击立即同步 (快捷键 Y)' : 'Click to sync now (Hotkey Y)'}
+        title={
+          hasSynced
+            ? isZh
+              ? `上次云端同步：${detailedTimeStr || relativeTimeStr} (点击立即同步 · 快捷键 Y)`
+              : `Last synced: ${detailedTimeStr || relativeTimeStr} (Click to sync · Hotkey Y)`
+            : isZh
+            ? '尚未与 AnkiWeb 云端同步 (点击立即同步 · 快捷键 Y)'
+            : 'Not synced with AnkiWeb yet (Click to sync · Hotkey Y)'
+        }
         className={`group relative h-9 pl-3.5 pr-2.5 rounded-full border text-[12px] flex items-center gap-2 transition-all duration-300 backdrop-blur-md active:scale-[0.98] ${pillSurface} ${
           isSyncActive
             ? 'animate-sync-glow ring-1 ring-[var(--status-warning)]/30 cursor-default'
@@ -132,9 +142,12 @@ export const SyncStatusPill: React.FC = () => {
                 className="animate-draw-check"
               />
             </svg>
-          ) : (
+          ) : hasSynced ? (
             /* Calm steady emerald dot */
             <span className="w-2 h-2 rounded-full bg-[var(--status-success)] shadow-[0_0_6px_rgba(47,148,97,0.4)] transition-all duration-300" />
+          ) : (
+            /* Neutral gray dot for un-synced account */
+            <span className="w-2 h-2 rounded-full bg-[#8E8E93]/60 shadow-xs transition-all duration-300" />
           )}
         </div>
 
@@ -143,14 +156,14 @@ export const SyncStatusPill: React.FC = () => {
           {isSyncActive ? (
             <span className="text-[12px] font-semibold text-[var(--status-warning)] tracking-tight animate-pulse truncate">
               {isInitialSyncing && !syncing
-                ? (isZh ? '云端就绪检查...' : 'Checking cloud...')
+                ? (isZh ? '本地卡库就绪中...' : 'Loading local...')
                 : t('syncing')}
             </span>
           ) : syncJustFinished ? (
             <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight flex items-center gap-1 animate-sync-reveal">
               <span>{isZh ? '同步完成' : t('syncCompleted')}</span>
             </span>
-          ) : (
+          ) : hasSynced ? (
             <div className="flex items-center gap-1 transition-opacity duration-300">
               <span className="font-medium text-[12px] leading-none group-hover:text-[var(--brand-text)] transition-colors">
                 {t('synced')}
@@ -159,6 +172,10 @@ export const SyncStatusPill: React.FC = () => {
                 ({relativeTimeStr})
               </span>
             </div>
+          ) : (
+            <span className="font-medium text-[12px] text-[#8E8E93] group-hover:text-[var(--brand-text)] leading-none transition-colors">
+              {isZh ? '尚未同步' : 'Not synced'}
+            </span>
           )}
         </div>
 
@@ -209,7 +226,7 @@ export const SyncStatusPill: React.FC = () => {
       {/* Sleek, Apple-Grade Status Popover */}
       {isFlyoutOpen && (
         <div
-          className={`absolute right-0 top-11 z-50 w-[260px] rounded-2xl border p-3.5 backdrop-blur-xl transition-all duration-150 animate-in fade-in-50 zoom-in-95 shadow-[0_16px_36px_rgba(0,0,0,0.18)] ${popoverSurface}`}
+          className={`absolute right-0 top-11 z-50 w-[270px] rounded-2xl border p-3.5 backdrop-blur-xl transition-all duration-150 animate-in fade-in-50 zoom-in-95 shadow-[0_16px_36px_rgba(0,0,0,0.18)] ${popoverSurface}`}
         >
           {/* Header */}
           <div className="flex items-center justify-between pb-2.5 border-b border-black/[0.06] dark:border-white/[0.08]">
@@ -218,22 +235,34 @@ export const SyncStatusPill: React.FC = () => {
                 <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
               </svg>
               <span className="text-[13px] font-semibold tracking-tight">
-                {isZh ? 'AnkiWeb 同步' : 'AnkiWeb Sync'}
+                {isZh ? 'AnkiWeb 云端同步' : 'AnkiWeb Sync'}
               </span>
             </div>
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1.5 ${
                 syncing
                   ? 'bg-[var(--status-warning-soft)] text-[var(--status-warning)]'
-                  : 'bg-[var(--status-success-soft)] text-[var(--status-success)]'
+                  : hasSynced
+                  ? 'bg-[var(--status-success-soft)] text-[var(--status-success)]'
+                  : 'bg-black/5 dark:bg-white/10 text-[#8E8E93]'
               }`}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  syncing ? 'bg-[var(--status-warning)] animate-ping' : 'bg-[var(--status-success)]'
+                  syncing
+                    ? 'bg-[var(--status-warning)] animate-ping'
+                    : hasSynced
+                    ? 'bg-[var(--status-success)]'
+                    : 'bg-[#8E8E93]'
                 }`}
               />
-              <span>{syncing ? (isZh ? '同步中' : 'Syncing') : (isZh ? '已同步' : 'Synced')}</span>
+              <span>
+                {syncing
+                  ? (isZh ? '同步中' : 'Syncing')
+                  : hasSynced
+                  ? (isZh ? '已同步' : 'Synced')
+                  : (isZh ? '未同步' : 'Not synced')}
+              </span>
             </span>
           </div>
 
@@ -242,14 +271,26 @@ export const SyncStatusPill: React.FC = () => {
             <div className="flex items-center justify-between text-[#8E8E93]">
               <span>{isZh ? '上次同步' : 'Last sync'}</span>
               <span className="font-mono text-[#1D1D1F] dark:text-[#E5E5EA]">
-                {relativeTimeStr}
+                {hasSynced ? relativeTimeStr : (isZh ? '从未同步' : 'Never')}
               </span>
             </div>
-            {detailedTimeStr && (
+            {hasSynced && detailedTimeStr && (
               <div className="text-[10px] text-[#8E8E93] text-right font-mono">
                 {detailedTimeStr}
               </div>
             )}
+            {!hasSynced && (
+              <div className="text-[10px] text-[#8E8E93] text-right">
+                {isZh ? '暂无云端同步记录' : 'No cloud sync record'}
+              </div>
+            )}
+          </div>
+
+          {/* Transparent Truth Explanatory Footnote */}
+          <div className="py-2 text-[10.5px] leading-relaxed text-[#8E8E93] border-t border-black/[0.04] dark:border-white/[0.04]">
+            {isZh
+              ? '💡 本地修改已实时自动保存至 SQLite。点击立即同步即可与 AnkiWeb 云端双向对齐。'
+              : '💡 Local edits auto-save to SQLite. Click Sync to exchange with AnkiWeb.'}
           </div>
 
           {/* Action Row */}

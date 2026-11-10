@@ -1428,7 +1428,7 @@ export const ReviewerView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => appActions.buryCurrentReviewCard()}
-                  className={`h-8 rounded-xl border text-[11px] font-medium cursor-pointer transition-colors ${
+                  className={`h-8 rounded-xl border text-[11px] font-medium cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
                     isDark
                       ? 'bg-[#1A1B22] border-white/[0.08] text-[#C8C8D2] hover:bg-white/10'
                       : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#EFEFF4]'
@@ -1441,7 +1441,7 @@ export const ReviewerView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => appActions.toggleSuspendCurrentReviewCard()}
-                  className={`h-8 rounded-xl border text-[11px] font-medium cursor-pointer transition-colors ${
+                  className={`h-8 rounded-xl border text-[11px] font-medium cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
                     isDark
                       ? 'bg-[#1A1B22] border-white/[0.08] text-[#C8C8D2] hover:bg-white/10'
                       : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#EFEFF4]'
@@ -1458,7 +1458,8 @@ export const ReviewerView: React.FC = () => {
                       setConfirmingDelete(false);
                       appActions.deleteCurrentReviewCard();
                     }}
-                    className="h-8 rounded-xl bg-[var(--status-danger)] text-white text-[11px] font-semibold cursor-pointer"
+                    className="h-8 rounded-xl bg-[var(--status-danger)] text-white text-[11px] font-semibold cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--status-danger)] focus-visible:outline-offset-2"
+                    aria-label={isZh ? '确认删除卡片' : 'Confirm delete card'}
                   >
                     {t('confirm')}
                   </button>
@@ -1466,7 +1467,7 @@ export const ReviewerView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setConfirmingDelete(true)}
-                    className="h-8 rounded-xl border text-[11px] font-medium cursor-pointer bg-[var(--status-danger-soft)] border-[var(--status-danger)]/30 text-[var(--status-danger)] hover:opacity-90"
+                    className="h-8 rounded-xl border text-[11px] font-medium cursor-pointer bg-[var(--status-danger-soft)] border-[var(--status-danger)]/30 text-[var(--status-danger)] hover:opacity-90 focus-visible:outline-2 focus-visible:outline-[var(--status-danger)] focus-visible:outline-offset-2"
                   >
                     {t('deleteCardBtn')}
                   </button>

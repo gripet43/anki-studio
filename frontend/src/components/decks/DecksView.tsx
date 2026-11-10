@@ -102,13 +102,15 @@ export const DecksView: React.FC = () => {
             <div className="flex items-center gap-2 mt-1">
               <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-ping" />
               <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight">
-                {isZh ? '正在从云端同步牌组层级与调度进度...' : 'Syncing decks hierarchy from cloud...'}
+                {syncing
+                  ? (isZh ? '正在从云端同步牌组层级与调度进度...' : 'Syncing decks hierarchy from cloud...')
+                  : (isZh ? '正在加载本地牌组层级与调度进度...' : 'Loading deck hierarchy & schedule...')}
               </span>
             </div>
           ) : syncJustFinished ? (
             <div className="flex items-center gap-1.5 mt-1 animate-in fade-in duration-300">
               <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight">
-                {isZh ? '✓ 牌组数据已同步就绪' : '✓ Decks synchronized'}
+                {isZh ? '✓ 牌组数据已就绪' : '✓ Decks ready'}
               </span>
             </div>
           ) : (

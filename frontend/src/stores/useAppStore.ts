@@ -35,6 +35,7 @@ import { EMPTY_ADVANCED_STATS, EMPTY_DASHBOARD } from '../data/mockData';
 import {
   detectBrowserLanguage,
   detectOSPlatform,
+  formatRelativeSyncLabel,
   LanguageOption,
   ResolvedLanguage,
   resolveLanguage,
@@ -361,10 +362,12 @@ export const appActions = {
 
       coldStartInProgress = false;
 
+      const genuineSyncTs = dash?.syncedAt !== undefined ? dash.syncedAt : (state.lastSyncedTimestamp || 0);
+
       setAppState({
         isLoading: false,
         isInitialSyncing: false,
-        syncJustFinished: isFirstLaunch,
+        syncJustFinished: false,
         decks: realDecks,
         activeDeckId: state.activeDeckId || realDecks[0]?.id || null,
         advancedStats: dash?.advancedStats || EMPTY_ADVANCED_STATS,
@@ -377,11 +380,15 @@ export const appActions = {
         showShortcutHints: prefs?.showShortcutHints !== undefined ? prefs.showShortcutHints : state.showShortcutHints,
         debugModeUnlocked: Boolean(prefs?.debugMode) || state.debugModeUnlocked,
         envInfo: dash?.envInfo || state.envInfo,
-        lastSyncedTimestamp: dash?.syncedAt || state.lastSyncedTimestamp || Date.now(),
-        lastSyncedText: state.lastSyncedText || (effectiveLang === 'zh-CN' ? '已就绪' : 'Ready'),
+        lastSyncedTimestamp: genuineSyncTs,
+        lastSyncedText: genuineSyncTs > 0
+          ? formatRelativeSyncLabel(genuineSyncTs, effectiveLang)
+          : (effectiveLang === 'zh-CN' ? '尚未同步' : 'Not synced'),
         dashboard: dashValid
           ? {
               ...dash!,
+              synced: genuineSyncTs > 0,
+              syncedAt: genuineSyncTs,
               decks: realDecks,
             }
           : EMPTY_DASHBOARD,
@@ -392,6 +399,34 @@ export const appActions = {
         libraryAllTags: searchRes?.allTags || [],
         cmdKResults: state.cmdKQuery.trim() ? state.cmdKResults : [],
       });
+
+      // If user was actively reviewing cards and collection updated in native Anki:
+      if (state.inReviewMode && state.activeDeckId) {
+        try {
+          const freshReviewRes = await callAnki<{ cards: ReviewCardItem[]; totalDue: number }>('start_review', {
+            deckId: state.activeDeckId,
+            includePreviewWhenEmpty: false,
+          });
+          if (freshReviewRes && Array.isArray(freshReviewRes.cards)) {
+            if (freshReviewRes.cards.length === 0) {
+              setAppState({
+                reviewQueue: [],
+                isSessionComplete: true,
+              });
+            } else {
+              setAppState((prev) => {
+                const newQueue = freshReviewRes.cards;
+                const newIdx = Math.min(prev.currentCardIndex, Math.max(0, newQueue.length - 1));
+                return {
+                  reviewQueue: newQueue,
+                  currentCardIndex: newIdx,
+                  isSessionComplete: false,
+                };
+              });
+            }
+          }
+        } catch {}
+      }
 
       // Crash recovery happens automatically on the Python side. Surface it once
       // so the user knows an interrupted bulk operation was reconciled.
@@ -408,12 +443,6 @@ export const appActions = {
             ? `Recovered ${safetyWarning.restored} cards after an interrupted operation`
             : 'An interrupted bulk operation needs a manual review'
         );
-      }
-
-      if (isFirstLaunch) {
-        setTimeout(() => {
-          setAppState({ syncJustFinished: false });
-        }, 2600);
       }
     } catch {
       coldStartInProgress = false;

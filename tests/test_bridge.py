@@ -88,6 +88,11 @@ class MockDB:
                 time INTEGER,
                 type INTEGER
             );
+            CREATE TABLE col (
+                id INTEGER PRIMARY KEY,
+                ls INTEGER
+            );
+            INSERT INTO col VALUES (1, 1794313537121);
             """
         )
         now_ms = int(time.time() * 1000)
@@ -193,6 +198,7 @@ class MockTreeNode:
 class MockCol:
     def __init__(self, media_dir: str):
         self.db = MockDB()
+        self.ls = 1794313537121
         self._media_dir = media_dir
         self._note_101 = MockNote(
             101,
@@ -597,6 +603,23 @@ class BridgeRouterAuditTest(unittest.TestCase):
         import datetime
         elapsed_week_days = datetime.date.today().weekday() + 1
         self.assertLessEqual(streak["weekActiveDays"], elapsed_week_days)
+
+        # Verify genuine AnkiWeb cloud sync timestamp reflects col.ls
+        self.assertTrue(dash["synced"])
+        self.assertEqual(dash["syncedAt"], 1794313537121)
+
+        # When col.ls is 0 (un-synced / no account), synced must be False and syncedAt 0
+        self.mock_col.ls = 0
+        self.mock_col.db.conn.execute("UPDATE col SET ls = 0")
+        self.mock_col.db.conn.commit()
+        dash_unsynced = self._call("get_dashboard")["data"]
+        self.assertFalse(dash_unsynced["synced"])
+        self.assertEqual(dash_unsynced["syncedAt"], 0)
+
+        # Restore
+        self.mock_col.ls = 1794313537121
+        self.mock_col.db.conn.execute("UPDATE col SET ls = 1794313537121")
+        self.mock_col.db.conn.commit()
 
     def test_07_preferences_and_batch_unsuspend_delete(self):
         """Bug #10 & Part 3 Task 4: Verify batch unsuspend/delete and preferences persistence."""

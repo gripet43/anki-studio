@@ -102,6 +102,38 @@ class DeckService:
             "platformBadge": f"{os_name} · {anki_ver}",
         }
 
+    @classmethod
+    def _get_last_sync_timestamp(cls, col) -> int:
+        """
+        Reads genuine AnkiWeb cloud sync timestamp directly from Anki's database (`col.ls`).
+        Returns milliseconds since epoch, or 0 if never synced / no account configured.
+        """
+        if col is None:
+            return 0
+        try:
+            ls_val = None
+            if hasattr(col, "ls"):
+                ls_val = getattr(col, "ls")
+            elif hasattr(col, "db") and hasattr(col.db, "first"):
+                row = col.db.first("SELECT ls FROM col")
+                if row and row[0] is not None:
+                    ls_val = row[0]
+            elif hasattr(col, "db") and hasattr(col.db, "scalar"):
+                ls_val = col.db.scalar("SELECT ls FROM col")
+
+            if ls_val is None:
+                return 0
+
+            ls_int = int(ls_val)
+            if ls_int <= 0:
+                return 0
+            # If 10 digits (seconds), convert to milliseconds
+            if ls_int < 100_000_000_000:
+                ls_int *= 1000
+            return ls_int
+        except Exception:
+            return 0
+
     def get_dashboard(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
         """Returns comprehensive dashboard state for Page 1 (Dashboard) & Stats."""
         data = data or {}
@@ -184,12 +216,13 @@ class DeckService:
 
             has_avalanche = overdue_count >= 30 or (total_due_review + total_due_new) >= 60
 
+            last_sync_ts = self._get_last_sync_timestamp(col)
             return {
                 "userName": profile_name,
                 "greeting": self._get_greeting(now.hour, lang),
                 "dateDisplay": self._format_date_display(now, lang),
-                "synced": True,
-                "syncedAt": int(time.time() * 1000),
+                "synced": last_sync_ts > 0,
+                "syncedAt": last_sync_ts,
                 "language": lang,
                 "envInfo": env_info,
                 "preferences": {
@@ -1465,8 +1498,8 @@ class DeckService:
             "userName": profile_name,
             "greeting": cls._get_greeting(now.hour, lang),
             "dateDisplay": cls._format_date_display(now, lang),
-            "synced": True,
-            "syncedAt": int(time.time() * 1000),
+            "synced": False,
+            "syncedAt": 0,
             "language": lang,
             "envInfo": env_info,
             "preferences": {

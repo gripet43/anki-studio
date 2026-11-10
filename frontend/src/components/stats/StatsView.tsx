@@ -18,7 +18,7 @@ export const StatsView: React.FC = () => {
       ? 'bg-[#1A1B21] border-[#2A2C36] text-white'
       : 'bg-white border-[#EAECEF] text-[#1D1D1F]';
 
-  const subText = 'text-[#8E8E93]';
+  const subText = 'text-[#636366] dark:text-[#8E8E93]';
 
   const {
     maturityBreakdown,
@@ -100,7 +100,9 @@ export const StatsView: React.FC = () => {
             <div className="flex items-center gap-2 mt-1">
               <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-ping" />
               <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight">
-                {isZh ? '正在从云端计算 FSRS 记忆留存与预测曲线...' : 'Syncing & calculating FSRS memory retention curves...'}
+                {syncing
+                  ? (isZh ? '正在从云端同步统计数据...' : 'Syncing stats from cloud...')
+                  : (isZh ? '正在从本地卡库计算 FSRS 记忆留存与预测曲线...' : 'Calculating FSRS memory retention curves from local data...')}
               </span>
             </div>
           ) : syncJustFinished ? (
@@ -215,13 +217,45 @@ export const StatsView: React.FC = () => {
 
           <div className="my-4 space-y-3">
             {/* Seamless 100% full-width stacked progress bar including suspended & buried */}
-            <div className="w-full h-3 rounded-full overflow-hidden flex bg-[#ECECF2] dark:bg-[#2A2C36]">
-              <div style={{ width: `${maturePct}%` }} className="bg-[var(--status-success)]" title="Mature" />
-              <div style={{ width: `${youngPct}%`, backgroundColor: brandHex }} title="Young" />
-              <div style={{ width: `${learnPct}%` }} className="bg-[var(--status-warning)]" title="Learning" />
-              <div style={{ width: `${newPct}%` }} className="bg-[var(--status-info)]" title="New" />
-              <div style={{ width: `${suspPct}%` }} className="bg-[#FF9F0A]" title="Suspended" />
-              <div style={{ width: `${buriedPct}%` }} className="bg-[#8E8E93]/70" title="Buried" />
+            <div
+              role="img"
+              aria-label={
+                isZh
+                  ? `卡片成熟度占比：已掌握 ${formatPctLabel(maturityBreakdown.mature, maturePct)}，巩固期 ${formatPctLabel(maturityBreakdown.young, youngPct)}，新卡 ${formatPctLabel(maturityBreakdown.newCards, newPct)}，学习中 ${formatPctLabel(maturityBreakdown.learning, learnPct)}，已暂停 ${formatPctLabel(maturityBreakdown.suspended, suspPct)}，已搁置 ${formatPctLabel(maturityBreakdown.buried || 0, buriedPct)}`
+                  : `Maturity Breakdown: Mature ${formatPctLabel(maturityBreakdown.mature, maturePct)}, Young ${formatPctLabel(maturityBreakdown.young, youngPct)}, New ${formatPctLabel(maturityBreakdown.newCards, newPct)}, Learning ${formatPctLabel(maturityBreakdown.learning, learnPct)}, Suspended ${formatPctLabel(maturityBreakdown.suspended, suspPct)}, Buried ${formatPctLabel(maturityBreakdown.buried || 0, buriedPct)}`
+              }
+              className="w-full h-3 rounded-full overflow-hidden flex bg-[#ECECF2] dark:bg-[#2A2C36]"
+            >
+              <div
+                style={{ width: `${maturePct}%` }}
+                className="bg-[var(--status-success)] transition-all"
+                title={isZh ? `已掌握 (成熟卡): ${maturityBreakdown.mature} (${formatPctLabel(maturityBreakdown.mature, maturePct)})` : `Mature: ${maturityBreakdown.mature} (${formatPctLabel(maturityBreakdown.mature, maturePct)})`}
+              />
+              <div
+                style={{ width: `${youngPct}%`, backgroundColor: brandHex }}
+                className="transition-all"
+                title={isZh ? `巩固期 (年轻卡): ${maturityBreakdown.young} (${formatPctLabel(maturityBreakdown.young, youngPct)})` : `Young: ${maturityBreakdown.young} (${formatPctLabel(maturityBreakdown.young, youngPct)})`}
+              />
+              <div
+                style={{ width: `${learnPct}%` }}
+                className="bg-[var(--status-warning)] transition-all"
+                title={isZh ? `学习中 / 重学中: ${maturityBreakdown.learning} (${formatPctLabel(maturityBreakdown.learning, learnPct)})` : `Learning: ${maturityBreakdown.learning} (${formatPctLabel(maturityBreakdown.learning, learnPct)})`}
+              />
+              <div
+                style={{ width: `${newPct}%` }}
+                className="bg-[var(--status-info)] transition-all"
+                title={isZh ? `未学新卡: ${maturityBreakdown.newCards} (${formatPctLabel(maturityBreakdown.newCards, newPct)})` : `New: ${maturityBreakdown.newCards} (${formatPctLabel(maturityBreakdown.newCards, newPct)})`}
+              />
+              <div
+                style={{ width: `${suspPct}%` }}
+                className="bg-[#FF9F0A] transition-all"
+                title={isZh ? `已暂停卡片: ${maturityBreakdown.suspended} (${formatPctLabel(maturityBreakdown.suspended, suspPct)})` : `Suspended: ${maturityBreakdown.suspended} (${formatPctLabel(maturityBreakdown.suspended, suspPct)})`}
+              />
+              <div
+                style={{ width: `${buriedPct}%` }}
+                className="bg-[#8E8E93]/70 transition-all"
+                title={isZh ? `已搁置卡片: ${maturityBreakdown.buried || 0} (${formatPctLabel(maturityBreakdown.buried || 0, buriedPct)})` : `Buried: ${maturityBreakdown.buried || 0} (${formatPctLabel(maturityBreakdown.buried || 0, buriedPct)})`}
+              />
             </div>
 
             <div className="space-y-2 pt-1 text-[12px]">
@@ -322,8 +356,11 @@ export const StatsView: React.FC = () => {
               return (
                 <div
                   key={pt.period}
+                  tabIndex={0}
+                  role="img"
+                  aria-label={`${pt.period}: ${pt.reviews > 0 ? `${pt.retentionRate}%` : (isZh ? '暂无数据' : 'No data')} (${pt.reviews} ${isZh ? '次复习' : 'reviews'})`}
                   title={`${pt.period}: ${pt.retentionRate}% (${pt.reviews} 次复习)`}
-                  className="flex-1 min-w-0 h-full flex flex-col items-center justify-end group cursor-pointer"
+                  className="flex-1 min-w-0 h-full flex flex-col items-center justify-end group cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 rounded-sm"
                 >
                   <span className="text-[9px] font-semibold text-[var(--brand-text)] whitespace-nowrap mb-1 opacity-90 group-hover:opacity-100">
                     {pt.reviews > 0 ? `${pt.retentionRate}%` : '--'}
@@ -372,8 +409,11 @@ export const StatsView: React.FC = () => {
               return (
                 <div
                   key={item.hour}
+                  tabIndex={0}
+                  role="img"
+                  aria-label={`${item.hour}: ${item.count} ${isZh ? '次复习' : 'reviews'} (${item.accuracy}%)`}
                   title={`${item.hour} - ${item.count} 次 (${item.accuracy}%)`}
-                  className="flex-1 min-w-0 h-full flex flex-col items-center justify-end group cursor-pointer"
+                  className="flex-1 min-w-0 h-full flex flex-col items-center justify-end group cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 rounded-sm"
                 >
                   <div
                     style={{
@@ -428,7 +468,14 @@ export const StatsView: React.FC = () => {
               return (
                 <div key={row.key} className="flex items-center gap-3 text-[11px]">
                   <span className={`w-[78px] shrink-0 ${subText}`}>{isZh ? row.zh : row.en}</span>
-                  <div className="flex-1 h-2 rounded-full bg-[#ECECF2] dark:bg-[#2A2C36] overflow-hidden">
+                  <div
+                    role="progressbar"
+                    aria-valuenow={row.value}
+                    aria-valuemin={0}
+                    aria-valuemax={maxButton}
+                    aria-label={`${isZh ? row.zh : row.en}: ${row.value.toLocaleString()} (${pct}%)`}
+                    className="flex-1 h-2 rounded-full bg-[#ECECF2] dark:bg-[#2A2C36] overflow-hidden"
+                  >
                     <div
                       style={{ width: `${(row.value / maxButton) * 100}%`, backgroundColor: row.color }}
                       className="h-full rounded-full transition-all"

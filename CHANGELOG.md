@@ -15,6 +15,32 @@
 
 ## [Unreleased]
 
+- **[Antigravity] 全链路真云端同步态对齐与本地数据加载解耦（Truth-in-Syncing & Reconcile Architecture）**：
+  - **1. 根因彻底清查与虚假同步修复**：
+    - 查明原生界面与现代界面切换、冷启动或刷新时界面错误显示「正在从云端同步...」、「集合与云端已完全同步」及胶囊显示「已同步 (刚刚)」的根本原因：此前 [`bridge/deck_service.py`](bridge/deck_service.py) 中的 `get_dashboard()` 每次被调用时均硬编码 `"syncedAt": int(time.time() * 1000)`，导致前端误认为刚刚发生了一次完整的 AnkiWeb 云端同步。
+    - 在 [`bridge/deck_service.py`](bridge/deck_service.py) 中新增 `_get_last_sync_timestamp(col)`，穿透读取 Anki 官方 SQLite `col` 表真正的 `ls` 字段（最后一次与 AnkiWeb 双向同步完成的真实微秒/毫秒时间戳）；若从未配置或未同步过则真实返回 `0`。
+  - **2. 文案真实化：彻底解耦「本地卡库加载」与「AnkiWeb 云端同步」**：
+    - 在 [`DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`DecksView.tsx`](frontend/src/components/decks/DecksView.tsx)、[`StatsView.tsx`](frontend/src/components/stats/StatsView.tsx) 中纠正误导性文案：本地 SQLite 数据读取与 FSRS 留存率计算期间准确提示「正在加载本地卡库与 FSRS 记忆调度...」/「正在从本地卡库计算 FSRS 记忆留存与预测曲线...」，数据就绪后提示「数据就绪 · 本地卡库已更新」；仅在真正触发 AnkiWeb 同步时提示「正在与 AnkiWeb 云端同步...」。
+  - **3. 状态胶囊精准真态显示与未同步态兜底**：
+    - 重构 [`SyncStatusPill.tsx`](frontend/src/components/dashboard/SyncStatusPill.tsx) 与 [`translations.ts`](frontend/src/i18n/translations.ts)：当 `lastSyncedTimestamp === 0` 时，呈现中性灰状态点与「尚未同步」文案，气泡悬浮窗标明「从未同步 · 暂无云端同步记录」，并在气泡底部明确注明「本地修改已实时自动保存至 SQLite。点击立即同步即可与 AnkiWeb 云端双向对齐」；当有真实同步记录时，准确呈现「已同步 (1小时前)」及真实时间戳（如 `2026-11-10 20:25:37`）。
+  - **4. 原生切换复习队列多端对齐（Review Queue Reconciliation）**：
+    - 在 [`useAppStore.ts`](frontend/src/stores/useAppStore.ts) 的 `initFromAnki()` 中增加校验：若用户在复习做题状态下切换至原生 Anki 并在原生中做完了卡片，返回现代界面时自动调用 `start_review` 重新获取最新到期队列；若卡片已全部完成，平滑切换为恭喜完成庆贺屏幕，彻底杜绝已学卡片二次作答或状态不同步问题。
+  - **5. 自动化测试保障**：
+    - 在 [`tests/test_bridge.py`](tests/test_bridge.py) 中补齐真实 `col.ls` 读取与 `synced: False` 零时间戳兜底双向单测，30 项 Python 核心单测、12 项卡片安全单测及前端 bundle 审计全部 100% 通过。
+
+- **[Antigravity] 遵循现代 Web 规范全面审查并优化新功能 UI (Modern Web Guidance & Accessibility Polish)**：
+  - **1. 文本与徽章色彩对比度升级 (WCAG 1.4.3 Contrast Minimum)**：
+    - 全局次级文字 `subText` 从静态 `#8E8E93`（浅色模式白底对比度仅 3.0:1）升级为响应式语义类 `text-[#636366] dark:text-[#8E8E93]`，浅色模式对比度提升至 **5.1:1**（深色模式保持 4.6:1），使 [`DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`StatsView.tsx`](frontend/src/components/stats/StatsView.tsx) 与 [`LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx) 中所有的副标题、说明文字与数据格全线达到 WCAG AA 4.5:1 硬门禁。
+    - [`LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx) 中已搁置（Buried）状态徽章文本优化为 `text-[#555558] dark:text-[#A1A1A6]`，在浅色底色与深色底色下对比度分别达 5.5:1 和 5.8:1，并将卡片卡头圆点统一归正为中性灰 `#8E8E93`。
+  - **2. 交互控件键盘焦点与靶区尺寸优化 (WCAG 2.4.7 Focus Visible & 2.5.8 Target Size)**：
+    - 主界面看板「待复习」、「新卡」、「已完成」3 枚可点击微胶囊设置 `min-h-[30px]`（确保大于 24x24px 目标尺寸规范），并配置 `:focus-visible:outline-2 outline-offset-2` 专用焦点环，装饰性圆点注入 `aria-hidden="true"` 避免读屏器冗余朗读。
+    - 做题界面抽屉内「搁置卡片」、「暂停卡片」与「删除卡片」三向独立操作按钮全面注入标准 `:focus-visible` 焦点样式与确认删除无障碍标签。
+  - **3. 高级统计图表与数据条语义化支持 (WCAG 1.1.1 Non-text Content & 4.1.2 Name, Role, Value)**：
+    - 成熟度多段堆叠条注入 `role="img"` 与全量百分比汇总 `aria-label`，各状态分段配置中英双语语义化悬浮 `title`。
+    - 答题按钮分布横向进度条注入 `role="progressbar"`、`aria-valuenow`、`aria-valuemin` 与 `aria-valuemax`。
+    - 留存率曲线与 24 小时活跃分布柱状图增加 `tabIndex={0}`、`role="img"` 及键盘悬停感知支持。
+  - **验证**：全部 30 项 Python 单测通过，Bundle 审计（含 Guardrails 与 UX 门禁）100% 通过，`npx tsc --noEmit` 零类型报错，Vite 打包成功。
+
 - **[Gemini] 新增图片遮挡制卡工作台（Image Occlusion Studio）与导入/导出及系统维护工具（Import/Export & Maintenance）**：
   - **1. 可视化图片遮挡制卡与复习渲染（Image Occlusion）**：
     - **后端与渲染引擎**：在 [`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py) 与 [`frontend/src/utils/mathRenderer.ts`](frontend/src/utils/mathRenderer.ts) 中新增 `.anki-io-wrap` 与 `.anki-io-rect` 百分比遮罩图层解析器，底层直接复用 Anki 原生 Cloze 挖空序号（`{{c1::...}}`、`{{c2::...}}`）自动拆分为独立子卡片。支持「隐藏全部 · 猜当前（`hide-all`）」与「仅隐藏当前（`hide-one`）」两种模式：问题面将当前提问区域渲染为高对比度琥珀色目标遮罩（`? #N`），答案面切换为半透明翠绿高亮边框并无损揭示原图文字。

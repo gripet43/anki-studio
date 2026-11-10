@@ -108,7 +108,7 @@ export const LibraryView: React.FC = () => {
       ? 'bg-[#1E1F28]/95 border-[#323444] text-white'
       : 'bg-white/95 border-[#E5E5EA] text-[#1D1D1F]';
 
-  const subText = 'text-[#8E8E93]';
+  const subText = 'text-[#636366] dark:text-[#8E8E93]';
 
   // Compute per-status card counts for StatusSelectDropdown
   const statusCountsMap = useMemo(() => {
@@ -1134,7 +1134,7 @@ export const LibraryView: React.FC = () => {
                             {isZh ? '已暂停' : 'Suspended'}
                           </span>
                         ) : isBuried ? (
-                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-black/5 dark:bg-white/10 text-[#8E8E93] shrink-0">
+                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-black/5 dark:bg-white/10 text-[#555558] dark:text-[#A1A1A6] shrink-0">
                             {isZh ? '已搁置' : 'Buried'}
                           </span>
                         ) : card.status === 'new' ? (
@@ -1214,7 +1214,7 @@ export const LibraryView: React.FC = () => {
                               isSuspended
                                 ? 'bg-[var(--status-warning)]'
                                 : isBuried
-                                ? 'bg-[var(--brand)]'
+                                ? 'bg-[#8E8E93]'
                                 : card.status === 'due'
                                 ? 'bg-[var(--status-danger)]'
                                 : card.status === 'new'
@@ -1393,7 +1393,7 @@ export const LibraryView: React.FC = () => {
                                 {isZh ? '已暂停' : 'Suspended'}
                               </span>
                             ) : isBuried ? (
-                              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-black/5 dark:bg-white/10 text-[#8E8E93]">
+                              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-black/5 dark:bg-white/10 text-[#555558] dark:text-[#A1A1A6]">
                                 {isZh ? '已搁置' : 'Buried'}
                               </span>
                             ) : (

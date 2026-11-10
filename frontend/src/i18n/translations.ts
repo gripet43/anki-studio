@@ -46,56 +46,74 @@ export function formatShortcut(shortcut: string, platform: OSPlatform = 'mac'): 
 }
 
 /**
- * Item #1: Formats relative time since `lastSyncedTimestamp` (`已同步 (刚刚)` / `已同步 (X分钟前)` / `已同步 (X小时前)`).
+ * Item #1: Formats relative time since `lastSyncedTimestamp` (`已同步 (刚刚)` / `已同步 (X分钟前)` / `已同步 (X小时前)` / `尚未云端同步`).
  */
 export function formatRelativeSyncLabel(
   lastSyncedTimestamp: number,
   lang: ResolvedLanguage,
   nowMs: number = Date.now()
 ): string {
-  const diffMs = Math.max(0, nowMs - (lastSyncedTimestamp || nowMs));
+  if (!lastSyncedTimestamp || lastSyncedTimestamp <= 0) {
+    return lang === 'en' ? 'Not synced' : '尚未云端同步';
+  }
+  const diffMs = Math.max(0, nowMs - lastSyncedTimestamp);
   const diffMin = Math.floor(diffMs / 60000);
   if (lang === 'en') {
     if (diffMin < 1) return 'Synced (Just now)';
     if (diffMin < 60) return `Synced (${diffMin}m ago)`;
     const diffHr = Math.floor(diffMin / 60);
-    return `Synced (${diffHr}h ago)`;
+    if (diffHr < 24) return `Synced (${diffHr}h ago)`;
+    const diffDays = Math.floor(diffHr / 24);
+    return `Synced (${diffDays}d ago)`;
   }
   if (diffMin < 1) return '已同步 (刚刚)';
   if (diffMin < 60) return `已同步 (${diffMin}分钟前)`;
   const diffHr = Math.floor(diffMin / 60);
-  return `已同步 (${diffHr}小时前)`;
+  if (diffHr < 24) return `已同步 (${diffHr}小时前)`;
+  const diffDays = Math.floor(diffHr / 24);
+  return `已同步 (${diffDays}天前)`;
 }
 
 /**
- * Formats relative duration string without prefix (e.g. `刚刚` / `3分钟前` / `Just now` / `3m ago`).
+ * Formats relative duration string without prefix (e.g. `刚刚` / `3分钟前` / `从未同步`).
  */
 export function formatRelativeTimeString(
   lastSyncedTimestamp: number,
   lang: ResolvedLanguage,
   nowMs: number = Date.now()
 ): string {
-  const diffMs = Math.max(0, nowMs - (lastSyncedTimestamp || nowMs));
+  if (!lastSyncedTimestamp || lastSyncedTimestamp <= 0) {
+    return lang === 'en' ? 'Never' : '从未同步';
+  }
+  const diffMs = Math.max(0, nowMs - lastSyncedTimestamp);
   const diffMin = Math.floor(diffMs / 60000);
   if (lang === 'en') {
     if (diffMin < 1) return 'Just now';
     if (diffMin < 60) return `${diffMin}m ago`;
     const diffHr = Math.floor(diffMin / 60);
-    return `${diffHr}h ago`;
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDays = Math.floor(diffHr / 24);
+    return `${diffDays}d ago`;
   }
   if (diffMin < 1) return '刚刚';
   if (diffMin < 60) return `${diffMin}分钟前`;
   const diffHr = Math.floor(diffMin / 60);
-  return `${diffHr}小时前`;
+  if (diffHr < 24) return `${diffHr}小时前`;
+  const diffDays = Math.floor(diffHr / 24);
+  return `${diffDays}天前`;
 }
 
 /**
  * Formats detailed ISO-like timestamp with seconds (YYYY-MM-DD HH:mm:ss).
+ * Returns empty string if never synced.
  */
 export function formatDetailedSyncTimestamp(
   lastSyncedTimestamp: number
 ): string {
-  const dt = new Date(lastSyncedTimestamp || Date.now());
+  if (!lastSyncedTimestamp || lastSyncedTimestamp <= 0) {
+    return '';
+  }
+  const dt = new Date(lastSyncedTimestamp);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(
     dt.getHours()
@@ -103,13 +121,18 @@ export function formatDetailedSyncTimestamp(
 }
 
 /**
- * Item #1: Formats absolute sync timestamp for hover tooltip (`上次同步：2026-11-08 14:28 · 点击立即与 AnkiWeb 云端同步`).
+ * Item #1: Formats absolute sync timestamp for hover tooltip.
  */
 export function formatAbsoluteSyncTooltip(
   lastSyncedTimestamp: number,
   lang: ResolvedLanguage
 ): string {
-  const dt = new Date(lastSyncedTimestamp || Date.now());
+  if (!lastSyncedTimestamp || lastSyncedTimestamp <= 0) {
+    return lang === 'en'
+      ? 'Not synced to AnkiWeb · Click to sync now'
+      : '尚未与 AnkiWeb 云端同步 · 点击立即同步';
+  }
+  const dt = new Date(lastSyncedTimestamp);
   const pad = (n: number) => String(n).padStart(2, '0');
   const absStr = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(
     dt.getHours()

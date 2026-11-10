@@ -55,7 +55,7 @@ export const DashboardView: React.FC = () => {
       ? 'bg-[#1A1B21] border-[#2A2C36] text-[#F2F3F7]'
       : 'bg-white border-[#EAECEF] text-[#1D1D1F]';
 
-  const subText = 'text-[#8E8E93]';
+  const subText = 'text-[#636366] dark:text-[#8E8E93]';
 
   const completed = dashboard.todayStats.completed;
   const totalPending = dashboard.todayStats.totalPending;
@@ -201,7 +201,9 @@ export const DashboardView: React.FC = () => {
             <div className="flex items-center gap-2 mt-1">
               <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-ping" />
               <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight">
-                {isZh ? '正在从云端同步最新复习队列与 FSRS 记忆调度...' : 'Syncing collection & FSRS memory matrix from cloud...'}
+                {syncing
+                  ? (isZh ? '正在与 AnkiWeb 云端同步...' : 'Syncing with AnkiWeb cloud...')
+                  : (isZh ? '正在加载本地卡库与 FSRS 记忆调度...' : 'Loading local collection & FSRS schedule...')}
               </span>
             </div>
           ) : syncJustFinished ? (
@@ -210,7 +212,7 @@ export const DashboardView: React.FC = () => {
                 <polyline points="20 6 9 17 4 12" className="animate-draw-check" />
               </svg>
               <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight">
-                {isZh ? '数据就绪 · 集合与云端已完全同步' : 'Data Ready · Collection synchronized'}
+                {isZh ? '同步完成 · 集合已与云端对齐' : 'Sync Complete · Collection synchronized with cloud'}
               </span>
             </div>
           ) : (
@@ -769,7 +771,11 @@ export const DashboardView: React.FC = () => {
                     }`}
                   >
                     <span className="w-3.5 h-3.5 rounded-full border-2 border-[var(--status-warning)]/30 border-t-[var(--status-warning)] animate-spin" />
-                    <span>{isZh ? '云端对齐中...' : 'Syncing...'}</span>
+                    <span>
+                      {syncing
+                        ? (isZh ? '云端同步中...' : 'Syncing...')
+                        : (isZh ? '卡库加载中...' : 'Loading...')}
+                    </span>
                   </button>
                 ) : totalPending > 0 ? (
                   <>
@@ -872,9 +878,9 @@ export const DashboardView: React.FC = () => {
                         });
                       }}
                       title={isZh ? '点击进入卡库查看待复习卡片' : 'View due cards in Library'}
-                      className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--brand-soft)] text-[var(--brand-text)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                      className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--brand-soft)] text-[var(--brand-text)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer min-h-[30px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                     >
-                      <span className="w-2 h-2 rounded-full bg-[var(--brand)]" />
+                      <span className="w-2 h-2 rounded-full bg-[var(--brand)]" aria-hidden="true" />
                       <span>{t('dueReviewPill', { n: dashboard.todayStats.dueReview })}</span>
                     </button>
 
@@ -891,9 +897,9 @@ export const DashboardView: React.FC = () => {
                         });
                       }}
                       title={isZh ? '点击进入卡库查看新卡片' : 'View new cards in Library'}
-                      className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--status-warning-soft)] text-[var(--status-warning)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                      className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--status-warning-soft)] text-[var(--status-warning)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer min-h-[30px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                     >
-                      <span className="w-2 h-2 rounded-full bg-[var(--status-warning)]" />
+                      <span className="w-2 h-2 rounded-full bg-[var(--status-warning)]" aria-hidden="true" />
                       <span>{t('dueNewPill', { n: dashboard.todayStats.dueNew })}</span>
                     </button>
 
@@ -910,9 +916,9 @@ export const DashboardView: React.FC = () => {
                         });
                       }}
                       title={isZh ? '点击进入卡库查看今日已完成卡片' : 'View cards completed today in Library'}
-                      className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--status-success-soft)] text-[var(--status-success)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                      className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--status-success-soft)] text-[var(--status-success)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer min-h-[30px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                     >
-                      <span className="w-2 h-2 rounded-full bg-[var(--status-success)]" />
+                      <span className="w-2 h-2 rounded-full bg-[var(--status-success)]" aria-hidden="true" />
                       <span>{t('completedPill', { n: completed })}</span>
                     </button>
 
