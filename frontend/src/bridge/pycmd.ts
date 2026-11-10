@@ -275,7 +275,8 @@ export interface LibraryCardItem {
   stability: number;
   difficultyLevel: 'high' | 'medium' | 'low';
   dueText: string;
-  status: 'due' | 'new' | 'suspended' | 'review' | 'buried';
+  status: 'due' | 'new' | 'suspended' | 'review' | 'buried' | 'completed';
+  ratedToday?: boolean;
   suspended: boolean;
   buried?: boolean;
   reps: number;

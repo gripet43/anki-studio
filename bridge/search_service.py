@@ -59,6 +59,8 @@ class SearchService:
             query_parts.append("(is:due OR is:learn)")
         elif status == "new":
             query_parts.append("is:new")
+        elif status == "completed":
+            query_parts.append("rated:1")
         elif status == "suspended":
             query_parts.append("is:suspended")
         elif status == "buried":
@@ -98,11 +100,16 @@ class SearchService:
         cards_out: List[Dict[str, Any]] = []
         matched_index = 0
         has_more = False
+        is_completed_query = (status == "completed")
 
         for cid in cids:
             item = self._serialize_library_card(col, cid, media_dir, lang)
             if item is None:
                 continue
+            if is_completed_query:
+                item["status"] = "completed"
+                item["ratedToday"] = True
+                item["dueText"] = "今日已完成" if lang == "zh-CN" else "Completed Today"
             if difficulty_filter in ("high", "medium", "low") and item["difficultyLevel"] != difficulty_filter:
                 continue
             if matched_index >= offset:

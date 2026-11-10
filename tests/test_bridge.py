@@ -333,6 +333,8 @@ class MockCol:
             return [201] if self._cards[201].queue == -1 else [201]
         if "is:buried" in query:
             return [202] if self._cards[202].queue in (-2, -3) else [202]
+        if "rated:1" in query:
+            return [201]
         return [201, 202]
 
     def get_card(self, cid):
@@ -520,6 +522,12 @@ class BridgeRouterAuditTest(unittest.TestCase):
         # Restore
         self.mock_col._cards[201].queue = 2
         self.mock_col._cards[202].queue = 2
+
+        # Verify completed (rated:1) status search
+        res_completed = self._call("search_cards", {"query": "", "status": "completed", "language": "zh-CN"})["data"]
+        self.assertEqual(res_completed["cards"][0]["status"], "completed")
+        self.assertTrue(res_completed["cards"][0]["ratedToday"])
+        self.assertEqual(res_completed["cards"][0]["dueText"], "今日已完成")
 
     def test_05_save_pasted_image_to_collection_media(self):
         """Bug #11: Verify clipboard Base64 image upload saves file to collection.media and returns fileUrl."""

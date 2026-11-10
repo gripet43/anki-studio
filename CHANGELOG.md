@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+- **[Antigravity] 主界面看板状态胶囊交互化与卡库联动筛选**：
+  - **主界面胶囊按钮化**：将英雄区「待复习」、「新卡」、「已完成」3枚原本仅用于展示的标签重构为可点击的交互式微胶囊（`hover:opacity-85 hover:scale-[1.02] active:scale-95 cursor-pointer`）。
+  - **卡库直连与筛选注入**：点击「待复习」自动切换至卡库并应用 `status: 'due'` 过滤；点击「新卡」自动切换并应用 `status: 'new'` 过滤；点击「已完成」自动切换并应用 `status: 'completed'`（底层直连 Anki `rated:1` 检索语义），卡库状态下拉列表同步增设「今日已完成」选项与状态标记。
+  - **修改文件**：[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx), [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx), [`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts), [`bridge/search_service.py`](bridge/search_service.py), [`tests/test_bridge.py`](tests/test_bridge.py)。
+
 - **[Antigravity] 设置中心主题色卡片极简重构**：
   - 将原「现代 SaaS 强调色系统」卡片标题精简为标准「主题色」（Theme Color）。
   - 彻底移除标题下方多余的选中说明（如「当前选中：经典蓝 · Anki Studio 官方固定品牌色」）以及右上角色阶预览胶囊组件，标题直连 8 色选择栅格，视觉极致轻盈。

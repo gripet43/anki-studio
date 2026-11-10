@@ -103,6 +103,7 @@ export const LibraryView: React.FC = () => {
       all: libraryCards.length,
       due: 0,
       new: 0,
+      completed: 0,
       review: 0,
       suspended: 0,
       buried: 0,
@@ -110,6 +111,7 @@ export const LibraryView: React.FC = () => {
     for (const c of libraryCards) {
       if (c.suspended || c.status === 'suspended') map.suspended++;
       else if (c.buried || c.status === 'buried') map.buried++;
+      else if (c.status === 'completed' || c.ratedToday) map.completed++;
       else if (c.status === 'due') map.due++;
       else if (c.status === 'new') map.new++;
       else if (c.status === 'review') map.review++;
@@ -177,6 +179,7 @@ export const LibraryView: React.FC = () => {
     if (filterStatus === 'buried' && !card.buried && card.status !== 'buried') return false;
     if (filterStatus === 'due' && card.status !== 'due') return false;
     if (filterStatus === 'new' && card.status !== 'new') return false;
+    if (filterStatus === 'completed' && card.status !== 'completed' && !card.ratedToday) return false;
     if (filterStatus === 'review' && card.status !== 'review') return false;
     if (filterDifficulty !== 'all' && card.difficultyLevel !== filterDifficulty) return false;
     if (filterTag !== 'all' && !card.tags.includes(filterTag)) return false;
@@ -226,6 +229,7 @@ export const LibraryView: React.FC = () => {
         all: '全部',
         due: '待复习',
         new: '新卡片',
+        completed: '今日已完成',
         review: '未到期复习卡',
         suspended: '已暂停 (已挂起)',
         buried: '已搁置',
@@ -234,6 +238,7 @@ export const LibraryView: React.FC = () => {
         all: 'All',
         due: 'Due Now',
         new: 'New',
+        completed: 'Completed Today',
         review: 'Undue Review',
         suspended: 'Suspended',
         buried: 'Buried',
@@ -355,14 +360,16 @@ export const LibraryView: React.FC = () => {
                 <span
                   className={`w-1.5 h-1.5 rounded-full ${
                     filterStatus === 'due'
-                      ? 'bg-[var(--status-danger)]'
+                      ? 'bg-[var(--brand)]'
                       : filterStatus === 'new'
-                      ? 'bg-[var(--status-info)]'
-                      : filterStatus === 'review'
+                      ? 'bg-[var(--status-warning)]'
+                      : filterStatus === 'completed'
                       ? 'bg-[var(--status-success)]'
+                      : filterStatus === 'review'
+                      ? 'bg-[var(--brand)]'
                       : filterStatus === 'suspended'
                       ? 'bg-[var(--status-warning)]'
-                      : 'bg-[var(--brand)]'
+                      : 'bg-[#8E8E93]'
                   }`}
                 />
                 <span>
@@ -380,11 +387,12 @@ export const LibraryView: React.FC = () => {
                   {(
                     [
                       { key: 'all', dot: 'bg-[#8E8E93]' },
-                      { key: 'due', dot: 'bg-[var(--status-danger)]' },
-                      { key: 'new', dot: 'bg-[var(--status-info)]' },
-                      { key: 'review', dot: 'bg-[var(--status-success)]' },
+                      { key: 'due', dot: 'bg-[var(--brand)]' },
+                      { key: 'new', dot: 'bg-[var(--status-warning)]' },
+                      { key: 'completed', dot: 'bg-[var(--status-success)]' },
+                      { key: 'review', dot: 'bg-[var(--brand)]' },
                       { key: 'suspended', dot: 'bg-[var(--status-warning)]' },
-                      { key: 'buried', dot: 'bg-[var(--brand)]' },
+                      { key: 'buried', dot: 'bg-[#8E8E93]' },
                     ] as const
                   ).map((opt) => {
                     const isSelected = filterStatus === opt.key;

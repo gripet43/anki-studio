@@ -135,7 +135,7 @@ export interface AppState {
   libraryViewMode: LibraryViewMode;
   librarySearchQuery: string;
   libraryVisibleCount: number;
-  filterStatus: 'all' | 'due' | 'new' | 'suspended' | 'review' | 'buried';
+  filterStatus: 'all' | 'due' | 'new' | 'suspended' | 'review' | 'buried' | 'completed';
   filterDifficulty: 'all' | 'high' | 'medium' | 'low';
   filterTag: string;
   filterDeckId: string;
@@ -420,7 +420,7 @@ export const appActions = {
    */
   searchLibraryDebounced(overrides?: {
     query?: string;
-    status?: 'all' | 'due' | 'new' | 'suspended' | 'review' | 'buried';
+    status?: 'all' | 'due' | 'new' | 'suspended' | 'review' | 'buried' | 'completed';
     difficulty?: 'all' | 'high' | 'medium' | 'low';
     tag?: string;
     deckId?: string;

@@ -825,20 +825,62 @@ export const DashboardView: React.FC = () => {
                   </div>
                 ) : (
                   <div className={`flex items-center gap-2 flex-wrap ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
-                    <span className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--brand-soft)] text-[var(--brand-text)]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAppState({ activeTab: 'library' });
+                        appActions.searchLibraryDebounced({
+                          status: 'due',
+                          query: '',
+                          difficulty: 'all',
+                          tag: 'all',
+                          deckId: 'all',
+                        });
+                      }}
+                      title={isZh ? '点击进入卡库查看待复习卡片' : 'View due cards in Library'}
+                      className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--brand-soft)] text-[var(--brand-text)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                    >
                       <span className="w-2 h-2 rounded-full bg-[var(--brand)]" />
-                      {t('dueReviewPill', { n: dashboard.todayStats.dueReview })}
-                    </span>
+                      <span>{t('dueReviewPill', { n: dashboard.todayStats.dueReview })}</span>
+                    </button>
 
-                    <span className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--status-warning-soft)] text-[var(--status-warning)]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAppState({ activeTab: 'library' });
+                        appActions.searchLibraryDebounced({
+                          status: 'new',
+                          query: '',
+                          difficulty: 'all',
+                          tag: 'all',
+                          deckId: 'all',
+                        });
+                      }}
+                      title={isZh ? '点击进入卡库查看新卡片' : 'View new cards in Library'}
+                      className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--status-warning-soft)] text-[var(--status-warning)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                    >
                       <span className="w-2 h-2 rounded-full bg-[var(--status-warning)]" />
-                      {t('dueNewPill', { n: dashboard.todayStats.dueNew })}
-                    </span>
+                      <span>{t('dueNewPill', { n: dashboard.todayStats.dueNew })}</span>
+                    </button>
 
-                    <span className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--status-success-soft)] text-[var(--status-success)]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAppState({ activeTab: 'library' });
+                        appActions.searchLibraryDebounced({
+                          status: 'completed',
+                          query: '',
+                          difficulty: 'all',
+                          tag: 'all',
+                          deckId: 'all',
+                        });
+                      }}
+                      title={isZh ? '点击进入卡库查看今日已完成卡片' : 'View cards completed today in Library'}
+                      className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--status-success-soft)] text-[var(--status-success)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                    >
                       <span className="w-2 h-2 rounded-full bg-[var(--status-success)]" />
-                      {t('completedPill', { n: completed })}
-                    </span>
+                      <span>{t('completedPill', { n: completed })}</span>
+                    </button>
 
                     {dashboard.todayStats.dueReview >= 60 && (
                       <button
