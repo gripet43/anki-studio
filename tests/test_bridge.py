@@ -20,6 +20,7 @@ Covers:
 """
 
 import base64
+import datetime
 import json
 import sqlite3
 import tempfile
@@ -237,6 +238,7 @@ class MockCol:
         self.buried_cids = []
         self.unburied_cids = []
         self.set_due_date_calls = []
+        self.updated_cards = []
 
         col_self = self
 
@@ -395,6 +397,18 @@ class MockCol:
         class Status:
             undo = "Answer Card"
         return Status()
+
+    def update_card(self, card):
+        self._cards[card.id] = card
+        self.updated_cards.append(card.id)
+        try:
+            self.db.conn.execute(
+                "UPDATE cards SET due = ?, ivl = ?, queue = ? WHERE id = ?",
+                (card.due, card.ivl, card.queue, card.id),
+            )
+            self.db.conn.commit()
+        except Exception:
+            pass
 
     def undo(self):
         self.undone = True
@@ -870,6 +884,89 @@ class BridgeRouterAuditTest(unittest.TestCase):
         latest_week = stats_clean["retentionCurve"][-1]
         self.assertEqual(latest_week["reviews"], 1)
         self.assertEqual(latest_week["retentionRate"], 100.0)
+
+
+    def test_13_vacation_expiry_revert_and_freeze_integrity(self):
+        """Vacation expiry, streak-freeze lifecycle, lossless revert and re-entry guard."""
+        # 1. An expired active vacation must be finalized by the dashboard path alone,
+        #    because the frontend never calls get_vacation_status.
+        yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+        self.config_store["vacation_state"] = {
+            "id": "vac-expired", "active": True, "start_date": yesterday,
+            "end_date": yesterday, "days": 1, "reason": "测试",
+            "freeze_new_cards": True, "frozen_dates": [yesterday],
+            "frozen_deck_limits": {}, "shifted_cids": [], "shifted_card_count": 0,
+        }
+        self.config_store["vacation_history"] = [{
+            "id": "vac-expired", "status": "active", "days": 1,
+            "startDate": yesterday, "endDate": yesterday, "reason": "测试",
+        }]
+        dash_payload = self._call("get_dashboard", {})["data"]
+        self.assertNotIn("bridgeWarning", dash_payload)
+        dash = dash_payload["vacation"]
+        self.assertFalse(dash["isActive"])
+        self.assertEqual(dash["remainingDays"], 0)
+        # Guard against a false pass via _empty_dashboard(), which also returns
+        # isActive=False / remainingDays=0.
+        self.assertEqual(dash["startDate"], yesterday)
+        self.assertFalse(self.config_store["vacation_state"]["active"])
+        self.assertEqual(self.config_store["vacation_history"][0]["status"], "completed")
+
+        # 2. Start a real vacation, then revert it. Freeze dates must be removed and
+        #    every shifted card restored to its exact original due/interval/queue.
+        card = self.mock_col.get_card(201)
+        original = {"due": card.due, "ivl": card.ivl, "queue": card.queue}
+        set_res = self._call("set_vacation", {
+            "days": 3, "freezeNewCards": True,
+            "shiftReviewCards": True, "freezeStreak": True,
+        })
+        self.assertTrue(set_res["data"]["success"])
+        state = self.config_store["vacation_state"]
+        own_frozen = list(state["frozen_dates"])
+        self.assertEqual(len(own_frozen), 3)
+        self.assertTrue(set(self.config_store["vacation_frozen_dates"]) >= set(own_frozen))
+        self.assertIn("201", state["shifted_card_snapshot"])
+
+        # 2b. Re-entering while active must be rejected: re-freezing would record the
+        #     already-zero new-card limit as the "original" value.
+        dup = self._call("set_vacation", {"days": 2})["data"]
+        self.assertFalse(dup["success"])
+        self.assertTrue(self.config_store["vacation_state"]["active"])
+
+        # Simulate Anki having moved the card while the vacation was in effect.
+        card.due = 999
+        card.ivl = 1
+        cancel = self._call("cancel_vacation", {})["data"]
+        self.assertTrue(cancel["success"])
+        restored = self.mock_col.get_card(201)
+        self.assertEqual(
+            (restored.due, restored.ivl, restored.queue),
+            (original["due"], original["ivl"], original["queue"]),
+        )
+        self.assertEqual(restored.due, original["due"])
+        for frozen in own_frozen:
+            self.assertNotIn(frozen, self.config_store["vacation_frozen_dates"])
+        self.assertFalse(any("!" in str(call[1]) for call in self.mock_col.set_due_date_calls))
+
+        # 3. A later vacation must not erase earlier (real) freeze dates.
+        earlier = (datetime.date.today() - datetime.timedelta(days=10)).isoformat()
+        self.config_store["vacation_frozen_dates"] = [earlier]
+        self._call("set_vacation", {
+            "days": 2, "freezeNewCards": False,
+            "shiftReviewCards": False, "freezeStreak": True,
+        })
+        self.assertIn(earlier, self.config_store["vacation_frozen_dates"])
+        self.assertEqual(len(self.config_store["vacation_state"]["frozen_dates"]), 2)
+
+        # 4. Undo of backlog rescue must never use the interval-rewriting '!' suffix.
+        self.config_store["last_rescue_receipt"] = {
+            "id": "rescue-test", "canUndo": True,
+            "rescheduledCids": ["201"],
+            "dayDistribution": [{"dayOffset": 1, "count": 1}],
+        }
+        self._call("undo_rescue", {})
+        self.assertIn(([201], "0"), self.mock_col.set_due_date_calls)
+        self.assertFalse(any("!" in str(call[1]) for call in self.mock_col.set_due_date_calls))
 
 
 if __name__ == "__main__":

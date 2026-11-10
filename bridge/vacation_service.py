@@ -24,6 +24,19 @@ import re
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+# Cumulative streak-freeze dates live at the top level of the add-on config so they
+# survive repeated vacations instead of being overwritten with each new vacation_state.
+FROZEN_DATES_KEY = "vacation_frozen_dates"
+
+
+def effective_frozen_dates(cfg: Dict[str, Any]) -> List[str]:
+    """Returns all streak-freeze dates ever granted, with a legacy config fallback."""
+    if FROZEN_DATES_KEY in cfg:
+        raw = cfg.get(FROZEN_DATES_KEY) or []
+    else:
+        raw = (cfg.get("vacation_state") or {}).get("frozen_dates") or []
+    return sorted({str(d) for d in raw})
+
 
 class VacationService:
     """Manages vacation status, backlog amortization, streak freeze, and low-energy sessions."""
@@ -51,7 +64,10 @@ class VacationService:
     # ---- Vacation Status & Inspection ----
 
     def get_vacation_status(self, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Returns the current vacation state, streak freeze dates, and backlog metrics."""
+        """Returns the current vacation state, cumulative streak-freeze dates, and backlog metrics."""
+        # The router reconciles expiry before every action, but keep this path safe when
+        # the service is invoked directly (e.g. from unit tests or another add-on).
+        self.reconcile_expired_vacation()
         cfg = self._get_config()
         vacation_cfg = cfg.get("vacation_state", {})
 
@@ -61,23 +77,13 @@ class VacationService:
         days = int(vacation_cfg.get("days", 0))
         reason = vacation_cfg.get("reason", "休整与备考")
         freeze_new = bool(vacation_cfg.get("freeze_new_cards", True))
-        frozen_dates = list(vacation_cfg.get("frozen_dates", []))
+        frozen_dates = effective_frozen_dates(cfg)
 
-        today = datetime.date.today()
-        today_str = today.isoformat()
-
-        # Check if active vacation has reached or passed end_date
         remaining_days = 0
         if is_active and end_date_str:
             try:
-                end_date = datetime.date.fromisoformat(end_date_str)
-                delta = (end_date - today).days
-                if delta < 0:
-                    # Vacation naturally ended
-                    self.end_vacation({"reason": "auto_expired"})
-                    is_active = False
-                else:
-                    remaining_days = max(1, delta + 1)
+                delta = (datetime.date.fromisoformat(end_date_str) - datetime.date.today()).days
+                remaining_days = max(1, delta + 1) if delta >= 0 else 0
             except Exception:
                 remaining_days = max(1, days)
 
@@ -107,6 +113,26 @@ class VacationService:
             "lastReceipt": last_receipt,
             "rescueHistory": rescue_history,
         }
+
+    def reconcile_expired_vacation(self) -> Optional[Dict[str, Any]]:
+        """Finalizes an active vacation once its end_date has passed.
+
+        Called by BridgeRouter before dispatching *any* action, so expiry no longer
+        depends on the frontend ever calling `get_vacation_status` (which it does not).
+        Returns the end_vacation result on the day it fires, otherwise None.
+        """
+        cfg = self._get_config()
+        state = cfg.get("vacation_state") or {}
+        if not state.get("active"):
+            return None
+        end_str = state.get("end_date") or ""
+        try:
+            end_date = datetime.date.fromisoformat(end_str)
+        except (ValueError, TypeError):
+            return None
+        if (end_date - datetime.date.today()).days >= 0:
+            return None
+        return self.end_vacation({"reason": "auto_expired"})
 
     def get_or_reconstruct_receipt(self) -> Optional[Dict[str, Any]]:
         """Returns existing rescue receipt, or reconstructs active distribution evidence from the collection."""
@@ -302,6 +328,16 @@ class VacationService:
 
     def set_vacation(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Activates vacation mode, optionally freezes new card limits and shifts due dates."""
+        # A stale 'active' flag must not block a new vacation after the previous one expired.
+        self.reconcile_expired_vacation()
+        existing = (self._get_config().get("vacation_state") or {}).get("active")
+        if existing:
+            # Re-freezing an already-zero new-card limit would permanently erase the
+            # original value, so never allow a second activation on top of a live one.
+            return {
+                "success": False,
+                "message": "已有生效中的休假，请先结束或撤销后再开启。",
+            }
         data = data or {}
         days = self._safe_int(data.get("days"), 3, 1, 60)
         reason = str(data.get("reason") or "休整与备考").strip() or "休整与备考"
@@ -323,6 +359,7 @@ class VacationService:
         col = self.col
         shifted_card_count = 0
         shifted_cids: List[int] = []
+        shifted_snapshot: Dict[str, Dict[str, int]] = {}
         frozen_deck_limits: Dict[str, int] = {}
 
         if col is not None:
@@ -332,7 +369,7 @@ class VacationService:
 
             # 2. Optionally shift currently due review cards forward by `days`
             if shift_reviews:
-                shifted_card_count, shifted_cids = self._shift_due_cards(col, days)
+                shifted_card_count, shifted_cids, shifted_snapshot = self._shift_due_cards(col, days)
 
             # Save collection changes if supported
             if hasattr(col, "save"):
@@ -357,6 +394,7 @@ class VacationService:
             "frozen_dates": frozen_dates,
             "shifted_cids": [str(c) for c in shifted_cids],
             "shifted_card_count": shifted_card_count,
+            "shifted_card_snapshot": shifted_snapshot,
             "created_at": now_str,
         }
 
@@ -377,9 +415,13 @@ class VacationService:
         if len(vacation_history) > 30:
             vacation_history = vacation_history[:30]
 
+        cumulative = set(effective_frozen_dates(cfg))
+        if freeze_streak:
+            cumulative.update(frozen_dates)
         cfg_patch = {
             "vacation_state": vacation_state,
             "vacation_history": vacation_history,
+            FROZEN_DATES_KEY: sorted(cumulative),
         }
         self._write_config(cfg_patch)
 
@@ -425,10 +467,13 @@ class VacationService:
         ended_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         updated_state["ended_at"] = ended_at
 
+        reason = str((data or {}).get("reason") or "")
+        # A naturally expired vacation is 'completed', not 'ended_early'.
+        final_status = "completed" if reason == "auto_expired" else "ended_early"
         vacation_history = list(cfg.get("vacation_history", []))
         for item in vacation_history:
             if item.get("status") == "active":
-                item["status"] = "ended_early"
+                item["status"] = final_status
                 item["endedAt"] = ended_at
                 break
 
@@ -463,17 +508,24 @@ class VacationService:
 
         col = self.col
         shifted_cids = vacation_cfg.get("shifted_cids", [])
+        snapshot = vacation_cfg.get("shifted_card_snapshot") or {}
         restored_card_count = 0
         if col is not None and shifted_cids:
             try:
                 cids = [int(c) for c in shifted_cids if str(c).isdigit()]
                 if cids:
-                    if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
-                        col.sched.set_due_date(cids, "0!")
-                    elif hasattr(col, "db"):
-                        sched_today = getattr(col.sched, "today", 0) if hasattr(col, "sched") else 0
-                        col.db.execute("UPDATE cards SET due = ? WHERE id IN (" + ",".join(str(c) for c in cids) + ")", sched_today)
-                    restored_card_count = len(cids)
+                    # Prefer a per-card restore: it puts every card back on its exact
+                    # original due/interval/queue instead of flattening them all to today.
+                    restored_card_count = self._restore_card_schedule(col, snapshot)
+                    if not restored_card_count:
+                        # Legacy fallback. Never use the '!' suffix: Anki reschedules
+                        # review cards *without* changing their interval only without '!'.
+                        if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
+                            col.sched.set_due_date(cids, "0")
+                        elif hasattr(col, "db"):
+                            sched_today = getattr(col.sched, "today", 0) if hasattr(col, "sched") else 0
+                            col.db.execute("UPDATE cards SET due = ? WHERE id IN (" + ",".join(str(c) for c in cids) + ")", sched_today)
+                        restored_card_count = len(cids)
                 if hasattr(col, "save"):
                     col.save()
             except Exception as e:
@@ -487,6 +539,11 @@ class VacationService:
         updated_state = dict(vacation_cfg)
         updated_state["active"] = False
         updated_state["cancelled_at"] = cancelled_at
+        own_frozen = [str(d) for d in vacation_cfg.get("frozen_dates", [])]
+        # A reverted vacation never happened, so its streak-freeze protection must be
+        # removed as well. Earlier (real) vacations keep their frozen dates.
+        cumulative = set(effective_frozen_dates(cfg)) - set(own_frozen)
+        updated_state["frozen_dates"] = []
 
         vacation_history = list(cfg.get("vacation_history", []))
         for item in vacation_history:
@@ -498,6 +555,7 @@ class VacationService:
         self._write_config({
             "vacation_state": updated_state,
             "vacation_history": vacation_history,
+            FROZEN_DATES_KEY: sorted(cumulative),
         })
 
         mw = self.mw
@@ -510,7 +568,7 @@ class VacationService:
         return {
             "success": True,
             "restoredCardCount": restored_card_count,
-            "message": f"已成功撤销本次休假，{restored_card_count} 张卡片已恢复今日队列，学习限额已还原。",
+            "message": f"已成功撤销本次休假，{restored_card_count} 张卡片已恢复原排期，学习限额已还原。",
             "vacationHistory": vacation_history,
         }
 
@@ -742,9 +800,10 @@ class VacationService:
             return {"success": False, "message": "无可操作的卡片数据。"}
 
         try:
-            # Setting due date to '0!' makes all these cards due today while preserving their interval
+            # '0' (no '!') returns cards to today's queue while keeping their interval.
+            # The '!' suffix would rewrite the interval and break FSRS/SM-2 memory state.
             if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
-                col.sched.set_due_date(list(cids), "0!")
+                col.sched.set_due_date(list(cids), "0")
             elif hasattr(col, "db"):
                 sched_today = getattr(col.sched, "today", 0) if hasattr(col, "sched") else 0
                 col.db.execute("UPDATE cards SET due = ? WHERE id IN (" + ",".join(str(c) for c in cids) + ")", sched_today)
@@ -852,14 +911,15 @@ class VacationService:
 
     # ---- Helpers ----
 
-    def _shift_due_cards(self, col, days: int) -> Tuple[int, List[int]]:
-        """Shifts all currently due review cards forward by `days` and returns (count, cids)."""
+    def _shift_due_cards(self, col, days: int) -> Tuple[int, List[int], Dict[str, Dict[str, int]]]:
+        """Shifts due review cards forward by `days`; also returns their original schedule."""
         try:
             due_cids = col.find_cards("is:due is:review") if hasattr(col, "find_cards") else []
             if not due_cids:
-                return 0, []
+                return 0, [], {}
 
             cids_list = list(due_cids)
+            snapshot = self._snapshot_card_schedule(col, cids_list)
             if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
                 col.sched.set_due_date(cids_list, str(days))
             elif hasattr(col, "db"):
@@ -872,9 +932,43 @@ class VacationService:
                 except Exception:
                     pass
 
-            return len(cids_list), cids_list
+            return len(cids_list), cids_list, snapshot
         except Exception:
-            return 0, []
+            return 0, [], {}
+
+    @staticmethod
+    def _snapshot_card_schedule(col, cids: List[int]) -> Dict[str, Dict[str, int]]:
+        """Records due/interval/queue before rescheduling so a revert can be lossless."""
+        snapshot: Dict[str, Dict[str, int]] = {}
+        for cid in cids:
+            try:
+                card = col.get_card(int(cid))
+                snapshot[str(cid)] = {
+                    "due": int(card.due),
+                    "ivl": int(getattr(card, "ivl", 0) or 0),
+                    "queue": int(getattr(card, "queue", 2)),
+                }
+            except Exception:
+                continue
+        return snapshot
+
+    @staticmethod
+    def _restore_card_schedule(col, snapshot: Dict[str, Dict[str, int]]) -> int:
+        """Restores each card via Anki's update_card so mod/usn stay sync-safe."""
+        if not snapshot or not hasattr(col, "get_card") or not hasattr(col, "update_card"):
+            return 0
+        restored = 0
+        for cid_str, sched in snapshot.items():
+            try:
+                card = col.get_card(int(cid_str))
+                card.due = int(sched["due"])
+                card.ivl = int(sched["ivl"])
+                card.queue = int(sched["queue"])
+                col.update_card(card)
+                restored += 1
+            except Exception:
+                continue
+        return restored
 
     def _freeze_new_card_limits(self, col) -> Dict[str, int]:
         """Temporarily records and sets new card limits to 0 across deck configs."""

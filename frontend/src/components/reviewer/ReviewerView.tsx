@@ -31,6 +31,7 @@ export const ReviewerView: React.FC = () => {
   } = useAppStore();
 
   const isDark = theme === 'dark' || theme === 'oled';
+  const isZh = resolvedLang === 'zh-CN';
   const brandHex = getAccentScale(accentColor, theme).brand;
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);

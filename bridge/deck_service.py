@@ -14,6 +14,8 @@ import sys
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+from .vacation_service import effective_frozen_dates
+
 
 class DeckService:
     """Service interacting with mw.col.decks, mw.col.sched, and revlog statistics."""
@@ -162,7 +164,13 @@ class DeckService:
                 try:
                     v_end = datetime.date.fromisoformat(vacation_cfg["end_date"])
                     v_delta = (v_end - datetime.date.today()).days
-                    vacation_remaining_days = max(1, v_delta + 1) if v_delta >= 0 else 0
+                    if v_delta < 0:
+                        # Expired state must never keep the dashboard in vacation mode,
+                        # even when this service is called outside BridgeRouter.
+                        is_vacation_active = False
+                        vacation_remaining_days = 0
+                    else:
+                        vacation_remaining_days = max(1, v_delta + 1)
                 except Exception:
                     vacation_remaining_days = int(vacation_cfg.get("days", 0))
 
@@ -201,7 +209,7 @@ class DeckService:
                     "remainingDays": vacation_remaining_days,
                     "reason": vacation_cfg.get("reason", "休整与备考"),
                     "freezeNewCards": bool(vacation_cfg.get("freeze_new_cards", True)),
-                    "frozenDates": list(vacation_cfg.get("frozen_dates", [])),
+                    "frozenDates": effective_frozen_dates(cfg),
                     "shiftedCardCount": int(vacation_cfg.get("shifted_card_count", 0)),
                     "createdAt": vacation_cfg.get("created_at", ""),
                 },
@@ -423,8 +431,7 @@ class DeckService:
     def _build_heatmap_and_streak(self, col, cutoff: int, lang: str = "zh-CN") -> Dict[str, Any]:
         """Calculates 365-day review matrix, per-day accuracy, streak, and 7-day summary metrics."""
         cfg = self._get_config()
-        vacation_cfg = cfg.get("vacation_state", {})
-        frozen_dates = set(vacation_cfg.get("frozen_dates", []))
+        frozen_dates = set(effective_frozen_dates(cfg))
 
         today_start_sec = cutoff - 86400
         start_365_sec = today_start_sec - (364 * 86400)

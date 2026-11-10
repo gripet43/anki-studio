@@ -700,7 +700,12 @@ export const appActions = {
   }) {
     setAppState({ isLoading: true });
     try {
-      const res = await callAnki<{ success: boolean; vacation?: any }>('set_vacation', params);
+      const res = await callAnki<{ success: boolean; message?: string; vacation?: any }>('set_vacation', params);
+      if (res?.success === false) {
+        setAppState({ isLoading: false });
+        showToast(res?.message || '设置休假失败');
+        return res;
+      }
       await appActions.refreshDashboard(false);
       setAppState({ vacationModalOpen: false, isLoading: false });
       // Trigger cloud sync to update vacation state on AnkiWeb

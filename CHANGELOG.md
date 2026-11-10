@@ -15,6 +15,25 @@
 
 ## [Unreleased]
 
+- **[WorkBuddy] 修复答题界面工具抽屉因 `isZh` 未定义导致的运行时崩溃**：
+  - **原因定位**：[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx) 第 1226 / 1228 / 1239 行的「搁置卡片 / 暂停卡片」按钮使用了 `isZh`，但组件内从未定义（上一位助手新增该工具抽屉时遗漏）。Vite/esbuild 不做类型检查，因此 `npm run build` 仍能通过，而渲染该区域时会抛 `ReferenceError: isZh is not defined`；`npm run lint`（`tsc --noEmit`）报 3 个 `TS2304`。
+  - **修复措施**：在组件 `useAppStore()` 解构之后补一行 `const isZh = resolvedLang === 'zh-CN';`，与文件内其余中英文判断口径完全一致；未改动任何文案、按钮行为或视觉样式。
+  - **修改文件**：[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)。
+  - **验证**：`npx tsc --noEmit` 退出码 0（零错误）；13 项 Python 单测、前端 Bundle 审计与 `npm run build` 全部通过。
+
+- **[WorkBuddy] 休假模式状态机三处逻辑错误修复（过期不收敛 / 连胜冰冻生命周期 / 撤销破坏记忆间隔）**：
+  - **原因定位**：
+    1. 自动过期判定只写在 `get_vacation_status()`（[`bridge/vacation_service.py`](bridge/vacation_service.py)），而前端整个 `frontend/src` 从不调用该 action，只读 `get_dashboard()`；后者在 `end_date` 过期后仅把 `remainingDays` 置 0，仍返回 `isActive=True` 且不写回配置。结果 `vacation_state.active` 永远为真，主界面卡在全画布休假视图、侧栏显示「休假中 · 0d」、弹窗因 `isAlreadyActive` 隐藏「开启休假」按钮。自动过期若被触发，还会经 `end_vacation()` 把按期结束误标为「提前结束」。
+    2. `frozen_dates` 挂在每次都被整体重建的 `vacation_state` 上：`cancel_vacation()` 撤销后原样保留，热力图与连胜算法继续把这些日期算作已打卡；反向 `set_vacation()` 又会抹掉上一次休假的冰冻日期，导致历史连胜在旧休假日断开。
+    3. `cancel_vacation()` 与 `undo_last_rescue()` 使用 `set_due_date(cids, "0!")`。Anki 官方手册明确「不带 `!` 才 rescheduled without changing their current interval」，带 `!` 会改写间隔，与注释/UI 承诺的「保留 FSRS 间隔、原样复原」正好相反；且 `shifted_cids` 只存 ID，撤销只能把所有卡片拍平到今日。
+  - **修复措施**：
+    1. 新增 `VacationService.reconcile_expired_vacation()`，由 [`bridge/router.py`](bridge/router.py) 的 `handle_pycmd()` 在分发**任何** action 前统一收敛；[`bridge/deck_service.py`](bridge/deck_service.py) 的 `get_dashboard()` 另加显示层兜底（过期即 `isActive=False / remainingDays=0`）；`end_vacation()` 按 `reason=auto_expired` 将历史标为 `completed` 而非 `ended_early`。
+    2. 新增顶层累积配置 `vacation_frozen_dates` 与纯函数 `effective_frozen_dates()`：开启时追加本次区间，撤销时精确移除本次区间，按期/提前结束保留；`get_dashboard()`、`get_vacation_status()`、`_build_heatmap_and_streak()` 全部改读该字段，并兼容旧配置回退。
+    3. 开启休假时快照每张卡的 `due/ivl/queue` 至 `shifted_card_snapshot`，撤销时经 `col.update_card()` 逐张精确回写（保持同步安全的 mod/usn）；无快照的旧数据回退到 `set_due_date(cids, "0")`。`undo_last_rescue()` 同步去除 `!`。
+    4. `set_vacation()` 增加防重入：已有生效休假时返回 `success=False`，避免把已冻结为 0 的新卡限额误存为「原始值」；[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts) 的 `setVacation` 对失败结果不再误报成功 toast。
+  - **修改文件**：[`bridge/vacation_service.py`](bridge/vacation_service.py), [`bridge/deck_service.py`](bridge/deck_service.py), [`bridge/router.py`](bridge/router.py), [`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts), [`tests/test_bridge.py`](tests/test_bridge.py)。
+  - **验证**：新增 `test_13_vacation_expiry_revert_and_freeze_integrity`（过期收敛与历史状态、防重入、逐张排程回写、冰冻日期增删、`!` 后缀禁令）；13 项 Python 测试、前端 Bundle 审计与 `npm run build` 全部通过。
+
 - **[Antigravity] 彻底纠正「已暂停 (Suspended)」与「已搁置 (Buried)」状态混淆及系统全链路重构**：
   - **原因定位**：
     1. 概念与文案倒置：此前在 Reviewer 暂停卡片时错误提示「已挂起卡片并跳过本轮复习」，将永久性移出学习队列的「暂停 (Suspend)」与推迟至次日恢复的「搁置 (Bury)」严重混淆，且使用了非标黑话「挂起」。

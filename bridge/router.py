@@ -81,6 +81,13 @@ class BridgeRouter:
 
         raw_payload = command[len(self.PREFIX):]
         try:
+            # Single point of truth for vacation expiry: the frontend never calls
+            # get_vacation_status, so reconcile before dispatching any action.
+            try:
+                self.vacation_service.reconcile_expired_vacation()
+            except Exception:
+                pass
+
             req = json.loads(raw_payload) if raw_payload else {}
             action = req.get("action", "")
             data = req.get("data") or {}
