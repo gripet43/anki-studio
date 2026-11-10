@@ -24,9 +24,9 @@
   - 当开启休假模式（`dashboard.vacation.isActive === true`）时，将 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx) 主内容区切换为全画布极简休假视图（放松插画 + `享受你的假期 ^_^` 主标题 + 单行轻量状态提示 + `休假设置 / 结束` 与 `查看看板` 按钮），并修复 [`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx) 底部休假按钮激活态文字截断。
 - **[Antigravity] 官方品牌 Logo 与经典蓝视觉系统正式确立**：
   - 正式集成等轴测对折知识棱柱（Open Knowledge Prism）作为 Anki Studio 官方标志。
-  - 创建独立像素级矢量组件 [`frontend/src/components/common/AnkiStudioLogo.tsx`](frontend/src/components/common/AnkiStudioLogo.tsx)，左侧面为柔和淡蓝 `#BCB8F7`（正面/输入），右侧面为经典蓝 `#5E5CE6`（反面/输出）。
+  - 创建独立像素级矢量组件 [`frontend/src/components/common/AnkiStudioLogo.tsx`](frontend/src/components/common/AnkiStudioLogo.tsx)，右侧面采用用户指定的官方经典蔚蓝 `#3076C3`（反面/输出），左侧面采用同色系柔和淡蓝 `#A1C1E4`（正面/输入）。
   - 全面更新侧边栏品牌区域 [`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)、设置中心关于视图 [`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx) 以及 0ms 首帧骨架 [`frontend/index.html`](frontend/index.html)。
-  - 品牌色固定为经典蓝（Studio Blue `#5E5CE6`），同步更新 [`config.json`](config.json)、[`meta.json`](meta.json) 与 [`themeTokens.ts`](frontend/src/utils/themeTokens.ts)。
+  - 品牌色固定为用户指定的官方经典蓝（Studio Blue `#3076C3` / `rgb(48, 118, 195)`），完成 12 阶色阶重新标定，同步更新 [`config.json`](config.json)、[`meta.json`](meta.json)、[`__init__.py`](__init__.py) 与 [`themeTokens.ts`](frontend/src/utils/themeTokens.ts)。
 
 ---
 

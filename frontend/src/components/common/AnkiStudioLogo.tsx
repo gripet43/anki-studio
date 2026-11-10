@@ -5,23 +5,23 @@ export interface AnkiStudioLogoProps {
   size?: number;
   /** Custom additional className */
   className?: string;
-  /** Custom left facet color (defaults to soft lavender-blue #BCB8F7) */
+  /** Custom left facet color (defaults to soft studio blue tint #A1C1E4) */
   leftColor?: string;
-  /** Custom right facet color (defaults to primary brand blue #5E5CE6) */
+  /** Custom right facet color (defaults to primary brand blue #3076C3) */
   rightColor?: string;
 }
 
 /**
  * Anki Studio Official Brand Logo
  * Geometry: Isometric split-hexagon / dual-facet open knowledge prism.
- * - Left facet: #BCB8F7 (Soft lavender blue · Input / Question / Front)
- * - Right facet: #5E5CE6 (Deep Studio brand blue · Output / Answer / Back)
+ * - Left facet: #A1C1E4 (Soft studio blue tint · Input / Question / Front)
+ * - Right facet: #3076C3 (Deep Studio brand blue · Output / Answer / Back)
  */
 export const AnkiStudioLogo: React.FC<AnkiStudioLogoProps> = ({
   size = 24,
   className = '',
-  leftColor = '#BCB8F7',
-  rightColor = '#5E5CE6',
+  leftColor = '#A1C1E4',
+  rightColor = '#3076C3',
 }) => {
   return (
     <svg
