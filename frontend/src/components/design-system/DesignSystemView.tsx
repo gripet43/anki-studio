@@ -130,34 +130,47 @@ export const DesignSystemView: React.FC = () => {
               ))}
             </div>
 
-            <div className="grid grid-cols-4 gap-2.5">
-              {ACCENT_COLOR_LIST.map((a) => {
-                const modeScale = isDark ? a.dark : a.light;
-                return (
-                  <button
-                    key={a.id}
-                    onClick={() => {
-                      appActions.setAccentColor(a.id);
-                      showToast(
-                        isZh ? `已保存强调色：${a.nameZh}` : `Saved accent: ${a.nameEn}`
-                      );
-                    }}
-                    title={isZh ? a.nameZh : a.nameEn}
-                    className={`px-2 py-1.5 rounded-xl border text-[11px] flex items-center gap-1.5 cursor-pointer transition-all ${
-                      accentColor === a.id
-                        ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold shadow-2xs'
-                        : 'border-black/10 dark:border-white/10 opacity-85 hover:opacity-100'
-                    }`}
-                  >
-                    <span
-                      style={{ backgroundColor: modeScale.brand }}
-                      className="w-3.5 h-3.5 rounded-full shrink-0"
-                    />
-                    <span className="truncate">{isZh ? a.nameZh.split(' · ')[0] : a.id}</span>
-                  </button>
-                );
-              })}
-            </div>
+              <div
+                role="radiogroup"
+                aria-label={isZh ? '设计系统全局强调色' : 'Design System Accent Colors'}
+                className="grid grid-cols-4 gap-2.5"
+              >
+                {ACCENT_COLOR_LIST.map((a) => {
+                  const modeScale = isDark ? a.dark : a.light;
+                  const active = accentColor === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => {
+                        appActions.setAccentColor(a.id);
+                        showToast(
+                          isZh ? `已保存强调色：${a.shortNameZh}` : `Saved accent: ${a.shortNameEn}`
+                        );
+                      }}
+                      title={isZh ? `${a.nameZh} · ${a.descZh}` : `${a.nameEn} · ${a.descEn}`}
+                      className={`px-2 py-1.5 rounded-xl border text-[11px] flex items-center gap-1.5 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
+                        active
+                          ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold shadow-2xs'
+                          : 'border-black/10 dark:border-white/10 opacity-85 hover:opacity-100'
+                      }`}
+                    >
+                      <span
+                        style={{ backgroundColor: modeScale.brand }}
+                        className="w-3.5 h-3.5 rounded-full shrink-0 ring-1 ring-black/10 dark:ring-white/10"
+                      />
+                      <span className="truncate">{isZh ? a.shortNameZh : a.shortNameEn}</span>
+                      {a.isOfficial && (
+                        <span className="text-[9px] font-semibold px-1 py-0.2 rounded bg-[var(--brand-softStrong)] text-[var(--brand-text)] shrink-0">
+                          {isZh ? '官方' : 'Brand'}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
           </div>
         </div>
       </section>

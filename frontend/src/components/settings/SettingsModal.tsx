@@ -289,8 +289,8 @@ export const SettingsModal: React.FC = () => {
                     </div>
                     <div className={`text-[11px] ${subText} mt-0.5`}>
                       {isZh
-                        ? `当前选中：${currentAccentMeta.nameZh} · ${currentAccentMeta.descZh}`
-                        : `Active: ${currentAccentMeta.nameEn} · ${currentAccentMeta.descEn}`}
+                        ? `当前选中：${currentAccentMeta.shortNameZh} · ${currentAccentMeta.descZh}`
+                        : `Active: ${currentAccentMeta.shortNameEn} · ${currentAccentMeta.descEn}`}
                     </div>
                   </div>
                   {/* Live mini preview of the 4-level heatmap & soft badge */}
@@ -308,18 +308,27 @@ export const SettingsModal: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-2.5">
+                <div
+                  role="radiogroup"
+                  aria-label={isZh ? '强调色选择' : 'Accent Color Palette'}
+                  className="grid grid-cols-4 gap-2.5"
+                >
                   {ACCENT_COLOR_LIST.map((a) => {
                     const active = accentColor === a.id;
                     const modeScale = isDark ? a.dark : a.light;
-                    const label = isZh ? a.nameZh : a.nameEn;
                     return (
                       <button
                         key={a.id}
                         type="button"
+                        role="radio"
+                        aria-checked={active}
+                        aria-label={isZh ? a.nameZh : a.nameEn}
+                        title={isZh ? `${a.nameZh} · ${a.descZh}` : `${a.nameEn} · ${a.descEn}`}
                         onClick={() => {
                           appActions.setAccentColor(a.id);
-                          showToast(isZh ? `已切换全局强调色：${a.nameZh}` : `Accent: ${a.nameEn}`);
+                          showToast(
+                            isZh ? `已切换强调色：${a.shortNameZh}` : `Accent: ${a.shortNameEn}`
+                          );
                         }}
                         style={
                           active
@@ -329,31 +338,47 @@ export const SettingsModal: React.FC = () => {
                               }
                             : undefined
                         }
-                        className={`px-2.5 py-2 rounded-xl border flex items-center gap-2.5 cursor-pointer transition-all text-left ${
+                        className={`px-2.5 py-2 rounded-xl border flex items-center gap-2 cursor-pointer transition-all text-left relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
                           active
                             ? 'ring-1 ring-[var(--brand)] shadow-xs'
                             : isDark
-                            ? 'border-[#303240] hover:border-white/20 bg-black/15'
-                            : 'border-[#E6E6EC] hover:border-black/20 bg-white'
+                            ? 'border-[#303240] hover:border-white/25 bg-black/15'
+                            : 'border-[#E6E6EC] hover:border-black/20 bg-white hover:bg-[#FAFBFD]'
                         }`}
                       >
                         <span
-                          className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center shadow-inner"
+                          className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center shadow-inner ring-1 ring-black/10 dark:ring-white/15"
                           style={{ backgroundColor: modeScale.brand }}
                         >
                           {active && (
-                            <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                            <svg
+                              className="w-3 h-3 text-white"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="3.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
                               <polyline points="20 6 9 17 4 12" />
                             </svg>
                           )}
                         </span>
-                        <span
-                          className={`text-[11px] truncate ${
-                            active ? 'font-semibold text-[var(--brand-text)]' : 'font-medium'
-                          }`}
-                        >
-                          {label}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className={`text-[11px] whitespace-nowrap ${
+                              active ? 'font-semibold text-[var(--brand-text)]' : 'font-medium'
+                            }`}
+                          >
+                            {isZh ? a.shortNameZh : a.shortNameEn}
+                          </span>
+                          {a.isOfficial && (
+                            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-[var(--brand-softStrong)] text-[var(--brand-text)] border border-[var(--brand-border)] leading-none shrink-0">
+                              {isZh ? '官方' : 'Brand'}
+                            </span>
+                          )}
+                        </div>
                       </button>
                     );
                   })}

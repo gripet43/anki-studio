@@ -43,6 +43,9 @@ export interface AccentThemeMeta {
   id: AccentColor;
   nameZh: string;
   nameEn: string;
+  shortNameZh: string;
+  shortNameEn: string;
+  isOfficial?: boolean;
   descZh: string;
   descEn: string;
   swatchHex: string;
@@ -55,6 +58,9 @@ export const ACCENT_THEMES: Record<AccentColor, AccentThemeMeta> = {
     id: 'indigo',
     nameZh: '经典蓝 · Studio Blue',
     nameEn: 'Studio Blue',
+    shortNameZh: '经典蓝',
+    shortNameEn: 'Studio Blue',
+    isOfficial: true,
     descZh: 'Anki Studio 官方固定品牌色',
     descEn: 'Official Anki Studio brand blue',
     swatchHex: '#3076C3',
@@ -87,6 +93,8 @@ export const ACCENT_THEMES: Record<AccentColor, AccentThemeMeta> = {
     id: 'emerald',
     nameZh: '松石绿 · Sage',
     nameEn: 'Sage Forest',
+    shortNameZh: '松石绿',
+    shortNameEn: 'Sage',
     descZh: '护眼温润的自然鼠尾草与松林绿',
     descEn: 'Soothing botanical sage green',
     swatchHex: '#2F9461',
@@ -119,6 +127,8 @@ export const ACCENT_THEMES: Record<AccentColor, AccentThemeMeta> = {
     id: 'cyan',
     nameZh: '雾海蓝 · Ocean',
     nameEn: 'Nordic Ocean',
+    shortNameZh: '雾海蓝',
+    shortNameEn: 'Ocean',
     descZh: '清澈克制的北欧深海蓝',
     descEn: 'Clear, balanced cerulean blue',
     swatchHex: '#2B7ABF',
@@ -151,6 +161,8 @@ export const ACCENT_THEMES: Record<AccentColor, AccentThemeMeta> = {
     id: 'rose',
     nameZh: '赤陶粉 · Rose',
     nameEn: 'Dusty Rose',
+    shortNameZh: '赤陶粉',
+    shortNameEn: 'Rose',
     descZh: '柔和低饱和的复古赤陶灰粉',
     descEn: 'Warm, muted terracotta rose',
     swatchHex: '#C44D6C',
@@ -183,6 +195,8 @@ export const ACCENT_THEMES: Record<AccentColor, AccentThemeMeta> = {
     id: 'amber',
     nameZh: '琥珀金 · Ochre',
     nameEn: 'Warm Ochre',
+    shortNameZh: '琥珀金',
+    shortNameEn: 'Ochre',
     descZh: '知性温暖的秋日琥珀与羊皮纸色调',
     descEn: 'Editorial warm amber & bronze',
     swatchHex: '#C27429',
@@ -215,6 +229,8 @@ export const ACCENT_THEMES: Record<AccentColor, AccentThemeMeta> = {
     id: 'teal',
     nameZh: '峡湾青 · Fjord',
     nameEn: 'Fjord Teal',
+    shortNameZh: '峡湾青',
+    shortNameEn: 'Fjord',
     descZh: '冷静理性的蓝绿平衡色',
     descEn: 'Serene, analytical blue-green',
     swatchHex: '#23868C',
@@ -247,6 +263,8 @@ export const ACCENT_THEMES: Record<AccentColor, AccentThemeMeta> = {
     id: 'violet',
     nameZh: '暮光紫 · Iris',
     nameEn: 'Twilight Iris',
+    shortNameZh: '暮光紫',
+    shortNameEn: 'Iris',
     descZh: '优雅静谧的创意工作室紫晶色',
     descEn: 'Refined, creative studio violet',
     swatchHex: '#7A50B6',
@@ -279,6 +297,8 @@ export const ACCENT_THEMES: Record<AccentColor, AccentThemeMeta> = {
     id: 'slate',
     nameZh: '石墨灰 · Graphite',
     nameEn: 'Graphite Slate',
+    shortNameZh: '石墨灰',
+    shortNameEn: 'Graphite',
     descZh: '纯粹无干扰的 Notion 极简黑白灰风格',
     descEn: 'Distraction-free monochrome slate',
     swatchHex: '#475569',

@@ -290,20 +290,22 @@ export const Sidebar: React.FC = () => {
       {/* Schedule Rhythm & Backlog Relief Bar — Unified, Minimalist Studio Controls */}
       <div className="px-3 pb-2.5">
         <div
-          className={`p-1 rounded-xl border grid grid-cols-2 gap-1 ${
-            isDark ? 'bg-white/[0.02] border-white/[0.07]' : 'bg-[#F7F7F9] border-[#EAECEF]'
+          role="toolbar"
+          aria-label={isZh ? '学习节奏辅助工具' : 'Study Rhythm Tools'}
+          className={`p-1 rounded-xl border grid grid-cols-2 gap-1 transition-colors ${
+            isDark ? 'bg-white/[0.025] border-white/[0.07]' : 'bg-[#F5F6F8] border-[#E5E7EB]'
           }`}
         >
           {/* 1. 休假模式 (Vacation Mode) */}
           <button
             type="button"
             onClick={() => appActions.openVacationModal('status')}
-            className={`px-2 py-1.5 rounded-lg text-[11px] font-medium flex items-center justify-between gap-1 transition-all cursor-pointer ${
+            className={`py-1.5 px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
               dashboard.vacation?.isActive
                 ? 'bg-[var(--status-success-soft)] text-[var(--status-success)] font-semibold shadow-2xs'
                 : isDark
-                ? 'text-[#A0A2AD] hover:text-white hover:bg-white/[0.05]'
-                : 'text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-white hover:shadow-2xs'
+                ? 'text-[#9A9CA6] hover:text-white hover:bg-white/[0.06] hover:shadow-2xs'
+                : 'text-[#5C5E66] hover:text-[#111215] hover:bg-white hover:shadow-2xs'
             }`}
             title={
               isZh
@@ -311,36 +313,32 @@ export const Sidebar: React.FC = () => {
                 : 'Vacation Mode: Pause new cards & preserve streak'
             }
           >
-            <span className="flex items-center gap-1 min-w-0">
-              <svg
-                className="w-3.5 h-3.5 shrink-0 opacity-85"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-                <line x1="10" y1="14" x2="10" y2="18" />
-                <line x1="14" y1="14" x2="14" y2="18" />
-              </svg>
-              <span className="truncate">
-                {dashboard.vacation?.isActive
-                  ? isZh
-                    ? '休假中'
-                    : 'Active'
-                  : t('vacationBtn')}
-              </span>
+            <svg
+              className="w-3.5 h-3.5 shrink-0 opacity-80"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+              <line x1="10" y1="14" x2="10" y2="18" />
+              <line x1="14" y1="14" x2="14" y2="18" />
+            </svg>
+            <span className="truncate">
+              {dashboard.vacation?.isActive
+                ? isZh
+                  ? `休假中 · ${dashboard.vacation.remainingDays}d`
+                  : `Active · ${dashboard.vacation.remainingDays}d`
+                : t('vacationBtn')}
             </span>
             {dashboard.vacation?.isActive && (
-              <span className="flex items-center gap-1 shrink-0">
-                <span className="text-[10px] font-mono">{dashboard.vacation.remainingDays}d</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)]" />
-              </span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] shrink-0" />
             )}
           </button>
 
@@ -354,14 +352,12 @@ export const Sidebar: React.FC = () => {
                 appActions.openIcuModal('rescue');
               }
             }}
-            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium flex items-center justify-between transition-all cursor-pointer ${
+            className={`py-1.5 px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
               dashboard.backlog?.hasAvalanche
                 ? 'bg-[var(--status-warning-soft)] text-[var(--status-warning)] font-semibold shadow-2xs'
-                : recentReceipt?.canUndo
-                ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] font-medium'
                 : isDark
-                ? 'text-[#A0A2AD] hover:text-white hover:bg-white/[0.05]'
-                : 'text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-white hover:shadow-2xs'
+                ? 'text-[#9A9CA6] hover:text-white hover:bg-white/[0.06] hover:shadow-2xs'
+                : 'text-[#5C5E66] hover:text-[#111215] hover:bg-white hover:shadow-2xs'
             }`}
             title={
               isZh
@@ -369,22 +365,24 @@ export const Sidebar: React.FC = () => {
                 : 'Backlog Relief: Smoothly distribute overdue cards across upcoming days'
             }
           >
-            <span className="flex items-center gap-1.5 min-w-0">
-              <svg
-                className="w-3.5 h-3.5 shrink-0 opacity-85"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                <path d="M2 17l10 5 10-5" />
-                <path d="M2 12l10 5 10-5" />
-              </svg>
-              <span className="truncate">{t('backlogRescueBtn')}</span>
-            </span>
+            <svg
+              className="w-3.5 h-3.5 shrink-0 opacity-80"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 2L2 7l10 5 10-5-10-5z" />
+              <path d="M2 17l10 5 10-5" />
+              <path d="M2 12l10 5 10-5" />
+            </svg>
+            <span className="truncate">{t('backlogRescueBtn')}</span>
+            {dashboard.backlog?.hasAvalanche && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)] shrink-0 animate-pulse" />
+            )}
           </button>
         </div>
       </div>
