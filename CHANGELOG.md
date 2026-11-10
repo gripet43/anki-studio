@@ -15,6 +15,10 @@
 
 ## [Unreleased]
 
+- **[Antigravity] 优化完成今日学习待办时的庆贺文案**：
+  - 在 [`translations.ts`](frontend/src/i18n/translations.ts) 中将今日所有牌组待办学完后的主标题文案 `allClearedTitle` 由「今日待办已全部清空！」更新为「**恭喜你已完成全部牌组的学习！**」（英文同步对齐为 `Congratulations! All decks completed!`），视觉呈现更加亲和振奋。
+
+
 - **[Antigravity] 全链路真云端同步态对齐与本地数据加载解耦（Truth-in-Syncing & Reconcile Architecture）**：
   - **1. 根因彻底清查与虚假同步修复**：
     - 查明原生界面与现代界面切换、冷启动或刷新时界面错误显示「正在从云端同步...」、「集合与云端已完全同步」及胶囊显示「已同步 (刚刚)」的根本原因：此前 [`bridge/deck_service.py`](bridge/deck_service.py) 中的 `get_dashboard()` 每次被调用时均硬编码 `"syncedAt": int(time.time() * 1000)`，导致前端误认为刚刚发生了一次完整的 AnkiWeb 云端同步。
