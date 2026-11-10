@@ -1,0 +1,237 @@
+@import "tailwindcss";
+
+/*
+ * Enable class-based dark mode in Tailwind v4 so any `dark:*` utility
+ * responds directly to the `.dark` class applied in `App.tsx` (instead of
+ * macOS `prefers-color-scheme`), guaranteeing 100% consistency when the user
+ * toggles Light / Dark / OLED in the UI.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Inter", system-ui, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Default SaaS Accent Tokens (Linear Indigo — overridden dynamically at runtime) */
+    --brand: #5B5BD6;
+    --brand-hover: #4E4EC8;
+    --brand-rgb: 91, 91, 214;
+    --brand-text: #4D4DC2;
+    --brand-soft: #EEF0FF;
+    --brand-soft-strong: #E0E3FF;
+    --brand-surface: #F5F6FF;
+    --brand-border: #C4C8FA;
+    --brand-muted-bar: #C8CCF8;
+    --heatmap-0: #ECECEF;
+    --heatmap-1: #E2E5FC;
+    --heatmap-2: #B8BEF7;
+    --heatmap-3: #868EEF;
+    --heatmap-4: #5B5BD6;
+
+    /* Desaturated SaaS Semantic Status Tokens */
+    --status-danger: #D44854;
+    --status-danger-soft: #FCECEE;
+    --status-warning: #CC7A25;
+    --status-warning-soft: #FDF3E7;
+    --status-success: #2F9461;
+    --status-success-soft: #EAF6F0;
+    --status-info: #2B7ABF;
+    --status-info-soft: #EBF4FC;
+
+    /* Design System Light Tokens */
+    --bg-canvas: #F4F4F6;
+    --bg-card: #FFFFFF;
+    --bg-subtle: #F7F7F9;
+    --border-subtle: #EAECEF;
+    --text-primary: #1D1D1F;
+    --text-secondary: #6E6E73;
+    --text-muted: #8E8E93;
+
+    /* Standardized Spacing & Typography Scale */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+  }
+
+  .dark {
+    --bg-canvas: #131418;
+    --bg-card: #1A1B21;
+    --bg-subtle: #20222A;
+    --border-subtle: #2A2C36;
+    --text-primary: #F2F3F7;
+    --text-secondary: #A6A8B3;
+    --text-muted: #7E808C;
+  }
+
+  .oled {
+    --bg-canvas: #09090C;
+    --bg-card: #111216;
+    --bg-subtle: #17181E;
+    --border-subtle: #22232B;
+    --text-primary: #F4F4F6;
+    --text-secondary: #A0A2AD;
+    --text-muted: #757782;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Custom subtle scrollbars for macOS feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(142, 142, 147, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(142, 142, 147, 0.45);
+}
+
+/* Allow text selection inside flashcards and inputs */
+.selectable-text {
+  user-select: text;
+}
+
+/* Modern Web Guidance: Accent color & Selection styling */
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  accent-color: var(--brand);
+}
+
+::selection {
+  background-color: rgba(var(--brand-rgb), 0.2);
+  color: inherit;
+}
+
+progress {
+  accent-color: var(--brand);
+}
+
+/* Cloze Pill styling inside WYSIWYG and Reviewer */
+.anki-cloze-pill {
+  background-color: var(--brand-soft) !important;
+  color: var(--brand-text) !important;
+  border-color: var(--brand-border) !important;
+}
+
+/* Overscroll containment for modals & drawers */
+.modal-contain-scroll {
+  overscroll-behavior: contain;
+}
+
+/* Unified Button Hierarchy (Primary / Secondary / Ghost / Danger) */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  height: 2.25rem;
+  padding: 0 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--brand);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--brand-hover);
+  filter: brightness(1.03);
+}
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  height: 2.25rem;
+  padding: 0 0.875rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid var(--border-subtle);
+  background-color: transparent;
+  color: var(--text-primary);
+  transition: all 150ms ease;
+  cursor: pointer;
+}
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--brand-border);
+  color: var(--brand-text);
+  background-color: var(--brand-soft);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  height: 2rem;
+  padding: 0 0.625rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background-color: transparent;
+  transition: all 150ms ease;
+  cursor: pointer;
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--brand-text);
+  background-color: var(--brand-soft);
+}
+
+/* Shimmer loading animation for skeleton states */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(142, 142, 147, 0.08) 25%,
+    rgba(var(--brand-rgb), 0.14) 50%,
+    rgba(142, 142, 147, 0.08) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s infinite linear;
+}

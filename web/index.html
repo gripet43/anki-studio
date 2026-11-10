@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Anki Studio</title>
+    <style>
+      :root {
+        --app-bg: #F4F4F6;
+        --app-surface: #FFFFFF;
+        --app-border: #EBEBF0;
+        --app-sidebar-bg: #FFFFFF;
+        --app-sidebar-border: #E8E8ED;
+        --app-shimmer-base: rgba(142, 142, 147, 0.08);
+        --app-shimmer-highlight: rgba(94, 92, 230, 0.16);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --app-bg: #16161A;
+          --app-surface: #1C1C22;
+          --app-border: #2C2C35;
+          --app-sidebar-bg: #131317;
+          --app-sidebar-border: #26262E;
+          --app-shimmer-base: rgba(255, 255, 255, 0.04);
+          --app-shimmer-highlight: rgba(94, 92, 230, 0.22);
+        }
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background-color: var(--app-bg);
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", "PingFang SC", sans-serif;
+      }
+      #root {
+        width: 100%;
+        height: 100%;
+        display: flex;
+      }
+      /* Pre-mount App Shell Skeleton: Instant painting on frame 0 */
+      .premount-shell {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        background-color: var(--app-bg);
+      }
+      .premount-sidebar {
+        width: 240px;
+        min-width: 240px;
+        height: 100%;
+        background-color: var(--app-sidebar-bg);
+        border-right: 1px solid var(--app-sidebar-border);
+        box-sizing: border-box;
+        padding: 24px 16px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .premount-main {
+        flex: 1;
+        height: 100%;
+        padding: 24px 32px;
+        box-sizing: border-box;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+      .premount-shimmer {
+        background: linear-gradient(
+          90deg,
+          var(--app-shimmer-base) 25%,
+          var(--app-shimmer-highlight) 37%,
+          var(--app-shimmer-base) 63%
+        );
+        background-size: 200% 100%;
+        animation: premountShimmer 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+      @keyframes premountShimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .premount-shimmer {
+          animation: none !important;
+          opacity: 0.5;
+        }
+      }
+    </style>
+    <script>
+      window.addEventListener('error', function(e) {
+        console.error('[Global Fatal Error]', e);
+        var el = document.getElementById('fatal-error-overlay');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'fatal-error-overlay';
+          el.style = 'position:fixed;inset:0;background:#16161A;color:#FF453A;padding:32px;font-family:monospace;z-index:999999;overflow:auto;';
+          document.body.appendChild(el);
+        }
+        el.innerHTML = '<h2 style="color:#FF453A">Global Script Error</h2><p style="color:#FFF">' + (e.message || e) + '</p><pre style="color:#A1A1A6">' + (e.error ? e.error.stack : '') + '</pre>';
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        console.error('[Unhandled Rejection]', e);
+      });
+    </script>
+    <script type="module" crossorigin src="./assets/index.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index.css">
+  </head>
+  <body>
+    <div id="root">
+      <!-- Instant App Shell Skeleton to completely eliminate startup blank flash -->
+      <div class="premount-shell" aria-hidden="true">
+        <aside class="premount-sidebar">
+          <div>
+            <!-- Logo area -->
+            <div style="display:flex;align-items:center;gap:10px;padding:4px 6px;">
+              <div style="width:32px;height:32px;border-radius:10px;background:#5E5CE6;display:flex;align-items:center;justify-content:center;color:#FFF;font-size:16px;font-weight:bold;">A</div>
+              <div style="width:96px;height:16px;border-radius:6px;" class="premount-shimmer"></div>
+            </div>
+            <!-- Quick Add button placeholder -->
+            <div style="width:100%;height:38px;border-radius:12px;margin-top:16px;" class="premount-shimmer"></div>
+            <!-- Nav list placeholder -->
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:20px;">
+              <div style="width:100%;height:36px;border-radius:10px;" class="premount-shimmer"></div>
+              <div style="width:100%;height:36px;border-radius:10px;" class="premount-shimmer"></div>
+              <div style="width:100%;height:36px;border-radius:10px;" class="premount-shimmer"></div>
+              <div style="width:100%;height:36px;border-radius:10px;" class="premount-shimmer"></div>
+            </div>
+          </div>
+          <!-- User / Settings placeholder -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:28px;height:28px;border-radius:50%;" class="premount-shimmer"></div>
+              <div style="width:60px;height:14px;border-radius:4px;" class="premount-shimmer"></div>
+            </div>
+            <div style="width:18px;height:18px;border-radius:4px;" class="premount-shimmer"></div>
+          </div>
+        </aside>
+        <main class="premount-main">
+          <!-- Header Row -->
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="width:160px;height:26px;border-radius:8px;" class="premount-shimmer"></div>
+              <div style="width:220px;height:14px;border-radius:4px;margin-top:8px;" class="premount-shimmer"></div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:center;">
+              <div style="width:140px;height:36px;border-radius:999px;" class="premount-shimmer"></div>
+              <div style="width:180px;height:36px;border-radius:12px;" class="premount-shimmer"></div>
+            </div>
+          </div>
+          <!-- Hero Progress Card -->
+          <div style="border-radius:16px;border:1px solid var(--app-border);background:var(--app-surface);padding:24px;display:flex;align-items:center;justify-content:space-between;gap:32px;">
+            <div style="display:flex;align-items:center;gap:28px;flex:1;">
+              <div style="width:100px;height:100px;border-radius:50%;border:8px solid var(--app-border);" class="premount-shimmer"></div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:14px;">
+                <div style="width:180px;height:22px;border-radius:6px;" class="premount-shimmer"></div>
+                <div style="display:flex;gap:10px;align-items:center;">
+                  <div style="width:120px;height:40px;border-radius:12px;" class="premount-shimmer"></div>
+                  <div style="width:84px;height:32px;border-radius:999px;" class="premount-shimmer"></div>
+                  <div style="width:72px;height:32px;border-radius:999px;" class="premount-shimmer"></div>
+                  <div style="width:80px;height:32px;border-radius:999px;" class="premount-shimmer"></div>
+                </div>
+              </div>
+            </div>
+            <div style="width:140px;padding-left:24px;border-left:1px solid var(--app-border);display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+              <div style="width:60px;height:14px;border-radius:4px;" class="premount-shimmer"></div>
+              <div style="width:80px;height:28px;border-radius:6px;" class="premount-shimmer"></div>
+              <div style="width:100px;height:12px;border-radius:4px;" class="premount-shimmer"></div>
+            </div>
+          </div>
+          <!-- Decks Row -->
+          <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:16px;">
+            <div style="height:156px;border-radius:16px;border:1px solid var(--app-border);background:var(--app-surface);padding:20px;display:flex;flex-direction:column;justify-content:space-between;">
+              <div style="display:flex;align-items:center;gap:12px;">
+                <div style="width:36px;height:36px;border-radius:10px;" class="premount-shimmer"></div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+                  <div style="width:90px;height:14px;border-radius:4px;" class="premount-shimmer"></div>
+                  <div style="width:60px;height:12px;border-radius:4px;" class="premount-shimmer"></div>
+                </div>
+              </div>
+              <div style="width:100%;height:6px;border-radius:999px;" class="premount-shimmer"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div style="width:110px;height:12px;border-radius:4px;" class="premount-shimmer"></div>
+                <div style="width:28px;height:28px;border-radius:50%;" class="premount-shimmer"></div>
+              </div>
+            </div>
+            <div style="height:156px;border-radius:16px;border:1px solid var(--app-border);background:var(--app-surface);padding:20px;display:flex;flex-direction:column;justify-content:space-between;">
+              <div style="display:flex;align-items:center;gap:12px;">
+                <div style="width:36px;height:36px;border-radius:10px;" class="premount-shimmer"></div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+                  <div style="width:90px;height:14px;border-radius:4px;" class="premount-shimmer"></div>
+                  <div style="width:60px;height:12px;border-radius:4px;" class="premount-shimmer"></div>
+                </div>
+              </div>
+              <div style="width:100%;height:6px;border-radius:999px;" class="premount-shimmer"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div style="width:110px;height:12px;border-radius:4px;" class="premount-shimmer"></div>
+                <div style="width:28px;height:28px;border-radius:50%;" class="premount-shimmer"></div>
+              </div>
+            </div>
+          </div>
+          <!-- Bottom Analytics Row -->
+          <div style="display:grid;grid-template-columns:7fr 5fr;gap:16px;flex:1;">
+            <div style="border-radius:16px;border:1px solid var(--app-border);background:var(--app-surface);padding:20px;" class="premount-shimmer"></div>
+            <div style="border-radius:16px;border:1px solid var(--app-border);background:var(--app-surface);padding:20px;" class="premount-shimmer"></div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

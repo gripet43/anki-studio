@@ -1,0 +1,10 @@
+{
+  "name": "Anki Studio",
+  "package": "anki_modern_os",
+  "version": "1.0.0",
+  "author": "Zhang Yao & Anki Studio Team",
+  "homepage": "https://ankiweb.net",
+  "min_point_version": 26,
+  "conflicts": [],
+  "mod": 1762575000
+}
