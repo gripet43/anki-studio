@@ -899,7 +899,7 @@ export const LibraryView: React.FC = () => {
                             {isZh ? '已暂停' : 'Suspended'}
                           </span>
                         ) : isBuried ? (
-                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--brand-soft)] text-[var(--brand-text)] shrink-0">
+                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-black/5 dark:bg-white/10 text-[#8E8E93] shrink-0">
                             {isZh ? '已搁置' : 'Buried'}
                           </span>
                         ) : card.status === 'new' ? (
@@ -1141,7 +1141,7 @@ export const LibraryView: React.FC = () => {
                                 {isZh ? '已暂停' : 'Suspended'}
                               </span>
                             ) : isBuried ? (
-                              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--brand-soft)] text-[var(--brand-text)]">
+                              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-black/5 dark:bg-white/10 text-[#8E8E93]">
                                 {isZh ? '已搁置' : 'Buried'}
                               </span>
                             ) : (
