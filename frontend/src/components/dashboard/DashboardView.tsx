@@ -970,8 +970,6 @@ export const DashboardView: React.FC = () => {
           <div className={`text-[11px] ${subText} mt-1.5`}>
             {t('streakSub', {
               longest: dashboard.streak.longest,
-              active: dashboard.streak.weekActiveDays,
-              total: dashboard.streak.weekTotalDays,
             })}
           </div>
         </div>

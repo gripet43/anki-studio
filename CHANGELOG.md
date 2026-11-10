@@ -15,6 +15,10 @@
 
 ## [Unreleased]
 
+- **[Antigravity] 极简打卡副标题：移除连续打卡卡片中的「本周 X / 7」提示**：
+  - 在 [`translations.ts`](frontend/src/i18n/translations.ts) 与 [`DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx) 中简化连续打卡卡片副标，移除容易引起理解歧义的「· 本周 X / 7」，保持清爽极简的「**最长 {longest} 天**」（英文对齐为 `Best {longest}d`），使打卡卡片聚焦在当前连续天数与个人最长历史纪录上。
+
+
 - **[Antigravity] 优化完成今日学习待办时的庆贺文案**：
   - 在 [`translations.ts`](frontend/src/i18n/translations.ts) 中将今日所有牌组待办学完后的主标题文案 `allClearedTitle` 由「今日待办已全部清空！」更新为「**恭喜你已完成全部牌组的学习！**」（英文同步对齐为 `Congratulations! All decks completed!`），视觉呈现更加亲和振奋。
 
