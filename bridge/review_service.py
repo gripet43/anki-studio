@@ -274,14 +274,14 @@ class ReviewService:
             predictions = self._predict_intervals(col, card, lang)
 
             rev_row = col.db.first(
-                "SELECT count(*), max(id) FROM revlog WHERE cid = ?", card.id
+                "SELECT count(*), max(id) FROM revlog WHERE cid = ? AND type < 4 AND ease > 0", card.id
             )
             reps_count = int(rev_row[0] or card.reps or 0) if rev_row else int(card.reps or 0)
             last_rev_ms = int(rev_row[1] or 0) if rev_row else 0
             last_review_text = self._format_relative_days(last_rev_ms, lang)
 
             history_rows = col.db.all(
-                "SELECT id, ease, ivl FROM revlog WHERE cid = ? ORDER BY id DESC LIMIT 8",
+                "SELECT id, ease, ivl FROM revlog WHERE cid = ? AND type < 4 AND ease > 0 ORDER BY id DESC LIMIT 8",
                 card.id,
             )
             history = []

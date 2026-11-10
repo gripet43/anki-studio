@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { translate } from '../../i18n/translations';
 import { appActions, NavTab, setAppState, useAppStore } from '../../stores/useAppStore';
+import { AnkiStudioLogo } from '../common/AnkiStudioLogo';
 import { getDeckColorByHash } from '../../utils/mathRenderer';
 import { getAccentScale } from '../../utils/themeTokens';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
@@ -125,13 +126,9 @@ export const Sidebar: React.FC = () => {
         className={`px-5 ${envInfo.platform === 'mac' ? 'pt-1 pb-4' : 'pt-5 pb-4'} flex items-center gap-3 cursor-default select-none`}
       >
         <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-sm transition-colors duration-200"
-          style={{ backgroundColor: brandHex }}
+          className="w-9 h-9 rounded-xl flex items-center justify-center shadow-xs transition-colors duration-200 border border-black/5 dark:border-white/10 bg-black/[0.025] dark:bg-white/[0.05]"
         >
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-            <rect x="4" y="4" width="16" height="16" rx="3" />
-            <path d="M8 10h8M8 14h5" strokeLinecap="round" />
-          </svg>
+          <AnkiStudioLogo size={22} />
         </div>
         <div
           onClick={handleVersionBadgeClick}

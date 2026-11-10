@@ -806,6 +806,25 @@ class BridgeRouterAuditTest(unittest.TestCase):
             parsed = json.loads(raw)
             self.assertEqual(parsed["status"], "success")
 
+        # 7. Verify manual reschedule logs (type=4, ease=0 from set_due_date) do NOT pollute completed_today or retentionRate
+        now_ms = int(time.time() * 1000)
+        cur = self.mock_col.db.conn.cursor()
+        for idx in range(50):
+            cur.execute(
+                "INSERT INTO revlog VALUES (?, 201, 0, 0, 5, 5, 0, 0, 4)",
+                (now_ms - 1000 - idx,),
+            )
+        self.mock_col.db.conn.commit()
+
+        dash_clean = self._call("get_dashboard", {})["data"]
+        # Only the 1 genuine review row (type=1, ease=3) should be counted, NOT the 50 type=4 reschedule rows!
+        self.assertEqual(dash_clean["todayStats"]["completed"], 1)
+        self.assertEqual(dash_clean["heatmap"]["retentionRate"], 100)
+        stats_clean = self._call("get_statistics", {})["data"]
+        latest_week = stats_clean["retentionCurve"][-1]
+        self.assertEqual(latest_week["reviews"], 1)
+        self.assertEqual(latest_week["retentionRate"], 100.0)
+
 
 if __name__ == "__main__":
     unittest.main()

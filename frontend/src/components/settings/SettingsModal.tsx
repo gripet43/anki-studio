@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { AnkiStudioLogo } from '../common/AnkiStudioLogo';
 import {
   formatAbsoluteSyncTooltip,
   formatRelativeSyncLabel,
@@ -667,16 +668,13 @@ export const SettingsModal: React.FC = () => {
 
               {/* Version Card */}
               <div className={`rounded-xl border p-5 flex items-center gap-4 ${cardSurface}`}>
-                <div
-                  style={{ backgroundColor: currentScale.brand }}
-                  className="w-12 h-12 rounded-2xl text-white flex items-center justify-center font-bold text-xl shadow-md"
-                >
-                  S
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-xs border border-black/5 dark:border-white/10 bg-black/[0.025] dark:bg-white/[0.05]">
+                  <AnkiStudioLogo size={30} />
                 </div>
                 <div>
                   <div className="text-[16px] font-bold">Anki Studio</div>
                   <div className={`text-[12px] ${subText} mt-0.5`}>
-                    Version 1.0.0 · {envInfo.platformBadge} · FSRS Ready
+                    Version 1.3.0 · {envInfo.platformBadge} · FSRS Ready
                   </div>
                 </div>
               </div>

@@ -15,6 +15,19 @@
 
 ## [Unreleased]
 
+- **[Gemini] 修复 `revlog` 统计口径受 `set_due_date` 改期日志（`type=4, ease=0`）污染的严重 Bug**：
+  - **原因定位**：Anki 在调用 `col.sched.set_due_date()`（如执行「进度减负」平摊或「休假模式」顺延/恢复卡片）时，会在 `revlog` 表中写入 `type = 4`（手动改期，`ease = 0, time = 0`）的记录。此前 `get_dashboard()`、`get_statistics()`、`_build_heatmap_and_streak()`、`_build_weekly_rhythm()` 与 `_serialize_review_card()` 查询 `revlog` 时未过滤 `type < 4 AND ease > 0`，导致：
+    1. 每次休假顺延或进度减负改期的卡片行（如 100 条改期记录）被误计入「今日已完成卡片数」（如实际复习 22 张 + 100 条改期日志 = 虚高显示已完成 122 / 161 张）；
+    2. 12 周留存率曲线与热力图准确率将 `ease = 0` 的改期记录计入总分母且算作未通过（分子 `ease > 1` 为 0），导致本周真实留存率（`84.4%`）被异常拉低至 `46.5%`。
+  - **修复措施**：在 [`bridge/deck_service.py`](bridge/deck_service.py) 与 [`bridge/review_service.py`](bridge/review_service.py) 所有复习统计 SQL 中严格限定 `type < 4 AND ease > 0`，并在 [`tests/test_bridge.py`](tests/test_bridge.py) 中新增 50 条 `type = 4, ease = 0` 日志注入的防污染断言测试。
+- **[Gemini] 休假模式生效态全画布极简视图重构**：
+  - 当开启休假模式（`dashboard.vacation.isActive === true`）时，将 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx) 主内容区切换为全画布极简休假视图（放松插画 + `享受你的假期 ^_^` 主标题 + 单行轻量状态提示 + `休假设置 / 结束` 与 `查看看板` 按钮），并修复 [`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx) 底部休假按钮激活态文字截断。
+- **[Antigravity] 官方品牌 Logo 与经典蓝视觉系统正式确立**：
+  - 正式集成等轴测对折知识棱柱（Open Knowledge Prism）作为 Anki Studio 官方标志。
+  - 创建独立像素级矢量组件 [`frontend/src/components/common/AnkiStudioLogo.tsx`](frontend/src/components/common/AnkiStudioLogo.tsx)，左侧面为柔和淡蓝 `#BCB8F7`（正面/输入），右侧面为经典蓝 `#5E5CE6`（反面/输出）。
+  - 全面更新侧边栏品牌区域 [`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)、设置中心关于视图 [`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx) 以及 0ms 首帧骨架 [`frontend/index.html`](frontend/index.html)。
+  - 品牌色固定为经典蓝（Studio Blue `#5E5CE6`），同步更新 [`config.json`](config.json)、[`meta.json`](meta.json) 与 [`themeTokens.ts`](frontend/src/utils/themeTokens.ts)。
+
 ---
 
 ## [v1.3.0] - 2026-11-10

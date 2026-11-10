@@ -118,16 +118,17 @@ class DeckService:
             today_start_sec = cutoff - 86400
             today_start_ms = today_start_sec * 1000
 
+            # Exclude manual reschedule / due-date shift entries (type = 4, ease = 0) written by set_due_date
             row = col.db.first(
                 "SELECT count(*), coalesce(sum(time), 0), coalesce(sum(case when ease > 1 then 1 else 0 end), 0) "
-                "FROM revlog WHERE id >= ?",
+                "FROM revlog WHERE id >= ? AND type < 4 AND ease > 0",
                 today_start_ms,
             )
             completed_today = int(row[0] or 0) if row else 0
             correct_today = int(row[2] or 0) if row else 0
 
             recent_speed_row = col.db.first(
-                "SELECT avg(time) FROM (SELECT time FROM revlog WHERE time > 0 AND time < 60000 ORDER BY id DESC LIMIT 200)"
+                "SELECT avg(time) FROM (SELECT time FROM revlog WHERE type < 4 AND ease > 0 AND time > 0 AND time < 60000 ORDER BY id DESC LIMIT 200)"
             )
             avg_sec_per_card = (
                 round((recent_speed_row[0] / 1000.0), 1)
@@ -298,14 +299,14 @@ class DeckService:
                     "young": young_d,
                 })
 
-            # 3. 12-Week Historical Retention & Lapse Rate Curve
+            # 3. 12-Week Historical Retention & Lapse Rate Curve (exclude type=4 / ease=0 manual reschedules)
             retention_curve = []
             for w in range(11, -1, -1):
                 w_end_sec = cutoff - (w * 7 * 86400)
                 w_start_sec = w_end_sec - (7 * 86400)
                 r_row = col.db.first(
                     "SELECT count(*), sum(case when ease > 1 then 1 else 0 end) "
-                    "FROM revlog WHERE id >= ? AND id < ?",
+                    "FROM revlog WHERE id >= ? AND id < ? AND type < 4 AND ease > 0",
                     w_start_sec * 1000,
                     w_end_sec * 1000,
                 )
@@ -324,11 +325,11 @@ class DeckService:
                     "reviews": w_total,
                 })
 
-            # 4. 24-Hour Study Time Distribution
+            # 4. 24-Hour Study Time Distribution (exclude type=4 / ease=0 manual reschedules)
             hour_rows = col.db.all(
                 "SELECT CAST(strftime('%H', id / 1000, 'unixepoch', 'localtime') AS INT) as hr, "
                 "count(*), sum(case when ease > 1 then 1 else 0 end) "
-                "FROM revlog GROUP BY hr"
+                "FROM revlog WHERE type < 4 AND ease > 0 GROUP BY hr"
             )
             hour_map = {int(r[0]): (int(r[1] or 0), int(r[2] or 0)) for r in hour_rows if r[0] is not None}
             hourly_dist = []
@@ -427,7 +428,7 @@ class DeckService:
         rows = col.db.all(
             "SELECT CAST((id / 1000 - ?) / 86400 AS INT) as day_idx, count(*), "
             "sum(case when ease > 1 then 1 else 0 end) "
-            "FROM revlog WHERE id >= ? GROUP BY day_idx",
+            "FROM revlog WHERE id >= ? AND type < 4 AND ease > 0 GROUP BY day_idx",
             start_365_sec,
             start_365_sec * 1000,
         )
@@ -461,7 +462,7 @@ class DeckService:
             })
 
         all_days_rows = col.db.all(
-            "SELECT DISTINCT CAST((id / 1000 - ?) / 86400 AS INT) as d FROM revlog ORDER BY d ASC",
+            "SELECT DISTINCT CAST((id / 1000 - ?) / 86400 AS INT) as d FROM revlog WHERE type < 4 AND ease > 0 ORDER BY d ASC",
             today_start_sec,
         )
         day_offsets = sorted({int(r[0]) for r in all_days_rows if r[0] is not None})
@@ -545,7 +546,7 @@ class DeckService:
             d_start_ms = (monday_sec + i * 86400) * 1000
             d_end_ms = d_start_ms + 86400 * 1000
             row = col.db.first(
-                "SELECT count(*), coalesce(sum(time), 0) FROM revlog WHERE id >= ? AND id < ?",
+                "SELECT count(*), coalesce(sum(time), 0) FROM revlog WHERE id >= ? AND id < ? AND type < 4 AND ease > 0",
                 d_start_ms,
                 d_end_ms,
             )
