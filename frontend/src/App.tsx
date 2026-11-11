@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useReducer } from 'react';
+import React, { useEffect, useMemo, useReducer, useRef } from 'react';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { DecksView } from './components/decks/DecksView';
 import { DesignSystemView } from './components/design-system/DesignSystemView';
@@ -12,6 +12,7 @@ import { StatsView } from './components/stats/StatsView';
 import { CustomStudyModal } from './components/study/CustomStudyModal';
 import { VacationModal } from './components/vacation/VacationModal';
 import { IcuRescueModal } from './components/vacation/IcuRescueModal';
+import { usePresence } from './hooks/usePresence';
 import { ensureLanguageLoaded, isLanguageLoaded, isRtlLanguage, translate } from './i18n/translations';
 import { appActions, getAppState, setAppState, showToast, useAppStore } from './stores/useAppStore';
 import { buildThemeCssVars } from './utils/themeTokens';
@@ -32,6 +33,13 @@ export const App: React.FC = () => {
   const themeVars = useMemo(() => buildThemeCssVars(accentColor, theme), [accentColor, theme]);
   const isRtl = isRtlLanguage(resolvedLang);
 
+  // Cache last non-empty toast message so exit animation renders the departing text cleanly (E2)
+  const lastToastTextRef = useRef<string>(toastMessage || '');
+  if (toastMessage) {
+    lastToastTextRef.current = toastMessage;
+  }
+  const toastPresence = usePresence(Boolean(toastMessage), 120, toastMessage || undefined);
+
   // 语言字典懒加载：中英已随首包常驻，其余 14 种在切到对应语言时才拉一个 chunk。
   // 加载完成后强制重渲染一次，让已经渲染出去的文案换成目标语言。
   const [, forceLanguageRender] = useReducer((n: number) => n + 1, 0);
@@ -46,6 +54,32 @@ export const App: React.FC = () => {
       alive = false;
     };
   }, [resolvedLang]);
+
+  // Smooth 260ms color/surface cross-fade when user switches theme or accentColor (F)
+  // Skips initial mount and does NOT trigger on language/RTL changes.
+  const themeMountedRef = useRef<boolean>(false);
+  const themeSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!themeMountedRef.current) {
+      themeMountedRef.current = true;
+      return;
+    }
+    const rootEl = document.documentElement;
+    rootEl.classList.add('theme-switching');
+    if (themeSwitchTimerRef.current !== null) {
+      clearTimeout(themeSwitchTimerRef.current);
+    }
+    themeSwitchTimerRef.current = setTimeout(() => {
+      rootEl.classList.remove('theme-switching');
+      themeSwitchTimerRef.current = null;
+    }, 260);
+    return () => {
+      if (themeSwitchTimerRef.current !== null) {
+        clearTimeout(themeSwitchTimerRef.current);
+        themeSwitchTimerRef.current = null;
+      }
+    };
+  }, [theme, accentColor]);
 
   // Synchronize CSS variables, theme class, and language/RTL direction onto document.documentElement
   // so portals and root-level styles always reflect the active theme, accent, and text direction.
@@ -205,13 +239,18 @@ export const App: React.FC = () => {
       {/* Left Navigation Sidebar */}
       <Sidebar />
 
-      {/* Main Workspace Area */}
+      {/* Main Workspace Area — Keyed inner wrapper for 160ms view enter animation (D) */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {activeTab === 'dashboard' && <DashboardView />}
-        {activeTab === 'library' && <LibraryView />}
-        {activeTab === 'decks' && <DecksView />}
-        {activeTab === 'stats' && <StatsView />}
-        {activeTab === 'design-system' && <DesignSystemView />}
+        <div
+          key={activeTab}
+          className="ui-view-enter flex-1 flex flex-col min-w-0 h-full overflow-hidden"
+        >
+          {activeTab === 'dashboard' && <DashboardView />}
+          {activeTab === 'library' && <LibraryView />}
+          {activeTab === 'decks' && <DecksView />}
+          {activeTab === 'stats' && <StatsView />}
+          {activeTab === 'design-system' && <DesignSystemView />}
+        </div>
       </main>
 
       {/* Fullscreen Zen Reviewer & Inline WYSIWYG Editor */}
@@ -235,10 +274,11 @@ export const App: React.FC = () => {
       {/* Custom Study, Mistake Drill & Flag/Tag Cram Modal */}
       <CustomStudyModal />
 
-      {/* Top-Center Dynamic Island Toast Notification */}
-      {toastMessage && (
+      {/* Top-Center Dynamic Island Toast Notification with Presence Enter/Exit (E2) */}
+      {toastPresence.mounted && (
         <div
-          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2.5 rounded-full border shadow-2xl text-[12px] font-medium flex items-center gap-2.5 backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-200 select-none ${
+          data-state={toastPresence.state}
+          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2.5 rounded-full border shadow-2xl text-[12px] font-medium flex items-center gap-2.5 backdrop-blur-md ui-toast select-none ${
             theme === 'light'
               ? 'bg-[#1D1D1F]/92 text-white border-black/10 shadow-[0_12px_36px_rgba(0,0,0,0.22)]'
               : 'bg-[#22232B]/94 text-white border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.5)]'
@@ -251,7 +291,7 @@ export const App: React.FC = () => {
               boxShadow: '0 0 8px rgba(var(--brand-rgb), 0.65)',
             }}
           />
-          <span className="tracking-tight">{toastMessage}</span>
+          <span className="tracking-tight">{toastMessage || lastToastTextRef.current}</span>
         </div>
       )}
     </div>

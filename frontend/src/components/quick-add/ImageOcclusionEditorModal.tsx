@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { usePresence } from '../../hooks/usePresence';
 import { translate } from '../../i18n/translations';
 import { useAppStore } from '../../stores/useAppStore';
 import { resolveMediaSrcValue } from '../../utils/mediaUrl';
@@ -245,7 +246,8 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
     };
   }, [open, selectedRectId]);
 
-  if (!open) return null;
+  const presence = usePresence(open, 120);
+  if (!presence.mounted) return null;
 
   const getRelativePercent = (clientX: number, clientY: number): { x: number; y: number } => {
     const el = canvasWrapRef.current;
@@ -374,16 +376,18 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
 
   return (
     <div
-      className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 select-none animate-in fade-in duration-150"
+      data-state={presence.state}
+      className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 select-none ui-modal-backdrop"
     >
       <div
+        data-state={presence.state}
         role="dialog"
         aria-modal="true"
         aria-label={t('ioStudioTitle')}
         onClick={(e) => e.stopPropagation()}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        className={`w-[780px] max-w-full max-h-[90vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden ${surfaceClass}`}
+        className={`w-[780px] max-w-full max-h-[90vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden ui-modal-panel ${surfaceClass}`}
       >
         {/* Header */}
         <header

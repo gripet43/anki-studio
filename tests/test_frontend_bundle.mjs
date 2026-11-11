@@ -715,4 +715,63 @@ assert(
   'Compiled production bundle and anki_modern_os.ankiaddon must exist with Library card CSS rules'
 );
 
+// Item #35: 动效体系整体补齐门禁 —— 校验构建产物 CSS 包含全部核心动效类、令牌与无障碍降级，且源码中任意 animate-* 类均在产物 CSS 中真实存在
+const frontendPkgSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/package.json'),
+  'utf-8'
+);
+assert(
+  !frontendPkgSrc.includes('framer-motion'),
+  'Item #35: frontend/package.json must not include unused framer-motion dependency'
+);
+
+const requiredCssTokensAndRules = [
+  '.animate-in',
+  '.fade-in',
+  '.slide-in-from-top-4',
+  '.delay-stagger-1',
+  '.animate-sync-border-flash',
+  '@keyframes ui-fade-in',
+  '--dur-fast',
+  'prefers-reduced-motion',
+];
+for (const token of requiredCssTokensAndRules) {
+  assert(
+    cssBundle.includes(token),
+    `Item #35: Compiled web/assets/index.css is missing required motion rule/token: ${token}`
+  );
+}
+
+function collectTsxFiles(dirPath, acc = []) {
+  for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+    const full = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      collectTsxFiles(full, acc);
+    } else if (entry.isFile() && full.endsWith('.tsx')) {
+      acc.push(full);
+    }
+  }
+  return acc;
+}
+
+const tsxFiles = collectTsxFiles(path.resolve(ADDON_ROOT, 'frontend/src'));
+const usedAnimateClasses = new Set();
+for (const file of tsxFiles) {
+  const content = fs.readFileSync(file, 'utf-8');
+  const matches = content.match(/\banimate-[a-zA-Z0-9_-]+/g) || [];
+  for (const cls of matches) {
+    usedAnimateClasses.add(cls);
+  }
+}
+assert(
+  usedAnimateClasses.size > 0,
+  'Item #35: Expected to discover animate-* classes across frontend/src/**/*.tsx'
+);
+for (const cls of usedAnimateClasses) {
+  assert(
+    cssBundle.includes(`.${cls}`),
+    `Item #35: TSX references class "${cls}" but ".${cls}" is missing from compiled web/assets/index.css`
+  );
+}
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

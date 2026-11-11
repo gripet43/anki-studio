@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { callAnki, isAnkiNativeEnv } from '../../bridge/pycmd';
+import { usePresence } from '../../hooks/usePresence';
 import { translate } from '../../i18n/translations';
 import { appActions, LibraryCardItem, ReviewCardItem, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
 import { renderMathAndRichHtml } from '../../utils/mathRenderer';
@@ -365,7 +366,8 @@ export const CardEditorModal: React.FC = () => {
       .slice(0, 8);
   }, [libraryAllTags, tagInput, tags]);
 
-  if (!quickAddOpen) return null;
+  const presence = usePresence(quickAddOpen, 120);
+  if (!presence.mounted) return null;
 
   const handleAttemptClose = () => {
     if (confirmDiscardOpen) {
@@ -484,13 +486,15 @@ export const CardEditorModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[6px] flex items-center justify-center p-3 sm:p-6 select-none modal-contain-scroll"
+      data-state={presence.state}
+      className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[6px] flex items-center justify-center p-3 sm:p-6 select-none ui-modal-backdrop modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-labelledby="card-editor-title"
     >
       <div
-        className={`w-full max-w-[820px] max-h-[90vh] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.32)] flex flex-col overflow-hidden transition-all relative ${modalBg}`}
+        data-state={presence.state}
+        className={`w-full max-w-[820px] max-h-[90vh] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.32)] flex flex-col overflow-hidden ui-modal-panel relative ${modalBg}`}
       >
         {/* Header Bar */}
         <div className={`h-14 px-5 border-b flex items-center justify-between shrink-0 ${cardBorder}`}>

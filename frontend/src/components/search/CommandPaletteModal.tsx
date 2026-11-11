@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { usePresence } from '../../hooks/usePresence';
 import { formatShortcut, translate } from '../../i18n/translations';
 import { appActions, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
 import { copyTextToClipboard } from '../../utils/clipboard';
@@ -157,7 +158,8 @@ export const CommandPaletteModal: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [cmdKOpen, displayedResults.length, activeCard]);
 
-  if (!cmdKOpen) return null;
+  const presence = usePresence(cmdKOpen, 120);
+  if (!presence.mounted) return null;
 
   const handleCopyText = async (rawText: string, side: 'front' | 'back' | 'all' = 'all') => {
     const success = await copyTextToClipboard(rawText);
@@ -197,7 +199,7 @@ export const CommandPaletteModal: React.FC = () => {
         aria-label={title}
         className={`${
           isInlineSide ? 'px-2 py-0.5 min-h-[24px]' : 'px-2.5 py-1'
-        } rounded-md text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
+        } rounded-md text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-[background-color,border-color,color,opacity] duration-[var(--dur-fast)] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
           isCopied
             ? 'bg-[var(--status-success-soft)] text-[var(--status-success)] border border-[var(--status-success)]/30 opacity-100 pointer-events-auto'
             : isDark
@@ -229,13 +231,15 @@ export const CommandPaletteModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 select-none animate-in fade-in duration-150 modal-contain-scroll"
+      data-state={presence.state}
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 select-none ui-modal-backdrop modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-label={t('cmdPaletteAriaLabel')}
     >
       <div
-        className={`w-[840px] max-w-full rounded-2xl border shadow-[0_24px_64px_rgba(0,0,0,0.32)] overflow-hidden transition-colors ${
+        data-state={presence.state}
+        className={`w-[840px] max-w-full rounded-2xl border shadow-[0_24px_64px_rgba(0,0,0,0.32)] overflow-hidden ui-modal-panel ${
           isDark ? 'bg-[#181920] border-[#2C2E3A] text-[#F4F4F6]' : 'bg-white border-[#E5E5EA] text-[#1D1D1F]'
         }`}
       >

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { DeckItem, DeckOptionsData } from '../../bridge/pycmd';
+import { usePresence } from '../../hooks/usePresence';
 import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { getAccentScale } from '../../utils/themeTokens';
@@ -29,6 +30,12 @@ export const DecksView: React.FC = () => {
 
   // Deck Options / FSRS Preset Configuration Modal State
   const [editingOptionsDeck, setEditingOptionsDeck] = useState<DeckItem | null>(null);
+  const lastOptionsDeckRef = useRef<DeckItem | null>(null);
+  if (editingOptionsDeck) {
+    lastOptionsDeckRef.current = editingOptionsDeck;
+  }
+  const optionsModalPresence = usePresence(Boolean(editingOptionsDeck), 120);
+  const activeOptionsDeck = editingOptionsDeck || lastOptionsDeckRef.current;
   const [optNewPerDay, setOptNewPerDay] = useState<number>(20);
   const [optRevPerDay, setOptRevPerDay] = useState<number>(200);
   const [optDesiredRetention, setOptDesiredRetention] = useState<number>(0.9);
@@ -457,15 +464,17 @@ export const DecksView: React.FC = () => {
       </section>
 
       {/* Deck Options & Core Scheduling Parameters Modal */}
-      {editingOptionsDeck && (
+      {optionsModalPresence.mounted && activeOptionsDeck && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 select-none animate-in fade-in duration-150"
+          data-state={optionsModalPresence.state}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 select-none ui-modal-backdrop"
         >
           <div
+            data-state={optionsModalPresence.state}
             role="dialog"
             aria-modal="true"
             aria-label={t('deckOptionsTitle')}
-            className={`w-[520px] max-w-full rounded-3xl border shadow-2xl overflow-hidden flex flex-col ${cardSurface}`}
+            className={`w-[520px] max-w-full rounded-3xl border shadow-2xl overflow-hidden flex flex-col ui-modal-panel ${cardSurface}`}
           >
             <header
               className={`px-6 py-4 border-b flex items-center justify-between ${
@@ -477,7 +486,7 @@ export const DecksView: React.FC = () => {
                   {t('deckOptionsTitle')}
                 </h2>
                 <p className={`text-[11px] ${subText} mt-0.5`}>
-                  {editingOptionsDeck.fullName} · {editingOptionsDeck.options?.presetName || 'Default'}
+                  {activeOptionsDeck.fullName} · {activeOptionsDeck.options?.presetName || 'Default'}
                 </p>
               </div>
               <button

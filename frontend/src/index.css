@@ -13,6 +13,17 @@
     --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Inter", system-ui, sans-serif;
     --font-mono: "SF Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
+    /* Unified Motion Duration & Easing Tokens (A1) */
+    --dur-fast: 120ms;
+    --dur-base: 180ms;
+    --dur-slow: 260ms;
+    --dur-reveal: 240ms;
+    --dur-draw: 320ms;
+    --dur-shimmer: 1.6s;
+    --dur-sweep: 1.4s;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-std: cubic-bezier(0.4, 0, 0.2, 1);
+
     /* Default SaaS Accent Tokens (Linear Indigo — overridden dynamically at runtime) */
     --brand: #5B5BD6;
     --brand-hover: #4E4EC8;
@@ -164,7 +175,7 @@ progress {
   overscroll-behavior: contain;
 }
 
-/* Unified Button Hierarchy (Primary / Secondary / Ghost / Danger) */
+/* Unified Button Hierarchy (Primary / Secondary / Ghost / Danger) — Explicit Property Transitions (A4) */
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -178,7 +189,13 @@ progress {
   color: #ffffff;
   background-color: var(--brand);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    border-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    transform var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std),
+    opacity var(--dur-fast) var(--ease-std);
   cursor: pointer;
 }
 .btn-primary:hover:not(:disabled) {
@@ -206,13 +223,22 @@ progress {
   border: 1px solid var(--border-subtle);
   background-color: transparent;
   color: var(--text-primary);
-  transition: all 150ms ease;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    border-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    transform var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std),
+    opacity var(--dur-fast) var(--ease-std);
   cursor: pointer;
 }
 .btn-secondary:hover:not(:disabled) {
   border-color: var(--brand-border);
   color: var(--brand-text);
   background-color: var(--brand-soft);
+}
+.btn-secondary:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .btn-ghost {
@@ -227,13 +253,56 @@ progress {
   font-weight: 500;
   color: var(--text-muted);
   background-color: transparent;
-  transition: all 150ms ease;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    border-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    transform var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std),
+    opacity var(--dur-fast) var(--ease-std);
   cursor: pointer;
 }
 .btn-ghost:hover:not(:disabled) {
   color: var(--brand-text);
   background-color: var(--brand-soft);
 }
+.btn-ghost:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* ============================================================================
+   Dashboard Deck Card — size-aware container & per-deck accent actions
+   ============================================================================ */
+
+/* 卡片自身作为尺寸容器，让 footer 能按卡片实际宽度（而非视口）自适应 */
+.deck-card {
+  container-type: inline-size;
+}
+
+/* 学习按钮继承每张卡片的 --deck-brand / --deck-brand-hover，与图标和进度条同色 */
+.deck-study-btn {
+  background-color: var(--deck-brand);
+}
+.deck-study-btn:hover:not(:disabled) {
+  background-color: var(--deck-brand-hover);
+}
+
+/* 窄卡片：将「查看」收敛为纯图标、隐藏次要的新卡指示，避免 due 指示与按钮拥挤溢出 */
+@container (max-width: 260px) {
+  .deck-view-label {
+    display: none;
+  }
+  .deck-view-btn {
+    padding-inline: 0.5rem;
+  }
+  .deck-due-new {
+    display: none;
+  }
+}
+
+/* ============================================================================
+   Unified Motion Keyframes & Animation Utilities (A2, A3, A5)
+   ============================================================================ */
 
 /* Shimmer loading animation for skeleton states */
 @keyframes skeleton-shimmer {
@@ -253,10 +322,9 @@ progress {
     rgba(142, 142, 147, 0.08) 75%
   );
   background-size: 200% 100%;
-  animation: skeleton-shimmer 1.6s infinite linear;
+  animation: skeleton-shimmer var(--dur-shimmer) infinite linear;
 }
 
-/* Motion-safe sync & hovercard transitions (defaults to static final state under prefers-reduced-motion: reduce) */
 .animate-draw-check {
   stroke-dasharray: 28;
   stroke-dashoffset: 0;
@@ -282,18 +350,230 @@ progress {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .animate-shimmer-sweep {
-    animation: sync-shimmer-sweep 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+@keyframes ui-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ui-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes ui-enter-top {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ui-view-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ui-card-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ui-answer-reveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ui-divider-reveal {
+  from { opacity: 0; transform: scaleX(0); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+
+@keyframes sync-border-flash {
+  0% {
+    box-shadow: 0 0 0 0 var(--status-success-soft), 0 0 0 2px var(--status-success);
   }
-  .animate-draw-check {
-    animation: sync-draw-check 0.32s ease-out both;
+  100% {
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
   }
-  .animate-sync-reveal {
-    animation: sync-reveal-in 0.24s ease-out both;
+}
+
+/* Pure CSS implementation of animate-in / fade-in / slide-in-from-top-4 (A3)
+ * Note: Tailwind v4 `.duration-*` only sets `transition-duration`, NOT `animation-duration`,
+ * so `.animate-in` MUST carry its own default `animation-duration` and modifier overrides.
+ */
+.animate-in {
+  animation-duration: var(--dur-base);
+  animation-timing-function: var(--ease-out);
+  animation-fill-mode: both;
+}
+
+.animate-in.duration-150 {
+  animation-duration: var(--dur-fast);
+}
+
+.animate-in.duration-200 {
+  animation-duration: var(--dur-base);
+}
+
+.animate-in.duration-300 {
+  animation-duration: var(--dur-slow);
+}
+
+.fade-in {
+  animation-name: ui-fade-in;
+}
+
+.fade-out {
+  animation-name: ui-fade-out;
+}
+
+.slide-in-from-top-4 {
+  animation-name: ui-enter-top;
+}
+
+.animate-shimmer-sweep {
+  animation: sync-shimmer-sweep var(--dur-sweep) var(--ease-std) infinite;
+}
+
+.animate-draw-check {
+  animation: sync-draw-check var(--dur-draw) var(--ease-out) both;
+}
+
+.animate-sync-reveal {
+  animation: sync-reveal-in var(--dur-reveal) var(--ease-out) both;
+}
+
+.animate-flyout-enter {
+  animation: flyout-enter-in var(--dur-fast) var(--ease-out) both;
+}
+
+.animate-sync-border-flash {
+  animation: sync-border-flash var(--dur-slow) var(--ease-out) both;
+}
+
+/* Stagger delays MUST appear AFTER `.animate-sync-reveal` so shorthand `animation:` does not reset `animation-delay` (A3) */
+.delay-stagger-1 {
+  animation-delay: 60ms;
+}
+
+.delay-stagger-2 {
+  animation-delay: 120ms;
+}
+
+.delay-stagger-3 {
+  animation-delay: 180ms;
+}
+
+/* Reviewer & View Transition Utilities (C1-C3, D) */
+.ui-view-enter {
+  animation: ui-view-enter 160ms var(--ease-out) both;
+}
+
+.ui-card-enter {
+  animation: ui-card-enter 160ms var(--ease-out) both;
+}
+
+.ui-answer-reveal {
+  animation: ui-answer-reveal var(--dur-base) var(--ease-out) both;
+}
+
+.ui-divider-reveal {
+  transform-origin: left center;
+  transform-origin: inline-start center;
+  animation: ui-divider-reveal var(--dur-base) var(--ease-out) both;
+}
+
+[dir="rtl"] .ui-divider-reveal {
+  transform-origin: right center;
+  transform-origin: inline-start center;
+}
+
+/* Modal & Toast Presence State Machine Styles (B1, E1, E2) */
+.ui-modal-backdrop {
+  transition: opacity var(--dur-fast) var(--ease-std);
+}
+
+.ui-modal-backdrop[data-state="entering"],
+.ui-modal-backdrop[data-state="leaving"] {
+  opacity: 0;
+}
+
+.ui-modal-backdrop[data-state="entered"] {
+  opacity: 1;
+}
+
+.ui-modal-backdrop[data-state="leaving"] {
+  pointer-events: none;
+}
+
+.ui-modal-panel {
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+
+.ui-modal-panel[data-state="entering"] {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+}
+
+.ui-modal-panel[data-state="entered"] {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.ui-modal-panel[data-state="leaving"] {
+  opacity: 0;
+  transform: translateY(4px) scale(0.985);
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-std);
+  pointer-events: none;
+}
+
+.ui-toast {
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+
+.ui-toast[data-state="entering"] {
+  opacity: 0;
+  transform: translateY(-12px);
+}
+
+.ui-toast[data-state="entered"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.ui-toast[data-state="leaving"] {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-std);
+  pointer-events: none;
+}
+
+/* Theme & Accent Color Smooth Cross-Fade (F) */
+.theme-switching,
+.theme-switching * {
+  transition:
+    color var(--dur-slow) var(--ease-std),
+    background-color var(--dur-slow) var(--ease-std),
+    border-color var(--dur-slow) var(--ease-std),
+    fill var(--dur-slow) var(--ease-std) !important;
+}
+
+/* Global Reduced Motion Fallback (A2 & A5) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
-  .animate-flyout-enter {
-    animation: flyout-enter-in 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+
+  .animate-skeleton-shimmer {
+    animation: none !important;
+    background: rgba(142, 142, 147, 0.12);
   }
 }
 

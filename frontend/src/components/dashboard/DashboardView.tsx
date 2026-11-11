@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useCountUp } from '../../hooks/useCountUp';
 import {
   formatFullDateWithWeekday,
   formatShortcut,
   translate,
 } from '../../i18n/translations';
 import { appActions, setAppState, useAppStore } from '../../stores/useAppStore';
-import { getAccentScale } from '../../utils/themeTokens';
+import { AccentColor, getAccentScale } from '../../utils/themeTokens';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
 import { StreakFlameBackdrop } from './StreakFlameBackdrop';
 import { SyncStatusPill } from './SyncStatusPill';
@@ -43,6 +44,37 @@ export const DashboardView: React.FC = () => {
 
   const [hoveredRhythmIdx, setHoveredRhythmIdx] = useState<number | null>(null);
   const [masteryHintId, setMasteryHintId] = useState<string | null>(null);
+  // 悬停宽限期：从熟记度区域移向弹窗时不闪烁，离开两者后才延迟收起
+  const hintCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openMasteryHint = (id: string) => {
+    if (hintCloseTimer.current) {
+      clearTimeout(hintCloseTimer.current);
+      hintCloseTimer.current = null;
+    }
+    setMasteryHintId(id);
+  };
+  const scheduleCloseMasteryHint = () => {
+    if (hintCloseTimer.current) clearTimeout(hintCloseTimer.current);
+    hintCloseTimer.current = setTimeout(() => setMasteryHintId(null), 160);
+  };
+  useEffect(() => () => {
+    if (hintCloseTimer.current) clearTimeout(hintCloseTimer.current);
+  }, []);
+  // WCAG 1.4.13 Dismissible：悬停/聚焦期间按 Escape 即可收起，无需移动指针或焦点
+  useEffect(() => {
+    if (!masteryHintId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (hintCloseTimer.current) {
+          clearTimeout(hintCloseTimer.current);
+          hintCloseTimer.current = null;
+        }
+        setMasteryHintId(null);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [masteryHintId]);
   const [peekNormalDashboard, setPeekNormalDashboard] = useState<boolean>(false);
 
   const accentScale = getAccentScale(accentColor, theme);
@@ -74,6 +106,10 @@ export const DashboardView: React.FC = () => {
       ? 1
       : 0;
   const strokeDashoffset = circumference * (1 - pct);
+
+  // Number count-up strictly for the two hero metrics: today's progress & current streak days (G)
+  const animatedCompleted = useCountUp(completed, 400);
+  const animatedStreakDays = useCountUp(dashboard.streak.current, 400);
 
   const topLevelDecks = decks.filter((d) => !d.isChild);
   const displayedDecks = showAllDashboardDecks ? decks : topLevelDecks;
@@ -112,27 +148,50 @@ export const DashboardView: React.FC = () => {
 
   const deckIconMap: Record<string, React.ReactNode> = {
     indigo: (
-      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
       </svg>
     ),
     blue: (
-      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="16 18 22 12 16 6" />
         <polyline points="8 6 2 12 8 18" />
       </svg>
     ),
     emerald: (
-      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
       </svg>
     ),
     amber: (
-      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
       </svg>
     ),
+    rose: (
+      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+        <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" />
+      </svg>
+    ),
+    purple: (
+      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="12 2 2 7 12 12 22 7 12 2" />
+        <polyline points="2 17 12 22 22 17" />
+        <polyline points="2 12 12 17 22 12" />
+      </svg>
+    ),
+  };
+
+  // 牌组自带 accent → 全局主题色阶映射，让每张卡片拥有独立而克制的色彩身份
+  const deckAccentToTheme: Record<string, AccentColor> = {
+    indigo: 'indigo',
+    blue: 'cyan',
+    emerald: 'emerald',
+    amber: 'amber',
+    rose: 'rose',
+    purple: 'violet',
   };
 
   const heatmapLevelStyle = (level: number): React.CSSProperties => {
@@ -581,8 +640,8 @@ export const DashboardView: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <span className={`text-[26px] font-bold leading-none ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
-                        {completed}
+                      <span className={`text-[26px] font-bold leading-none tabular-nums ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
+                        {animatedCompleted}
                       </span>
                       <span className={`text-[11px] ${subText} mt-1`}>
                         / {totalWorkload} {t('cardsUnit')}
@@ -913,8 +972,8 @@ export const DashboardView: React.FC = () => {
                   ) : (
                     <div className="lg:mt-1 flex items-baseline justify-end gap-1.5 whitespace-nowrap">
                       {/* 火苗图标已去掉，改用火焰色数字承载「连胜」语义（#FF8A00 与背景火焰同色系） */}
-                      <span className="text-[26px] sm:text-[28px] font-bold leading-none text-[#FF8A00]">
-                        {dashboard.streak.current}
+                      <span className="text-[26px] sm:text-[28px] font-bold leading-none tabular-nums text-[#FF8A00]">
+                        {animatedStreakDays}
                       </span>
                       <span className={`text-[13px] ${subText}`}>{t('daysUnit')}</span>
                     </div>
@@ -973,16 +1032,24 @@ export const DashboardView: React.FC = () => {
                 {Array.from({ length: 2 }).map((_, idx) => (
                   <div
                     key={idx}
-                    className={`rounded-2xl border p-5 h-[120px] flex flex-col justify-between ${cardSurface}`}
+                    className={`rounded-2xl border p-5 flex flex-col ${cardSurface}`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl animate-skeleton-shimmer" />
-                      <div className="space-y-2 flex-1">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-xl animate-skeleton-shimmer shrink-0" />
+                      <div className="space-y-2 flex-1 pt-0.5">
                         <div className="w-24 h-4 rounded animate-skeleton-shimmer" />
                         <div className="w-16 h-3 rounded animate-skeleton-shimmer" />
                       </div>
+                      <div className="space-y-2 flex flex-col items-end">
+                        <div className="w-12 h-5 rounded animate-skeleton-shimmer" />
+                        <div className="w-10 h-2.5 rounded animate-skeleton-shimmer" />
+                      </div>
                     </div>
                     <div className="w-full h-1.5 rounded-full animate-skeleton-shimmer mt-4" />
+                    <div className="flex items-center justify-between mt-4">
+                      <div className="w-28 h-3 rounded animate-skeleton-shimmer" />
+                      <div className="w-24 h-7 rounded-lg animate-skeleton-shimmer" />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -995,129 +1062,148 @@ export const DashboardView: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {displayedDecks.map((deck) => {
                   const iconNode = deckIconMap[deck.accent] || deckIconMap.indigo;
+                  const deckScale = getAccentScale(deckAccentToTheme[deck.accent] || 'indigo', theme);
                   const breakdown = deck.masteryBreakdown ?? {
                     mature: deck.mastery / 100,
                     review: 0,
                     learning: 0,
                     new: 0,
                   };
+                  const trackColor = isDark ? '#2A2C36' : '#ECECF2';
+                  const newColor = isDark ? '#3A3D48' : '#D6D6DE';
                   const stageLabels = t('masteryStageLabels').split('|');
                   const masteryStages = [
-                    { label: stageLabels[0] || '', value: breakdown.mature, color: brandHex },
-                    { label: stageLabels[1] || '', value: breakdown.review, color: '#85B7EB' },
-                    { label: stageLabels[2] || '', value: breakdown.learning + breakdown.new, color: '#B5D4F4' },
+                    { label: stageLabels[0] || '', value: breakdown.mature, color: deckScale.brand },
+                    { label: stageLabels[1] || '', value: breakdown.review, color: deckScale.heatmap[2] },
+                    { label: stageLabels[2] || '', value: breakdown.learning + breakdown.new, color: deckScale.heatmap[1] },
                   ];
+                  const hintOpen = masteryHintId === deck.id;
                   return (
-                    <div
+                    <article
                       key={deck.id}
                       onClick={() => appActions.startReview(deck.id)}
-                      className={`group relative flex min-h-[120px] cursor-pointer flex-col rounded-2xl border shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-0.5 hover:border-[var(--brand-border)] hover:shadow-md ${cardSurface} ${masteryHintId === deck.id ? 'z-30' : ''} ${
+                      style={{
+                        '--deck-brand': deckScale.brand,
+                        '--deck-brand-hover': deckScale.brandHover,
+                        '--deck-border': deckScale.brandBorder,
+                      } as React.CSSProperties}
+                      className={`deck-card group relative flex cursor-pointer flex-col rounded-2xl border p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-[transform,border-color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:border-[var(--deck-border)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] focus-within:border-[var(--deck-border)] ${cardSurface} ${hintOpen ? 'z-30' : ''} ${
                         syncJustFinished ? 'animate-sync-reveal delay-stagger-2' : ''
                       }`}
                     >
-                      <div className="flex flex-1 flex-col p-5">
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand-text)] transition-colors">
-                            {iconNode}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-[14px] font-semibold">{deck.name}</div>
-                            <div className={`mt-0.5 truncate text-[11px] ${subText}`}>
-                              {deck.totalCards.toLocaleString()} {t('cardsUnit')}
-                              {deck.childrenCount > 0
-                                ? t('subDecksCount', { n: deck.childrenCount })
-                                : ''}
-                            </div>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <span className={`text-[11px] ${subText}`}>{t('masteryLabel')}</span>
-                              <span className={`text-[13px] font-semibold ${isDark ? 'text-[#D8D8E0]' : 'text-[#1D1D1F]'}`}>
-                                {deck.mastery}%
-                              </span>
-                              <button
-                                type="button"
-                                title={t('masteryHintTrigger')}
-                                aria-label={t('masteryHintTrigger')}
-                                aria-expanded={masteryHintId === deck.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setMasteryHintId(masteryHintId === deck.id ? null : deck.id);
-                                }}
-                                className={`flex h-[14px] w-[14px] items-center justify-center rounded-full border text-[10px] leading-none transition-colors cursor-pointer ${
-                                  isDark
-                                    ? 'border-[#343644] text-[#9A9AA5] hover:text-[var(--brand-text)]'
-                                    : 'border-[#E0E0E6] text-[#8A8A8E] hover:text-[var(--brand-text)]'
-                                }`}
-                              >?</button>
-                            </div>
-                            <div
-                              className={`mt-1.5 ml-auto flex h-1 w-16 overflow-hidden rounded-full ${isDark ? 'bg-[#2A2C36]' : 'bg-[#ECECF2]'}`}
-                              role="group"
-                              aria-label={`${deck.name} ${t('masteryLabel')} ${deck.mastery}%`}
-                            >
-                              <span className="h-full transition-all duration-500" style={{ width: `${breakdown.mature * 100}%`, backgroundColor: brandHex }} />
-                              <span className="h-full transition-all duration-500" style={{ width: `${breakdown.review * 100}%`, backgroundColor: '#85B7EB' }} />
-                              <span className="h-full transition-all duration-500" style={{ width: `${breakdown.learning * 100}%`, backgroundColor: '#B5D4F4' }} />
-                              <span className="h-full transition-all duration-500" style={{ width: `${breakdown.new * 100}%`, backgroundColor: isDark ? '#3A3D48' : '#D6D6DE' }} />
-                            </div>
+                      {/* Identity + mastery hero stat */}
+                      <div className="flex items-start gap-3">
+                        <div
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform duration-[var(--dur-base)] ease-[var(--ease-out)] group-hover:scale-105"
+                          style={{ backgroundColor: deckScale.brandSoft, color: deckScale.brandText }}
+                        >
+                          {iconNode}
+                        </div>
+                        <div className="min-w-0 flex-1 pt-0.5">
+                          <h3 className="truncate text-[14px] font-semibold leading-tight">{deck.name}</h3>
+                          <div className={`mt-1 truncate text-[11px] ${subText}`}>
+                            {deck.totalCards.toLocaleString()} {t('cardsUnit')}
+                            {deck.childrenCount > 0
+                              ? t('subDecksCount', { n: deck.childrenCount })
+                              : ''}
                           </div>
                         </div>
-
-                        <div className={`relative mt-auto h-7 border-t pt-2 ${isDark ? 'border-[#2A2C36]' : 'border-[#ECECF2]'}`}>
-                          <div className="flex items-center gap-2 truncate text-[11px] transition-opacity duration-150 group-hover:opacity-0">
-                            <span className="font-semibold" style={{ color: brandHex }}>
-                              {t('dueReviewPill', { n: deck.dueReview })}
-                            </span>
-                            <span className={`truncate ${subText}`}>
-                              {deck.dueNew > 0 ? t('dueNewPill', { n: deck.dueNew }) : t('noNewCards')}
-                            </span>
+                        <div
+                          tabIndex={0}
+                          aria-label={t('masteryHintTrigger')}
+                          aria-describedby={hintOpen ? `mastery-hint-${deck.id}` : undefined}
+                          onMouseEnter={() => openMasteryHint(deck.id)}
+                          onMouseLeave={scheduleCloseMasteryHint}
+                          onFocus={() => openMasteryHint(deck.id)}
+                          onBlur={scheduleCloseMasteryHint}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openMasteryHint(deck.id);
+                          }}
+                          className="group/mastery -m-1 shrink-0 cursor-help rounded-lg p-1 text-right outline-none focus-visible:ring-2 focus-visible:ring-[var(--deck-border)]"
+                        >
+                          <div className="text-[18px] font-bold leading-none tabular-nums tracking-tight transition-colors duration-[var(--dur-fast)] group-hover/mastery:text-[var(--deck-brand)]">
+                            {deck.mastery}
+                            <span className={`text-[12px] font-semibold ${subText}`}>%</span>
                           </div>
-
-                          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex translate-y-1 items-center justify-end gap-1 opacity-0 transition-[opacity,transform] duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100">
-                            <button
-                              type="button"
-                              title={t('viewInLibraryBtn')}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setAppState({ activeTab: 'library' });
-                                appActions.searchLibraryDebounced({ deckId: deck.id });
-                              }}
-                              className={`flex h-6 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium whitespace-nowrap transition-colors cursor-pointer ${
-                                isDark
-                                  ? 'border-[#343644] text-[#D8D8E0] hover:border-[var(--brand-border)] hover:text-[var(--brand-text)]'
-                                  : 'border-[#E0E0E6] text-[#3A3A3C] hover:border-[var(--brand-border)] hover:text-[var(--brand-text)]'
-                              }`}
-                            >
-                              <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <rect x="3" y="4" width="18" height="16" rx="2" />
-                                <line x1="3" y1="9" x2="21" y2="9" />
-                              </svg>
-                              <span>{t('viewDeckBtn')}</span>
-                            </button>
-                            <button
-                              type="button"
-                              title={t('studyDeckBtn')}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                appActions.startReview(deck.id);
-                              }}
-                              style={{ backgroundColor: brandHex }}
-                              className="flex h-6 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold text-white whitespace-nowrap transition-opacity hover:opacity-95 cursor-pointer"
-                            >
-                              <svg className="h-3 w-3 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden="true">
-                                <polygon points="6 4 20 12 6 20 6 4" />
-                              </svg>
-                              <span>{t('studyDeckBtn')}</span>
-                            </button>
+                          <div className={`mt-1 text-[10px] font-medium tracking-wide ${subText}`}>
+                            {t('masteryLabel')}
                           </div>
                         </div>
                       </div>
 
-                      {masteryHintId === deck.id && (
+                      {/* Full-width segmented mastery bar */}
+                      <div
+                        className="mt-4 flex h-1.5 w-full overflow-hidden rounded-full"
+                        style={{ backgroundColor: trackColor }}
+                        role="img"
+                        aria-label={`${deck.name} ${t('masteryLabel')} ${deck.mastery}%`}
+                      >
+                        <span className="h-full transition-all duration-500 ease-[var(--ease-out)]" style={{ width: `${breakdown.mature * 100}%`, backgroundColor: deckScale.brand }} />
+                        <span className="h-full transition-all duration-500 ease-[var(--ease-out)]" style={{ width: `${breakdown.review * 100}%`, backgroundColor: deckScale.heatmap[2] }} />
+                        <span className="h-full transition-all duration-500 ease-[var(--ease-out)]" style={{ width: `${breakdown.learning * 100}%`, backgroundColor: deckScale.heatmap[1] }} />
+                        <span className="h-full transition-all duration-500 ease-[var(--ease-out)]" style={{ width: `${breakdown.new * 100}%`, backgroundColor: newColor }} />
+                      </div>
+
+                      {/* Due indicators + persistent actions */}
+                      <div className="mt-4 flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-3 text-[11px]">
+                          <span className="flex items-center gap-1.5 whitespace-nowrap font-semibold" style={{ color: deckScale.brandText }}>
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: deckScale.brand }} />
+                            {t('dueReviewPill', { n: deck.dueReview })}
+                          </span>
+                          <span className={`deck-due-new flex min-w-0 items-center gap-1.5 truncate ${subText}`}>
+                            <span
+                              className="h-1.5 w-1.5 shrink-0 rounded-full"
+                              style={{ backgroundColor: deck.dueNew > 0 ? 'var(--status-warning)' : newColor }}
+                            />
+                            <span className="truncate">
+                              {deck.dueNew > 0 ? t('dueNewPill', { n: deck.dueNew }) : t('noNewCards')}
+                            </span>
+                          </span>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            type="button"
+                            title={t('viewInLibraryBtn')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAppState({ activeTab: 'library' });
+                              appActions.searchLibraryDebounced({ deckId: deck.id });
+                            }}
+                            className="btn-secondary deck-view-btn !h-7 !rounded-lg !px-2.5 !text-[11px]"
+                          >
+                            <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <rect x="3" y="4" width="18" height="16" rx="2" />
+                              <line x1="3" y1="9" x2="21" y2="9" />
+                            </svg>
+                            <span className="deck-view-label">{t('viewDeckBtn')}</span>
+                          </button>
+                          <button
+                            type="button"
+                            title={t('studyDeckBtn')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              appActions.startReview(deck.id);
+                            }}
+                            className="btn-primary deck-study-btn !h-7 !rounded-lg !px-3 !text-[11px]"
+                          >
+                            <svg className="h-3 w-3 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                              <polygon points="6 4 20 12 6 20 6 4" />
+                            </svg>
+                            <span>{t('studyDeckBtn')}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {hintOpen && (
                         <div
-                          className={`absolute right-3 top-12 z-40 w-56 rounded-xl border p-3 text-left shadow-lg ${cardSurface}`}
+                          id={`mastery-hint-${deck.id}`}
+                          role="tooltip"
+                          className={`absolute right-4 top-[58px] z-40 w-56 rounded-xl border p-3 text-left shadow-lg animate-in fade-in duration-150 ${cardSurface}`}
                           onClick={(e) => e.stopPropagation()}
+                          onMouseEnter={() => openMasteryHint(deck.id)}
+                          onMouseLeave={scheduleCloseMasteryHint}
                         >
                           <div className="text-[12px] font-semibold">{t('masteryHintTitle', { n: deck.mastery })}</div>
                           <p className={`mt-1 text-[11px] leading-relaxed ${subText}`}>{t('masteryHintBody')}</p>
@@ -1126,7 +1212,7 @@ export const DashboardView: React.FC = () => {
                               <div key={i} className="flex items-center gap-2">
                                 <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: stage.color }} />
                                 <span className={`flex-1 truncate text-[11px] ${subText}`}>{stage.label}</span>
-                                <span className="text-[11px] font-medium">{Math.round(stage.value * 100)}%</span>
+                                <span className="text-[11px] font-medium tabular-nums">{Math.round(stage.value * 100)}%</span>
                               </div>
                             ))}
                           </div>
@@ -1135,7 +1221,7 @@ export const DashboardView: React.FC = () => {
                           </div>
                         </div>
                       )}
-                    </div>
+                    </article>
                   );
                 })}
               </div>

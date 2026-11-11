@@ -6,6 +6,7 @@ import {
   CustomStudyParams,
   isAnkiNativeEnv,
 } from '../../bridge/pycmd';
+import { usePresence } from '../../hooks/usePresence';
 import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { getAccentScale } from '../../utils/themeTokens';
@@ -118,7 +119,8 @@ export const CustomStudyModal: React.FC = () => {
     };
   }, [customStudyModalOpen, preset, deckId, days, flag, tag, sortOrder, limit, isPreviewOnly, libraryCards]);
 
-  if (!customStudyModalOpen) return null;
+  const presence = usePresence(customStudyModalOpen, 120);
+  if (!presence.mounted) return null;
 
   const modalSurface =
     theme === 'oled'
@@ -212,13 +214,15 @@ export const CustomStudyModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 select-none animate-in fade-in duration-150"
+      data-state={presence.state}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 select-none ui-modal-backdrop"
     >
       <div
+        data-state={presence.state}
         role="dialog"
         aria-modal="true"
         aria-label={t('customStudyModalTitle')}
-        className={`w-[580px] max-w-full rounded-3xl border shadow-2xl overflow-hidden flex flex-col ${modalSurface}`}
+        className={`w-[580px] max-w-full rounded-3xl border shadow-2xl overflow-hidden flex flex-col ui-modal-panel ${modalSurface}`}
       >
         {/* Header */}
         <header

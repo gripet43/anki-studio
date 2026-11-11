@@ -330,7 +330,7 @@ export const ReviewerView: React.FC = () => {
   // ============== SESSION COMPLETE CELEBRATION SCREEN (Light & Dark Adapted) ==============
   if (isSessionComplete || !currentCard) {
     return (
-      <div className={`fixed inset-0 z-30 flex flex-col justify-between select-none overflow-hidden ${screenBg}`}>
+      <div className={`fixed inset-0 z-30 flex flex-col justify-between select-none overflow-hidden ui-view-enter ${screenBg}`}>
         <div className="w-full h-[2px] bg-[var(--status-success)]" />
 
         <header
@@ -488,8 +488,12 @@ export const ReviewerView: React.FC = () => {
       {/* Ultra-thin Top Progress Bar */}
       <div className={`w-full h-[2px] ${isDark ? 'bg-[#1C1D24]' : 'bg-[#E5E5EA]'}`}>
         <div
-          className="h-full transition-all duration-300"
-          style={{ width: `${progressPct}%`, backgroundColor: brandHex }}
+          className="h-full"
+          style={{
+            width: `${progressPct}%`,
+            backgroundColor: brandHex,
+            transition: 'width var(--dur-slow) var(--ease-out)',
+          }}
         />
       </div>
 
@@ -723,17 +727,18 @@ export const ReviewerView: React.FC = () => {
       <div className="flex-1 min-h-0 relative flex flex-col overflow-hidden">
         {/* Scrollable Center Pane for Flashcard */}
         <div
-          className={`flex-1 overflow-y-auto px-6 py-6 flex flex-col items-center transition-all duration-300 ${
+          className={`flex-1 overflow-y-auto px-6 py-6 flex flex-col items-center transition-transform duration-[var(--dur-slow)] ${
             inspectorOpen ? 'ltr:-translate-x-28 rtl:translate-x-28' : ''
           }`}
         >
           <div className="my-auto flex flex-col items-center w-full max-w-[580px]">
-            {/* Floating Zen Flashcard — Strict Light/Dark Adaptation */}
+            {/* Floating Zen Flashcard — Strict Light/Dark Adaptation + Card Enter (C2) */}
             <div
+              key={currentCard.id}
               onDoubleClick={() => {
                 if (currentCard) appActions.openCardEditor(currentCard);
               }}
-              className={`w-full rounded-[22px] border p-7 sm:p-8 relative transition-all shadow-sm ${cardContainerSurface}`}
+              className={`w-full rounded-[22px] border p-7 sm:p-8 relative transition-[background-color,border-color,box-shadow] duration-[var(--dur-base)] shadow-sm ui-card-enter ${cardContainerSurface}`}
             >
             {inlineEditing ? (
               <div className="space-y-4">
@@ -961,9 +966,9 @@ export const ReviewerView: React.FC = () => {
                 })()}
 
                 {isCardFlipped ? (
-                  <>
+                  <div className="ui-answer-reveal">
                     <div
-                      className={`h-[1px] my-5 ${
+                      className={`h-[1px] my-5 ui-divider-reveal ${
                         isDark ? 'bg-white/[0.07]' : 'bg-[#ECECF2]'
                       }`}
                     />
@@ -1031,7 +1036,7 @@ export const ReviewerView: React.FC = () => {
                         </button>
                       ) : null}
                     </div>
-                  </>
+                  </div>
                 ) : (
                   <div
                     className={`py-7 flex flex-col items-center justify-center border-t mt-4 gap-3.5 ${
@@ -1090,7 +1095,7 @@ export const ReviewerView: React.FC = () => {
       {/* Fixed Ergonomic Decision Bar at the Bottom — Always Visible & Accessible */}
       {!inlineEditing && (
         <footer
-          className={`shrink-0 pb-6 pt-3 px-6 flex flex-col items-center justify-center border-t border-black/[0.04] dark:border-white/[0.04] transition-all duration-300 z-10 ${
+          className={`shrink-0 pb-6 pt-3 px-6 flex flex-col items-center justify-center border-t border-black/[0.04] dark:border-white/[0.04] transition-transform duration-[var(--dur-slow)] z-10 ${
             isDark ? 'bg-[#0E0F14]/92' : 'bg-[#F8F8FA]/92'
           } backdrop-blur-md ${inspectorOpen ? 'ltr:-translate-x-28 rtl:translate-x-28' : ''}`}
         >
@@ -1102,7 +1107,7 @@ export const ReviewerView: React.FC = () => {
                 style={{ backgroundColor: brandHex }}
                 className={`w-[560px] h-[58px] px-6 rounded-2xl hover:opacity-95 text-white font-semibold text-[15px] shadow-xl flex items-center ${
                   showShortcutHints ? 'justify-between' : 'justify-center'
-                } cursor-pointer transition-all active:scale-[0.99]`}
+                } cursor-pointer transition-[transform,opacity] duration-[var(--dur-fast)] active:scale-[0.98]`}
               >
                 <span>{t('showAnswerBtn')}</span>
                 {showShortcutHints && (
@@ -1118,7 +1123,7 @@ export const ReviewerView: React.FC = () => {
                   onClick={() => appActions.answerCurrentCard(1)}
                   className={`h-[58px] px-4 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-all bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger)]`}
+                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] active:scale-[0.98] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger)]`}
                 >
                   <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[13px] font-semibold">{t('rateAgain')}</div>
@@ -1137,7 +1142,7 @@ export const ReviewerView: React.FC = () => {
                   onClick={() => appActions.answerCurrentCard(2)}
                   className={`h-[58px] px-4 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-all bg-[var(--status-warning-soft)] border-[var(--status-warning)]/35 hover:border-[var(--status-warning)] text-[var(--status-warning)]`}
+                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] active:scale-[0.98] bg-[var(--status-warning-soft)] border-[var(--status-warning)]/35 hover:border-[var(--status-warning)] text-[var(--status-warning)]`}
                 >
                   <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[13px] font-semibold">{t('rateHard')}</div>
@@ -1156,7 +1161,7 @@ export const ReviewerView: React.FC = () => {
                   onClick={() => appActions.answerCurrentCard(3)}
                   className={`h-[58px] px-4 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-all bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success)]`}
+                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] active:scale-[0.98] bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success)]`}
                 >
                   <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[13px] font-semibold">{t('rateGood')}</div>
@@ -1175,7 +1180,7 @@ export const ReviewerView: React.FC = () => {
                   onClick={() => appActions.answerCurrentCard(4)}
                   className={`h-[58px] px-4 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-all bg-[var(--status-info-soft)] border-[var(--status-info)]/35 hover:border-[var(--status-info)] text-[var(--status-info)]`}
+                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] active:scale-[0.98] bg-[var(--status-info-soft)] border-[var(--status-info)]/35 hover:border-[var(--status-info)] text-[var(--status-info)]`}
                 >
                   <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[13px] font-semibold">{t('rateEasy')}</div>
@@ -1197,7 +1202,7 @@ export const ReviewerView: React.FC = () => {
                   onClick={() => appActions.answerCurrentCard(1)}
                   className={`w-[170px] h-[58px] px-5 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-all active:scale-[0.98] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger)]`}
+                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] active:scale-[0.98] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger)]`}
                 >
                   <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[14px] font-semibold">{t('rateAgain')}</div>
@@ -1216,7 +1221,7 @@ export const ReviewerView: React.FC = () => {
                   onClick={() => appActions.answerCurrentCard(3)}
                   className={`w-[374px] h-[58px] px-6 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-all active:scale-[0.98] bg-[var(--brand-soft)] border-[var(--brand-border)] hover:border-[var(--brand)] text-[var(--brand-text)]`}
+                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] active:scale-[0.98] bg-[var(--brand-soft)] border-[var(--brand-border)] hover:border-[var(--brand)] text-[var(--brand-text)]`}
                 >
                   <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[15px] font-bold">{t('rateGood')}</div>

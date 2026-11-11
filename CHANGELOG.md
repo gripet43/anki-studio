@@ -15,6 +15,37 @@
 
 ## [Unreleased]
 
+- **[Qoder] 牌组卡片二次精修：熟记度改悬停提示 + 移除与进度条重复的中部分隔线**（[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)）：
+  - **删除问号按钮，改悬停自动展示**：移除熟记度右侧的 `?` 圆形按钮，将百分比 + 「熟记度」标签整体改为可悬停/可聚焦触发区（`tabIndex=0`、`cursor-help`、`aria-label` 复用 `masteryHintTrigger`、`aria-describedby` 指向弹窗）。鼠标移入即展开说明弹窗，悬停时百分比染上牌组色（`group-hover/mastery:text-[var(--deck-brand)]`）作为交互提示。
+  - **防闪烁宽限期**：新增 `hintCloseTimer` ref + `openMasteryHint`/`scheduleCloseMasteryHint`，离开触发区或弹窗后延迟 160ms 收起，进入任一则取消收起——保证从触发区移向弹窗时不闪烁；弹窗补 `role="tooltip"` 与 `id`，并绑定 `onMouseEnter/Leave` 维持悬停；组件卸载清理定时器。键盘聚焦展开、失焦收起，兼顾无障碍。
+  - **WCAG 1.4.13 合规**（对照 `interest-triggered-tooltips` 指南）：新增 document 级 `keydown` 监听，悬停/聚焦期间按 `Escape` 即收起（Dismissible，无需移动指针或焦点）；弹窗可悬停（Hoverable）、持续显示至触发移除（Persistent）；不将焦点移入弹窗（避免 WCAG 3.2.1 On Focus 违规）。因 Anki Qt WebEngine 内嵌运行时不支持 native `popover="hint"`/`interestfor`（需多个重型 polyfill），采用满足同等 WCAG 约束的手动实现。
+  - **移除中部分隔线**：删去 footer 的 `border-t pt-3.5`（及骨架屏同款分隔线）。原灰色横线与上方全宽进度条形成两条平行横线的视觉重复，去除后仅以留白分隔，进度条成为唯一横向元素，画面更干净。
+  - **验证**：浏览器实测悬停展开（`role=tooltip`、内容/几何位置正确、无横向溢出）、移开收起、移入弹窗保持、键盘 focus/blur 开合、`Escape` 收起均正常；问号按钮 0 残留、footer `border-top-width=0`；控制台零报错；`tsc`、Bundle 审计、38 项 Python 单测、`npm run build` 全绿。
+
+- **[Qoder] 首页牌组卡片优雅化重设计（熟记度主角化 + 每牌组独立色彩身份 + 尺寸自适应 footer）**（[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
+  - **问题**：旧卡片把图标、名称、熟记度百分比、`?` 与一条 64×4px 迷你进度条全挤在头部一行，进度条配色写死（`#85B7EB`/`#B5D4F4`）不跟随主题；底部「待复习文字 ↔ 按钮」hover 互换导致布局跳动且按钮仅 24px 高；牌组自带的 `accent` 字段未被用于配色，卡片千篇一律。
+  - **熟记度主角化**：百分比升级为 18px 粗体 `tabular-nums`（`%` 缩小为次级），下方配 10px「熟记度」标签；迷你条改为**全宽 6px 四段分段进度条**（已熟记/复习中/学习中/新卡），成为卡片视觉锚点，`role="img"` + `aria-label` 保留无障碍语义。
+  - **每牌组独立色彩身份**：新增 `deckAccentToTheme` 将牌组 `accent`（indigo/blue/emerald/amber/rose/purple）映射到全局色阶，图标底色、进度条分段、待复习圆点与「学习」按钮统一取该牌组色（`--deck-brand`/`--deck-brand-hover`/`--deck-border` CSS 变量），与全局强调色解耦——全局色仍主导应用 CTA，牌组色仅作用于自身卡片。`deckIconMap` 补齐 rose（星芒）/purple（层叠）两色图标，统一 18px、1.8 描边。
+  - **footer 常驻不跳动**：移除 hover 互换，改为左侧「待复习/新卡」圆点指示 + 右侧常驻标准按钮（`btn-secondary` 查看 / `btn-primary` 学习，紧凑 h-7），布局稳定、可发现性更强。
+  - **尺寸自适应（容器查询）**：卡片设 `container-type: inline-size`，`@container (max-width: 260px)` 下「查看」收敛为纯图标、隐藏次要的新卡指示，杜绝窄卡 truncation 与溢出；宽卡完整展示。遵循 `card` 指南「按卡片自身可用空间而非视口适配」。
+  - **微交互与语义**：hover 上浮 2px + 图标 `scale(1.05)` + 牌组色边框 + 环境投影，统一走 `--dur-base`/`--ease-out` 令牌；卡片根改为 `<article>` + `<h3>` 标题，`focus-within` 高亮，熟记度弹窗图例配色与进度条分段一致。
+  - **验证**：Light/Dark/OLED 三主题 × 6 牌组色浏览器实拍确认；窄（216px content）/宽（338px content）容器查询切换无溢出；hover 位移/缩放/边框经计算样式确认；`tsc`、Bundle 审计（含 `Item #35`）、38 项 Python 单测、`npm run build` 全绿。
+
+- **[Gemini] Anki Studio 动效体系整体补齐（A1–A5 统一令牌与死类修复、B1–B2 `usePresence` 离场体系、C1–C4 复习器翻面与切卡动效、D–G 视图/模态/Toast/主题切换/数字滚动、H1–H3 依赖清理与 `Item #35` 门禁）**：
+  - **A. 统一动效令牌、6 个死类纯 CSS 补齐与全局无障碍降级**（[`frontend/src/index.css`](frontend/src/index.css)）：
+    - 在 `:root` 补齐 `--dur-fast`（`120ms`）、`--dur-base`（`180ms`）、`--dur-slow`（`260ms`）、`--dur-reveal`（`240ms`）、`--dur-draw`（`320ms`）、`--dur-shimmer`（`1.6s`）、`--dur-sweep`（`1.4s`）与 `--ease-out`、`--ease-std` 曲线令牌，收敛全仓散落时长，并将 `.btn-primary` / `.btn-secondary` / `.btn-ghost` 的 `transition: all` 改为显式属性列表。
+    - 针对 Tailwind v4 未装 `tailwindcss-animate` 且 `.duration-*` 仅设置 `transition-duration` 导致 `animate-in fade-in`、`slide-in-from-top-4`、`delay-stagger-1/2/3`、`animate-sync-border-flash` 0 命中的根因，以纯 CSS 实现上述动效类与 `ui-fade-in/out`、`ui-enter-top`、`ui-view-enter`、`ui-card-enter`、`ui-answer-reveal`、`ui-divider-reveal`、`sync-border-flash` keyframes；将 `.delay-stagger-1/2/3` 置于 `.animate-sync-reveal` 之后以防简写 `animation:` 重置延迟。
+    - 新增全局 `@media (prefers-reduced-motion: reduce)` `0.01ms` 兜底规则，并为 `.animate-skeleton-shimmer` 提供静态淡底降级。
+  - **B & E. 通用 `usePresence` 进出场状态机与 7 大模态 / Toast 离场过渡**（[`frontend/src/hooks/usePresence.ts`](frontend/src/hooks/usePresence.ts)、[`CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)、[`SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`CustomStudyModal.tsx`](frontend/src/components/study/CustomStudyModal.tsx)、[`VacationModal.tsx`](frontend/src/components/vacation/VacationModal.tsx)、[`IcuRescueModal.tsx`](frontend/src/components/vacation/IcuRescueModal.tsx)、[`CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`ImageOcclusionEditorModal.tsx`](frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx)、[`DecksView.tsx`](frontend/src/components/decks/DecksView.tsx)、[`App.tsx`](frontend/src/App.tsx)）：
+    - 新增 `usePresence(open, exitMs, resetKey)` 钩子管理 `entering -> entered -> leaving` 状态与延迟卸载；各模态保留自身外层 `fixed inset-0` 遮罩节点且不绑定背景点击关闭（严守 `Item #23`），统一实现遮罩 `120ms` 淡入淡出与面板 `180ms` 进场 / `120ms` 离场。
+    - `App.tsx` 的 Toast 接入 `usePresence` 并缓存离场文案，新 Toast 顶替旧 Toast 时平滑重置为 `entering` 而不闪退。
+  - **C. 复习器翻面揭示、切卡入场与完成页过渡**（[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)）：
+    - 翻面答案区包裹 `.ui-answer-reveal`（`180ms` `opacity + translateY(8px)`），分割线接入 `.ui-divider-reveal`（逻辑起点 `inline-start` 的 `scaleX(0->1)`）；卡片容器绑定 `key={currentCard.id}` 与 `.ui-card-enter`（`160ms` 入场）；完成页根节点接入 `.ui-view-enter`（严格不新增或移动任何 Hook，守住 `Item #30`）；评分按钮与顶部进度条收敛至统一令牌且全流程无 `disabled` 阻塞。
+  - **D, F & G. 主视图切换、主题/8 强调色 260ms 过渡与英雄区数字滚动**（[`frontend/src/App.tsx`](frontend/src/App.tsx)、[`frontend/src/hooks/useCountUp.ts`](frontend/src/hooks/useCountUp.ts)、[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)）：
+    - `<main>` 内层包裹 `<div key={activeTab} className="ui-view-enter ...">` 实现五大主视图切换淡入上浮；`App.tsx` 监听 `[theme, accentColor]`（跳过首帧且不响应语言切换）临时挂载 `260ms` `.theme-switching` 平滑过渡色彩变量；新增 `useCountUp`（`reduced-motion` 下直出终值）并仅绑定首页今日进度完成数与连胜天数。
+  - **H. 清理无用依赖与新增 `Item #35` 动效门禁**（[`frontend/package.json`](frontend/package.json)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+    - 从 `frontend/package.json` 移除 0 引用的 `framer-motion`；在 `tests/test_frontend_bundle.mjs` 新增 `Item #35`，强校验编译产物 `web/assets/index.css` 包含核心动效类、令牌与 `prefers-reduced-motion`，并自动扫描 `frontend/src/**/*.tsx` 全部 `animate-*` 类确保产物 100% 命中（经变异测试验证）。
+
 - **[WorkBuddy]** 窗口扩展改为一次性 + 火焰在窄屏隐藏（[__init__.py](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/__init__.py)、[StreakFlameBackdrop.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/dashboard/StreakFlameBackdrop.tsx)）：
   - **窗口尺寸保护落持久化标记**：`_did_initial_expand` 原为实例级变量，Anki 每次启动都会重置，导致用户手动调小的窗口每次开机都被拉回 1180×760。现改为从 `get_config()["windowInitialExpandDone"]` 初始化，且**只在真正执行过 resize 时**写入该键；窗口本来就够大的用户不写标记，每次启动检查一次但不做任何 resize，完全无感。
   - **窄屏隐藏火焰**：响应式改版后连胜卡在 `<1024px` 变为底部通栏，原先贴整卡右下角的 142×186 火焰会横向压住「19 天」。给 SVG 加 `hidden lg:block`，宽屏保留背景剪影，窄屏只留干净的连胜区。

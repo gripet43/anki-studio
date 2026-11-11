@@ -8,6 +8,7 @@
 // ============================================================================
 
 import React, { useEffect, useState } from 'react';
+import { usePresence } from '../../hooks/usePresence';
 import { translate } from '../../i18n/translations';
 import { appActions, RescueReceipt, useAppStore } from '../../stores/useAppStore';
 import { getAccentScale } from '../../utils/themeTokens';
@@ -61,7 +62,11 @@ export const IcuRescueModal: React.FC = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [store.icuModalOpen, store.rescueModalOpen, store.receiptModalOpen, confirmUndoId]);
 
-  if (!store.icuModalOpen && !store.rescueModalOpen && !store.receiptModalOpen) {
+  const isAnyIcuOpen = Boolean(
+    store.icuModalOpen || store.rescueModalOpen || store.receiptModalOpen
+  );
+  const presence = usePresence(isAnyIcuOpen, 120);
+  if (!presence.mounted) {
     return null;
   }
 
@@ -113,13 +118,15 @@ export const IcuRescueModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[5px] select-none modal-contain-scroll"
+      data-state={presence.state}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[5px] select-none ui-modal-backdrop modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-labelledby="icu-modal-title"
     >
       <div
-        className={`w-full max-w-[560px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.32)] overflow-hidden transition-all duration-200 flex flex-col max-h-[86vh] ${modalBg}`}
+        data-state={presence.state}
+        className={`w-full max-w-[560px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.32)] overflow-hidden ui-modal-panel flex flex-col max-h-[86vh] ${modalBg}`}
       >
         {/* Header Bar — Clean Title without Subtitle */}
         <header className="flex items-center justify-between px-5 py-4 border-b border-black/5 dark:border-white/8 shrink-0 gap-3">

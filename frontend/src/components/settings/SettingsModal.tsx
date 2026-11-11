@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AnkiStudioLogo } from '../common/AnkiStudioLogo';
 import { SyncStateIcon, SyncVisualState } from '../common/SyncStateIcon';
+import { usePresence } from '../../hooks/usePresence';
 import {
   formatAbsoluteSyncTooltip,
   formatRelativeSyncLabel,
@@ -71,7 +72,8 @@ export const SettingsModal: React.FC = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [settingsOpen]);
 
-  if (!settingsOpen) return null;
+  const presence = usePresence(settingsOpen, 120);
+  if (!presence.mounted) return null;
 
   const modalSurface =
     theme === 'oled'
@@ -194,14 +196,16 @@ export const SettingsModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[5px] flex items-center justify-center p-6 select-none modal-contain-scroll"
+      data-state={presence.state}
+      className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[5px] flex items-center justify-center p-6 select-none ui-modal-backdrop modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-label={t('navSettings')}
     >
       <div
+        data-state={presence.state}
         onClick={(e) => e.stopPropagation()}
-        className={`w-[800px] h-[560px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.35)] flex overflow-hidden transition-colors relative ${modalSurface}`}
+        className={`w-[800px] h-[560px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.35)] flex overflow-hidden ui-modal-panel relative ${modalSurface}`}
       >
         {/* Top Right Close Button */}
         <button
