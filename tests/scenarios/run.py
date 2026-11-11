@@ -124,9 +124,9 @@ def sync_addon() -> None:
     if config_path.exists():
         existing_config = config_path.read_bytes()
 
-    if ADDON_DST.exists():
-        shutil.rmtree(ADDON_DST)
-    shutil.copytree(DEV_DIR, ADDON_DST, ignore=_ignore_factory(DEV_DIR))
+    ensure_dir(ADDON_DST)
+    # 增量覆盖复制而非整目录 rmtree，避免在 Windows 上一次性删除数十个文件触发批量删除拦截或文件句柄锁
+    shutil.copytree(DEV_DIR, ADDON_DST, ignore=_ignore_factory(DEV_DIR), dirs_exist_ok=True)
 
     if existing_config is not None:
         config_path.write_bytes(existing_config)
@@ -194,18 +194,74 @@ def ensure_profile() -> None:
     profile_dir = BASE / PROFILE
     ensure_dir(profile_dir / "collection.media")
     prefs = BASE / "prefs21.db"
-    if prefs.exists():
-        return
-    info("初始化沙盒 profile 元数据")
+    now_sec = int(time.time())
+
+    # Anki 26 ProfileManager.loadMeta() 强依赖 profiles 表中同时存在 `_global` 与目标 profile。
+    # 若缺失 `_global` 行（或缺少 ver / firstRun / defaultLang 等关键键），Anki 会将 prefs21.db
+    # 判定为损坏并弹窗重建，随后弹出首次启动语言选择框。
+    global_meta = {
+        "ver": 0,
+        "updates": False,
+        "created": now_sec,
+        "id": 450351942741429716,
+        "lastMsg": 0,
+        "suppressUpdate": True,
+        "firstRun": False,
+        "defaultLang": "zh_CN",
+        "last_run_version": 260904,
+        "last_loaded_profile_name": PROFILE,
+        "last_addon_update_check": now_sec,
+        "answer_keys": {1: "1", 2: "2", 3: "3", 4: "4"},
+        "browser_layout": "auto",
+        "addTagsCollapsed": False,
+        "browserTagsCollapsed": True,
+        "reduce_motion": 0,
+        "theme": 1,
+    }
+    profile_meta = {
+        "numBackups": 0,
+        "lastOptimize": now_sec,
+        "syncMedia": False,
+        "autoSync": False,
+        "allowHTML": False,
+        "importMode": 1,
+        "lastColour": "#00f",
+        "stripHTML": True,
+        "deleteMedia": False,
+        "autoSyncMediaMinutes": 0,
+        "currentSyncUrl": None,
+        "customSyncUrl": "",
+        "networkTimeout": 30,
+        "hostNum": None,
+        "lastTextColor": "#000000",
+        "allowedUrlSchemes": ["file"],
+        "syncKey": None,
+        "syncUser": None,
+    }
+
+    is_new = not prefs.exists()
     conn = sqlite3.connect(prefs)
     try:
         conn.execute("create table if not exists profiles (name text primary key, data blob)")
-        # Anki 读配置时用 pickle.loads；空 dict 会被补全默认值
-        conn.execute(
-            "insert or replace into profiles (name, data) values (?, ?)",
-            (PROFILE, pickle.dumps({})),
-        )
+        has_global = conn.execute(
+            "select 1 from profiles where name = '_global'"
+        ).fetchone()
+        has_profile = conn.execute(
+            "select 1 from profiles where name = ?", (PROFILE,)
+        ).fetchone()
+        if not has_global:
+            conn.execute(
+                "insert or replace into profiles (name, data) values ('_global', ?)",
+                (pickle.dumps(global_meta, protocol=4),),
+            )
+        if not has_profile:
+            conn.execute(
+                "insert or replace into profiles (name, data) values (?, ?)",
+                (PROFILE, pickle.dumps(profile_meta, protocol=4)),
+            )
         conn.commit()
+        if is_new or not has_global or not has_profile:
+            info("初始化沙盒 profile 元数据（含 _global 与完整 Anki 26 配置结构）")
     finally:
         conn.close()
 
@@ -234,15 +290,18 @@ def cmd_run(key: str) -> None:
             stale.unlink()
 
     media_dst = BASE / PROFILE / "collection.media"
-    if media_dst.exists():
-        shutil.rmtree(media_dst)
     ensure_dir(media_dst)
+    for stale_media in list(media_dst.iterdir()):
+        if stale_media.is_file() or stale_media.is_symlink():
+            stale_media.unlink()
+        elif stale_media.is_dir():
+            shutil.rmtree(stale_media)
     media_src = LIB / f"{key}.media"
     if media_src.is_dir():
         for item in media_src.iterdir():
             target = media_dst / item.name
             if item.is_dir():
-                shutil.copytree(item, target)
+                shutil.copytree(item, target, dirs_exist_ok=True)
             else:
                 shutil.copy2(item, target)
 

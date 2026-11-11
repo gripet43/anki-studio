@@ -213,7 +213,7 @@ assert(
   deckSrc.includes('answerButtons') &&
     deckSrc.includes('trueRetention') &&
     deckSrc.includes('dailyLoad') &&
-    deckSrc.includes('ROW_NUMBER() OVER') &&
+    (deckSrc.includes('ROW_NUMBER() OVER') || deckSrc.includes('first_daily')) &&
     statsViewSrc.includes('Answer Buttons') &&
     statsViewSrc.includes('True Retention') &&
     statsViewSrc.includes('dailyLoad'),
@@ -407,7 +407,6 @@ for (const [name, src] of backdropGuardedModals) {
 }
 assert(
   cmdKSrc.includes('onClick={() => setAppState({ cmdKOpen: false })}') &&
-    // 关闭按钮的无障碍标签已从硬编码中英二元组迁到 i18n 字典，两种写法都要认
     (cmdKSrc.includes("aria-label={isZh ? '关闭' : 'Close'}") ||
       cmdKSrc.includes("aria-label={t('close')}")),
   'Item #23: CommandPaletteModal must expose a dedicated top-right close button distinct from clearing the search query'
@@ -543,11 +542,6 @@ assert(
 );
 
 // Item #30: Hook 顺序守卫 —— 任何顶层提前 return 之后都不允许再出现 Hook 调用
-// 触发过 React #310 "Rendered more hooks than during the previous render"：
-// ReviewerView 的 `if (isSessionComplete || !currentCard)` 早退曾位于两个 useMemo 之前，
-// 导致「无卡片 / 已完成」与「有卡片」两条路径 Hook 数量不一致。
-// 那两个 useMemo（expectedTypeTarget / typeAnswerDiff）已随默写自检一起下线，
-// 这里改为纯位置守卫，对新加的 Hook 同样生效。
 const reviewerHookNames = ['useState(', 'useEffect(', 'useMemo(', 'useRef(', 'useCallback('];
 const reviewerLastHookIdx = Math.max(
   ...reviewerHookNames.map((name) => reviewerSrc.lastIndexOf(name))
@@ -560,7 +554,7 @@ assert(
   'Item #30: ReviewerView 的会话完成态提前 return 必须位于所有 Hook 之后，否则 React 抛 #310'
 );
 
-// Item #31: 16-Language i18n System aligned with official Anki desktop languages (100% key coverage, zero isZh inline ternaries, Arabic RTL dir="rtl", and flat tiled language grid without <select>)
+// Item #31: 16-Language i18n System aligned with official Anki desktop languages
 const designSystemSrc = fs.readFileSync(
   path.resolve(ADDON_ROOT, 'frontend/src/components/design-system/DesignSystemView.tsx'),
   'utf-8'
@@ -611,8 +605,6 @@ assert(
 );
 
 // Item #33: 16 语言字典完整性与占位符守卫
-// 背景：i18n 拆成「中英常驻 + 14 种懒加载」后，加文案很容易只补中文/英文，
-// 或把 {n} 写成 {N}（界面上就会露出裸变量）。这条断言把两件事钉死。
 const LOCALE_DIR = path.resolve(ADDON_ROOT, 'frontend/src/i18n/locales');
 const EXPECTED_LOCALES = [
   'ar', 'de', 'es', 'fr', 'it', 'ja', 'ko',
@@ -687,6 +679,29 @@ const viCjkLines = viSrc.split('\n').filter((l) => /[\u4e00-\u9fff]/.test(l));
 assert(
   viCjkLines.length === 0,
   `Item #33: 越南语字典残留中文字符 → ${viCjkLines.slice(0, 3).join(' | ')}`
+);
+
+// Item #34: Windows 验版报告 8 项修复守卫
+const smokePySrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'tests/scenarios/smoke.py'), 'utf-8');
+const runPySrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'tests/scenarios/run.py'), 'utf-8');
+const pathsPySrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'tests/scenarios/paths.py'), 'utf-8');
+assert(
+  runPySrc.includes("'_global'") &&
+    runPySrc.includes('"firstRun": False') &&
+    runPySrc.includes('dirs_exist_ok=True') &&
+    pathsPySrc.includes('configure_utf8_stdio') &&
+    smokePySrc.includes('self.col.db.scalar(sql)') &&
+    smokePySrc.includes('self.col.db.all(sql)') &&
+    initPy.includes('MODERN_DEFAULT_WIDTH') &&
+    initPy.includes('ApplicationShortcut') &&
+    initPy.includes('anki:open-settings') &&
+    appSrc.includes('anki:open-settings') &&
+    appSrc.includes("e.key.toLowerCase() === 'p'") &&
+    dashboardSrc.includes('col-span-12 xl:col-span-7') &&
+    dashboardSrc.includes('col-span-12 xl:col-span-5') &&
+    dashboardSrc.includes('flex-col lg:flex-row') &&
+    vacationServiceSrc.includes('not hasattr(col, "_backend")'),
+  'Item #34: Windows QA fixes (prefs21.db _global row, smoke.py col.db lock reuse, window sizing, ApplicationShortcut, Ctrl+P settings, responsive hero/analytics, and deprecated API guards) must remain in place'
 );
 
 const jsBundle = fs.readFileSync(WEB_JS, 'utf-8');

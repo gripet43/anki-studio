@@ -15,6 +15,25 @@
 
 ## [Unreleased]
 
+- **[Gemini] Windows 验版报告（2026-11-11）8 项问题全量调查与修复**：
+  - **问题 1（首次启动 `prefs21.db` 被判定损坏并重建 + 语言确认框）**：定位根因为 [`tests/scenarios/run.py`](tests/scenarios/run.py) 的 `ensure_profile()` 仅写入了 `(PROFILE, pickle.dumps({}))`，缺失 Anki 26 `ProfileManager.loadMeta()` 强依赖的 `'_global'` 元数据行（导致 `pickle.loads(None)` 抛异常触发数据库重建并重置 `firstRun=True`）。现补齐完整 `_global` 字典（含 `ver: 0`、`firstRun: False`、`defaultLang: 'zh_CN'`、`last_run_version: 260904`、`last_loaded_profile_name`、`suppressUpdate: True`）与标准 profile 配置字典；同时将 `sync_addon()` 由 `shutil.rmtree` 整目录删除改为 `shutil.copytree(..., dirs_exist_ok=True)` 增量覆盖同步，避免一次性删除 65+ 个文件触发批量删除拦截，并在 [`tests/scenarios/paths.py`](tests/scenarios/paths.py) 中自动配置 UTF-8 标准输出流解决 Windows 终端默认代码页乱码。
+  - **问题 2（默认窗口尺寸 `683×609` / `820×650` 下首页右侧文案一字一行竖排）**：
+    - **宿主窗口尺寸自适应**：在 [`__init__.py`](__init__.py) 中新增 `_ensure_comfortable_window_size()`，进入现代工作台时设置最小尺寸保护（`860×600`，切回原生界面时无损还原），并在首次打开且窗口小于 `1040×680`（如 Windows 原生默认 `683×609`）时自动扩展至 `1180×760`（受当前屏幕可用工作区 `availableGeometry` 约束）。
+    - **响应式折行与防竖排保护**：重构 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx) 顶栏与「今日学习进度」英雄区布局（改为 `flex-col lg:flex-row` 响应式排布，连胜卡在 `< 1024px` 窗口下自动转为底部横向通栏，核心标题/剩余卡数/预计用时/操作按钮补充 `whitespace-nowrap` 与 `min-w-[200px]`，底部热力图与周节奏改为 `col-span-12 xl:col-span-7` / `col-span-12 xl:col-span-5`），确保在 `683px–1280px` 全宽度区间内均无单字竖排。
+  - **问题 3 & 问题 4（Windows / QEMU 下 WebView 焦点、重绘覆盖与切到原生界面后无法切回）**：
+    - 在 [`__init__.py`](__init__.py) 中将 `_resize_filter` 同时安装到 `mw` 与 `target_parent`（Windows 下的 `mw.centralWidget()`），监听 `Resize`、`Show` 与 `LayoutRequest` 事件，并在 `_on_state_did_reset` 中重新隐藏被 `mw.reset()` 恢复显示的 `mw.toolbar.web` / `mw.web` 并提升 `self.webview.raise_()` 与 `StrongFocus` 焦点。
+    - 为 `切换 Anki Studio / 原生界面 (Ctrl+Alt+M)` 显式设置 `Qt.ShortcutContext.ApplicationShortcut` 全局快捷键上下文，并在原生窗口顶部菜单栏（`mw.form.menubar`）直接挂载一级菜单项「`🌟 Anki Studio`」，即使在 QEMU 虚拟机等 WebEngine 鼠标命中异常环境下，也能通过原生菜单栏一键双向切回。
+  - **问题 5（`smoke.py` 在 Windows 上因二次 SQLite 连接报 `OperationalError: database is locked` 11/11 全红）**：在 [`tests/scenarios/smoke.py`](tests/scenarios/smoke.py) 中将 `sqlite_count()`、`_sqlite_rows()` 与 `_schedule_snapshot()` 统一改为优先复用已打开的 `self.col.db.scalar()` / `self.col.db.all()`，消除 Windows 按句柄独占锁拒绝同进程第二条 `sqlite3.connect` 连接的问题；同时优化查重检查扫描前 30 条笔记跳过 `dirty` 场景前置空卡。
+  - **问题 6（清理 Anki 26 已废弃的 `col.save()` 与 `col.sched.reset()` 调用告警）**：在 [`bridge/vacation_service.py`](bridge/vacation_service.py)、[`bridge/deck_service.py`](bridge/deck_service.py) 与 [`bridge/safety.py`](bridge/safety.py) 中增加 `not hasattr(col, "_backend")` 守卫，在 Anki 26 Rust 后端下不再触发已废弃的 `save()` 与 `reset()` 警告。
+  - **问题 7（优化 `get_dashboard` 与 `get_statistics` 大集合性能热点）**：在 [`bridge/deck_service.py`](bridge/deck_service.py) 中将 `_build_decks_list` 的逐牌组 SQL 查询合并为单次 `GROUP BY did` 查询 + 内存子树聚合；将 `_build_weekly_rhythm` 的 7 次循环查询合并为单次 `GROUP BY` 查询；将 `get_statistics` 中 12 周留存率的 12 次循环查询合并为单次 `GROUP BY` 查询；用基于本地时区偏移的纯整数取模运算替代逐行调用 `strftime('%H', ..., 'localtime')`（消除 12 万次 OS 时区锁调用）；将 `trueRetention` 的全表窗口函数排序 `ROW_NUMBER() OVER` 优化为 `GROUP BY cid, day_bucket` + `MIN(id)` 聚合。
+  - **问题 8（菜单标注 `Ctrl+P` 不生效）**：在 [`frontend/src/App.tsx`](frontend/src/App.tsx) 中新增 `Ctrl+P` 与 `Cmd+,` / `Ctrl+,` 快捷键映射以切换设置弹窗，并在 [`__init__.py`](__init__.py) 中桥接原生 `mw.form.actionPreferences`（`工具 -> 设置(P) Ctrl+P`），在现代界面激活时直接呼出 Anki Studio 设置中心。
+  - **验证**：新增 `test_27_windows_qa_fixes_no_deprecated_save_and_prefs21_schema` 与 Bundle 审计 `Item #34`，`tsc --noEmit`、前端构建、Bundle 审计、38 项 Python 单测与 11 场景 `smoke.py` 全部通过。
+
+- **[WorkBuddy]** 修复侧边栏「设置」齿轮图标残缺（[Sidebar.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/layout/Sidebar.tsx)）：
+  - **根因**：path 里 `a2 2 0 0 1-2-2` 少了一个空格。SVG 允许用负号当分隔符，于是它被解析成 `sweep=1, dx=-2, dy=-2`，而本意是 `dx=+2, dy=-2`——齿轮顶部那一段弧往反方向画，整圈就不闭合，看起来像缺了一块。
+  - **修法**：换成 lucide 标准 `settings` 路径（12 齿 + 中心圆），不再手工维护这段坐标。
+  - 验证：截图确认齿轮闭合对称；`tsc` 0 错误、Bundle 审计 ALL PASSED、37 项单测通过。
+
 - **[WorkBuddy]** 「自定义学习」入口按钮与弹窗标题统一（[translations.ts](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/i18n/translations.ts)、[locales/](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/i18n/locales)）：
   - 按钮原为「自定义学习 / 错题特训」、弹窗标题为「自定义学习与错题集特训」，但点进去是通用自定义学习面板（可按状态 / 难度 / 标签 / 牌组组合筛选，错题集只是其中一个预设），副标题名不副实。两处统一为「自定义学习」。
   - 16 种语言的 `customStudyEntryBtn` / `customStudyModalTitle` 同步去掉副标题（EN: `Custom Study / Cram` → `Custom Study`；DE: `Benutzerdefiniertes Lernen & Fehlertraining` → `Benutzerdefiniertes Lernen`…），避免只有中文变短、其他语言仍拖着一长串。

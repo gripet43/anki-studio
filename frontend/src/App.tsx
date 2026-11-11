@@ -95,20 +95,27 @@ export const App: React.FC = () => {
       appActions.handleNativeSyncFinished(detail);
     };
 
+    const onOpenSettings = () => {
+      setAppState({ settingsOpen: true });
+    };
+
     window.addEventListener('anki:collection-updated', onCollectionUpdated);
     window.addEventListener('anki:sync-started', onSyncStarted);
     window.addEventListener('anki:sync-finished', onSyncFinished);
     window.addEventListener('anki:toast', onAnkiToast);
+    window.addEventListener('anki:open-settings', onOpenSettings);
     return () => {
       window.removeEventListener('anki:collection-updated', onCollectionUpdated);
       window.removeEventListener('anki:sync-started', onSyncStarted);
       window.removeEventListener('anki:sync-finished', onSyncFinished);
       window.removeEventListener('anki:toast', onAnkiToast);
+      window.removeEventListener('anki:open-settings', onOpenSettings);
     };
   }, []);
 
   // Global keyboard shortcuts:
   // - Cmd+K / Ctrl+K: Search Palette
+  // - Ctrl+P / Cmd+, / Ctrl+,: Preferences & Settings Modal (aligned with Anki Tools -> Preferences)
   // - N: Quick Add Drawer
   // - Ctrl+Opt+M / Ctrl+Alt+M: Fail-safe Native UI Toggle
   // - Ctrl+Shift+D: Developer Design System View (Item #7)
@@ -126,9 +133,20 @@ export const App: React.FC = () => {
         return;
       }
 
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setAppState((prev) => ({ cmdKOpen: !prev.cmdKOpen }));
+        return;
+      }
+
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        (e.key.toLowerCase() === 'p' || e.key === ',')
+      ) {
+        e.preventDefault();
+        setAppState((prev) => ({ settingsOpen: !prev.settingsOpen }));
         return;
       }
 

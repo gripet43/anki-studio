@@ -219,11 +219,12 @@ def reconcile_pending_ticket(
             "mismatches": mismatches,
             "state": "recovered" if not failed and not mismatches else "partial",
         })
-        try:
-            if col is not None and hasattr(col, "save"):
+        # Anki 2.1.50+ / 26.x with Rust `_backend` saves automatically and deprecates `col.save()`
+        if col is not None and hasattr(col, "save") and not hasattr(col, "_backend"):
+            try:
                 col.save()
-        except Exception:
-            pass
+            except Exception:
+                pass
 
     finish_ticket(writer, ticket, result["state"])
     return result

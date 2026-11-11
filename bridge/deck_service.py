@@ -12,7 +12,7 @@ from __future__ import annotations
 import datetime
 import sys
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .media_utils import get_media_base_url, get_media_dir
 from .vacation_service import effective_frozen_dates
@@ -241,7 +241,6 @@ class DeckService:
             ls_int = int(ls_val)
             if ls_int <= 0:
                 return 0
-            # If 10 digits (seconds), convert to milliseconds
             if ls_int < 100_000_000_000:
                 ls_int *= 1000
             return ls_int
@@ -311,8 +310,6 @@ class DeckService:
                     v_end = datetime.date.fromisoformat(vacation_cfg["end_date"])
                     v_delta = (v_end - datetime.date.today()).days
                     if v_delta < 0:
-                        # Expired state must never keep the dashboard in vacation mode,
-                        # even when this service is called outside BridgeRouter.
                         is_vacation_active = False
                         vacation_remaining_days = 0
                     else:
@@ -322,9 +319,16 @@ class DeckService:
 
             overdue_count = 0
             try:
-                # Query overdue cards if supported
-                overdue_cids = col.find_cards("is:due is:review prop:due<0") if hasattr(col, "find_cards") else []
-                overdue_count = len(overdue_cids)
+                today_sched = getattr(col.sched, "today", None)
+                if today_sched is not None and hasattr(col, "db"):
+                    ov_row = col.db.first(
+                        "SELECT count(*) FROM cards WHERE queue = 2 AND due < ?",
+                        int(today_sched),
+                    )
+                    overdue_count = int(ov_row[0] or 0) if ov_row else 0
+                else:
+                    overdue_cids = col.find_cards("is:due is:review prop:due<0") if hasattr(col, "find_cards") else []
+                    overdue_count = len(overdue_cids)
             except Exception:
                 overdue_count = total_due_review
 
@@ -425,7 +429,7 @@ class DeckService:
             cutoff = getattr(col.sched, "day_cutoff", int(time.time()) + 86400)
             today_start_sec = cutoff - 86400
 
-            # 1. Card Maturity Breakdown
+            # 1. Card Maturity Breakdown + 7. Daily Load in a SINGLE `cards` table scan!
             m_row = col.db.first(
                 "SELECT "
                 "coalesce(sum(case when queue = -1 then 1 else 0 end), 0), "
@@ -433,7 +437,8 @@ class DeckService:
                 "coalesce(sum(case when queue >= 0 and type = 0 then 1 else 0 end), 0), "
                 "coalesce(sum(case when queue >= 0 and type in (1, 3) then 1 else 0 end), 0), "
                 "coalesce(sum(case when queue >= 0 and type = 2 and ivl < 21 then 1 else 0 end), 0), "
-                "coalesce(sum(case when queue >= 0 and type = 2 and ivl >= 21 then 1 else 0 end), 0) "
+                "coalesce(sum(case when queue >= 0 and type = 2 and ivl >= 21 then 1 else 0 end), 0), "
+                "coalesce(sum(case when queue = 2 then (case when ivl >= 1 then 1.0 / ivl else 1.0 end) else 0 end), 0) "
                 "FROM cards"
             )
             suspended_cnt = int(m_row[0] or 0) if m_row else 0
@@ -442,6 +447,7 @@ class DeckService:
             learning_cnt = int(m_row[3] or 0) if m_row else 0
             young_cnt = int(m_row[4] or 0) if m_row else 0
             mature_cnt = int(m_row[5] or 0) if m_row else 0
+            daily_load = round(float(m_row[6] or 0), 1) if m_row else 0.0
 
             # 2. Next 30 Days Forecast
             due_rows = col.db.all(
@@ -469,19 +475,26 @@ class DeckService:
                     "young": young_d,
                 })
 
-            # 3. 12-Week Historical Retention & Lapse Rate Curve (exclude type=4 / ease=0 manual reschedules)
+            # 3. 12-Week Historical Retention & Lapse Rate Curve (SINGLE GROUP BY query instead of 12 scans)
+            start_12w_sec = cutoff - (12 * 7 * 86400)
+            start_12w_ms = start_12w_sec * 1000
+            cutoff_ms = cutoff * 1000
+            week_ms = 7 * 86400 * 1000
+            w_rows = col.db.all(
+                "SELECT CAST((id - ?) / ? AS INT) as w_idx, "
+                "count(*), sum(case when ease > 1 then 1 else 0 end) "
+                "FROM revlog WHERE id >= ? AND id < ? AND type < 4 AND ease > 0 "
+                "GROUP BY w_idx",
+                start_12w_ms,
+                week_ms,
+                start_12w_ms,
+                cutoff_ms,
+            )
+            w_map = {int(r[0]): (int(r[1] or 0), int(r[2] or 0)) for r in w_rows if r[0] is not None}
             retention_curve = []
-            for w in range(11, -1, -1):
-                w_end_sec = cutoff - (w * 7 * 86400)
-                w_start_sec = w_end_sec - (7 * 86400)
-                r_row = col.db.first(
-                    "SELECT count(*), sum(case when ease > 1 then 1 else 0 end) "
-                    "FROM revlog WHERE id >= ? AND id < ? AND type < 4 AND ease > 0",
-                    w_start_sec * 1000,
-                    w_end_sec * 1000,
-                )
-                w_total = int(r_row[0] or 0) if r_row else 0
-                w_pass = int(r_row[1] or 0) if r_row else 0
+            for idx_w in range(12):
+                w = 11 - idx_w
+                w_total, w_pass = w_map.get(idx_w, (0, 0))
                 ret_pct = round((w_pass / w_total) * 100, 1) if w_total > 0 else 0.0
                 lapse_pct = round(100.0 - ret_pct, 1) if w_total > 0 else 0.0
                 if lang == "zh-CN":
@@ -495,11 +508,16 @@ class DeckService:
                     "reviews": w_total,
                 })
 
-            # 4. 24-Hour Study Time Distribution (exclude type=4 / ease=0 manual reschedules)
+            # 4. 24-Hour Study Time Distribution (pure integer math with local UTC offset instead of per-row strftime('localtime'))
+            try:
+                local_offset_sec = int(datetime.datetime.now().astimezone().utcoffset().total_seconds())
+            except Exception:
+                local_offset_sec = 0
             hour_rows = col.db.all(
-                "SELECT CAST(strftime('%H', id / 1000, 'unixepoch', 'localtime') AS INT) as hr, "
+                "SELECT CAST((((CAST(id / 1000 AS INT) + ?) % 86400 + 86400) % 86400) / 3600 AS INT) as hr, "
                 "count(*), sum(case when ease > 1 then 1 else 0 end) "
-                "FROM revlog WHERE type < 4 AND ease > 0 GROUP BY hr"
+                "FROM revlog WHERE type < 4 AND ease > 0 GROUP BY hr",
+                local_offset_sec,
             )
             hour_map = {int(r[0]): (int(r[1] or 0), int(r[2] or 0)) for r in hour_rows if r[0] is not None}
             hourly_dist = []
@@ -514,8 +532,7 @@ class DeckService:
             def _pct(passed: int, total: int) -> float:
                 return round((passed / total) * 100, 1) if total > 0 else 0.0
 
-            # 5. Anki "Answer Buttons" graph, last 365 days. Split by the interval the
-            #    card had *before* the review (lastIvl >= 21 days = mature).
+            # 5. Anki "Answer Buttons" graph, last 365 days.
             year_start_ms = (cutoff - 365 * 86400) * 1000
             btn_row = col.db.first(
                 "SELECT "
@@ -541,17 +558,15 @@ class DeckService:
                 "mature": {"pass": b[6], "total": b[7], "rate": _pct(b[6], b[7])},
             }
 
-            # 6. Anki "True Retention": only the first review of each card per day,
-            #    Again = fail / Hard,Good,Easy = pass. Used to calibrate FSRS desired retention.
+            # 6. Anki "True Retention": only the first review of each card per day (MIN(id) per cid+day).
+            #    Using GROUP BY cid, day_bucket with MIN(id) avoids sorting the entire revlog table via ROW_NUMBER() OVER.
             last30_ms = (cutoff - 30 * 86400) * 1000
             try:
                 tr_row = col.db.first(
-                    "WITH ranked AS ("
-                    " SELECT cid, ease, lastIvl, id,"
-                    " ROW_NUMBER() OVER ("
-                    "   PARTITION BY cid, CAST((id / 1000 - ?) / 86400 AS INT) ORDER BY id ASC"
-                    " ) AS rn"
+                    "WITH first_daily AS ("
+                    " SELECT cid, ease, lastIvl, MIN(id) AS id"
                     " FROM revlog WHERE type < 4 AND ease > 0"
+                    " GROUP BY cid, CAST((id / 1000 - ?) / 86400 AS INT)"
                     ") SELECT "
                     " coalesce(sum(case when lastIvl >= 21 then 1 else 0 end), 0), "
                     " coalesce(sum(case when lastIvl >= 21 and ease > 1 then 1 else 0 end), 0), "
@@ -561,14 +576,12 @@ class DeckService:
                     " coalesce(sum(case when id >= ? and lastIvl >= 21 and ease > 1 then 1 else 0 end), 0), "
                     " coalesce(sum(case when id >= ? and lastIvl < 21 then 1 else 0 end), 0), "
                     " coalesce(sum(case when id >= ? and lastIvl < 21 and ease > 1 then 1 else 0 end), 0) "
-                    "FROM ranked WHERE rn = 1",
+                    "FROM first_daily",
                     today_start_sec,
                     last30_ms, last30_ms, last30_ms, last30_ms,
                 )
                 t = [int(x or 0) for x in (tr_row or (0,) * 8)]
             except Exception:
-                # Older SQLite without window functions: degrade gracefully instead
-                # of dropping every other statistic.
                 t = [0] * 8
 
             def _tr_block(m_total: int, m_pass: int, y_total: int, y_pass: int) -> Dict[str, Any]:
@@ -584,14 +597,6 @@ class DeckService:
                 "allTime": _tr_block(t[0], t[1], t[2], t[3]),
                 "last30d": _tr_block(t[4], t[5], t[6], t[7]),
             }
-
-            # 7. Anki "Daily Load": expected reviews/day = sum(1 / interval),
-            #    counting only active review cards; sub-day intervals count as 1.
-            load_row = col.db.first(
-                "SELECT coalesce(sum(case when ivl >= 1 then 1.0 / ivl else 1.0 end), 0) "
-                "FROM cards WHERE queue = 2"
-            )
-            daily_load = round(float(load_row[0] or 0), 1) if load_row else 0.0
 
             return {
                 "maturityBreakdown": {
@@ -614,12 +619,43 @@ class DeckService:
             return self._empty_advanced_stats(lang)
 
     def _build_decks_list(self, col) -> List[Dict[str, Any]]:
-        """Collects all decks with due counts, total cards, parentId, and mastery percentage."""
+        """Collects all decks with due counts, total cards, parentId, and mastery percentage in O(1) SQL queries."""
         tree = col.sched.deck_due_tree()
         decks_out: List[Dict[str, Any]] = []
 
         icons = ["book", "code", "heart", "folder", "layers", "sparkles"]
         accents = ["indigo", "blue", "emerald", "amber", "rose", "purple"]
+
+        # Pre-aggregate per-deck card count and weighted mastery in a single SQL query
+        direct_stats: Dict[int, Tuple[int, float]] = {}
+        if hasattr(col, "db") and hasattr(col.db, "all"):
+            try:
+                rows = col.db.all(
+                    "SELECT did, count(*), "
+                    "coalesce(sum(case when ivl >= 21 then 1.0 when type = 2 then 0.6 when type in (1,3) then 0.3 else 0.0 end), 0) "
+                    "FROM cards GROUP BY did"
+                )
+                for r in rows:
+                    if r[0] is not None:
+                        direct_stats[int(r[0])] = (int(r[1] or 0), float(r[2] or 0.0))
+            except Exception:
+                pass
+
+        # Cache subtree (total_cards, weighted_mastered) bottom-up across the deck tree
+        subtree_stats: Dict[int, Tuple[int, float]] = {}
+
+        def compute_subtree_stats(node) -> Tuple[int, float]:
+            did = int(getattr(node, "deck_id", 0) or 0)
+            own_cnt, own_wt = direct_stats.get(did, (0, 0.0))
+            for child in getattr(node, "children", []):
+                c_cnt, c_wt = compute_subtree_stats(child)
+                own_cnt += c_cnt
+                own_wt += c_wt
+            if did:
+                subtree_stats[did] = (own_cnt, own_wt)
+            return own_cnt, own_wt
+
+        compute_subtree_stats(tree)
 
         def traverse(node, depth=0, parent_name="", parent_id=None):
             for child in getattr(node, "children", []):
@@ -632,16 +668,20 @@ class DeckService:
                 review_count = int(getattr(child, "review_count", 0))
                 due_review = learn_count + review_count
 
-                dids = [did] + [int(cid) for _, cid in col.decks.children(did)]
-                placeholders = ",".join("?" for _ in dids)
-                stats_row = col.db.first(
-                    f"SELECT count(*), "
-                    f"coalesce(sum(case when ivl >= 21 then 1.0 when type = 2 then 0.6 when type in (1,3) then 0.3 else 0.0 end), 0) "
-                    f"FROM cards WHERE did IN ({placeholders})",
-                    *dids,
-                )
-                total_cards = int(stats_row[0] or 0) if stats_row else 0
-                weighted_mastered = float(stats_row[1] or 0.0) if stats_row else 0.0
+                if did in subtree_stats:
+                    total_cards, weighted_mastered = subtree_stats[did]
+                else:
+                    dids = [did] + [int(cid) for _, cid in col.decks.children(did)]
+                    placeholders = ",".join("?" for _ in dids)
+                    stats_row = col.db.first(
+                        f"SELECT count(*), "
+                        f"coalesce(sum(case when ivl >= 21 then 1.0 when type = 2 then 0.6 when type in (1,3) then 0.3 else 0.0 end), 0) "
+                        f"FROM cards WHERE did IN ({placeholders})",
+                        *dids,
+                    )
+                    total_cards = int(stats_row[0] or 0) if stats_row else 0
+                    weighted_mastered = float(stats_row[1] or 0.0) if stats_row else 0.0
+
                 mastery = (
                     min(100, max(0, round((weighted_mastered / total_cards) * 100)))
                     if total_cards > 0
@@ -807,13 +847,14 @@ class DeckService:
 
     def _serialize_deck_options(self, col, did: int, fallback_name: str = "Default") -> Dict[str, Any]:
         deck_name = fallback_name
-        if col is not None and hasattr(col, "decks") and hasattr(col.decks, "get"):
-            try:
-                d_obj = col.decks.get(int(did), default=False)
-                if isinstance(d_obj, dict) and d_obj.get("name"):
-                    deck_name = str(d_obj["name"])
-            except Exception:
-                pass
+        if not fallback_name or fallback_name == "Default":
+            if col is not None and hasattr(col, "decks") and hasattr(col.decks, "get"):
+                try:
+                    d_obj = col.decks.get(int(did), default=False)
+                    if isinstance(d_obj, dict) and d_obj.get("name"):
+                        deck_name = str(d_obj["name"])
+                except Exception:
+                    pass
 
         conf = self._resolve_deck_config(col, int(did))
         new_cfg = conf.get("new") if isinstance(conf.get("new"), dict) else {}
@@ -922,7 +963,7 @@ class DeckService:
                 col.decks.update_config(conf)
             elif hasattr(col.decks, "save"):
                 col.decks.save(conf)
-            if hasattr(col, "save"):
+            if hasattr(col, "save") and not hasattr(col, "_backend"):
                 col.save()
         except Exception:
             pass
@@ -1013,7 +1054,6 @@ class DeckService:
         prev_week_reviews = sum(day_map.get(364 - i, {"count": 0})["count"] for i in range(7, 14))
 
         weekday_idx = today_date.weekday()
-        # Count active days in the current calendar week so far (Monday through today)
         week_active_days = sum(
             1
             for i in range(weekday_idx + 1)
@@ -1053,26 +1093,29 @@ class DeckService:
     def _build_weekly_rhythm(
         self, col, cutoff: int, avg_sec_per_card: float, lang: str = "zh-CN"
     ) -> Dict[str, Any]:
-        """Builds the 7-day bar chart data (Monday..Sunday of current week, with per-day minutes)."""
+        """Builds the 7-day bar chart data (Monday..Sunday of current week) in a single SQL query."""
         today_start_sec = cutoff - 86400
         today_date = datetime.date.fromtimestamp(today_start_sec)
         weekday_idx = today_date.weekday()
         monday_sec = today_start_sec - (weekday_idx * 86400)
+        monday_ms = monday_sec * 1000
+        next_monday_ms = (monday_sec + 7 * 86400) * 1000
+
+        week_rows = col.db.all(
+            "SELECT CAST((id - ?) / 86400000 AS INT) as d_idx, count(*), coalesce(sum(time), 0) "
+            "FROM revlog WHERE id >= ? AND id < ? AND type < 4 AND ease > 0 GROUP BY d_idx",
+            monday_ms,
+            monday_ms,
+            next_monday_ms,
+        )
+        w_map = {int(r[0]): (int(r[1] or 0), int(r[2] or 0)) for r in week_rows if r[0] is not None}
 
         labels = self._get_weekday_short_labels(lang)
         days_list = []
         max_session_minutes = 0
 
         for i in range(7):
-            d_start_ms = (monday_sec + i * 86400) * 1000
-            d_end_ms = d_start_ms + 86400 * 1000
-            row = col.db.first(
-                "SELECT count(*), coalesce(sum(time), 0) FROM revlog WHERE id >= ? AND id < ? AND type < 4 AND ease > 0",
-                d_start_ms,
-                d_end_ms,
-            )
-            cnt = int(row[0] or 0) if row else 0
-            t_ms = int(row[1] or 0) if row else 0
+            cnt, t_ms = w_map.get(i, (0, 0))
             mins = round(t_ms / 60000.0) if t_ms > 0 else 0
             if cnt > 0 and mins == 0:
                 mins = 1
@@ -1210,7 +1253,6 @@ class DeckService:
         empty_items: List[Dict[str, Any]] = []
         seen_cids = set()
 
-        # 1. If native col.empty_cards() is available, include its reported cids
         if hasattr(col, "empty_cards"):
             try:
                 rep = col.empty_cards()
@@ -1223,7 +1265,6 @@ class DeckService:
             except Exception:
                 pass
 
-        # 2. Inspect cards & notes directly for blank front field or missing Cloze {{cN::...}}
         all_cids = list(col.find_cards("")) if hasattr(col, "find_cards") else []
         for cid in all_cids:
             c_int = int(cid)
@@ -1338,16 +1379,7 @@ class DeckService:
         }
 
     def run_maintenance_action(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
-        """
-        Executes in-app system maintenance diagnostics and cleanup:
-        - toolType:
-          - 'check_db': SQLite PRAGMA quick_check + ANALYZE + collection counts
-          - 'check_empty_cards': scans for blank/orphaned cards
-          - 'clean_empty_cards': removes detected empty cards/notes
-          - 'check_media': scans collection.media for unused/missing files
-          - 'clean_unused_media': removes unused files from collection.media
-          - 'open_native_tool': triggers mw.onCheckDB / mw.onEmptyCards / mw.onMediaCheck
-        """
+        """Executes in-app system maintenance diagnostics and cleanup."""
         data = data or {}
         tool_type = str(data.get("toolType", "check_db") or "check_db").strip()
         lang = self._resolve_language(data.get("language"))

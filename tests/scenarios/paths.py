@@ -18,6 +18,19 @@ import shutil
 import sys
 from pathlib import Path
 
+
+def configure_utf8_stdio() -> None:
+    """在 Windows 非 UTF-8 默认代码页（如 cp936/cp1252）下强制 stdout/stderr 使用 UTF-8。"""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
+configure_utf8_stdio()
+
 HOME = Path.home()
 
 IS_MAC = sys.platform == "darwin"

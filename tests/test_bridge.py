@@ -1842,6 +1842,28 @@ class BridgeRouterAuditTest(unittest.TestCase):
             self.assertEqual(dash["weeklyRhythm"]["days"][0]["label"], expected_mon)
             self.assertTrue(len(DeckService._get_greeting(9, lang_code)) > 0)
 
+    def test_27_windows_qa_fixes_no_deprecated_save_and_prefs21_schema(self):
+        """Verify Windows QA fixes: no deprecated col.save/reset calls when _backend exists, and valid prefs21.db _global schema."""
+        # 1. When col._backend is present (Anki 26 Rust backend), deprecated col.save() and col.sched.reset() must NEVER be called
+        save_calls = {"col_save": 0, "sched_reset": 0}
+        self.mock_col._backend = object()
+        self.mock_col.save = lambda: save_calls.__setitem__("col_save", save_calls["col_save"] + 1)
+        self.mock_col.sched.reset = lambda: save_calls.__setitem__("sched_reset", save_calls["sched_reset"] + 1)
+        try:
+            self._call("set_vacation", {"days": 2, "reason": "Win Test"})
+            self._call("cancel_vacation", {})
+            self._call("set_vacation", {"days": 2, "reason": "Win Test 2"})
+            self._call("end_vacation", {})
+            self._call("rescue_backlog", {"mode": "amortize", "days": 3})
+            self._call("undo_rescue", {})
+            self._call("save_deck_options", {"deckId": "1", "newPerDay": 25})
+            self.assertEqual(save_calls["col_save"], 0)
+            self.assertEqual(save_calls["sched_reset"], 0)
+        finally:
+            delattr(self.mock_col, "_backend")
+            delattr(self.mock_col, "save")
+            delattr(self.mock_col.sched, "reset")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -42,6 +42,15 @@ from .safety import (
 FROZEN_DATES_KEY = "vacation_frozen_dates"
 
 
+def _save_col_if_legacy(col: Any) -> None:
+    """Calls `col.save()` only on legacy/mock collections without Anki 26's Rust `_backend`."""
+    if col is not None and hasattr(col, "save") and not hasattr(col, "_backend"):
+        try:
+            col.save()
+        except Exception:
+            pass
+
+
 def effective_frozen_dates(cfg: Dict[str, Any]) -> List[str]:
     """Returns all streak-freeze dates ever granted, with a legacy config fallback.
 
@@ -175,14 +184,7 @@ class VacationService:
         return self.last_recovery
 
     def get_or_reconstruct_receipt(self) -> Optional[Dict[str, Any]]:
-        """Returns the stored rescue receipt only; never invents one on a read path.
-
-        The previous implementation inferred "rescheduled" cards from cards due in
-        the next 7 days, fabricated a canUndo receipt and persisted it from a GET
-        action. Undoing that receipt dragged unrelated, perfectly normal cards
-        back into today's queue. Receipts are created exclusively by
-        rescue_backlog() and must carry the IDs of cards it actually rescheduled.
-        """
+        """Returns the stored rescue receipt only; never invents one on a read path."""
         receipt = self._get_config().get("last_rescue_receipt")
         if isinstance(receipt, dict) and receipt.get("rescheduledCids"):
             return receipt
@@ -212,8 +214,6 @@ class VacationService:
                     return f'deck:"{escaped}" '
             except Exception:
                 pass
-            # Never degrade to an empty clause: that would silently turn a
-            # deck-scoped reschedule into a collection-wide one.
             return 'deck:"__anki_studio_unknown_deck__" '
         escaped = raw.replace('"', '\\"')
         return f'deck:"{escaped}" '
@@ -231,24 +231,20 @@ class VacationService:
             }
 
         try:
-            # Query due review cards using resolved deck name
             deck_filter = self._build_deck_search_clause(col, deck_id)
             query = f"{deck_filter}is:due"
             all_due_cids = col.find_cards(query) if hasattr(col, "find_cards") else []
             total_due = len(all_due_cids)
 
-            # Query overdue cards (review cards due strictly before today)
             overdue_query = f"{deck_filter}is:due is:review prop:due<0"
             try:
                 overdue_cids = col.find_cards(overdue_query) if hasattr(col, "find_cards") else []
             except Exception:
-                # Fallback if prop:due<0 not supported
                 overdue_cids = all_due_cids
 
             overdue_count = len(overdue_cids)
             has_avalanche = overdue_count >= 30 or total_due >= 60
 
-            # Compute suggested amortization days (e.g. 3, 5, 7, 14)
             if total_due <= 30:
                 suggested_days = 3
             elif total_due <= 80:
@@ -280,12 +276,9 @@ class VacationService:
 
     def set_vacation(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Activates vacation mode, optionally freezes new card limits and shifts due dates."""
-        # A stale 'active' flag must not block a new vacation after the previous one expired.
         self.reconcile_expired_vacation()
         existing = (self._get_config().get("vacation_state") or {}).get("active")
         if existing:
-            # Re-freezing an already-zero new-card limit would permanently erase the
-            # original value, so never allow a second activation on top of a live one.
             return {
                 "success": False,
                 "message": "已有生效中的休假，请先结束或撤销后再开启。",
@@ -301,7 +294,6 @@ class VacationService:
         start_date = today.isoformat()
         end_date = (today + datetime.timedelta(days=days - 1)).isoformat()
 
-        # Compute all frozen dates in this vacation range for heatmap & streak preservation
         frozen_dates = []
         if freeze_streak:
             for offset in range(days):
@@ -315,32 +307,21 @@ class VacationService:
         frozen_deck_limits: Dict[str, int] = {}
 
         if col is not None:
-            # One native undo entry for the whole operation. Without merging,
-            # each per-card update_card creates its own undo step and a user can
-            # never undo the batch (Anki caps the undo stack).
             undo_target = begin_undo_group(col, "Anki Studio · 开启休假")
             try_native_backup(self.mw, col)
 
-            # 1. Optionally freeze new card limits across deck configs
             if freeze_new:
                 frozen_deck_limits = self._freeze_new_card_limits(col)
 
-            # 2. Optionally shift currently due review cards forward by `days`
             if shift_reviews:
                 shifted_card_count, shifted_cids, shifted_snapshot = self._shift_due_cards(col, days)
 
-            # Save collection changes if supported
-            if hasattr(col, "save"):
-                try:
-                    col.save()
-                except Exception:
-                    pass
+            _save_col_if_legacy(col)
             end_undo_group(col, undo_target)
 
         vacation_id = f"vac-{int(datetime.datetime.now().timestamp())}"
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        # Persist vacation state into add-on config
         vacation_state = {
             "id": vacation_id,
             "active": True,
@@ -357,7 +338,6 @@ class VacationService:
             "created_at": now_str,
         }
 
-        # Track history
         cfg = self._get_config()
         vacation_history = list(cfg.get("vacation_history", []))
         history_item = {
@@ -414,20 +394,14 @@ class VacationService:
         restored_deck_count = 0
         if col is not None and frozen_deck_limits:
             restored_deck_count = self._restore_new_card_limits(col, frozen_deck_limits)
-            if hasattr(col, "save"):
-                try:
-                    col.save()
-                except Exception:
-                    pass
+            _save_col_if_legacy(col)
 
-        # Update config to inactive
         updated_state = dict(vacation_cfg)
         updated_state["active"] = False
         ended_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         updated_state["ended_at"] = ended_at
 
         reason = str((data or {}).get("reason") or "")
-        # A naturally expired vacation is 'completed', not 'ended_early'.
         final_status = "completed" if reason == "auto_expired" else "ended_early"
         vacation_history = list(cfg.get("vacation_history", []))
         for item in vacation_history:
@@ -474,20 +448,15 @@ class VacationService:
             try:
                 cids = [int(c) for c in shifted_cids if str(c).isdigit()]
                 if cids:
-                    # Prefer a per-card restore: it puts every card back on its exact
-                    # original due/interval/queue instead of flattening them all to today.
                     restored_card_count = self._restore_card_schedule(col, snapshot)
                     if not restored_card_count:
-                        # Legacy fallback. Never use the '!' suffix: Anki reschedules
-                        # review cards *without* changing their interval only without '!'.
                         if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
                             col.sched.set_due_date(cids, "0")
                         elif hasattr(col, "db"):
                             sched_today = getattr(col.sched, "today", 0) if hasattr(col, "sched") else 0
                             col.db.execute("UPDATE cards SET due = ? WHERE id IN (" + ",".join(str(c) for c in cids) + ")", sched_today)
                         restored_card_count = len(cids)
-                if hasattr(col, "save"):
-                    col.save()
+                _save_col_if_legacy(col)
             except Exception as e:
                 print(f"[VacationService] cancel vacation card error: {e}")
 
@@ -501,8 +470,6 @@ class VacationService:
         updated_state["active"] = False
         updated_state["cancelled_at"] = cancelled_at
         own_frozen = [str(d) for d in vacation_cfg.get("frozen_dates", [])]
-        # A reverted vacation never happened, so its streak-freeze protection must be
-        # removed as well. Earlier (real) vacations keep their frozen dates.
         cumulative = set(effective_frozen_dates(cfg)) - set(own_frozen)
         updated_state["frozen_dates"] = []
 
@@ -545,8 +512,6 @@ class VacationService:
         Rescues overdue card backlogs:
         - mode 'amortize' (削峰平摊): spreads overdue cards uniformly over 1 to N days using `set_due_date("1-{days}")`.
         - mode 'shift' (整体顺延): shifts overdue cards forward by N days using `set_due_date("{days}")`.
-        Generates an irrefutable audit receipt with before/after card counts, zero data-loss proof,
-        and day-by-day distribution schedule to provide 100% user peace of mind.
         """
         data = data or {}
         mode = data.get("mode", "amortize") if data.get("mode") in ("amortize", "shift") else "amortize"
@@ -562,8 +527,6 @@ class VacationService:
         undo_target: Optional[int] = None
         try:
             deck_filter = self._build_deck_search_clause(col, deck_id)
-            # Anki's Set Due Date turns learning/new cards into review cards and
-            # rewrites their interval. Only real review cards may be rescheduled.
             query = f"{deck_filter}is:due is:review"
             cids = col.find_cards(query) if hasattr(col, "find_cards") else []
 
@@ -586,7 +549,6 @@ class VacationService:
             backup_created = try_native_backup(self.mw, col)
             # -----------------------------------------------------------------
 
-            # Pre-audit card count
             total_before = 0
             if hasattr(col, "card_count"):
                 try:
@@ -597,29 +559,21 @@ class VacationService:
                 r = col.db.first("SELECT count(*) FROM cards")
                 total_before = int(r[0]) if r else 0
 
-            # Execute safe rescheduling
             if mode == "amortize":
-                # Spreads cards uniformly across days 1 to `days` from now without altering intervals!
                 range_expr = f"1-{days}" if days > 1 else "1"
                 if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
                     col.sched.set_due_date(list(cids), range_expr)
                 elif hasattr(col, "db"):
-                    # Fallback for mock environments: set due in range
                     for i, cid in enumerate(cids):
                         target_day = (i % days) + 1
                         col.db.execute("UPDATE cards SET due = ? WHERE id = ?", target_day, cid)
             else:
-                # Mode 'shift': sets due date to `days` days from now
                 if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
                     col.sched.set_due_date(list(cids), str(days))
                 elif hasattr(col, "db"):
                     col.db.execute("UPDATE cards SET due = due + ? WHERE id IN (" + ",".join(str(c) for c in cids) + ")", days)
 
-            if hasattr(col, "save"):
-                try:
-                    col.save()
-                except Exception:
-                    pass
+            _save_col_if_legacy(col)
 
             mw = self.mw
             if mw is not None and hasattr(mw, "reset"):
@@ -628,7 +582,6 @@ class VacationService:
                 except Exception:
                     pass
 
-            # Post-audit card count
             total_after = total_before
             if hasattr(col, "card_count"):
                 try:
@@ -644,7 +597,6 @@ class VacationService:
                 crt = getattr(col, "crt", int(time.time()))
                 sched_today = int((time.time() - crt) // 86400)
 
-            # Build precise day-by-day distribution and card samples
             today_date = datetime.date.today()
             day_counts = {d: 0 for d in range(1, days + 1)}
             card_samples = []
@@ -662,9 +614,10 @@ class VacationService:
                         c_due = c.due
                         c_ivl = c.ivl
                         c_did = c.did
-                        note = c.note()
-                        if note and hasattr(note, "fields") and note.fields:
-                            front_text = re.sub(r"<[^>]*>", "", str(note.fields[0])).strip()
+                        if len(card_samples) < 30:
+                            note = c.note()
+                            if note and hasattr(note, "fields") and note.fields:
+                                front_text = re.sub(r"<[^>]*>", "", str(note.fields[0])).strip()
                     except Exception:
                         pass
                 elif hasattr(col, "db"):
@@ -672,9 +625,10 @@ class VacationService:
                         r = col.db.first("SELECT due, ivl, did, nid FROM cards WHERE id = ?", cid)
                         if r:
                             c_due, c_ivl, c_did, nid = r
-                            nr = col.db.first("SELECT flds FROM notes WHERE id = ?", nid)
-                            if nr and nr[0]:
-                                front_text = re.sub(r"<[^>]*>", "", str(nr[0]).split("\x1f")[0]).strip()
+                            if len(card_samples) < 30:
+                                nr = col.db.first("SELECT flds FROM notes WHERE id = ?", nid)
+                                if nr and nr[0]:
+                                    front_text = re.sub(r"<[^>]*>", "", str(nr[0]).split("\x1f")[0]).strip()
                     except Exception:
                         pass
 
@@ -732,8 +686,6 @@ class VacationService:
                 "dayDistribution": day_distribution,
                 "cardSamples": card_samples,
                 "rescheduledCids": [str(c) for c in cids],
-                # Per-card pre-write snapshot: the undo path must restore these
-                # exact fields, not flatten every card to today.
                 "scheduleSnapshot": schedule_snapshot,
                 "safety": {
                     "ticketId": ticket["id"],
@@ -749,7 +701,6 @@ class VacationService:
             }
 
             rescue_history = list(self._get_config().get("rescue_history", []))
-            # Only the most recent relief operation can ever be undone; all prior operations are superseded
             for prev_item in rescue_history:
                 prev_item["canUndo"] = False
 
@@ -757,8 +708,6 @@ class VacationService:
             if len(rescue_history) > 30:
                 rescue_history = rescue_history[:30]
 
-            # Persist the receipt BEFORE closing the ticket: if the process dies
-            # in between, the pending ticket can still find its snapshot.
             self._write_config({
                 "last_rescue_receipt": receipt,
                 "rescue_history": rescue_history,
@@ -776,12 +725,10 @@ class VacationService:
                 "rescueHistory": rescue_history,
             }
         except Exception as e:
-            # A failed bulk reschedule must not leave half of the cards moved.
             if schedule_snapshot:
                 try:
                     restore_schedule(col, schedule_snapshot)
-                    if hasattr(col, "save"):
-                        col.save()
+                    _save_col_if_legacy(col)
                 except Exception:
                     pass
             if ticket is not None:
@@ -818,7 +765,6 @@ class VacationService:
             undo_target = begin_undo_group(col, "Anki Studio · 撤销减负")
             restored, failed, mismatches = 0, [], []
             if snapshot:
-                # Exact per-card restoration. Never flatten cards to today.
                 restored, failed = restore_schedule(col, snapshot)
                 mismatches = verify_restoration(col, snapshot)
                 if failed or mismatches:
@@ -837,8 +783,6 @@ class VacationService:
                     }
                 restored_count = restored
             else:
-                # Legacy receipts written before round 2 have no snapshot.
-                # '0' without '!' at least keeps intervals intact.
                 if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
                     col.sched.set_due_date(list(cids), "0")
                 elif hasattr(col, "db"):
@@ -848,17 +792,14 @@ class VacationService:
             end_undo_group(col, undo_target)
             physical_ok, physical_note = quick_integrity_check(col)
 
-            if hasattr(col, "sched") and hasattr(col.sched, "reset"):
+            # Anki 26 Rust backend deprecates both col.sched.reset() and col.save()
+            if hasattr(col, "sched") and hasattr(col.sched, "reset") and not hasattr(col, "_backend"):
                 try:
                     col.sched.reset()
                 except Exception:
                     pass
 
-            if hasattr(col, "save"):
-                try:
-                    col.save()
-                except Exception:
-                    pass
+            _save_col_if_legacy(col)
 
             mw = self.mw
             if mw is not None and hasattr(mw, "reset"):
@@ -923,7 +864,6 @@ class VacationService:
     def start_low_energy_session(self, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Returns a gentle, curated review queue of 10-15 easiest/most stable cards.
-        Allows the user to easily complete today's review when exhausted without feeling overwhelmed.
         """
         data = data or {}
         limit = self._safe_int(data.get("limit"), 15, 5, 30)
@@ -935,22 +875,18 @@ class VacationService:
 
         try:
             deck_filter = self._build_deck_search_clause(col, deck_id)
-            # Query due review cards
             query = f"{deck_filter}is:due is:review"
             cids = list(col.find_cards(query)) if hasattr(col, "find_cards") else []
 
-            # If fewer review cards, take any due cards
             if not cids:
                 cids = list(col.find_cards(f"{deck_filter}is:due")) if hasattr(col, "find_cards") else []
 
-            # Sort by interval descending so the user gets their most familiar / highest-stability cards first
             if cids and hasattr(col, "get_card"):
                 try:
                     cids.sort(key=lambda cid: int(getattr(col.get_card(int(cid)), "ivl", 0) or 0), reverse=True)
                 except Exception:
                     pass
 
-            # Pick up to `limit` cards
             selected_cids = [str(cid) for cid in cids[:limit]]
 
             return {

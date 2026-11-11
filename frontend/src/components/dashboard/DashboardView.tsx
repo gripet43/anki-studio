@@ -185,42 +185,42 @@ export const DashboardView: React.FC = () => {
   }, [dashboard.vacation?.startDate, dashboard.vacation?.endDate, resolvedLang]);
 
   return (
-    <div className="flex-1 h-screen overflow-y-auto px-8 py-6 space-y-6">
+    <div className="flex-1 h-screen overflow-y-auto px-5 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-6">
       {/* Top Header Row — Synced Status Capsule & Cmd+K Search */}
       <header
         onMouseDown={startWindowDrag}
         onDoubleClick={handleWindowDoubleClick}
-        className="flex items-center justify-between select-none cursor-default"
+        className="flex flex-wrap items-center justify-between gap-3 select-none cursor-default"
       >
-        <div>
-          <h1 className="text-[22px] font-bold tracking-tight">
+        <div className="min-w-[180px]">
+          <h1 className="text-[20px] sm:text-[22px] font-bold tracking-tight whitespace-nowrap">
             {dashboard.greeting}
             {displayName}
           </h1>
           {isSyncPending ? (
             <div className="flex items-center gap-2 mt-1">
-              <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-ping" />
-              <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight">
+              <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-ping shrink-0" />
+              <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight whitespace-nowrap">
                 {syncing ? t('syncingAnkiWebAria') : t('loadingLocalCollection')}
               </span>
             </div>
           ) : syncJustFinished ? (
             <div className="flex items-center gap-1.5 mt-1 animate-sync-reveal">
-              <svg className="w-3.5 h-3.5 text-[var(--status-success)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="w-3.5 h-3.5 text-[var(--status-success)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" className="animate-draw-check" />
               </svg>
-              <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight">
+              <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight whitespace-nowrap">
                 {t('syncCompleted')}
               </span>
             </div>
           ) : (
-            <p className={`text-[13px] ${subText} mt-0.5 font-medium`}>
+            <p className={`text-[13px] ${subText} mt-0.5 font-medium whitespace-nowrap`}>
               {dashboard.dateDisplay}
             </p>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 ms-auto">
           {/* Apple Inset Translucent Synced Status Capsule with Rich Flyout */}
           <SyncStatusPill />
 
@@ -228,7 +228,7 @@ export const DashboardView: React.FC = () => {
           <button
             onClick={() => setAppState({ cmdKOpen: true })}
             className={`h-9 ${
-              showShortcutHints ? 'w-[220px]' : 'w-[180px]'
+              showShortcutHints ? 'w-[190px] sm:w-[220px]' : 'w-[156px] sm:w-[180px]'
             } px-3.5 rounded-xl border text-[12px] flex items-center justify-between cursor-pointer transition-all hover:border-[var(--brand-border)] ${cardSurface}`}
           >
             <span className={`flex items-center gap-2 ${subText} truncate`}>
@@ -494,7 +494,7 @@ export const DashboardView: React.FC = () => {
 
           {/* Dynamic Today's Study Progress Board / Active Vacation Protection Hero */}
           <section
-            className={`relative rounded-2xl border p-6 shadow-[0_2px_10px_rgba(0,0,0,0.02)] flex items-center justify-between gap-8 transition-all duration-500 ${cardSurface} ${
+            className={`relative rounded-2xl border p-5 sm:p-6 shadow-[0_2px_10px_rgba(0,0,0,0.02)] flex flex-col lg:flex-row lg:items-center justify-between gap-5 lg:gap-8 transition-all duration-500 ${cardSurface} ${
               isSyncPending
                 ? 'border-[var(--brand-border)] shadow-md ring-1 ring-[var(--brand)]/20'
                 : isVacationActive
@@ -511,7 +511,7 @@ export const DashboardView: React.FC = () => {
             >
               <StreakFlameBackdrop isDark={isDark} />
             </div>
-            <div className="relative z-10 flex items-center gap-7 flex-1 min-w-0">
+            <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-7 flex-1 min-w-0">
               {/* Left Ring */}
               <div
                 className="relative w-[112px] h-[112px] shrink-0 flex items-center justify-center"
@@ -593,7 +593,7 @@ export const DashboardView: React.FC = () => {
 
               {/* Central Overview */}
               {isVacationActive && !isSyncPending ? (
-                <div className="space-y-3 flex-1 min-w-0">
+                <div className="space-y-3 flex-1 min-w-[200px]">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--status-success-soft)] text-[var(--status-success)]">
                       <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] animate-pulse" />
@@ -608,7 +608,7 @@ export const DashboardView: React.FC = () => {
 
                   <div className="space-y-1">
                     <div className="flex items-baseline gap-2.5 flex-wrap">
-                      <span className="text-[22px] font-bold tracking-tight">
+                      <span className="text-[22px] font-bold tracking-tight whitespace-nowrap">
                         {vacationTimelineInfo.startLabel} – {vacationTimelineInfo.endLabel}
                       </span>
                     </div>
@@ -622,7 +622,7 @@ export const DashboardView: React.FC = () => {
                       type="button"
                       onClick={() => appActions.openVacationModal('status')}
                       style={{ backgroundColor: brandHex }}
-                      className="btn-primary !h-9 !px-4 !text-[12px] flex items-center gap-1.5"
+                      className="btn-primary !h-9 !px-4 !text-[12px] flex items-center gap-1.5 whitespace-nowrap"
                     >
                       <span>{t('endVacationBtn')}</span>
                     </button>
@@ -630,16 +630,16 @@ export const DashboardView: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setAppState({ activeTab: 'library' })}
-                      className="btn-secondary !h-9 !px-3.5 !text-[12px]"
+                      className="btn-secondary !h-9 !px-3.5 !text-[12px] whitespace-nowrap"
                     >
                       {t('navLibrary')}
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3 flex-1 min-w-0">
+                <div className="space-y-3 flex-1 min-w-[200px]">
                   <div>
-                    <span className={`text-[12px] font-medium ${subText}`}>
+                    <span className={`text-[12px] font-medium whitespace-nowrap ${subText}`}>
                       {t('todayProgressTitle')}
                     </span>
                   </div>
@@ -648,33 +648,33 @@ export const DashboardView: React.FC = () => {
                     {isSyncPending ? (
                       <div className="h-8 w-56 rounded-lg animate-skeleton-shimmer" />
                     ) : totalPending > 0 ? (
-                      <div className={`flex items-baseline gap-2.5 ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
-                        <span className="text-[26px] font-bold tracking-tight">
+                      <div className={`flex items-baseline gap-2.5 flex-wrap ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
+                        <span className="text-[24px] sm:text-[26px] font-bold tracking-tight whitespace-nowrap">
                           {t('remainingCards', { n: totalPending })}
                         </span>
-                        <span className={`text-[13px] ${subText}`}>
+                        <span className={`text-[13px] whitespace-nowrap ${subText}`}>
                           {t('estimatedMinutes', { n: dashboard.todayStats.estimatedMinutes })}
                         </span>
                       </div>
                     ) : completed > 0 ? (
-                      <div className={`flex items-baseline gap-2.5 ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
-                        <span className="text-[20px] font-bold tracking-tight text-[var(--status-success)] flex items-center gap-2">
+                      <div className={`flex items-baseline gap-2.5 flex-wrap ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
+                        <span className="text-[18px] sm:text-[20px] font-bold tracking-tight text-[var(--status-success)] flex items-center gap-2 whitespace-nowrap">
                           <svg className="w-5 h-5 text-[var(--status-success)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <circle cx="12" cy="12" r="10" />
                             <polyline points="16 10 11 15 8 12" />
                           </svg>
                           <span>{t('allClearedTitle')}</span>
                         </span>
-                        <span className={`text-[13px] ${subText}`}>
+                        <span className={`text-[13px] whitespace-nowrap ${subText}`}>
                           {t('allClearedSub', { n: completed })}
                         </span>
                       </div>
                     ) : (
-                      <div className={`flex items-baseline gap-2.5 ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
-                        <span className="text-[20px] font-bold tracking-tight">
+                      <div className={`flex items-baseline gap-2.5 flex-wrap ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
+                        <span className="text-[18px] sm:text-[20px] font-bold tracking-tight whitespace-nowrap">
                           {t('noDueTodayTitle')}
                         </span>
-                        <span className={`text-[13px] ${subText}`}>{t('noDueTodaySub')}</span>
+                        <span className={`text-[13px] whitespace-nowrap ${subText}`}>{t('noDueTodaySub')}</span>
                       </div>
                     )}
                     {isSyncPending ? (
@@ -698,7 +698,7 @@ export const DashboardView: React.FC = () => {
                             });
                           }}
                           title={t('dueReviewPill', { n: dashboard.todayStats.dueReview })}
-                          className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--brand-soft)] text-[var(--brand-text)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer min-h-[30px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                          className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer min-h-[30px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                         >
                           <span className="w-2 h-2 rounded-full bg-[var(--brand)]" aria-hidden="true" />
                           <span>{t('dueReviewPill', { n: dashboard.todayStats.dueReview })}</span>
@@ -717,7 +717,7 @@ export const DashboardView: React.FC = () => {
                             });
                           }}
                           title={t('dueNewPill', { n: dashboard.todayStats.dueNew })}
-                          className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--status-warning-soft)] text-[var(--status-warning)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer min-h-[30px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                          className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--status-warning-soft)] text-[var(--status-warning)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer min-h-[30px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                         >
                           <span className="w-2 h-2 rounded-full bg-[var(--status-warning)]" aria-hidden="true" />
                           <span>{t('dueNewPill', { n: dashboard.todayStats.dueNew })}</span>
@@ -736,7 +736,7 @@ export const DashboardView: React.FC = () => {
                             });
                           }}
                           title={t('completedPill', { n: completed })}
-                          className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--status-success-soft)] text-[var(--status-success)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer min-h-[30px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                          className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--status-success-soft)] text-[var(--status-success)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer min-h-[30px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                         >
                           <span className="w-2 h-2 rounded-full bg-[var(--status-success)]" aria-hidden="true" />
                           <span>{t('completedPill', { n: completed })}</span>
@@ -746,7 +746,7 @@ export const DashboardView: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => appActions.openIcuModal('rescue')}
-                            className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)] hover:opacity-90 transition-opacity cursor-pointer"
+                            className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)] hover:opacity-90 transition-opacity cursor-pointer"
                           >
                             <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M3 17l6-6 4 4 8-8" />
@@ -760,12 +760,12 @@ export const DashboardView: React.FC = () => {
                   </div>
 
                   {/* Primary Action Button & Breakdown Pills */}
-                  <div className="flex items-center gap-3 flex-wrap pt-0.5">
+                  <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap pt-0.5">
                     {isSyncPending ? (
                       <button
                         type="button"
                         disabled
-                        className={`h-10 px-5 rounded-xl border font-medium text-[13px] flex items-center gap-2 cursor-wait ${
+                        className={`h-10 px-5 rounded-xl border font-medium text-[13px] flex items-center gap-2 cursor-wait whitespace-nowrap ${
                           isDark ? 'bg-white/5 border-white/10 text-[#8E8E93]' : 'bg-black/5 border-black/10 text-[#8E8E93]'
                         }`}
                       >
@@ -778,7 +778,7 @@ export const DashboardView: React.FC = () => {
                           type="button"
                           onClick={() => appActions.startReview(decks[0]?.id)}
                           style={{ backgroundColor: brandHex }}
-                          className={`btn-primary !h-10 !px-6 ${
+                          className={`btn-primary !h-10 !px-6 whitespace-nowrap ${
                             syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
                           }`}
                         >
@@ -788,7 +788,7 @@ export const DashboardView: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => appActions.startLowEnergySession(decks[0]?.id)}
-                          className="btn-secondary !h-10 !px-3.5 text-[#8E8E93] hover:text-current flex items-center gap-1.5"
+                          className="btn-secondary !h-10 !px-3.5 text-[#8E8E93] hover:text-current flex items-center gap-1.5 whitespace-nowrap"
                           title={t('lowEnergySub')}
                         >
                           <svg
@@ -808,7 +808,7 @@ export const DashboardView: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => appActions.openCustomStudyModal('mistakes')}
-                          className="btn-secondary !h-10 !px-3.5 text-[#8E8E93] hover:text-current flex items-center gap-1.5"
+                          className="btn-secondary !h-10 !px-3.5 text-[#8E8E93] hover:text-current flex items-center gap-1.5 whitespace-nowrap"
                           title={t('customStudyModalTitle')}
                         >
                           <svg
@@ -830,7 +830,7 @@ export const DashboardView: React.FC = () => {
                           type="button"
                           onClick={() => appActions.openCustomStudyModal('mistakes')}
                           style={{ backgroundColor: brandHex }}
-                          className={`btn-primary !h-10 !px-5 flex items-center gap-1.5 ${
+                          className={`btn-primary !h-10 !px-5 flex items-center gap-1.5 whitespace-nowrap ${
                             syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
                           }`}
                         >
@@ -843,7 +843,7 @@ export const DashboardView: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setAppState({ activeTab: 'library' })}
-                          className={`btn-secondary !h-10 !px-5 ${
+                          className={`btn-secondary !h-10 !px-5 whitespace-nowrap ${
                             syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
                           }`}
                         >
@@ -851,20 +851,19 @@ export const DashboardView: React.FC = () => {
                         </button>
                       </>
                     )}
-
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Right: Clean, un-crammed Streak Details Card */}
+            {/* Right: Clean, un-crammed Streak Details Card (stacks cleanly below on < lg windows) */}
             <div
-              className={`relative shrink-0 ps-8 border-s ${
+              className={`relative shrink-0 pt-4 lg:pt-0 lg:ps-8 border-t lg:border-t-0 lg:border-s ${
                 isDark ? 'border-[#2A2C36]' : 'border-[#F0F0F5]'
-              } flex flex-col justify-center text-end min-w-[140px] ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}
+              } flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center text-start lg:text-end min-w-[140px] ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}
             >
-              <div className="relative z-10 flex flex-col justify-center">
-                <div className="flex items-center justify-end gap-1.5">
+              <div className="relative z-10 flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center w-full gap-3 lg:gap-0">
+                <div className="flex items-center lg:justify-end gap-1.5 whitespace-nowrap">
                   <span className={`text-[12px] ${subText}`}>{t('streakTitle')}</span>
                   <span className="relative inline-flex group/streak">
                     <button
@@ -889,7 +888,7 @@ export const DashboardView: React.FC = () => {
                     </button>
                     <span
                       role="tooltip"
-                      className={`pointer-events-none absolute end-0 top-full z-50 mt-2 w-[248px] rounded-xl border px-3 py-2.5 text-start text-[11px] leading-[1.6] shadow-lg opacity-0 translate-y-1 transition-[opacity,transform] duration-150 group-hover/streak:opacity-100 group-hover/streak:translate-y-0 group-focus-within/streak:opacity-100 group-focus-within/streak:translate-y-0 ${
+                      className={`pointer-events-none absolute end-0 top-full z-50 mt-2 w-[248px] rounded-xl border px-3 py-2.5 text-start whitespace-normal text-[11px] leading-[1.6] shadow-lg opacity-0 translate-y-1 transition-[opacity,transform] duration-150 group-hover/streak:opacity-100 group-hover/streak:translate-y-0 group-focus-within/streak:opacity-100 group-focus-within/streak:translate-y-0 ${
                         isDark
                           ? 'bg-[#202127] border-white/10 text-white/85 shadow-[0_10px_30px_rgba(0,0,0,0.55)]'
                           : 'bg-white border-[#E7E7EC] text-[#3A3A3C] shadow-[0_10px_30px_rgba(0,0,0,0.12)]'
@@ -907,21 +906,23 @@ export const DashboardView: React.FC = () => {
                     </span>
                   )}
                 </div>
-                {isSyncPending ? (
-                  <div className="h-8 w-20 rounded-lg animate-skeleton-shimmer mt-1 self-end" />
-                ) : (
-                  <div className="mt-1 flex items-baseline justify-end gap-1.5">
-                    {/* 火苗图标已去掉，改用火焰色数字承载「连胜」语义（#FF8A00 与背景火焰同色系） */}
-                    <span className="text-[28px] font-bold leading-none text-[#FF8A00]">
-                      {dashboard.streak.current}
-                    </span>
-                    <span className={`text-[13px] ${subText}`}>{t('daysUnit')}</span>
+                <div className="flex items-baseline lg:flex-col lg:items-end gap-2 lg:gap-0">
+                  {isSyncPending ? (
+                    <div className="h-8 w-20 rounded-lg animate-skeleton-shimmer lg:mt-1 self-end" />
+                  ) : (
+                    <div className="lg:mt-1 flex items-baseline justify-end gap-1.5 whitespace-nowrap">
+                      {/* 火苗图标已去掉，改用火焰色数字承载「连胜」语义（#FF8A00 与背景火焰同色系） */}
+                      <span className="text-[26px] sm:text-[28px] font-bold leading-none text-[#FF8A00]">
+                        {dashboard.streak.current}
+                      </span>
+                      <span className={`text-[13px] ${subText}`}>{t('daysUnit')}</span>
+                    </div>
+                  )}
+                  <div className={`text-[11px] whitespace-nowrap ${subText} lg:mt-1.5`}>
+                    {t('streakSub', {
+                      longest: dashboard.streak.longest,
+                    })}
                   </div>
-                )}
-                <div className={`text-[11px] ${subText} mt-1.5`}>
-                  {t('streakSub', {
-                    longest: dashboard.streak.longest,
-                  })}
                 </div>
               </div>
             </div>
@@ -929,10 +930,10 @@ export const DashboardView: React.FC = () => {
 
           {/* Deck Cards Grid */}
           <section className="space-y-3.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-baseline gap-2.5 flex-wrap">
-                <h2 className="text-[15px] font-bold">{t('myDecksTitle')}</h2>
-                <span className={`text-[12px] ${subText}`}>
+                <h2 className="text-[15px] font-bold whitespace-nowrap">{t('myDecksTitle')}</h2>
+                <span className={`text-[12px] whitespace-nowrap ${subText}`}>
                   {/* 没有子牌组时 top 与 total 相等，再写「N 个主牌组 · 共 N 个牌组」就是同义反复 */}
                   {topLevelDecks.length === decks.length
                     ? t('decksTotalOnly', { n: decks.length })
@@ -944,13 +945,13 @@ export const DashboardView: React.FC = () => {
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 ms-auto">
                 {decks.length > topLevelDecks.length && (
                   <button
                     onClick={() =>
                       setAppState((prev) => ({ showAllDashboardDecks: !prev.showAllDashboardDecks }))
                     }
-                    className="btn-ghost !text-[var(--brand-text)]"
+                    className="btn-ghost !text-[var(--brand-text)] whitespace-nowrap"
                   >
                     {showAllDashboardDecks
                       ? t('showTopDecksOnly')
@@ -959,7 +960,7 @@ export const DashboardView: React.FC = () => {
                 )}
                 <button
                   onClick={() => appActions.setActiveTab('decks')}
-                  className="btn-ghost flex items-center gap-1"
+                  className="btn-ghost flex items-center gap-1 whitespace-nowrap"
                 >
                   <span>{t('allDecksManage')}</span>
                 </button>
@@ -967,26 +968,20 @@ export const DashboardView: React.FC = () => {
             </div>
 
             {isSyncPending ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {Array.from({ length: 2 }).map((_, idx) => (
                   <div
                     key={idx}
-                    className={`rounded-2xl border p-5 h-[168px] flex flex-col justify-between ${cardSurface}`}
+                    className={`rounded-2xl border p-5 h-[120px] flex flex-col justify-between ${cardSurface}`}
                   >
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl animate-skeleton-shimmer" />
-                        <div className="space-y-2 flex-1">
-                          <div className="w-24 h-4 rounded animate-skeleton-shimmer" />
-                          <div className="w-16 h-3 rounded animate-skeleton-shimmer" />
-                        </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl animate-skeleton-shimmer" />
+                      <div className="space-y-2 flex-1">
+                        <div className="w-24 h-4 rounded animate-skeleton-shimmer" />
+                        <div className="w-16 h-3 rounded animate-skeleton-shimmer" />
                       </div>
-                      <div className="w-full h-1.5 rounded-full animate-skeleton-shimmer mt-4" />
                     </div>
-                    <div className="flex items-center justify-between pt-3 border-t border-black/[0.04] dark:border-white/[0.05]">
-                      <div className="w-24 h-3 rounded animate-skeleton-shimmer" />
-                      <div className="w-7 h-7 rounded-full animate-skeleton-shimmer" />
-                    </div>
+                    <div className="w-full h-1.5 rounded-full animate-skeleton-shimmer mt-4" />
                   </div>
                 ))}
               </div>
@@ -996,57 +991,53 @@ export const DashboardView: React.FC = () => {
                 <p className={`text-[12px] ${subText}`}>{t('noDecksSub')}</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {displayedDecks.map((deck) => {
                   const iconNode = deckIconMap[deck.accent] || deckIconMap.indigo;
                   return (
                     <div
                       key={deck.id}
                       onClick={() => appActions.startReview(deck.id)}
-                      className={`group rounded-2xl border p-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:shadow-md hover:border-[var(--brand-border)] hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col justify-between ${cardSurface} ${
+                      className={`group relative flex min-h-[120px] cursor-pointer flex-col overflow-hidden rounded-2xl border shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-0.5 hover:border-[var(--brand-border)] hover:shadow-md ${cardSurface} ${
                         syncJustFinished ? 'animate-sync-reveal delay-stagger-2' : ''
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-[var(--brand-soft)] text-[var(--brand-text)] transition-colors">
-                          {iconNode}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-semibold text-[14px] truncate">{deck.name}</div>
-                          <div className={`text-[11px] ${subText} mt-0.5 truncate`}>
-                            {deck.totalCards.toLocaleString()} {t('cardsUnit')}
-                            {deck.childrenCount > 0
-                              ? t('subDecksCount', { n: deck.childrenCount })
-                              : ''}
+                      <div className="flex flex-1 flex-col p-5 pb-1">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand-text)] transition-colors">
+                            {iconNode}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-[14px] font-semibold">{deck.name}</div>
+                            <div className={`mt-0.5 truncate text-[11px] ${subText}`}>
+                              {deck.totalCards.toLocaleString()} {t('cardsUnit')}
+                              {deck.childrenCount > 0
+                                ? t('subDecksCount', { n: deck.childrenCount })
+                                : ''}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="mt-6">
-                        <div className="flex items-center justify-between text-[11px] mb-1.5">
-                          <span className={subText}>{t('masteryLabel')}</span>
-                          <span className="font-semibold">{deck.mastery}%</span>
-                        </div>
-                        <div
-                          className={`w-full h-1.5 rounded-full overflow-hidden ${
-                            isDark ? 'bg-[#2A2C36]' : 'bg-[#ECECF2]'
-                          }`}
-                        >
-                          <div
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{ width: `${deck.mastery}%`, backgroundColor: brandHex }}
-                          />
-                        </div>
-                      </div>
+                        {/* 数据行：静态显示统计与熟练度，悬停时整行让位给两个动作按钮 */}
+                        <div className="relative mt-auto h-6">
+                          <div className="flex items-center justify-between text-[11px] transition-opacity duration-150 group-hover:opacity-0">
+                            <span className={`flex items-center gap-2.5 truncate ${subText}`}>
+                              <span className="flex items-center gap-1 whitespace-nowrap">
+                                <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand)]" aria-hidden="true" />
+                                {t('dueReviewPill', { n: deck.dueReview })}
+                              </span>
+                              <span className="flex items-center gap-1 whitespace-nowrap">
+                                <span className="h-1.5 w-1.5 rounded-full bg-[var(--status-warning)]" aria-hidden="true" />
+                                {deck.dueNew > 0 ? t('dueNewPill', { n: deck.dueNew }) : t('noNewCards')}
+                              </span>
+                            </span>
+                            <span className={`font-semibold shrink-0 ms-2 ${isDark ? 'text-[#D8D8E0]' : 'text-[#1D1D1F]'}`}>
+                              {deck.mastery}%
+                            </span>
+                          </div>
 
-                      <div className="mt-4 pt-3 flex items-center justify-between">
-                        <span className={`text-[11px] ${subText}`}>
-                          {t('dueReviewPill', { n: deck.dueReview })} ·{' '}
-                          {deck.dueNew > 0 ? t('dueNewPill', { n: deck.dueNew }) : t('noNewCards')}
-                        </span>
-                        {/* 默认只放一个播放键；悬停后换成「查看 / 学习」两个明确动作 */}
-                        <div className="flex items-center gap-1 shrink-0 min-h-7">
-                          <div className="hidden group-hover:flex items-center gap-1">
+                          {/* 悬停浮层：从下方轻推上来，静态时不占位、不拦截点击 */}
+                          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex translate-y-1 items-center justify-end gap-1 opacity-0 transition-[opacity,transform] duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100">
                             <button
                               type="button"
                               title={t('viewInLibraryBtn')}
@@ -1055,13 +1046,17 @@ export const DashboardView: React.FC = () => {
                                 setAppState({ activeTab: 'library' });
                                 appActions.searchLibraryDebounced({ deckId: deck.id });
                               }}
-                              className={`h-7 px-2.5 rounded-full border text-[11px] font-medium transition-colors cursor-pointer ${
+                              className={`flex h-6 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium whitespace-nowrap transition-colors cursor-pointer ${
                                 isDark
                                   ? 'border-[#343644] text-[#D8D8E0] hover:border-[var(--brand-border)] hover:text-[var(--brand-text)]'
                                   : 'border-[#E0E0E6] text-[#3A3A3C] hover:border-[var(--brand-border)] hover:text-[var(--brand-text)]'
                               }`}
                             >
-                              {t('viewDeckBtn')}
+                              <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <rect x="3" y="4" width="18" height="16" rx="2" />
+                                <line x1="3" y1="9" x2="21" y2="9" />
+                              </svg>
+                              <span>{t('viewDeckBtn')}</span>
                             </button>
                             <button
                               type="button"
@@ -1071,12 +1066,30 @@ export const DashboardView: React.FC = () => {
                                 appActions.startReview(deck.id);
                               }}
                               style={{ backgroundColor: brandHex }}
-                              className="h-7 px-2.5 rounded-full text-white text-[11px] font-semibold transition-opacity hover:opacity-95 cursor-pointer"
+                              className="flex h-6 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold text-white whitespace-nowrap transition-opacity hover:opacity-95 cursor-pointer"
                             >
-                              {t('studyDeckBtn')}
+                              <svg className="h-3 w-3 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                                <polygon points="6 4 20 12 6 20 6 4" />
+                              </svg>
+                              <span>{t('studyDeckBtn')}</span>
                             </button>
                           </div>
                         </div>
+                      </div>
+
+                      {/* 熟练度进度条贴卡片底边，由外层 overflow-hidden 自然切成圆角底边 */}
+                      <div
+                        role="progressbar"
+                        aria-valuenow={deck.mastery}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label={`${deck.name} ${t('masteryLabel')}`}
+                        className={`h-1 w-full ${isDark ? 'bg-[#2A2C36]' : 'bg-[#ECECF2]'}`}
+                      >
+                        <div
+                          className="h-full transition-all duration-500"
+                          style={{ width: `${deck.mastery}%`, backgroundColor: brandHex }}
+                        />
                       </div>
                     </div>
                   );
@@ -1089,7 +1102,7 @@ export const DashboardView: React.FC = () => {
           <section className="grid grid-cols-12 gap-4 pb-4">
             {/* Left: Heatmap */}
             <div
-              className={`col-span-7 rounded-2xl border p-5 flex flex-col justify-between relative ${cardSurface} ${
+              className={`col-span-12 xl:col-span-7 rounded-2xl border p-5 flex flex-col justify-between relative ${cardSurface} ${
                 syncJustFinished ? 'animate-sync-reveal delay-stagger-3' : ''
               }`}
             >
@@ -1133,14 +1146,14 @@ export const DashboardView: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
                     <div>
                       <h3 className="text-[14px] font-bold">{t('heatmapTitle')}</h3>
                       <p className={`text-[11px] ${subText} mt-0.5`}>
                         {t('heatmapSub', { n: dashboard.heatmap.totalYearReviews.toLocaleString() })}
                       </p>
                     </div>
-                    <div className={`flex items-center gap-1 text-[11px] ${subText}`}>
+                    <div className={`flex items-center gap-1 text-[11px] shrink-0 ${subText}`}>
                       <span>{t('less')}</span>
                       {[0, 1, 2, 3, 4].map((lv) => (
                         <span
@@ -1251,26 +1264,26 @@ export const DashboardView: React.FC = () => {
                   <div
                     className={`pt-3.5 border-t ${
                       isDark ? 'border-[#2A2C36]' : 'border-[#F2F2F7]'
-                    } flex items-center gap-8`}
+                    } flex items-center gap-6 sm:gap-8 flex-wrap`}
                   >
                     <div>
-                      <div className="text-[15px] font-bold">
+                      <div className="text-[15px] font-bold whitespace-nowrap">
                         {dashboard.heatmap.weekTotalCards} {t('cardsUnit')}
                       </div>
-                      <div className={`text-[11px] ${subText}`}>{t('weekStudied')}</div>
+                      <div className={`text-[11px] whitespace-nowrap ${subText}`}>{t('weekStudied')}</div>
                     </div>
                     <div>
-                      <div className="text-[15px] font-bold">
+                      <div className="text-[15px] font-bold whitespace-nowrap">
                         {dashboard.heatmap.dailyAverage} {t('cardsUnit')}
                       </div>
-                      <div className={`text-[11px] ${subText}`}>{t('dailyAvg')}</div>
+                      <div className={`text-[11px] whitespace-nowrap ${subText}`}>{t('dailyAvg')}</div>
                     </div>
                     <div>
-                      <div className="text-[15px] font-bold">{dashboard.heatmap.retentionRate}%</div>
-                      <div className={`text-[11px] ${subText}`}>{t('retentionRate')}</div>
+                      <div className="text-[15px] font-bold whitespace-nowrap">{dashboard.heatmap.retentionRate}%</div>
+                      <div className={`text-[11px] whitespace-nowrap ${subText}`}>{t('retentionRate')}</div>
                     </div>
                     <div className="ms-auto">
-                      <span className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-[var(--brand-soft)] text-[var(--brand-text)]">
+                      <span className="px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)]">
                         {dashboard.heatmap.wowChange}
                       </span>
                     </div>
@@ -1281,7 +1294,7 @@ export const DashboardView: React.FC = () => {
 
             {/* Right: Weekly Rhythm Bar Chart */}
             <div
-              className={`col-span-5 rounded-2xl border p-5 flex flex-col justify-between relative ${cardSurface} ${
+              className={`col-span-12 xl:col-span-5 rounded-2xl border p-5 flex flex-col justify-between relative ${cardSurface} ${
                 syncJustFinished ? 'animate-sync-reveal delay-stagger-3' : ''
               }`}
             >

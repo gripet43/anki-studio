@@ -123,12 +123,18 @@ class ScenarioRunner:
 
     def __exit__(self, *exc) -> None:
         if self.col is not None:
-            self.col.close()
+            try:
+                self.col.close()
+            finally:
+                self.col = None
         for path in (self.copy, Path(str(self.copy) + "-wal"), Path(str(self.copy) + "-shm")):
             if path.exists():
-                path.unlink()
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
         if getattr(self, "media_copy", None) and self.media_copy.exists():
-            shutil.rmtree(self.media_copy)
+            shutil.rmtree(self.media_copy, ignore_errors=True)
 
     # ---------------------------------------------------------------- 工具
     def call(self, action: str, data: dict | None = None) -> dict[str, Any]:
@@ -180,13 +186,21 @@ class ScenarioRunner:
                 raise AssertionError(f"返回值含非法数值 {token}，前端无法解析")
 
     def sqlite_count(self, sql: str) -> int:
+        # Windows 下 Anki 26 以 WAL + 独占句柄锁持有 collection，同进程二次 sqlite3.connect
+        # 会直接触发 OperationalError: database is locked；统一优先走已打开的 col.db 连接。
+        if self.col is not None and hasattr(self.col, "db") and self.col.db is not None:
+            val = self.col.db.scalar(sql)
+            return int(val) if val is not None else 0
         conn = sqlite3.connect(f"file:{self.copy}?mode=ro", uri=True)
         try:
-            return conn.execute(sql).fetchone()[0]
+            row = conn.execute(sql).fetchone()
+            return int(row[0]) if row and row[0] is not None else 0
         finally:
             conn.close()
 
     def _sqlite_rows(self, sql: str) -> list[tuple]:
+        if self.col is not None and hasattr(self.col, "db") and self.col.db is not None:
+            return [tuple(r) for r in self.col.db.all(sql)]
         conn = sqlite3.connect(f"file:{self.copy}?mode=ro", uri=True)
         try:
             return conn.execute(sql).fetchall()
@@ -533,14 +547,10 @@ def run_native_io_checks(runner: ScenarioRunner) -> None:
 
 
 def _schedule_snapshot(runner: ScenarioRunner) -> list[tuple]:
-    """逐卡调度快照，用于零 diff 断言。"""
-    conn = sqlite3.connect(f"file:{runner.copy}?mode=ro", uri=True)
-    try:
-        return conn.execute(
-            "select id, type, queue, due, ivl, factor, reps, lapses from cards order by id"
-        ).fetchall()
-    finally:
-        conn.close()
+    """逐卡调度快照，用于零 diff 断言（复用 runner.col.db 避免 Windows 独占文件锁冲突）。"""
+    return runner._sqlite_rows(
+        "select id, type, queue, due, ivl, factor, reps, lapses from cards order by id"
+    )
 
 
 def _diff_count(before: list[tuple], after: list[tuple]) -> int:
@@ -838,12 +848,20 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
     )
 
     # ---- 查重：拿真实卡片正文去查，必须判定为重复
-    rows = runner._sqlite_rows("select flds from notes limit 1")
-    front_text = rows[0][0].split("\x1f")[0] if rows else ""
-    # 遮挡类笔记的正文是 `{{c1::<svg>…</svg>}}`，先把 cloze 与标签都剥掉再判断，
-    # 否则剩下的 `{{c1::}}` 会被误认为可比较文本，查重必然落空。
-    plain_front = re.sub(r"\{\{c\d+::[\s\S]*?\}\}", "", front_text)
-    plain_front = re.sub(r"<[^>]+>", "", plain_front).strip()
+    # dirty 场景会把前几条笔记置为空卡，因此扫描前 30 条找到第一条有实际文本的笔记
+    rows = runner._sqlite_rows("select flds from notes limit 30")
+    front_text = ""
+    plain_front = ""
+    for r in rows:
+        candidate = (r[0] or "").split("\x1f")[0]
+        # 遮挡类笔记的正文是 `{{c1::<svg>…</svg>}}`，先把 cloze 与标签都剥掉再判断，
+        # 否则剩下的 `{{c1::}}` 会被误认为可比较文本，查重必然落空。
+        stripped = re.sub(r"\{\{c\d+::[\s\S]*?\}\}", "", candidate)
+        stripped = re.sub(r"<[^>]+>", "", stripped).strip()
+        if len(stripped) >= 4:
+            front_text = candidate
+            plain_front = stripped
+            break
 
     if len(plain_front) >= 4:
         def duplicate(payload: dict) -> None:
@@ -907,8 +925,9 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
             data = runner.expect_success(payload)
             if data.get("saved") is False:
                 raise AssertionError("编辑返回 saved=False")
-            flds = runner.sqlite_count(f"select flds from notes where id={edit_nid}")
-            if "冒烟编辑" not in str(flds):
+            flds = runner._sqlite_rows(f"select flds from notes where id={edit_nid}")
+            flds_str = str(flds[0][0]) if flds else ""
+            if "冒烟编辑" not in flds_str:
                 raise AssertionError("编辑内容没写进 notes.flds")
 
         runner.check(

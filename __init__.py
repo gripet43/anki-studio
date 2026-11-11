@@ -5,8 +5,8 @@ Non-intrusively mounts the full-screen Modern Web UI over Anki's `mw.centralWidg
 connects the <2ms pycmd IPC bridge, listens to Anki native lifecycle hooks
 (sync_did_finish, operation_did_execute, state_did_reset) for two-way live sync,
 and provides a 3-Layer Anti-Lost Safety Net to switch seamlessly between Anki Studio and native Anki:
-  1. Global Hotkey: `Ctrl+Opt+M` (macOS) / `Ctrl+Alt+M` (Windows/Linux)
-  2. Tools Menu Action: `切换 Anki Studio / 原生界面 (Ctrl+Opt+M)`
+  1. Global Hotkey: `Ctrl+Opt+M` (macOS) / `Ctrl+Alt+M` (Windows/Linux) with ApplicationShortcut context
+  2. Native Menu Bar & Tools Menu Actions: Top-level `🌟 Anki Studio` menu bar action + `切换 Anki Studio / 原生界面`
   3. Native Top Toolbar Permanent Button: `[ 🌟 进入 Anki Studio (Ctrl+Opt+M) ]` injected via `top_toolbar_did_init_links`
 """
 
@@ -24,6 +24,13 @@ ADDON_DIR = Path(__file__).resolve().parent
 WEB_DIST_DIR = ADDON_DIR / "web"
 CONFIG_FILE = ADDON_DIR / "config.json"
 
+# Comfortable default & minimum workspace dimensions so Windows first-run (683x609)
+# never crushes the multi-column modern dashboard into vertical single-character lines.
+MODERN_DEFAULT_WIDTH = 1180
+MODERN_DEFAULT_HEIGHT = 760
+MODERN_MIN_WIDTH = 860
+MODERN_MIN_HEIGHT = 600
+
 
 class AnkiModernHost:
     """Manages the full-screen modern Anki WebEngine overlay, preferences persistence, and 3-layer native switch."""
@@ -32,6 +39,8 @@ class AnkiModernHost:
         self.webview: Optional[Any] = None
         self.is_modern_visible: bool = False
         self._sync_error_in_flight: Optional[str] = None
+        self._orig_min_size: Optional[Any] = None
+        self._did_initial_expand: bool = False
         self.router = BridgeRouter(
             toggle_native_callback=self.toggle_modern_ui,
             config_getter=self.get_config,
@@ -79,7 +88,7 @@ class AnkiModernHost:
     def initialize(self) -> None:
         try:
             from aqt import gui_hooks, mw
-            from aqt.qt import QAction, QKeySequence
+            from aqt.qt import QAction, QKeySequence, Qt
         except ImportError:
             # Outside Anki runtime (e.g., automated unit tests)
             return
@@ -103,26 +112,84 @@ class AnkiModernHost:
         if hasattr(gui_hooks, "state_did_reset"):
             gui_hooks.state_did_reset.append(self._on_state_did_reset)
 
-        # 4. Layer 3 Safety Net: Inject prominent "[ 🌟 进入 Modern OS (Ctrl+Opt+M) ]" button into Anki native top toolbar
+        # 4. Layer 3 Safety Net: Inject prominent "[ 🌟 进入 Anki Studio (Ctrl+Opt+M) ]" button into Anki native top toolbar
         if hasattr(gui_hooks, "top_toolbar_did_init_links"):
             gui_hooks.top_toolbar_did_init_links.append(self._on_top_toolbar_init_links)
 
-        # 5. Layer 1 & Layer 2 Safety Net: Tools menu action & Fail-safe hotkeys (Ctrl+Opt+M / Ctrl+Alt+M)
+        # 5. Layer 1 & Layer 2 Safety Net: Tools menu action, Top Menu Bar action & Application-wide Hotkeys
         shortcut_hint = "Ctrl+Opt+M" if sys.platform.startswith("darwin") else "Ctrl+Alt+M"
         # Qt swaps Ctrl/Meta on macOS: "Meta+Alt+M" is the documented ⌃⌥M there,
-        # while other platforms need a literal "Ctrl+Alt+M". Using one shared
-        # sequence also avoids QAction + QShortcut both firing (double toggle).
+        # while other platforms need a literal "Ctrl+Alt+M". Using ApplicationShortcut
+        # guarantees the shortcut works even when a child QWebEngineView holds or loses focus.
         shortcut_seq = QKeySequence(
             "Meta+Alt+M" if sys.platform.startswith("darwin") else "Ctrl+Alt+M"
         )
         action = QAction(f"切换 Anki Studio / 原生界面 ({shortcut_hint})", mw)
         action.setShortcut(shortcut_seq)
+        try:
+            action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        except Exception:
+            pass
         action.triggered.connect(self.toggle_modern_ui)
         mw.form.menuTools.addAction(action)
         self._modern_toggle_action = action
 
-        # 6. Suppress duplicate native Qt sync progress modal dialogs & tooltips while Modern UI is active
+        # Also mount a one-click top-level "Anki Studio" entry on the native menu bar
+        # so users in Native UI on Windows/Linux can switch back with a single native menu click
+        # even if QtWebEngine mouse input inside mw.toolbar.web is unavailable (e.g. QEMU VM).
+        try:
+            if hasattr(mw.form, "menubar") and mw.form.menubar is not None:
+                menubar_action = QAction("🌟 Anki Studio", mw)
+                menubar_action.setToolTip(f"切换 Anki Studio / 原生界面 ({shortcut_hint})")
+                menubar_action.triggered.connect(self.toggle_modern_ui)
+                mw.form.menubar.addAction(menubar_action)
+                self._menubar_toggle_action = menubar_action
+        except Exception:
+            pass
+
+        # 6. Bridge native Tools -> Preferences (Ctrl+P / Cmd+,) to Modern Settings Modal when Modern UI is active
+        self._patch_preferences_action()
+
+        # 7. Suppress duplicate native Qt sync progress modal dialogs & tooltips while Modern UI is active
         self._patch_anki_dialogs()
+
+    def _patch_preferences_action(self) -> None:
+        """
+        Ensures triggering Tools -> Preferences (`Ctrl+P` on Windows/Linux, `Cmd+,` on macOS)
+        while Modern UI is visible opens Anki Studio's Settings Modal instead of doing nothing
+        or opening an orphaned background dialog; preserves native Preferences when in Native UI.
+        """
+        host = self
+        try:
+            from aqt import mw
+            from aqt.qt import Qt
+            if mw is None:
+                return
+            pref_action = getattr(mw.form, "actionPreferences", None)
+            if pref_action is not None:
+                try:
+                    pref_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+                except Exception:
+                    pass
+            if hasattr(mw, "onPrefs") and not getattr(mw, "_anki_modern_prefs_patched", False):
+                orig_on_prefs = mw.onPrefs
+
+                def modern_on_prefs(*args, **kwargs):
+                    if host.is_modern_visible:
+                        host._emit_js_event("anki:open-settings", {})
+                        return None
+                    return orig_on_prefs(*args, **kwargs)
+
+                mw.onPrefs = modern_on_prefs
+                if pref_action is not None:
+                    try:
+                        pref_action.triggered.disconnect()
+                    except Exception:
+                        pass
+                    pref_action.triggered.connect(modern_on_prefs)
+                mw._anki_modern_prefs_patched = True
+        except Exception:
+            pass
 
     def _patch_anki_dialogs(self) -> None:
         """
@@ -147,8 +214,6 @@ class AnkiModernHost:
 
                 def modern_set_busy_cursor(pm_self):
                     if host.is_modern_visible:
-                        # Modern UI handles loading states with smooth vector SVG spinners.
-                        # Silently prevent setting Qt.CursorShape.WaitCursor (retro 4-quadrant checkered circle cursor).
                         return None
                     if orig_set_busy:
                         return orig_set_busy(pm_self)
@@ -175,7 +240,6 @@ class AnkiModernHost:
 
         try:
             import aqt.utils
-            import sys
             import re
 
             if not getattr(aqt.utils, "_anki_modern_patched", False):
@@ -184,13 +248,9 @@ class AnkiModernHost:
                 def modern_tooltip_interceptor(msg, *args, **kwargs):
                     if host.is_modern_visible:
                         try:
-                            # 1. Immediately dismiss any stray native Qt yellow tooltip label
                             if hasattr(aqt.utils, "closeTooltip"):
                                 aqt.utils.closeTooltip()
-                            # 2. Extract clean text without HTML tags
                             clean_text = re.sub(r"<[^>]*>", "", str(msg or "")).strip()
-                            # Modern UI provides rich, integrated header capsule and waterfall reveals for sync,
-                            # so silence redundant sync notification toasts to prevent visual clutter
                             sync_ignore_terms = ("集合同步完成", "Collection synced", "同步已完成", "同步完成")
                             if clean_text in sync_ignore_terms:
                                 return None
@@ -205,7 +265,6 @@ class AnkiModernHost:
                 self._modern_tooltip_interceptor = modern_tooltip_interceptor
                 self._orig_tooltip = orig_tooltip
 
-                # Patch all existing modules that imported `tooltip` directly
                 for mod_name, mod in list(sys.modules.items()):
                     if mod:
                         if getattr(mod, "tooltip", None) is orig_tooltip:
@@ -245,8 +304,8 @@ class AnkiModernHost:
     def _on_top_toolbar_init_links(self, links: List[str], toolbar: Any) -> None:
         """
         Layer 3 Anti-Lost Safety Net:
-        Injects a prominent purple/gold pill button into Anki's native top toolbar (`mw.toolbar`)
-        so users who switched to native Anki can always return to Modern OS in a single click.
+        Injects a prominent pill button into Anki's native top toolbar (`mw.toolbar`)
+        so users who switched to native Anki can always return to Anki Studio in a single click.
         """
         try:
             shortcut_hint = "Ctrl+Opt+M" if sys.platform.startswith("darwin") else "Ctrl+Alt+M"
@@ -323,13 +382,10 @@ class AnkiModernHost:
         col = getattr(mw, "col", None) if mw is not None else None
         ls_ts = DeckService._get_last_sync_timestamp(col) if col is not None else None
         if ls_ts is not None and ls_ts <= 0:
-            # Collection still has ls == 0 (e.g. un-synced profile or user canceled initial full sync)
             self._emit_js_event("anki:sync-finished", {"synced": False, "syncedAt": 0})
             return
 
         synced_at_ms = int(_time.time() * 1000)
-        # Anki leaves SQLite `col.ls` unchanged when AnkiWeb reports NO_CHANGES.
-        # Persist the verified sync check timestamp per profile when col.ls > 0.
         if ls_ts is not None and ls_ts > 0:
             try:
                 profile_key = DeckService.resolve_profile_sync_key(mw)
@@ -352,8 +408,65 @@ class AnkiModernHost:
             return
         self._emit_js_event("anki:collection-updated", {"source": "operation"})
 
+    def _hide_native_webviews(self, mw: Any) -> None:
+        """Hides Anki's native toolbar, main webview, and bottom webview so they never overlap or steal input."""
+        if mw is None:
+            return
+        toolbar = getattr(mw, "toolbar", None)
+        if toolbar and getattr(toolbar, "web", None):
+            try:
+                toolbar.web.hide()
+            except Exception:
+                pass
+
+        bottom_web = getattr(mw, "bottomWeb", None)
+        if bottom_web is not None:
+            try:
+                bottom_web.hide()
+            except Exception:
+                pass
+
+        main_web = getattr(mw, "web", None)
+        if main_web is not None:
+            try:
+                main_web.hide()
+            except Exception:
+                pass
+
+    def _sync_webview_geometry_and_focus(self, grab_focus: bool = False) -> None:
+        """Synchronizes Modern WebView bounds to its parent container and keeps it stacked on top."""
+        if self.webview is None or not self.is_modern_visible:
+            return
+        try:
+            from aqt import mw
+            target = self.webview.parentWidget() if hasattr(self.webview, "parentWidget") else None
+            if target is None:
+                target = self.webview.parent() or mw
+            if target is not None:
+                w, h = int(target.width()), int(target.height())
+                if w > 0 and h > 0:
+                    self.webview.setGeometry(0, 0, w, h)
+            self.webview.show()
+            self.webview.raise_()
+            if grab_focus:
+                self.webview.setFocus()
+        except Exception:
+            pass
+
     def _on_state_did_reset(self, *args: Any) -> None:
+        """
+        When Anki runs `mw.reset()`, native Anki re-shows `mw.toolbar.web` and `mw.web`.
+        On Windows/Linux where `self.webview` lives inside `mw.centralWidget()`, we must
+        immediately re-hide the native webviews and raise `self.webview` so native widgets
+        never cover or steal mouse/keyboard input from Anki Studio.
+        """
         if self.is_modern_visible:
+            try:
+                from aqt import mw
+                self._hide_native_webviews(mw)
+                self._sync_webview_geometry_and_focus(grab_focus=True)
+            except Exception:
+                pass
             self._emit_js_event("anki:collection-updated", {"source": "reset"})
 
     def _on_main_window_init(self) -> None:
@@ -415,12 +528,51 @@ class AnkiModernHost:
                 except Exception:
                     pass
             return True
-        except Exception as e:
+        except Exception:
             return False
+
+    def _ensure_comfortable_window_size(self, mw: Any) -> None:
+        """
+        Ensures the host Anki window meets Modern UI minimum dimensions and expands
+        tiny first-run windows (such as Windows default 683x609) to a comfortable desktop size.
+        """
+        if mw is None:
+            return
+        try:
+            if self._orig_min_size is None and hasattr(mw, "minimumSize"):
+                self._orig_min_size = mw.minimumSize()
+            if hasattr(mw, "setMinimumSize"):
+                mw.setMinimumSize(MODERN_MIN_WIDTH, MODERN_MIN_HEIGHT)
+
+            is_max_or_full = (
+                (hasattr(mw, "isMaximized") and mw.isMaximized())
+                or (hasattr(mw, "isFullScreen") and mw.isFullScreen())
+            )
+            if not is_max_or_full and not self._did_initial_expand:
+                curr_w = int(mw.width()) if hasattr(mw, "width") else MODERN_DEFAULT_WIDTH
+                curr_h = int(mw.height()) if hasattr(mw, "height") else MODERN_DEFAULT_HEIGHT
+                if curr_w < 1040 or curr_h < 680:
+                    target_w = max(curr_w, MODERN_DEFAULT_WIDTH)
+                    target_h = max(curr_h, MODERN_DEFAULT_HEIGHT)
+                    # Clamp to available screen geometry so we never overflow small displays (e.g. 1280x800)
+                    try:
+                        screen = mw.screen() if hasattr(mw, "screen") else None
+                        if screen is not None and hasattr(screen, "availableGeometry"):
+                            avail = screen.availableGeometry()
+                            avail_w, avail_h = int(avail.width()), int(avail.height())
+                            if avail_w > 0 and avail_h > 0:
+                                target_w = min(target_w, max(MODERN_MIN_WIDTH, avail_w - 40))
+                                target_h = min(target_h, max(MODERN_MIN_HEIGHT, avail_h - 40))
+                    except Exception:
+                        pass
+                    mw.resize(target_w, target_h)
+                self._did_initial_expand = True
+        except Exception:
+            pass
 
     def _ensure_webview(self) -> Any:
         from aqt import mw
-        from aqt.qt import QUrl
+        from aqt.qt import Qt, QUrl
         from aqt.webview import AnkiWebView
 
         if self.webview is not None:
@@ -434,9 +586,14 @@ class AnkiModernHost:
         )
         self.webview = AnkiWebView(parent=target_parent)
         self.webview.setObjectName("ankiModernOSWebView")
+        try:
+            self.webview.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+            self.webview.setAttribute(Qt.WidgetAttribute.WA_InputMethodEnabled, True)
+        except Exception:
+            pass
 
         # Guardrail #2: Immediately set `page.open_links_externally = False` so `file://` URLs
-        # never launch in the macOS external browser
+        # never launch in the external browser
         page = self.webview.page()
         if page is not None:
             page.open_links_externally = False
@@ -470,7 +627,13 @@ class AnkiModernHost:
                 "</body></html>"
             )
 
-        mw.installEventFilter(self._create_resize_filter(mw))
+        resize_filter = self._create_resize_filter(mw)
+        mw.installEventFilter(resize_filter)
+        if target_parent is not None and target_parent is not mw:
+            try:
+                target_parent.installEventFilter(resize_filter)
+            except Exception:
+                pass
         return self.webview
 
     def _create_resize_filter(self, mw_obj):
@@ -480,9 +643,16 @@ class AnkiModernHost:
 
         class ResizeFilter(QObject):
             def eventFilter(self, obj, event):
-                if event.type() == QEvent.Type.Resize and host.webview and host.is_modern_visible:
+                ev_type = event.type()
+                if (
+                    ev_type in (QEvent.Type.Resize, QEvent.Type.Show, QEvent.Type.LayoutRequest)
+                    and host.webview
+                    and host.is_modern_visible
+                ):
                     target = host.webview.parent() or mw_obj
-                    host.webview.setGeometry(0, 0, target.width(), target.height())
+                    w, h = int(target.width()), int(target.height())
+                    if w > 0 and h > 0:
+                        host.webview.setGeometry(0, 0, w, h)
                 return False
 
         self._resize_filter = ResizeFilter(mw_obj)
@@ -493,53 +663,28 @@ class AnkiModernHost:
         if mw is None:
             return
 
+        self._ensure_comfortable_window_size(mw)
         web = self._ensure_webview()
         try:
             self._apply_cocoa_immersive_titlebar(int(mw.winId()), True)
         except Exception:
             pass
 
-        toolbar = getattr(mw, "toolbar", None)
-        if toolbar and getattr(toolbar, "web", None):
-            try:
-                toolbar.web.hide()
-            except Exception:
-                pass
-
-        # Guardrail #1: Version-safe access to `bottomWeb` via getattr
-        bottom_web = getattr(mw, "bottomWeb", None)
-        if bottom_web is not None:
-            try:
-                bottom_web.hide()
-            except Exception:
-                pass
-
-        main_web = getattr(mw, "web", None)
-        if main_web is not None:
-            try:
-                main_web.hide()
-            except Exception:
-                pass
+        self._hide_native_webviews(mw)
 
         try:
-            target = web.parent() or mw
-            web.setGeometry(0, 0, target.width(), target.height())
-            web.show()
-            web.raise_()
-            web.setFocus()
             self.is_modern_visible = True
+            self._sync_webview_geometry_and_focus(grab_focus=True)
 
             # Dismiss any stray native tooltip and ensure late-imported modules are patched
             try:
                 import aqt.utils
                 if hasattr(aqt.utils, "closeTooltip"):
                     aqt.utils.closeTooltip()
-                from aqt import mw
                 if mw and hasattr(mw, "app") and mw.app:
                     while mw.app.overrideCursor():
                         mw.app.restoreOverrideCursor()
                 if hasattr(self, "_modern_tooltip_interceptor") and hasattr(self, "_orig_tooltip"):
-                    import sys
                     for mod_name, mod in list(sys.modules.items()):
                         if mod and getattr(mod, "tooltip", None) is self._orig_tooltip:
                             try:
@@ -563,6 +708,12 @@ class AnkiModernHost:
         except Exception:
             pass
 
+        if self._orig_min_size is not None and hasattr(mw, "setMinimumSize"):
+            try:
+                mw.setMinimumSize(self._orig_min_size)
+            except Exception:
+                pass
+
         if self.webview is not None:
             try:
                 self.webview.hide()
@@ -576,7 +727,7 @@ class AnkiModernHost:
                     toolbar.web.show()
                 except Exception:
                     pass
-            # Redraw native toolbar so the injected `[ 🌟 进入 Modern OS (Ctrl+Opt+M) ]` button is immediately visible
+            # Redraw native toolbar so the injected `[ 🌟 进入 Anki Studio (Ctrl+Opt+M) ]` button is immediately visible
             if hasattr(toolbar, "draw"):
                 try:
                     toolbar.draw()
@@ -595,6 +746,7 @@ class AnkiModernHost:
         if main_web is not None:
             try:
                 main_web.show()
+                main_web.setFocus()
             except Exception:
                 pass
 
