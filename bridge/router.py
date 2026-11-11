@@ -221,6 +221,12 @@ class BridgeRouter:
 
     # ---- Inline Edit, Media Paste & Quick Add Actions ----
 
+    def action_get_note_types(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.edit_service.get_note_types(data)
+
+    def action_check_duplicate(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.edit_service.check_duplicate_note(data)
+
     def action_update_card_inline(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.edit_service.update_card_inline(data)
 
@@ -261,8 +267,28 @@ class BridgeRouter:
         """Invokes Anki's native AnkiWeb cloud sync (`mw.on_sync_button_clicked` / `mw.onSync`)."""
         mw = self._get_mw()
         triggered_native = False
+        requires_login = False
+        media_sync_in_progress = False
         if mw is not None:
             try:
+                pm = getattr(mw, "pm", None)
+                sync_auth_fn = getattr(pm, "sync_auth", None) if pm is not None else None
+                if callable(sync_auth_fn):
+                    try:
+                        if not sync_auth_fn():
+                            requires_login = True
+                    except Exception:
+                        pass
+
+                media_syncer = getattr(mw, "media_syncer", None)
+                is_media_syncing = getattr(media_syncer, "is_syncing", None) if media_syncer is not None else None
+                if callable(is_media_syncing):
+                    try:
+                        if is_media_syncing() is True:
+                            media_sync_in_progress = True
+                    except Exception:
+                        pass
+
                 if hasattr(mw, "on_sync_button_clicked"):
                     mw.on_sync_button_clicked()
                     triggered_native = True
@@ -274,12 +300,23 @@ class BridgeRouter:
                     triggered_native = True
             except Exception as e:
                 print(f"[Anki Modern OS] Error triggering native sync: {e}")
-        # Report success only when a native sync was actually triggered; otherwise
-        # the UI would show "Synced" while AnkiWeb was never contacted.
+
+        if requires_login:
+            return {
+                "synced": False,
+                "triggeredNativeSync": triggered_native,
+                "requiresLogin": True,
+                "syncedAt": 0,
+            }
+
+        # Do not return a synthetic pre-completion `syncedAt` while Anki's async
+        # sync job is still running; `anki:sync-finished` carries the verified timestamp.
         return {
             "synced": triggered_native,
             "triggeredNativeSync": triggered_native,
-            "syncedAt": int(time.time() * 1000) if triggered_native else 0,
+            "asyncPending": triggered_native,
+            "mediaSyncInProgress": media_sync_in_progress,
+            "requiresLogin": False,
         }
 
     def action_sync_collection(self, data: Dict[str, Any]) -> Dict[str, Any]:

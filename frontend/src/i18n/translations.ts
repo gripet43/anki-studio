@@ -46,7 +46,8 @@ export function formatShortcut(shortcut: string, platform: OSPlatform = 'mac'): 
 }
 
 /**
- * Item #1: Formats relative time since `lastSyncedTimestamp` (`已同步 (刚刚)` / `已同步 (X分钟前)` / `已同步 (X小时前)` / `尚未云端同步`).
+ * Formats relative time since `lastSyncedTimestamp` as a factual snapshot label
+ * (`上次同步 · 刚刚` / `上次同步 · 40分钟前` / `Last synced · 40m ago` / `尚未云端同步`).
  */
 export function formatRelativeSyncLabel(
   lastSyncedTimestamp: number,
@@ -56,26 +57,13 @@ export function formatRelativeSyncLabel(
   if (!lastSyncedTimestamp || lastSyncedTimestamp <= 0) {
     return lang === 'en' ? 'Not synced' : '尚未云端同步';
   }
-  const diffMs = Math.max(0, nowMs - lastSyncedTimestamp);
-  const diffMin = Math.floor(diffMs / 60000);
-  if (lang === 'en') {
-    if (diffMin < 1) return 'Synced (Just now)';
-    if (diffMin < 60) return `Synced (${diffMin}m ago)`;
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `Synced (${diffHr}h ago)`;
-    const diffDays = Math.floor(diffHr / 24);
-    return `Synced (${diffDays}d ago)`;
-  }
-  if (diffMin < 1) return '已同步 (刚刚)';
-  if (diffMin < 60) return `已同步 (${diffMin}分钟前)`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `已同步 (${diffHr}小时前)`;
-  const diffDays = Math.floor(diffHr / 24);
-  return `已同步 (${diffDays}天前)`;
+  const rel = formatRelativeTimeString(lastSyncedTimestamp, lang, nowMs);
+  return lang === 'en' ? `Last synced · ${rel}` : `上次同步 · ${rel}`;
 }
 
 /**
- * Formats relative duration string without prefix (e.g. `刚刚` / `3分钟前` / `从未同步`).
+ * Formats localized relative duration string without prefix (e.g. `刚刚` / `40分钟前` / `40m ago` / `从未同步`).
+ * Uses native `Intl.RelativeTimeFormat` (narrow + auto) with a graceful fallback.
  */
 export function formatRelativeTimeString(
   lastSyncedTimestamp: number,
@@ -87,19 +75,28 @@ export function formatRelativeTimeString(
   }
   const diffMs = Math.max(0, nowMs - lastSyncedTimestamp);
   const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) {
+    return lang === 'en' ? 'Just now' : '刚刚';
+  }
+
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHr / 24);
+  const locale = lang === 'en' ? 'en' : 'zh-CN';
+
+  if (typeof Intl !== 'undefined' && typeof Intl.RelativeTimeFormat === 'function') {
+    const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'narrow' });
+    if (diffMin < 60) return rtf.format(-diffMin, 'minute');
+    if (diffHr < 24) return rtf.format(-diffHr, 'hour');
+    return rtf.format(-diffDays, 'day');
+  }
+
   if (lang === 'en') {
-    if (diffMin < 1) return 'Just now';
     if (diffMin < 60) return `${diffMin}m ago`;
-    const diffHr = Math.floor(diffMin / 60);
     if (diffHr < 24) return `${diffHr}h ago`;
-    const diffDays = Math.floor(diffHr / 24);
     return `${diffDays}d ago`;
   }
-  if (diffMin < 1) return '刚刚';
   if (diffMin < 60) return `${diffMin}分钟前`;
-  const diffHr = Math.floor(diffMin / 60);
   if (diffHr < 24) return `${diffHr}小时前`;
-  const diffDays = Math.floor(diffHr / 24);
   return `${diffDays}天前`;
 }
 
@@ -121,7 +118,7 @@ export function formatDetailedSyncTimestamp(
 }
 
 /**
- * Item #1: Formats absolute sync timestamp for hover tooltip.
+ * Formats absolute sync snapshot timestamp for status summaries & tooltips.
  */
 export function formatAbsoluteSyncTooltip(
   lastSyncedTimestamp: number,
@@ -129,8 +126,8 @@ export function formatAbsoluteSyncTooltip(
 ): string {
   if (!lastSyncedTimestamp || lastSyncedTimestamp <= 0) {
     return lang === 'en'
-      ? 'Not synced to AnkiWeb · Click to sync now'
-      : '尚未与 AnkiWeb 云端同步 · 点击立即同步';
+      ? 'Not synced to AnkiWeb · Local changes only stored on this device'
+      : '尚未与 AnkiWeb 云端同步 · 当前进度仅保存在本机';
   }
   const dt = new Date(lastSyncedTimestamp);
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -138,8 +135,8 @@ export function formatAbsoluteSyncTooltip(
     dt.getHours()
   )}:${pad(dt.getMinutes())}`;
   return lang === 'en'
-    ? `Last synced: ${absStr} · Click to sync with AnkiWeb`
-    : `上次同步：${absStr} · 点击立即与 AnkiWeb 云端同步`;
+    ? `Last sync snapshot: ${absStr} · Sync again to align new changes`
+    : `上次同步快照：${absStr} · 新增变动需再次同步后对齐`;
 }
 
 /**
@@ -180,12 +177,12 @@ const DICT = {
     // Dashboard
     pendingTodaySub: '{date} · 今天共 {n} 张待处理',
     noPendingTodaySub: '{date} · 今日待办已全部完成',
-    synced: '已同步',
+    synced: '上次同步',
     syncNowAction: '立即同步',
     syncing: '同步中...',
-    syncCompleted: '同步成功',
+    syncCompleted: '同步完成',
     syncCloudTitle: 'AnkiWeb 云端同步',
-    syncStatusProtected: '已是最新',
+    syncStatusProtected: '历史快照',
     syncStatusSyncing: '同步进行中',
     syncDetailLastTime: '上次同步时间',
     syncDetailServer: '云端节点',
@@ -282,7 +279,7 @@ const DICT = {
 
     // Library & Cmd+K
     libraryTitle: '卡片库',
-    librarySub: '{total} 张总卡片 · {decks} 个牌组 · 当前匹配 {matched} 张',
+    librarySub: '共 {total} 张卡片 · {decks} 个牌组',
     searchingDb: ' · 正在检索数据库...',
     searchLibraryPlaceholder: '搜索卡片...',
     statusFilterLabel: '状态',
@@ -370,12 +367,12 @@ const DICT = {
     // Dashboard
     pendingTodaySub: '{date} · {n} cards due today',
     noPendingTodaySub: '{date} · All due cards completed',
-    synced: 'Synced',
+    synced: 'Last synced',
     syncNowAction: 'Sync now',
     syncing: 'Syncing...',
     syncCompleted: 'Sync Complete',
     syncCloudTitle: 'AnkiWeb Cloud Sync',
-    syncStatusProtected: 'Up to Date',
+    syncStatusProtected: 'Snapshot',
     syncStatusSyncing: 'Syncing...',
     syncDetailLastTime: 'Last Synced',
     syncDetailServer: 'Cloud Service',
@@ -472,7 +469,7 @@ const DICT = {
 
     // Library & Cmd+K
     libraryTitle: 'Card Library',
-    librarySub: '{total} total · {decks} decks · {matched} matched',
+    librarySub: '{total} total cards · {decks} decks',
     searchingDb: ' · Querying DB...',
     searchLibraryPlaceholder: 'Search cards...',
     statusFilterLabel: 'Status',

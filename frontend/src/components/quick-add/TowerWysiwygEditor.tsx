@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { resolveMediaInHtml } from '../../utils/mediaUrl';
 
 export interface TowerWysiwygEditorProps {
   label: string;
@@ -9,6 +10,7 @@ export interface TowerWysiwygEditorProps {
   minHeight?: number;
   isDark?: boolean;
   accentColor?: string;
+  mediaBaseUrl?: string;
   onPasteImage?: (file: File) => Promise<string | null>;
   onKeyDownShortcut?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   showCloze?: boolean;
@@ -16,11 +18,12 @@ export interface TowerWysiwygEditorProps {
 
 /**
  * Deserializes raw card field HTML into visual WYSIWYG markup:
- * Converts Anki Cloze syntax {{c1::answer}} into visually highlighted Cloze badges.
+ * Resolves relative `<img src>` filenames against `mediaBaseUrl` and converts
+ * Anki Cloze syntax `{{c1::answer}}` into visually highlighted Cloze badges.
  */
-function deserializeToWysiwyg(raw: string): string {
+function deserializeToWysiwyg(raw: string, mediaBaseUrl?: string): string {
   if (!raw || !raw.trim()) return '';
-  let html = raw;
+  let html = resolveMediaInHtml(raw, mediaBaseUrl);
 
   // Convert standalone newlines into <br> if no block tags present
   if (!/<(p|div|br|ul|ol|li|h[1-6]|table|blockquote)\b/i.test(html) && html.includes('\n')) {
@@ -71,6 +74,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
   placeholder,
   minHeight = 130,
   isDark = false,
+  mediaBaseUrl,
   onPasteImage,
   onKeyDownShortcut,
   showCloze = true,
@@ -90,16 +94,20 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
   // Track initial value loaded to avoid cursor jumps
   const lastLoadedValueRef = useRef<string | null>(null);
+  const lastLoadedMediaBaseRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (!editorRef.current) return;
     const currentSerialized = serializeFromWysiwyg(editorRef.current);
-    if (lastLoadedValueRef.current === null || value !== currentSerialized) {
-      editorRef.current.innerHTML = deserializeToWysiwyg(value);
+    const mediaBaseChanged =
+      Boolean(mediaBaseUrl) && mediaBaseUrl !== lastLoadedMediaBaseRef.current;
+    if (lastLoadedValueRef.current === null || value !== currentSerialized || mediaBaseChanged) {
+      editorRef.current.innerHTML = deserializeToWysiwyg(value, mediaBaseUrl);
       lastLoadedValueRef.current = value;
+      lastLoadedMediaBaseRef.current = mediaBaseUrl;
       setCharCount(editorRef.current.textContent?.length || 0);
     }
-  }, [value]);
+  }, [value, mediaBaseUrl]);
 
   const handleInput = () => {
     if (!editorRef.current) return;

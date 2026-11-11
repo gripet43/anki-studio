@@ -19,10 +19,7 @@ export const Sidebar: React.FC = () => {
     showShortcutHints,
     debugModeUnlocked,
     settingsOpen,
-    currentRescueReceipt,
   } = useAppStore();
-
-  const recentReceipt = currentRescueReceipt || dashboard.lastRescueReceipt;
 
   const isZh = resolvedLang === 'zh-CN';
   const t = (key: any, params?: Record<string, string | number>) =>
@@ -345,13 +342,7 @@ export const Sidebar: React.FC = () => {
           {/* 2. 进度减负 (Backlog Relief) */}
           <button
             type="button"
-            onClick={() => {
-              if (recentReceipt && !dashboard.backlog?.hasAvalanche) {
-                appActions.openIcuModal('history', recentReceipt);
-              } else {
-                appActions.openIcuModal('rescue');
-              }
-            }}
+            onClick={() => appActions.openIcuModal('rescue')}
             className={`py-1.5 px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
               dashboard.backlog?.hasAvalanche
                 ? 'bg-[var(--status-warning-soft)] text-[var(--status-warning)] font-semibold shadow-2xs'

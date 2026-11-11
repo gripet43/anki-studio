@@ -312,6 +312,7 @@ export interface EnvInfo {
   osName: string;
   ankiVersion: string;
   platformBadge: string;
+  mediaBaseUrl?: string;
 }
 
 export interface UserPreferences {
@@ -435,6 +436,24 @@ export interface ReviewCardItem {
   history: ReviewHistoryEntry[];
 }
 
+export type LibrarySortOption =
+  | 'default'
+  | 'due_asc'
+  | 'lapses_desc'
+  | 'ivl_asc'
+  | 'ivl_desc'
+  | 'stability_asc'
+  | 'front_asc'
+  | 'newest';
+
+export interface LibraryFacetCounts {
+  statusCounts: Record<string, number>;
+  difficultyCounts: Record<string, number>;
+  flagCounts: Record<string, number>;
+  tagCounts: Record<string, number>;
+  tagAllCount: number;
+}
+
 export interface LibraryCardItem {
   id: string;
   noteId: string;
@@ -456,12 +475,14 @@ export interface LibraryCardItem {
   stability: number;
   difficultyLevel: 'high' | 'medium' | 'low';
   dueText: string;
+  dueRaw?: number;
   status: 'due' | 'new' | 'suspended' | 'review' | 'buried' | 'completed';
   ratedToday?: boolean;
   suspended: boolean;
   buried?: boolean;
   flags?: number;
   reps: number;
+  lapses?: number;
   intervalDays: number;
   lastReviewText?: string;
   nextReviewText?: string;

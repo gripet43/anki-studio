@@ -15,6 +15,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 
+from .media_utils import get_media_dir, normalize_media_html_for_storage
+
 
 class EditService:
     """Service for updating notes/cards in-place, saving pasted media, and adding new notes."""
@@ -47,6 +49,7 @@ class EditService:
             raise ValueError("Valid cardId or noteId is required")
 
         field_names = list(note.keys())
+        media_dir = get_media_dir(col)
         model = note.note_type() if hasattr(note, "note_type") else {"type": 0}
         is_cloze = bool(model.get("type") == 1)
 
@@ -55,7 +58,7 @@ class EditService:
         if isinstance(explicit_fields, dict) and explicit_fields:
             for k, v in explicit_fields.items():
                 if k in note:
-                    note[k] = str(v)
+                    note[k] = normalize_media_html_for_storage(str(v), media_dir)
                     updated_keys.add(k)
 
         front_alias = ("正面", "Front", "Text", "文字", "问题", "Question", "Word", "Expression")
@@ -68,12 +71,15 @@ class EditService:
             matched_front = next((f for f in field_names if f in front_alias), None)
             target_front_key = matched_front or (field_names[0] if field_names else None)
             if target_front_key:
-                note[target_front_key] = str(data["front"])
+                note[target_front_key] = normalize_media_html_for_storage(str(data["front"]), media_dir)
                 updated_keys.add(target_front_key)
 
         has_updated_meaning = any(k in meaning_alias for k in updated_keys)
         if ("meaning" in data or "back" in data) and not has_updated_meaning:
-            meaning_val = str(data.get("meaning") if "meaning" in data else data.get("back", ""))
+            meaning_val = normalize_media_html_for_storage(
+                str(data.get("meaning") if "meaning" in data else data.get("back", "")),
+                media_dir,
+            )
             if is_cloze and len(field_names) == 1:
                 if field_names[0] not in updated_keys and "front" not in data:
                     note[field_names[0]] = meaning_val
@@ -86,7 +92,7 @@ class EditService:
 
         has_updated_example = any(k in example_alias for k in updated_keys)
         if "example" in data and not has_updated_example:
-            example_val = str(data.get("example", "")).strip()
+            example_val = normalize_media_html_for_storage(str(data.get("example", "")).strip(), media_dir)
             matched_example = next((f for f in field_names if f in example_alias), None)
             if matched_example and matched_example not in updated_keys:
                 note[matched_example] = example_val
@@ -95,7 +101,7 @@ class EditService:
 
         has_updated_etym = any(k in etymology_alias for k in updated_keys)
         if "etymology" in data and not has_updated_etym:
-            etym_val = str(data.get("etymology", "")).strip()
+            etym_val = normalize_media_html_for_storage(str(data.get("etymology", "")).strip(), media_dir)
             matched_etym = next((f for f in field_names if f in etymology_alias), None)
             if matched_etym and matched_etym not in updated_keys:
                 note[matched_etym] = etym_val
@@ -204,13 +210,113 @@ class EditService:
             "htmlTag": f'<img src="{actual_name}" />',
         }
 
+    def get_note_types(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Returns all note types (models) in the user's collection with field names and flags."""
+        col = self.col
+        if col is None or not hasattr(col, "models"):
+            return {
+                "success": True,
+                "noteTypes": [
+                    {"id": "basic", "name": "Basic", "isCloze": False, "fields": ["正面", "背面"], "isReversed": False, "isTypeAnswer": False},
+                    {"id": "Cloze", "name": "Cloze", "isCloze": True, "fields": ["Text", "Back Extra"], "isReversed": False, "isTypeAnswer": False},
+                ],
+            }
+
+        out: List[Dict[str, Any]] = []
+        try:
+            models = col.models.all() if hasattr(col.models, "all") else []
+            for m in models:
+                m_id = str(m.get("id", ""))
+                m_name = str(m.get("name", "Basic"))
+                is_cloze = bool(m.get("type") == 1)
+                flds = [str(f.get("name", "")) for f in m.get("flds", []) if isinstance(f, dict) and f.get("name")]
+                if not flds:
+                    flds = ["Text", "Back Extra"] if is_cloze else ["正面", "背面"]
+                tmpls = m.get("tmpls", []) if isinstance(m.get("tmpls"), list) else []
+                is_reversed = (not is_cloze) and len(tmpls) >= 2
+                is_type_ans = any(
+                    "{{type:" in (str(t.get("qfmt", "")) + str(t.get("afmt", "")))
+                    for t in tmpls
+                    if isinstance(t, dict)
+                ) or ("type" in m_name.lower() or "输入" in m_name or "默写" in m_name)
+                out.append({
+                    "id": m_id,
+                    "name": m_name,
+                    "isCloze": is_cloze,
+                    "fields": flds,
+                    "isReversed": is_reversed,
+                    "isTypeAnswer": is_type_ans,
+                })
+        except Exception:
+            pass
+
+        return {"success": True, "noteTypes": out}
+
+    @staticmethod
+    def _normalize_for_dup_check(raw_html: str) -> str:
+        if not raw_html:
+            return ""
+        import html
+        s = re.sub(r"\[sound:[^\]]+\]", "", str(raw_html))
+        s = re.sub(r"\{\{c\d+::([\s\S]*?)(?:::[\s\S]*?)?\}\}", r"\1", s)
+        s = re.sub(r"<br\s*/?>", " ", s, flags=re.I)
+        s = re.sub(r"<[^>]+>", "", s)
+        s = html.unescape(s)
+        return re.sub(r"\s+", " ", s).strip().lower()
+
+    def check_duplicate_note(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Checks whether a note with the same normalized front field already exists."""
+        data = data or {}
+        raw_front = str(data.get("front", "") or "").strip()
+        exclude_nid = str(data.get("excludeNoteId", "") or "").strip()
+        norm_target = self._normalize_for_dup_check(raw_front)
+
+        if not norm_target:
+            return {"isDuplicate": False, "count": 0, "duplicateCount": 0, "matchedNoteIds": [], "matchedPreview": ""}
+
+        col = self.col
+        if col is None or not hasattr(col, "db") or not hasattr(col.db, "all"):
+            return {"isDuplicate": False, "count": 0, "duplicateCount": 0, "matchedNoteIds": [], "matchedPreview": ""}
+
+        matched_nids: List[str] = []
+        matched_preview = ""
+        try:
+            rows = col.db.all("SELECT id, flds FROM notes")
+            for r in rows:
+                nid_str = str(r[0])
+                if exclude_nid and nid_str == exclude_nid:
+                    continue
+                flds_raw = str(r[1] or "")
+                first_field = flds_raw.split("\x1f", 1)[0]
+                if self._normalize_for_dup_check(first_field) == norm_target:
+                    matched_nids.append(nid_str)
+                    if not matched_preview:
+                        matched_preview = re.sub(r"<[^>]+>", "", first_field).strip()[:80]
+        except Exception:
+            pass
+
+        return {
+            "isDuplicate": len(matched_nids) > 0,
+            "count": len(matched_nids),
+            "duplicateCount": len(matched_nids),
+            "matchedNoteIds": matched_nids[:10],
+            "matchedPreview": matched_preview,
+        }
+
     def quick_add_card(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Creates a new note & card from the Quick Add Drawer (Page 6)."""
+        """Creates a new note & card from the Quick Add Drawer (supports model selection, reverse cards, and type-answer)."""
         front = str(data.get("front", "")).strip()
         back = str(data.get("back", "")).strip()
         tags: List[str] = [str(t).strip() for t in data.get("tags", []) if str(t).strip()]
         deck_id_raw = data.get("deckId")
         deck_name = str(data.get("deckName", "")).strip()
+        requested_model_id = str(data.get("modelId", "") or "").strip()
+        requested_model_name = str(data.get("modelName", "") or "").strip()
+        create_reverse = bool(data.get("createReverseCard", False))
+        type_answer_mode = bool(data.get("typeAnswerMode", False))
+
+        if type_answer_mode and "type-answer" not in tags and "默写" not in tags:
+            tags.append("默写")
 
         if not front:
             raise ValueError("Card front content cannot be empty")
@@ -220,6 +326,10 @@ class EditService:
             # Never mint a fake timestamp ID: the note does not exist in Anki and
             # would disappear (or collide) on the next refresh.
             return {"created": False, "error": "Collection unavailable"}
+
+        media_dir = get_media_dir(col)
+        front = normalize_media_html_for_storage(front, media_dir)
+        back = normalize_media_html_for_storage(back, media_dir)
 
         target_did = 1
         if deck_id_raw and str(deck_id_raw).isdigit():
@@ -231,14 +341,28 @@ class EditService:
             target_did = int(out.id)
 
         is_cloze = bool(re.search(r"\{\{c\d+::", front) or re.search(r"\{\{c\d+::", back))
+        all_models = col.models.all() if hasattr(col.models, "all") else []
         model = None
-        for m in col.models.all():
-            if is_cloze and m.get("type") == 1:
-                model = m
-                break
-            if not is_cloze and m.get("type") == 0 and len(m.get("flds", [])) >= 2:
-                model = m
-                break
+
+        # 1. Explicit model selection if not overridden by Cloze syntax
+        if not is_cloze and (requested_model_id or requested_model_name):
+            for m in all_models:
+                if requested_model_id and str(m.get("id", "")) == requested_model_id:
+                    model = m
+                    break
+                if requested_model_name and str(m.get("name", "")).lower() == requested_model_name.lower():
+                    model = m
+                    break
+
+        # 2. Fallback automatic model selection
+        if model is None:
+            for m in all_models:
+                if is_cloze and m.get("type") == 1:
+                    model = m
+                    break
+                if not is_cloze and m.get("type") == 0 and len(m.get("flds", [])) >= 2:
+                    model = m
+                    break
         if model is None:
             model = col.models.current()
 
@@ -251,15 +375,36 @@ class EditService:
         if isinstance(data.get("fields"), dict):
             for k, v in data["fields"].items():
                 if k in note:
-                    note[k] = str(v)
-        note.tags = tags
+                    note[k] = normalize_media_html_for_storage(str(v), media_dir)
+        note.tags = list(tags)
 
         col.add_note(note, target_did)
         cids = [str(cid) for cid in note.card_ids()]
 
+        # 3. If user requested a bidirectional (Basic + Reversed) card and the model only produced 1 card
+        #    and back is non-empty, create the reverse direction note so both directions are scheduled!
+        reverse_note_id = None
+        if create_reverse and not is_cloze and back and len(cids) <= 1:
+            try:
+                rev_note = col.new_note(model)
+                rev_flds = list(rev_note.keys())
+                if rev_flds:
+                    rev_note[rev_flds[0]] = back
+                if len(rev_flds) > 1:
+                    rev_note[rev_flds[1]] = front
+                rev_note.tags = list(tags)
+                col.add_note(rev_note, target_did)
+                reverse_note_id = str(rev_note.id)
+                for r_cid in rev_note.card_ids():
+                    cids.append(str(r_cid))
+            except Exception:
+                pass
+
         return {
             "created": True,
+            "createdCount": len(cids),
             "noteId": str(note.id),
+            "reverseNoteId": reverse_note_id,
             "cardIds": cids,
             "cardId": cids[0] if cids else str(note.id),
             "deckId": str(target_did),

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AnkiStudioLogo } from '../common/AnkiStudioLogo';
+import { SyncStateIcon, SyncVisualState } from '../common/SyncStateIcon';
 import {
   formatAbsoluteSyncTooltip,
   formatRelativeSyncLabel,
@@ -28,6 +29,7 @@ export const SettingsModal: React.FC = () => {
     customNickname,
     dashboard,
     syncing,
+    syncJustFinished,
     lastSyncedTimestamp,
     settingsInitialTab,
     envInfo,
@@ -178,7 +180,6 @@ export const SettingsModal: React.FC = () => {
 
   return (
     <div
-      onClick={() => setAppState({ settingsOpen: false })}
       className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[5px] flex items-center justify-center p-6 select-none modal-contain-scroll"
       role="dialog"
       aria-modal="true"
@@ -576,51 +577,71 @@ export const SettingsModal: React.FC = () => {
           )}
 
           {/* TAB 3: AnkiWeb Sync */}
-          {activeTab === 'sync' && (
-            <div className="space-y-5">
-              <div>
-                <h3 className="text-[17px] font-bold tracking-tight">
-                  {isZh ? '云端同步' : 'AnkiWeb Sync'}
-                </h3>
-                <p className={`text-[12px] ${subText} mt-0.5`}>
-                  {isZh ? '与 AnkiWeb 官方云端实时同步学习进度' : 'Synchronize progress with AnkiWeb cloud'}
-                </p>
-              </div>
+          {activeTab === 'sync' && (() => {
+            const hasSynced = Boolean(lastSyncedTimestamp && lastSyncedTimestamp > 0);
+            const syncVisualState: SyncVisualState = syncing
+              ? 'syncing'
+              : syncJustFinished
+              ? 'justFinished'
+              : hasSynced
+              ? 'snapshot'
+              : 'unsynced';
+            const isoTimestamp = hasSynced ? new Date(lastSyncedTimestamp).toISOString() : undefined;
 
-              {/* Sync Status Card */}
-              <div className={`rounded-xl border p-5 flex items-center justify-between ${cardSurface}`}>
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[var(--status-success)]" />
-                    <span className="text-[14px] font-bold">{relativeSync}</span>
+            return (
+              <div className="space-y-5">
+                <div>
+                  <h3 className="text-[17px] font-bold tracking-tight">
+                    {isZh ? '云端同步' : 'AnkiWeb Sync'}
+                  </h3>
+                  <p className={`text-[12px] ${subText} mt-0.5`}>
+                    {isZh
+                      ? '按需与 AnkiWeb 官方云端双向同步本地学习进度与卡片'
+                      : 'Sync local study progress and cards with AnkiWeb on demand'}
+                  </p>
+                </div>
+
+                {/* Sync Status Card */}
+                <div className={`rounded-xl border p-5 flex items-center justify-between gap-4 ${cardSurface}`}>
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <SyncStateIcon state={syncVisualState} size="lg" />
+                      {hasSynced ? (
+                        <time dateTime={isoTimestamp} className="text-[14px] font-bold tabular-nums">
+                          {relativeSync}
+                        </time>
+                      ) : (
+                        <span className="text-[14px] font-bold">{relativeSync}</span>
+                      )}
+                    </div>
+                    <div className={`text-[12px] ${subText}`}>{absSync}</div>
                   </div>
-                  <div className={`text-[12px] ${subText}`}>{absSync}</div>
+
+                  <button
+                    type="button"
+                    onClick={() => appActions.syncCollection()}
+                    disabled={syncing}
+                    className="btn-primary !h-10 !px-5 !text-[13px] shrink-0"
+                  >
+                    <span aria-hidden="true" className={syncing ? 'motion-safe:animate-spin' : ''}>⟳</span>
+                    <span>{syncing ? t('syncing') : isZh ? '立即同步' : 'Sync Now'}</span>
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => appActions.syncCollection()}
-                  disabled={syncing}
-                  className="btn-primary !h-10 !px-5 !text-[13px]"
-                >
-                  <span className={syncing ? 'animate-spin' : ''}>⟳</span>
-                  <span>{syncing ? t('syncing') : isZh ? '立即同步' : 'Sync Now'}</span>
-                </button>
-              </div>
-
-              {/* Automatic Sync Notice */}
-              <div className={`rounded-xl border p-4 space-y-1.5 text-[12px] ${cardSurface}`}>
-                <div className="font-semibold text-[var(--brand-text)]">
-                  {isZh ? '静默安全同步机制' : 'Silent & Safe Sync'}
+                {/* Snapshot Sync Notice */}
+                <div className={`rounded-xl border p-4 space-y-1.5 text-[12px] ${cardSurface}`}>
+                  <div className="font-semibold text-[var(--brand-text)]">
+                    {isZh ? '按需双向快照同步' : 'On-Demand Snapshot Sync'}
+                  </div>
+                  <p className={`${subText} leading-relaxed`}>
+                    {isZh
+                      ? '启动时自动检测同步，并支持随时点击或按 Y 键触发双向对齐。所有本地练习与编辑都会实时写入 SQLite 数据库，但跨设备进度需再次同步后生效。'
+                      : 'Checks on launch and syncs two-way on demand or via shortcut Y. Local edits save immediately to SQLite; sync again to align across devices.'}
+                  </p>
                 </div>
-                <p className={`${subText} leading-relaxed`}>
-                  {isZh
-                    ? '启动时自动检测同步，并在后台静默监听集合变动，保证多端进度实时一致、数据安全无缝。'
-                    : 'Syncs automatically on launch and listens for background database updates in real-time.'}
-                </p>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* TAB 3.5: Import / Export & System Maintenance Tools */}
           {activeTab === 'maintenance' && (

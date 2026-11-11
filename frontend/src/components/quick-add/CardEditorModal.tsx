@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { callAnki, isAnkiNativeEnv } from '../../bridge/pycmd';
 import { formatShortcut, translate } from '../../i18n/translations';
 import { appActions, LibraryCardItem, ReviewCardItem, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
 import { renderMathAndRichHtml } from '../../utils/mathRenderer';
+import { extractMediaBaseUrlFromHtml, resolveMediaInHtml } from '../../utils/mediaUrl';
 import { getAccentScale } from '../../utils/themeTokens';
 import { ImageOcclusionEditorModal } from './ImageOcclusionEditorModal';
 import { TowerWysiwygEditor } from './TowerWysiwygEditor';
@@ -9,11 +11,36 @@ import { TowerWysiwygEditor } from './TowerWysiwygEditor';
 const FRONT_ALIASES = ['正面', 'Front', 'Text', '文字', '问题', 'Question', 'Word', 'Expression'];
 const BACK_ALIASES = ['背面', 'Back', 'Meaning', '释义', '答案', 'Back Extra', 'Answer', '背面额外', 'Examples', '例句'];
 
+export type NoteCreationPreset = 'basic' | 'reversed' | 'type_answer' | 'cloze' | string;
+
+interface NoteTypeOption {
+  id: string;
+  name: string;
+  isCloze: boolean;
+  fields: string[];
+  isReversed?: boolean;
+  isTypeAnswer?: boolean;
+}
+
+function normalizeTextForDup(raw: string): string {
+  if (!raw) return '';
+  return raw
+    .replace(/\[sound:[^\]]+\]/g, '')
+    .replace(/\{\{c\d+::([\s\S]*?)(?:::[\s\S]*?)?\}\}/g, '$1')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
 export const CardEditorModal: React.FC = () => {
   const {
     quickAddOpen,
     editingCardData,
     decks,
+    libraryCards,
     theme,
     accentColor,
     resolvedLang,
@@ -23,6 +50,7 @@ export const CardEditorModal: React.FC = () => {
 
   const isZh = resolvedLang === 'zh-CN';
   const isDark = theme === 'dark' || theme === 'oled';
+  const platform = envInfo.platform;
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
@@ -33,6 +61,11 @@ export const CardEditorModal: React.FC = () => {
   const [deckDropdownOpen, setDeckDropdownOpen] = useState(false);
   const [deckSearchQuery, setDeckSearchQuery] = useState('');
 
+  // Note Type / Creation Mode Selector State
+  const [noteTypeDropdownOpen, setNoteTypeDropdownOpen] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState<NoteCreationPreset>('basic');
+  const [customNoteTypes, setCustomNoteTypes] = useState<NoteTypeOption[]>([]);
+
   // Fields State
   const [front, setFront] = useState('');
   const [back, setBack] = useState('');
@@ -40,6 +73,17 @@ export const CardEditorModal: React.FC = () => {
   const [backFieldName, setBackFieldName] = useState<string>('背面');
   const [additionalFields, setAdditionalFields] = useState<Record<string, string>>({});
   const [showMoreFields, setShowMoreFields] = useState(false);
+
+  // Sticky / Pin Fields State (for Continuous Creation)
+  const [pinnedFront, setPinnedFront] = useState(false);
+  const [pinnedBack, setPinnedBack] = useState(false);
+  const [pinnedTags, setPinnedTags] = useState(true);
+  const [pinnedExtraKeys, setPinnedExtraKeys] = useState<Record<string, boolean>>({});
+  const [continuousAddedCount, setContinuousAddedCount] = useState(0);
+
+  // Real-time Duplicate Detection State
+  const [backendDupCount, setBackendDupCount] = useState(0);
+  const [backendDupPreview, setBackendDupPreview] = useState('');
 
   // Tags State
   const [tags, setTags] = useState<string[]>([]);
@@ -63,16 +107,38 @@ export const CardEditorModal: React.FC = () => {
   });
 
   const deckDropdownRef = useRef<HTMLDivElement>(null);
+  const noteTypeDropdownRef = useRef<HTMLDivElement>(null);
 
   // Formatting helper compatible with Tower WYSIWYG and Cloze auto-increment
   const applyFormatting = (type: 'bold' | 'italic' | 'cloze' | 'math' | 'code' | 'highlight' | 'list' | 'clear') => {
     if (type === 'cloze') {
-      // Dispatched natively inside TowerWysiwygEditor via renderMathAndRichHtml
       void renderMathAndRichHtml;
     }
   };
 
   const brandHex = getAccentScale(accentColor, theme).brand;
+  const effectiveMediaBaseUrl = useMemo(() => {
+    if (envInfo.mediaBaseUrl) return envInfo.mediaBaseUrl;
+    if (editingCardData) {
+      return extractMediaBaseUrlFromHtml(
+        editingCardData.frontHtml,
+        editingCardData.backHtml
+      );
+    }
+    return '';
+  }, [envInfo.mediaBaseUrl, editingCardData]);
+
+  // Fetch available Note Types from Anki collection when modal opens
+  useEffect(() => {
+    if (!quickAddOpen || !isAnkiNativeEnv()) return;
+    callAnki<{ noteTypes?: NoteTypeOption[] }>('get_note_types', {})
+      .then((res) => {
+        if (res && Array.isArray(res.noteTypes)) {
+          setCustomNoteTypes(res.noteTypes);
+        }
+      })
+      .catch(() => {});
+  }, [quickAddOpen]);
 
   // Initialize data on modal open or card switch
   useEffect(() => {
@@ -93,17 +159,21 @@ export const CardEditorModal: React.FC = () => {
       setFrontFieldName(fKey);
       setBackFieldName(bKey);
 
-      const rawFront =
+      const rawFront = resolveMediaInHtml(
         fKey && allFields[fKey] !== undefined && allFields[fKey] !== ''
           ? allFields[fKey]
-          : editingCardData.front || '';
+          : editingCardData.front || '',
+        effectiveMediaBaseUrl
+      );
 
-      const rawBack =
+      const rawBack = resolveMediaInHtml(
         bKey && allFields[bKey] !== undefined && allFields[bKey] !== ''
           ? allFields[bKey]
           : (editingCardData as ReviewCardItem).meaning ||
             (editingCardData as LibraryCardItem).back ||
-            '';
+            '',
+        effectiveMediaBaseUrl
+      );
 
       const initTags = editingCardData.tags ? [...editingCardData.tags] : [];
 
@@ -119,6 +189,7 @@ export const CardEditorModal: React.FC = () => {
         }
       }
       setAdditionalFields(extra);
+      setShowMoreFields(Object.keys(extra).length > 0);
 
       setOriginalSnapshot({
         front: rawFront,
@@ -130,12 +201,18 @@ export const CardEditorModal: React.FC = () => {
       // Create Mode
       const fallbackDeckId = decks[0]?.id || '1';
       setSelectedDeckId(fallbackDeckId);
+      setSelectedPreset('basic');
       setFrontFieldName('正面');
       setBackFieldName('背面');
       setFront('');
       setBack('');
       setAdditionalFields({});
       setTags([]);
+      setPinnedFront(false);
+      setPinnedBack(false);
+      setPinnedTags(true);
+      setPinnedExtraKeys({});
+      setContinuousAddedCount(0);
       setOriginalSnapshot({
         front: '',
         back: '',
@@ -145,27 +222,86 @@ export const CardEditorModal: React.FC = () => {
     }
 
     setDeckDropdownOpen(false);
+    setNoteTypeDropdownOpen(false);
     setDeckSearchQuery('');
     setTagInput('');
     setShowTagInput(false);
-    setShowMoreFields(false);
     setSubmitting(false);
     setConfirmDiscardOpen(false);
+    setBackendDupCount(0);
+    setBackendDupPreview('');
     // `decks` is intentionally NOT a dependency: any background refresh replaces
     // the array reference and used to silently wipe the user's unsaved draft.
   }, [quickAddOpen, editingCardData]);
 
-  // Click outside deck dropdown to close
+  // Click outside dropdowns to close
   useEffect(() => {
-    if (!deckDropdownOpen) return;
+    if (!deckDropdownOpen && !noteTypeDropdownOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (deckDropdownRef.current && !deckDropdownRef.current.contains(e.target as Node)) {
         setDeckDropdownOpen(false);
       }
+      if (noteTypeDropdownRef.current && !noteTypeDropdownRef.current.contains(e.target as Node)) {
+        setNoteTypeDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [deckDropdownOpen]);
+  }, [deckDropdownOpen, noteTypeDropdownOpen]);
+
+  // Real-time Duplicate Detection (Instant local check + debounced SQLite check)
+  const localDuplicateInfo = useMemo(() => {
+    const norm = normalizeTextForDup(front);
+    if (!norm || norm.length < 1) {
+      return { count: 0, matchedTerm: '' };
+    }
+    const excludeNid = editingCardData?.noteId;
+    const matches = libraryCards.filter((c) => {
+      if (excludeNid && c.noteId === excludeNid) return false;
+      return normalizeTextForDup(c.frontHtml || c.front) === norm;
+    });
+    return {
+      count: matches.length,
+      matchedTerm: matches[0]?.front || norm,
+    };
+  }, [front, libraryCards, editingCardData]);
+
+  useEffect(() => {
+    if (!quickAddOpen) return;
+    const norm = normalizeTextForDup(front);
+    if (!norm || !isAnkiNativeEnv()) {
+      setBackendDupCount(0);
+      setBackendDupPreview('');
+      return;
+    }
+    const timer = setTimeout(() => {
+      callAnki<{
+        isDuplicate: boolean;
+        duplicateCount: number;
+        matchedPreview: string;
+      }>('check_duplicate', {
+        front,
+        excludeNoteId: editingCardData?.noteId || '',
+      })
+        .then((res) => {
+          if (res) {
+            setBackendDupCount(res.duplicateCount || 0);
+            setBackendDupPreview(res.matchedPreview || '');
+          }
+        })
+        .catch(() => {});
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [front, quickAddOpen, editingCardData]);
+
+  const effectiveDuplicateCount = Math.max(localDuplicateInfo.count, backendDupCount);
+  const duplicateSearchTerm = useMemo(() => {
+    return (
+      backendDupPreview ||
+      localDuplicateInfo.matchedTerm ||
+      front.replace(/<[^>]+>/g, '').trim().slice(0, 40)
+    );
+  }, [backendDupPreview, localDuplicateInfo, front]);
 
   // Dirty state computation
   const hasChanges = useMemo(() => {
@@ -183,12 +319,55 @@ export const CardEditorModal: React.FC = () => {
   // Cloze indicator
   const isCloze = useMemo(() => {
     return (
+      selectedPreset === 'cloze' ||
       /\{\{c\d+::/.test(front) ||
       /\{\{c\d+::/.test(back) ||
       /data-cloze-ord/.test(front) ||
       /data-cloze-ord/.test(back)
     );
-  }, [front, back]);
+  }, [front, back, selectedPreset]);
+
+  // Handle selecting a Note Type / Preset in Create Mode
+  const handleSelectNotePreset = (presetId: NoteCreationPreset, customModel?: NoteTypeOption) => {
+    setSelectedPreset(presetId);
+    setNoteTypeDropdownOpen(false);
+    if (customModel && customModel.fields.length >= 1) {
+      setFrontFieldName(customModel.fields[0] || '正面');
+      setBackFieldName(customModel.fields[1] || '背面');
+      const extra: Record<string, string> = {};
+      for (const fName of customModel.fields.slice(2)) {
+        extra[fName] = additionalFields[fName] || '';
+      }
+      setAdditionalFields(extra);
+      setShowMoreFields(Object.keys(extra).length > 0);
+    } else if (presetId === 'cloze') {
+      setFrontFieldName('Text');
+      setBackFieldName('Back Extra');
+    } else {
+      setFrontFieldName('正面');
+      setBackFieldName('背面');
+    }
+  };
+
+  const activePresetLabel = useMemo(() => {
+    if (front.includes('anki-io-wrap')) {
+      return isZh ? '图片遮挡模板' : 'Image Occlusion';
+    }
+    if (selectedPreset === 'reversed') {
+      return isZh ? '正反双向问答卡 (2张)' : 'Basic + Reversed (2x)';
+    }
+    if (selectedPreset === 'type_answer') {
+      return isZh ? '拼写默写检验卡' : 'Type in the Answer';
+    }
+    if (isCloze) {
+      return isZh ? 'Cloze 挖空模板' : 'Cloze Deletion';
+    }
+    const foundCustom = customNoteTypes.find((m) => `model:${m.id}` === selectedPreset);
+    if (foundCustom) {
+      return foundCustom.name;
+    }
+    return isZh ? '标准问答卡 (Basic)' : 'Basic Card';
+  }, [front, selectedPreset, isCloze, customNoteTypes, isZh]);
 
   // Filtered decks for deck selector popover
   const filteredDecks = useMemo(() => {
@@ -228,9 +407,15 @@ export const CardEditorModal: React.FC = () => {
 
   // Global Keyboard shortcut listener for modal
   const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'Enter' && !isEditMode) {
+      e.preventDefault();
+      handleSubmit(true);
+      return;
+    }
+
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
-      handleSubmit();
+      handleSubmit(false);
       return;
     }
 
@@ -250,8 +435,8 @@ export const CardEditorModal: React.FC = () => {
     }
   };
 
-  // Save / Submit
-  const handleSubmit = async () => {
+  // Save / Submit (supports keepOpen = true for Continuous Card Creation)
+  const handleSubmit = async (keepOpen = false) => {
     if (!front.trim() || submitting) return;
     setSubmitting(true);
     applyFormatting('cloze');
@@ -267,8 +452,6 @@ export const CardEditorModal: React.FC = () => {
         }
         mergedFields[frontFieldName] = formattedFront;
         mergedFields[backFieldName] = formattedBack;
-        // Do not inject Chinese field names into notes whose model uses
-        // Text / Back Extra / Front / Question etc.: that corrupts the note.
 
         await appActions.saveCardEdits({
           cardId: editingCardData.id,
@@ -283,18 +466,70 @@ export const CardEditorModal: React.FC = () => {
       } else {
         const formattedFront = front.trim();
         const formattedBack = back.trim();
+        const customModelId = selectedPreset.startsWith('model:')
+          ? selectedPreset.slice('model:'.length)
+          : undefined;
+        const extraClean: Record<string, string> = {};
+        for (const [k, v] of Object.entries(additionalFields)) {
+          if (v.trim()) extraClean[k] = v.trim();
+        }
+
         await appActions.quickAddCard({
           deckId: currentDeck.id,
           deckName: currentDeck.name,
           front: formattedFront,
           back: formattedBack,
           tags,
+          modelId: customModelId,
+          createReverseCard: selectedPreset === 'reversed',
+          typeAnswerMode: selectedPreset === 'type_answer',
+          fields: Object.keys(extraClean).length > 0 ? extraClean : undefined,
         });
-        setAppState({ quickAddOpen: false });
+
+        if (keepOpen) {
+          setContinuousAddedCount((prev) => prev + 1);
+          const nextFront = pinnedFront ? front : '';
+          const nextBack = pinnedBack ? back : '';
+          const nextTags = pinnedTags ? [...tags] : [];
+          const nextExtra: Record<string, string> = {};
+          for (const [k, v] of Object.entries(additionalFields)) {
+            nextExtra[k] = pinnedExtraKeys[k] ? v : '';
+          }
+          setFront(nextFront);
+          setBack(nextBack);
+          setTags(nextTags);
+          setAdditionalFields(nextExtra);
+          setOriginalSnapshot({
+            front: nextFront,
+            back: nextBack,
+            tags: nextTags,
+            deckId: selectedDeckId,
+          });
+        } else {
+          setAppState({ quickAddOpen: false });
+        }
       }
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleJumpToDuplicateInLibrary = () => {
+    const queryStr = duplicateSearchTerm;
+    setAppState({
+      quickAddOpen: false,
+      editingCardData: null,
+      activeTab: 'library',
+      inReviewMode: false,
+    });
+    appActions.searchLibraryDebounced({
+      query: queryStr,
+      status: 'all',
+      difficulty: 'all',
+      flag: 'all',
+      tag: 'all',
+      deckId: 'all',
+    });
   };
 
   const modalBg = isDark
@@ -306,19 +541,17 @@ export const CardEditorModal: React.FC = () => {
 
   return (
     <div
-      onClick={handleAttemptClose}
       className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[6px] flex items-center justify-center p-3 sm:p-6 select-none modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-labelledby="card-editor-title"
     >
       <div
-        onClick={(e) => e.stopPropagation()}
-        className={`w-full max-w-[800px] max-h-[90vh] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.32)] flex flex-col overflow-hidden transition-all relative ${modalBg}`}
+        className={`w-full max-w-[820px] max-h-[90vh] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.32)] flex flex-col overflow-hidden transition-all relative ${modalBg}`}
       >
         {/* Header Bar */}
         <div className={`h-14 px-5 border-b flex items-center justify-between shrink-0 ${cardBorder}`}>
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             {/* Modal Title */}
             <span id="card-editor-title" className="font-bold text-[15px] tracking-tight shrink-0 flex items-center gap-2">
               {isEditMode ? (
@@ -337,7 +570,10 @@ export const CardEditorModal: React.FC = () => {
             <div ref={deckDropdownRef} className="relative shrink-0">
               <button
                 type="button"
-                onClick={() => setDeckDropdownOpen((prev) => !prev)}
+                onClick={() => {
+                  setDeckDropdownOpen((prev) => !prev);
+                  setNoteTypeDropdownOpen(false);
+                }}
                 className={`h-7 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
                   isDark
                     ? 'border-[#343644] bg-[#21222E] hover:border-[var(--brand-border)] text-[#D8D8E0]'
@@ -347,7 +583,7 @@ export const CardEditorModal: React.FC = () => {
                 <svg className="w-3.5 h-3.5 opacity-70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
                 </svg>
-                <span className="max-w-[130px] truncate">{currentDeck.name}</span>
+                <span className="max-w-[125px] truncate">{currentDeck.name}</span>
                 <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="m6 9 6 6 6-6" />
                 </svg>
@@ -402,30 +638,139 @@ export const CardEditorModal: React.FC = () => {
               )}
             </div>
 
-            {/* Note Type / Cloze Indicator Badge */}
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${
-                front.includes('anki-io-wrap')
-                  ? 'bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/30'
-                  : isCloze
-                  ? 'bg-[var(--brand-soft)] text-[var(--brand-text)]'
-                  : isDark
-                  ? 'bg-white/5 text-[#8E8E93]'
-                  : 'bg-black/5 text-[#8E8E93]'
-              }`}
-            >
-              {front.includes('anki-io-wrap')
-                ? isZh
-                  ? '图片遮挡模板'
-                  : 'Image Occlusion'
-                : isCloze
-                ? isZh
-                  ? 'Cloze 挖空模板'
-                  : 'Cloze Type'
-                : isZh
-                ? '问答卡片'
-                : 'Basic Type'}
-            </span>
+            {/* Note Type / Creation Mode Selector Popover */}
+            <div ref={noteTypeDropdownRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isEditMode) {
+                    setNoteTypeDropdownOpen((prev) => !prev);
+                    setDeckDropdownOpen(false);
+                  }
+                }}
+                className={`h-7 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 transition-colors ${
+                  isEditMode ? 'cursor-default' : 'cursor-pointer'
+                } ${
+                  front.includes('anki-io-wrap')
+                    ? 'bg-[#F59E0B]/15 text-[#F59E0B] border-[#F59E0B]/35'
+                    : isCloze || selectedPreset === 'reversed' || selectedPreset === 'type_answer'
+                    ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
+                    : isDark
+                    ? 'border-[#343644] bg-[#21222E] hover:border-[var(--brand-border)] text-[#D8D8E0]'
+                    : 'border-[#E0E0E6] bg-[#F4F4F6] hover:border-[var(--brand-border)] text-[#3A3A3C]'
+                }`}
+                title={isZh ? '切换笔记模板或制卡模式（问答 / 正反双向 / 拼写默写 / 挖空）' : 'Select Note Type / Card Mode'}
+              >
+                <span className="max-w-[140px] truncate">{activePresetLabel}</span>
+                {!isEditMode && (
+                  <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                )}
+              </button>
+
+              {!isEditMode && noteTypeDropdownOpen && (
+                <div
+                  className={`absolute left-0 top-8.5 z-50 w-[265px] rounded-xl border shadow-xl p-1.5 space-y-1 backdrop-blur-xl ${
+                    isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
+                  }`}
+                >
+                  <div className="px-2 py-1 text-[10px] text-[#8E8E93] font-semibold">
+                    {isZh ? '核心制卡模式' : 'Core Note Modes'}
+                  </div>
+                  {(
+                    [
+                      {
+                        id: 'basic',
+                        title: isZh ? '标准问答卡 (Basic)' : 'Basic (Front → Back)',
+                        desc: isZh ? '正面提问、背面作答（1 张卡）' : 'Standard 1-way flashcard',
+                      },
+                      {
+                        id: 'reversed',
+                        title: isZh ? '正反双向问答卡 (Basic + Reversed)' : 'Basic (and reversed card)',
+                        desc: isZh ? '同时生成「正→反」与「反→正」2 张卡' : 'Generates both Front→Back and Back→Front',
+                      },
+                      {
+                        id: 'type_answer',
+                        title: isZh ? '拼写默写检验卡 (Type in Answer)' : 'Basic (type in the answer)',
+                        desc: isZh ? '复习时提供输入框，翻面逐字比对默写差异' : 'Prompts typed input during review with diff check',
+                      },
+                      {
+                        id: 'cloze',
+                        title: isZh ? 'Cloze 填空挖空卡' : 'Cloze Deletion',
+                        desc: isZh ? '按 {{c1::...}} 挖空序号生成多张联动卡' : 'Generates sibling cards per {{c1::...}} index',
+                      },
+                    ] as const
+                  ).map((opt) => {
+                    const isSel = selectedPreset === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => handleSelectNotePreset(opt.id)}
+                        className={`w-full px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                          isSel
+                            ? 'bg-[var(--brand)] text-white'
+                            : isDark
+                            ? 'hover:bg-white/5 text-[#D1D1D8]'
+                            : 'hover:bg-black/5 text-[#3A3A3C]'
+                        }`}
+                      >
+                        <div className="text-[12px] font-semibold flex items-center justify-between">
+                          <span>{opt.title}</span>
+                          {isSel && <span>✓</span>}
+                        </div>
+                        <div className={`text-[10px] mt-0.5 ${isSel ? 'text-white/80' : 'text-[#8E8E93]'}`}>
+                          {opt.desc}
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {customNoteTypes.filter((m) => m.fields.length > 2).length > 0 && (
+                    <>
+                      <div className="my-1 border-t border-black/5 dark:border-white/5" />
+                      <div className="px-2 py-0.5 text-[10px] text-[#8E8E93] font-semibold">
+                        {isZh ? '集合自定义多字段模板' : 'Custom Note Types'}
+                      </div>
+                      {customNoteTypes
+                        .filter((m) => m.fields.length > 2)
+                        .map((m) => {
+                          const pKey = `model:${m.id}`;
+                          const isSel = selectedPreset === pKey;
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => handleSelectNotePreset(pKey, m)}
+                              className={`w-full px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                                isSel
+                                  ? 'bg-[var(--brand)] text-white'
+                                  : isDark
+                                  ? 'hover:bg-white/5 text-[#D1D1D8]'
+                                  : 'hover:bg-black/5 text-[#3A3A3C]'
+                              }`}
+                            >
+                              <div className="text-[12px] font-semibold flex items-center justify-between">
+                                <span className="truncate">{m.name}</span>
+                                <span className={`text-[10px] font-mono ${isSel ? 'text-white/80' : 'text-[#8E8E93]'}`}>
+                                  {m.fields.length} {isZh ? '字段' : 'flds'}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {continuousAddedCount > 0 && !isEditMode && (
+              <span className="px-2 py-0.5 rounded-full bg-[var(--status-success-soft)] text-[var(--status-success)] text-[10px] font-semibold shrink-0">
+                {isZh ? `已连建 ${continuousAddedCount} 张` : `Added ${continuousAddedCount}`}
+              </span>
+            )}
           </div>
 
           {/* Right Action & Close Buttons */}
@@ -471,42 +816,126 @@ export const CardEditorModal: React.FC = () => {
 
         {/* Modal Body: Two Tower WYSIWYG Editor Blocks */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-          {/* Front WYSIWYG Box (Tower Editor) */}
-          <TowerWysiwygEditor
-            label={isZh ? '卡片正面 (问题)' : 'Front (Question)'}
-            badge="必填"
-            value={front}
-            onChange={(val) => setFront(val)}
-            placeholder={
-              isZh
-                ? '输入词条、概念、题目，支持直接 Cmd+V 粘贴截图，或选取文字按 Cmd+Shift+C 挖空...'
-                : 'Enter question, term, or select text and press Cmd+Shift+C to cloze...'
-            }
-            minHeight={130}
-            isDark={isDark}
-            accentColor={brandHex}
-            onPasteImage={appActions.pasteImageFromClipboard}
-            onKeyDownShortcut={handleEditorKeyDown}
-            showCloze={true}
-          />
+          {/* Real-time Duplicate Warning Banner */}
+          {effectiveDuplicateCount > 0 && (
+            <div className="px-3.5 py-2.5 rounded-xl border bg-[var(--status-warning-soft)] border-[var(--status-warning)]/40 text-[var(--status-warning)] flex items-center justify-between gap-3 text-[12px] animate-in fade-in duration-150">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-bold shrink-0">⚠️</span>
+                <span className="font-medium truncate">
+                  {isZh
+                    ? `检测到重复卡片：卡库中已存在 ${effectiveDuplicateCount} 张相同正面词条的卡片`
+                    : `Duplicate detected: ${effectiveDuplicateCount} existing card(s) share this front text`}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleJumpToDuplicateInLibrary}
+                className="px-2.5 py-1 rounded-lg bg-[var(--status-warning)] text-white text-[11px] font-semibold shrink-0 cursor-pointer hover:opacity-90"
+              >
+                {isZh ? '在卡库中查看' : 'View in Library'}
+              </button>
+            </div>
+          )}
 
-          {/* Back WYSIWYG Box (Tower Editor) */}
-          <TowerWysiwygEditor
-            label={isZh ? '卡片背面 (释义 / 要点解答)' : 'Back (Answer / Explanation)'}
-            value={back}
-            onChange={(val) => setBack(val)}
-            placeholder={
-              isZh
-                ? '输入详细释义、解析、例句，支持插入表格、项目列表、代码块或直接按 Cmd+V 粘贴截图...'
-                : 'Enter explanation, examples, or paste screenshots with Cmd+V...'
-            }
-            minHeight={150}
-            isDark={isDark}
-            accentColor={brandHex}
-            onPasteImage={appActions.pasteImageFromClipboard}
-            onKeyDownShortcut={handleEditorKeyDown}
-            showCloze={true}
-          />
+          {/* Front WYSIWYG Box (Tower Editor) + Pin Toggle */}
+          <div className="relative">
+            {!isEditMode && (
+              <button
+                type="button"
+                onClick={() => setPinnedFront((prev) => !prev)}
+                title={
+                  isZh
+                    ? '固定正面字段：使用「保存并继续 +1」连续制卡时保留此字段内容不清空'
+                    : 'Pin field: keep Front text when using Save & Add Another'
+                }
+                className={`absolute right-14 top-0.5 z-10 h-5 px-2 rounded-md text-[10px] font-medium flex items-center gap-1 cursor-pointer transition-colors ${
+                  pinnedFront
+                    ? 'bg-[var(--brand)] text-white'
+                    : 'text-[#8E8E93] hover:text-current bg-black/5 dark:bg-white/5'
+                }`}
+              >
+                <span>📌</span>
+                <span>{pinnedFront ? (isZh ? '已固定' : 'Pinned') : (isZh ? '固定' : 'Pin')}</span>
+              </button>
+            )}
+            <TowerWysiwygEditor
+              label={`${frontFieldName} (${isZh ? '正面 / 问题' : 'Front'})`}
+              badge={isZh ? '必填' : 'Required'}
+              value={front}
+              onChange={(val) => setFront(val)}
+              placeholder={
+                isZh
+                  ? '输入词条、概念、题目，支持直接 Cmd+V 粘贴截图，或选取文字按 Cmd+Shift+C 挖空...'
+                  : 'Enter question, term, or select text and press Cmd+Shift+C to cloze...'
+              }
+              minHeight={130}
+              isDark={isDark}
+              accentColor={brandHex}
+              mediaBaseUrl={effectiveMediaBaseUrl}
+              onPasteImage={appActions.pasteImageFromClipboard}
+              onKeyDownShortcut={handleEditorKeyDown}
+              showCloze={true}
+            />
+          </div>
+
+          {/* Back WYSIWYG Box (Tower Editor) + Pin Toggle */}
+          <div className="relative">
+            {!isEditMode && (
+              <button
+                type="button"
+                onClick={() => setPinnedBack((prev) => !prev)}
+                title={
+                  isZh
+                    ? '固定背面字段：使用「保存并继续 +1」连续制卡时保留此字段内容不清空'
+                    : 'Pin field: keep Back text when using Save & Add Another'
+                }
+                className={`absolute right-14 top-0.5 z-10 h-5 px-2 rounded-md text-[10px] font-medium flex items-center gap-1 cursor-pointer transition-colors ${
+                  pinnedBack
+                    ? 'bg-[var(--brand)] text-white'
+                    : 'text-[#8E8E93] hover:text-current bg-black/5 dark:bg-white/5'
+                }`}
+              >
+                <span>📌</span>
+                <span>{pinnedBack ? (isZh ? '已固定' : 'Pinned') : (isZh ? '固定' : 'Pin')}</span>
+              </button>
+            )}
+            <TowerWysiwygEditor
+              label={`${backFieldName} (${
+                selectedPreset === 'type_answer'
+                  ? isZh
+                    ? '标准默写答案'
+                    : 'Expected Type Answer'
+                  : isZh
+                  ? '背面 / 释义解答'
+                  : 'Back'
+              })`}
+              badge={
+                selectedPreset === 'reversed'
+                  ? isZh
+                    ? '双向卡反面'
+                    : 'Reversed Side'
+                  : selectedPreset === 'type_answer'
+                  ? isZh
+                    ? '默写比对基准'
+                    : 'Diff Target'
+                  : undefined
+              }
+              value={back}
+              onChange={(val) => setBack(val)}
+              placeholder={
+                isZh
+                  ? '输入详细释义、解析、例句，支持插入表格、项目列表、代码块或直接按 Cmd+V 粘贴截图...'
+                  : 'Enter explanation, examples, or paste screenshots with Cmd+V...'
+              }
+              minHeight={150}
+              isDark={isDark}
+              accentColor={brandHex}
+              mediaBaseUrl={effectiveMediaBaseUrl}
+              onPasteImage={appActions.pasteImageFromClipboard}
+              onKeyDownShortcut={handleEditorKeyDown}
+              showCloze={true}
+            />
+          </div>
 
           {/* Additional Fields (if note has custom fields) */}
           {Object.keys(additionalFields).length > 0 && (
@@ -528,7 +957,24 @@ export const CardEditorModal: React.FC = () => {
                 <div className="mt-3 space-y-3 pl-2 border-l-2 border-[var(--brand-border)]">
                   {Object.entries(additionalFields).map(([fKey, fVal]) => (
                     <div key={fKey} className="space-y-1">
-                      <label className="text-[11px] text-[#8E8E93] font-medium">{fKey}</label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] text-[#8E8E93] font-medium">{fKey}</label>
+                        {!isEditMode && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPinnedExtraKeys((prev) => ({ ...prev, [fKey]: !prev[fKey] }))
+                            }
+                            className={`px-1.5 py-0.5 rounded text-[10px] cursor-pointer ${
+                              pinnedExtraKeys[fKey]
+                                ? 'bg-[var(--brand)] text-white'
+                                : 'text-[#8E8E93] hover:text-current'
+                            }`}
+                          >
+                            📌 {pinnedExtraKeys[fKey] ? (isZh ? '已固定' : 'Pinned') : (isZh ? '固定' : 'Pin')}
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
                         value={fVal}
@@ -553,6 +999,19 @@ export const CardEditorModal: React.FC = () => {
               <label className="text-[12px] font-semibold text-[#8E8E93]">
                 {isZh ? '标签' : 'Tags'}
               </label>
+              {!isEditMode && (
+                <button
+                  type="button"
+                  onClick={() => setPinnedTags((prev) => !prev)}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-medium cursor-pointer transition-colors ${
+                    pinnedTags
+                      ? 'bg-[var(--brand-soft)] text-[var(--brand-text)]'
+                      : 'text-[#8E8E93] hover:text-current'
+                  }`}
+                >
+                  📌 {pinnedTags ? (isZh ? '连建时保留标签' : 'Keep Tags Pinned') : (isZh ? '固定标签' : 'Pin Tags')}
+                </button>
+              )}
             </div>
 
             {/* Active Tags Pills */}
@@ -686,18 +1145,30 @@ export const CardEditorModal: React.FC = () => {
           </div>
 
           {/* Right Action Buttons */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleAttemptClose}
-              className="btn-secondary !h-9 !px-4"
+              className="btn-secondary !h-9 !px-3.5"
             >
               {isZh ? '取消' : 'Cancel'}
             </button>
 
+            {!isEditMode && (
+              <button
+                type="button"
+                onClick={() => handleSubmit(true)}
+                disabled={!front.trim() || submitting}
+                title={formatShortcut('Cmd+Shift+Enter', platform)}
+                className="btn-secondary !h-9 !px-3.5 !text-[12px] font-semibold text-[var(--brand-text)] border-[var(--brand-border)]"
+              >
+                <span>{isZh ? '保存并继续 +1' : 'Save & Add Another'}</span>
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={handleSubmit}
+              onClick={() => handleSubmit(false)}
               disabled={!front.trim() || submitting}
               style={{ backgroundColor: brandHex }}
               className="btn-primary !h-9 !px-5"
@@ -770,10 +1241,11 @@ export const CardEditorModal: React.FC = () => {
           isDark={isDark}
           isZh={isZh}
           brandHex={brandHex}
+          mediaBaseUrl={effectiveMediaBaseUrl}
           onSaveImageFile={appActions.pasteImageFromClipboard}
           onClose={() => setIoEditorOpen(false)}
           onApply={(generatedHtml, rectCount) => {
-            setFront(generatedHtml);
+            setFront(resolveMediaInHtml(generatedHtml, effectiveMediaBaseUrl));
             setIoEditorOpen(false);
             showToast(
               isZh

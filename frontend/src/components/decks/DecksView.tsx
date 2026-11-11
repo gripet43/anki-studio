@@ -462,13 +462,11 @@ export const DecksView: React.FC = () => {
       {editingOptionsDeck && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 select-none animate-in fade-in duration-150"
-          onClick={() => setEditingOptionsDeck(null)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-label={isZh ? '牌组预设与核心调度参数' : 'Deck Scheduling Options'}
-            onClick={(e) => e.stopPropagation()}
             className={`w-[520px] max-w-full rounded-3xl border shadow-2xl overflow-hidden flex flex-col ${cardSurface}`}
           >
             <header

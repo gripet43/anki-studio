@@ -28,9 +28,7 @@ export const IcuRescueModal: React.FC = () => {
 
   // Tabs: only 2 tabs now ("rescue" = 减负方案, "history" = 历史记录)
   const [activeTab, setActiveTab] = useState<'rescue' | 'history'>(
-    store.icuModalTab === 'history' || (totalDue === 0 && rescueHistory.length > 0)
-      ? 'history'
-      : 'rescue'
+    store.icuModalTab === 'history' ? 'history' : 'rescue'
   );
 
   const [mode, setMode] = useState<'amortize' | 'shift'>('amortize');
@@ -127,14 +125,12 @@ export const IcuRescueModal: React.FC = () => {
 
   return (
     <div
-      onClick={() => appActions.closeIcuModal()}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[5px] select-none modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-labelledby="icu-modal-title"
     >
       <div
-        onClick={(e) => e.stopPropagation()}
         className={`w-full max-w-[560px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.32)] overflow-hidden transition-all duration-200 flex flex-col max-h-[86vh] ${modalBg}`}
       >
         {/* Header Bar — Clean Title without Subtitle */}

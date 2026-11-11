@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ANKI_FLAG_PALETTE, CardFlagColor } from '../../bridge/pycmd';
+import {
+  ANKI_FLAG_PALETTE,
+  CardFlagColor,
+  isAnkiNativeEnv,
+  LibrarySortOption,
+} from '../../bridge/pycmd';
 import { translate } from '../../i18n/translations';
 import {
   appActions,
@@ -19,6 +24,7 @@ export const LibraryView: React.FC = () => {
     libraryCards,
     libraryTotalCount,
     libraryFilteredCount,
+    libraryFacetCounts,
     libraryHasMoreFromBackend,
     libraryAllTags,
     librarySearching,
@@ -30,6 +36,7 @@ export const LibraryView: React.FC = () => {
     filterFlag,
     filterTag,
     filterDeckId,
+    librarySortBy,
     selectedCardIds,
     decks,
     theme,
@@ -42,7 +49,7 @@ export const LibraryView: React.FC = () => {
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
-  // Custom Modern Dropdown Popover States (Status, Difficulty, Flag, Tag, Deck)
+  // Custom Modern Dropdown Popover States (Status, Difficulty, Flag, Tag, Deck, Sort)
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [diffDropdownOpen, setDiffDropdownOpen] = useState(false);
   const [flagDropdownOpen, setFlagDropdownOpen] = useState(false);
@@ -50,18 +57,25 @@ export const LibraryView: React.FC = () => {
   const [tagSearchInput, setTagSearchInput] = useState('');
   const [deckDropdownOpen, setDeckDropdownOpen] = useState(false);
   const [deckSearchInput, setDeckSearchInput] = useState('');
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const diffDropdownRef = useRef<HTMLDivElement>(null);
   const flagDropdownRef = useRef<HTMLDivElement>(null);
   const tagDropdownRef = useRef<HTMLDivElement>(null);
   const deckDropdownRef = useRef<HTMLDivElement>(null);
+  const sortDropdownRef = useRef<HTMLDivElement>(null);
 
   // Interactive Batch Popover State
   const [activeBatchModal, setActiveBatchModal] = useState<
-    'none' | 'addTag' | 'moveDeck' | 'setFlag' | 'confirmDelete'
+    'none' | 'addTag' | 'removeTag' | 'findReplace' | 'moveDeck' | 'setFlag' | 'confirmDelete'
   >('none');
   const [batchTagInput, setBatchTagInput] = useState('');
+  const [batchRemoveTagInput, setBatchRemoveTagInput] = useState('');
+  const [batchFindText, setBatchFindText] = useState('');
+  const [batchReplaceText, setBatchReplaceText] = useState('');
+  const [batchFieldScope, setBatchFieldScope] = useState<'all' | 'front' | 'back'>('all');
+  const [batchIgnoreCase, setBatchIgnoreCase] = useState(false);
   const [batchTargetDeckId, setBatchTargetDeckId] = useState(decks[0]?.id || '1');
 
   useEffect(() => {
@@ -88,6 +102,9 @@ export const LibraryView: React.FC = () => {
       if (deckDropdownRef.current && !deckDropdownRef.current.contains(e.target as Node)) {
         setDeckDropdownOpen(false);
       }
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(e.target as Node)) {
+        setSortDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
@@ -110,8 +127,12 @@ export const LibraryView: React.FC = () => {
 
   const subText = 'text-[#636366] dark:text-[#8E8E93]';
 
-  // Compute per-status card counts for StatusSelectDropdown
+  // Prefer authoritative collection-wide facet counts from backend search_cards;
+  // fall back to in-memory libraryCards only in non-native preview mode.
   const statusCountsMap = useMemo(() => {
+    if (libraryFacetCounts?.statusCounts) {
+      return libraryFacetCounts.statusCounts;
+    }
     const map: Record<string, number> = {
       all: libraryCards.length,
       due: 0,
@@ -130,10 +151,13 @@ export const LibraryView: React.FC = () => {
       else if (c.status === 'review') map.review++;
     }
     return map;
-  }, [libraryCards]);
+  }, [libraryFacetCounts, libraryCards]);
 
   // Compute per-difficulty card counts for DifficultySelectDropdown
   const diffCountsMap = useMemo(() => {
+    if (libraryFacetCounts?.difficultyCounts) {
+      return libraryFacetCounts.difficultyCounts;
+    }
     const map: Record<string, number> = {
       all: libraryCards.length,
       high: 0,
@@ -146,10 +170,13 @@ export const LibraryView: React.FC = () => {
       else if (c.difficultyLevel === 'low') map.low++;
     }
     return map;
-  }, [libraryCards]);
+  }, [libraryFacetCounts, libraryCards]);
 
   // Compute per-flag card counts for FlagSelectDropdown
   const flagCountsMap = useMemo(() => {
+    if (libraryFacetCounts?.flagCounts) {
+      return libraryFacetCounts.flagCounts;
+    }
     const map: Record<string, number> = {
       all: libraryCards.length,
       flagged: 0,
@@ -169,10 +196,13 @@ export const LibraryView: React.FC = () => {
       }
     }
     return map;
-  }, [libraryCards]);
+  }, [libraryFacetCounts, libraryCards]);
 
   // Compute per-tag card counts for `TagSelectDropdown`
   const tagCountsMap = useMemo(() => {
+    if (libraryFacetCounts?.tagCounts) {
+      return libraryFacetCounts.tagCounts;
+    }
     const map: Record<string, number> = {};
     for (const c of libraryCards) {
       for (const tg of c.tags) {
@@ -180,7 +210,9 @@ export const LibraryView: React.FC = () => {
       }
     }
     return map;
-  }, [libraryCards]);
+  }, [libraryFacetCounts, libraryCards]);
+
+  const tagAllCount = libraryFacetCounts ? libraryFacetCounts.tagAllCount : libraryCards.length;
 
   const allAvailableTags = useMemo(() => {
     const set = new Set<string>([...libraryAllTags, ...Object.keys(tagCountsMap)]);
@@ -201,47 +233,95 @@ export const LibraryView: React.FC = () => {
     );
   }, [decks, deckSearchInput]);
 
-  const filteredCards = libraryCards.filter((card) => {
-    if (librarySearchQuery.trim()) {
-      const q = librarySearchQuery.toLowerCase();
-      const match =
-        card.front.toLowerCase().includes(q) ||
-        card.back.toLowerCase().includes(q) ||
-        card.deckName.toLowerCase().includes(q) ||
-        card.tags.some((tItem) => tItem.toLowerCase().includes(q));
-      if (!match) return false;
-    }
-    if (filterStatus === 'suspended' && !card.suspended && card.status !== 'suspended') return false;
-    if (filterStatus === 'buried' && !card.buried && card.status !== 'buried') return false;
-    if (filterStatus === 'due' && card.status !== 'due') return false;
-    if (filterStatus === 'new' && card.status !== 'new') return false;
-    if (filterStatus === 'completed' && card.status !== 'completed' && !card.ratedToday) return false;
-    if (filterStatus === 'review' && card.status !== 'review') return false;
-    if (filterDifficulty !== 'all' && card.difficultyLevel !== filterDifficulty) return false;
-    if (filterFlag === 'flagged' && ((card.flags || 0) & 7) <= 0) return false;
-    if (
-      filterFlag !== 'all' &&
-      filterFlag !== 'flagged' &&
-      ((card.flags || 0) & 7) !== Number(filterFlag)
-    ) {
-      return false;
-    }
-    if (filterTag !== 'all' && !card.tags.includes(filterTag)) return false;
-    if (filterDeckId !== 'all' && card.deckId !== filterDeckId) return false;
-    return true;
-  });
+  const filteredCards = useMemo(() => {
+    const base = libraryCards.filter((card) => {
+      if (librarySearchQuery.trim()) {
+        const q = librarySearchQuery.toLowerCase();
+        const match =
+          card.front.toLowerCase().includes(q) ||
+          card.back.toLowerCase().includes(q) ||
+          card.deckName.toLowerCase().includes(q) ||
+          card.tags.some((tItem) => tItem.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+      if (filterStatus === 'suspended' && !card.suspended && card.status !== 'suspended') return false;
+      if (filterStatus === 'buried' && !card.buried && card.status !== 'buried') return false;
+      if (filterStatus === 'due' && card.status !== 'due') return false;
+      if (filterStatus === 'new' && card.status !== 'new') return false;
+      if (filterStatus === 'completed' && card.status !== 'completed' && !card.ratedToday) return false;
+      if (filterStatus === 'review' && card.status !== 'review') return false;
+      if (filterDifficulty !== 'all' && card.difficultyLevel !== filterDifficulty) return false;
+      if (filterFlag === 'flagged' && ((card.flags || 0) & 7) <= 0) return false;
+      if (
+        filterFlag !== 'all' &&
+        filterFlag !== 'flagged' &&
+        ((card.flags || 0) & 7) !== Number(filterFlag)
+      ) {
+        return false;
+      }
+      if (filterTag !== 'all' && !card.tags.includes(filterTag)) return false;
+      if (filterDeckId !== 'all' && card.deckId !== filterDeckId) return false;
+      return true;
+    });
+
+    if (librarySortBy === 'default') return base;
+    const sorted = [...base];
+    sorted.sort((a, b) => {
+      if (librarySortBy === 'lapses_desc') {
+        const diff = (b.lapses || 0) - (a.lapses || 0);
+        return diff !== 0 ? diff : b.reps - a.reps;
+      }
+      if (librarySortBy === 'ivl_asc') {
+        return (a.intervalDays || 0) - (b.intervalDays || 0);
+      }
+      if (librarySortBy === 'ivl_desc') {
+        return (b.intervalDays || 0) - (a.intervalDays || 0);
+      }
+      if (librarySortBy === 'stability_asc') {
+        return (a.mastery || 0) - (b.mastery || 0);
+      }
+      if (librarySortBy === 'front_asc') {
+        return a.front.localeCompare(b.front);
+      }
+      if (librarySortBy === 'due_asc') {
+        const rank = (c: typeof a) =>
+          c.status === 'due' ? 0 : c.status === 'new' ? 1 : c.status === 'review' ? 2 : 3;
+        const rDiff = rank(a) - rank(b);
+        return rDiff !== 0 ? rDiff : (a.dueRaw || 0) - (b.dueRaw || 0);
+      }
+      if (librarySortBy === 'newest') {
+        return String(b.id).localeCompare(String(a.id));
+      }
+      return 0;
+    });
+    return sorted;
+  }, [
+    libraryCards,
+    librarySearchQuery,
+    filterStatus,
+    filterDifficulty,
+    filterFlag,
+    filterTag,
+    filterDeckId,
+    librarySortBy,
+  ]);
 
   const visibleCards = filteredCards.slice(0, libraryVisibleCount);
-  const totalMatchedCount = Math.max(filteredCards.length, libraryFilteredCount);
+  const totalMatchedCount = isAnkiNativeEnv()
+    ? librarySearching
+      ? filteredCards.length
+      : libraryFilteredCount
+    : filteredCards.length;
   const canLoadMore =
     filteredCards.length > libraryVisibleCount || libraryHasMoreFromBackend;
-  const hasActiveFilters =
+  const hasNarrowingFilter =
     filterStatus !== 'all' ||
     filterDifficulty !== 'all' ||
     filterFlag !== 'all' ||
     filterTag !== 'all' ||
     filterDeckId !== 'all' ||
     librarySearchQuery.trim().length > 0;
+  const hasActiveFilters = hasNarrowingFilter || librarySortBy !== 'default';
 
   const selectedObjects = libraryCards.filter((c) => selectedCardIds.includes(c.id));
   const allSelectedSuspended =
@@ -249,10 +329,39 @@ export const LibraryView: React.FC = () => {
   const allSelectedBuried =
     selectedObjects.length > 0 && selectedObjects.every((c) => c.buried || c.status === 'buried');
 
+  const selectedCardTags = useMemo(() => {
+    const s = new Set<string>();
+    for (const c of selectedObjects) {
+      for (const tg of c.tags) s.add(tg);
+    }
+    return Array.from(s);
+  }, [selectedObjects]);
+
   const handleConfirmBatchTag = () => {
     if (!batchTagInput.trim()) return;
     appActions.executeBatchAction('addTag', { tag: batchTagInput.trim() });
     setBatchTagInput('');
+    setActiveBatchModal('none');
+  };
+
+  const handleConfirmBatchRemoveTag = (overrideTag?: string) => {
+    const target = (overrideTag ?? batchRemoveTagInput).trim();
+    if (!target) return;
+    appActions.executeBatchAction('removeTag', { tag: target });
+    setBatchRemoveTagInput('');
+    setActiveBatchModal('none');
+  };
+
+  const handleConfirmBatchFindReplace = () => {
+    if (!batchFindText) return;
+    appActions.executeBatchAction('findReplace', {
+      findText: batchFindText,
+      replaceText: batchReplaceText,
+      fieldScope: batchFieldScope,
+      ignoreCase: batchIgnoreCase,
+    });
+    setBatchFindText('');
+    setBatchReplaceText('');
     setActiveBatchModal('none');
   };
 
@@ -316,7 +425,6 @@ export const LibraryView: React.FC = () => {
               {t('librarySub', {
                 total: libraryTotalCount.toLocaleString(),
                 decks: decks.length,
-                matched: totalMatchedCount,
               })}
               {librarySearching ? t('searchingDb') : ''}
             </p>
@@ -805,7 +913,7 @@ export const LibraryView: React.FC = () => {
                       <span>{isZh ? '全部标签' : 'All Tags'}</span>
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] text-[#8E8E93]">
-                          {libraryCards.length}
+                          {tagAllCount}
                         </span>
                         {filterTag === 'all' && <span className="text-[var(--brand-text)]">✓</span>}
                       </div>
@@ -963,6 +1071,105 @@ export const LibraryView: React.FC = () => {
               )}
             </div>
 
+            {/* Pill 6: Multi-Dimension Sort Dropdown */}
+            <div ref={sortDropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setSortDropdownOpen((prev) => !prev);
+                  setStatusDropdownOpen(false);
+                  setDiffDropdownOpen(false);
+                  setFlagDropdownOpen(false);
+                  setTagDropdownOpen(false);
+                  setDeckDropdownOpen(false);
+                }}
+                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
+                  librarySortBy !== 'default'
+                    ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)]'
+                    : `border hover:border-[var(--brand-border)] ${cardSurface}`
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 opacity-70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="m3 16 4 4 4-4" />
+                  <path d="M7 20V4" />
+                  <path d="m21 8-4-4-4 4" />
+                  <path d="M17 4v16" />
+                </svg>
+                <span>
+                  {isZh ? '排序' : 'Sort'} ·{' '}
+                  {
+                    (
+                      isZh
+                        ? {
+                            default: '默认顺序',
+                            lapses_desc: '失误最多 ↓',
+                            ivl_asc: '间隔最短 ↑',
+                            ivl_desc: '间隔最长 ↓',
+                            due_asc: '到期最早 ↑',
+                            stability_asc: '熟练度最低 ↑',
+                            front_asc: '词条 A→Z',
+                            newest: '最新添加 ↓',
+                          }
+                        : {
+                            default: 'Default',
+                            lapses_desc: 'Most Lapses ↓',
+                            ivl_asc: 'Shortest Ivl ↑',
+                            ivl_desc: 'Longest Ivl ↓',
+                            due_asc: 'Earliest Due ↑',
+                            stability_asc: 'Lowest Mastery ↑',
+                            front_asc: 'Front A→Z',
+                            newest: 'Newest First ↓',
+                          }
+                    )[librarySortBy]
+                  }
+                </span>
+                <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+
+              {sortDropdownOpen && (
+                <div
+                  className={`absolute left-0 top-10 z-40 w-[230px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
+                >
+                  {(
+                    [
+                      { key: 'default', zh: '默认顺序（智能优先）', en: 'Default Order' },
+                      { key: 'lapses_desc', zh: '失误最多（顽固错题 ↓）', en: 'Most Lapses ↓' },
+                      { key: 'due_asc', zh: '到期最早（排期优先 ↑）', en: 'Earliest Due ↑' },
+                      { key: 'ivl_asc', zh: '间隔最短（新学/薄弱 ↑）', en: 'Shortest Interval ↑' },
+                      { key: 'ivl_desc', zh: '间隔最长（高稳定卡 ↓）', en: 'Longest Interval ↓' },
+                      { key: 'stability_asc', zh: '熟练度最低（待巩固 ↑）', en: 'Lowest Mastery ↑' },
+                      { key: 'front_asc', zh: '正面词条（字母 A→Z）', en: 'Front A→Z' },
+                      { key: 'newest', zh: '最新创建（时间倒序 ↓）', en: 'Newest Added ↓' },
+                    ] as Array<{ key: LibrarySortOption; zh: string; en: string }>
+                  ).map((opt) => {
+                    const isSelected = librarySortBy === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => {
+                          appActions.searchLibraryDebounced({ sortBy: opt.key });
+                          setSortDropdownOpen(false);
+                        }}
+                        className={`w-full px-3 py-2 rounded-xl text-[12px] flex items-center justify-between cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold'
+                            : isDark
+                            ? 'hover:bg-white/5'
+                            : 'hover:bg-[#F4F4F6]'
+                        }`}
+                      >
+                        <span>{isZh ? opt.zh : opt.en}</span>
+                        {isSelected && <span className="text-[var(--brand-text)]">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {hasActiveFilters && (
               <button
                 onClick={() => {
@@ -973,8 +1180,9 @@ export const LibraryView: React.FC = () => {
                     flag: 'all',
                     tag: 'all',
                     deckId: 'all',
+                    sortBy: 'default',
                   });
-                  showToast(isZh ? '已重置所有筛选条件' : 'Filters reset');
+                  showToast(isZh ? '已重置所有筛选与排序条件' : 'Filters and sort reset');
                 }}
                 className={`h-8 px-3.5 rounded-full text-[12px] font-medium cursor-pointer transition-all active:scale-95 ${
                   isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-[#1D1D1F] hover:bg-black/10'
@@ -985,9 +1193,11 @@ export const LibraryView: React.FC = () => {
             )}
           </div>
 
-          <span className={`text-[12px] ${subText}`}>
-            {t('matchedCountText', { n: totalMatchedCount })}
-          </span>
+          {hasNarrowingFilter && (
+            <span className={`text-[12px] ${subText}`}>
+              {t('matchedCountText', { n: totalMatchedCount.toLocaleString() })}
+            </span>
+          )}
         </div>
 
         {/* Skeleton Loading & Cloud Sync State */}
@@ -1286,12 +1496,51 @@ export const LibraryView: React.FC = () => {
                     }`}
                   >
                     <th className="py-3 px-4 w-10">{isZh ? '选择' : 'Sel'}</th>
-                    <th className="py-3 px-4">{isZh ? '正面词条' : 'Front'}</th>
+                    <th
+                      onClick={() =>
+                        appActions.searchLibraryDebounced({
+                          sortBy: librarySortBy === 'front_asc' ? 'default' : 'front_asc',
+                        })
+                      }
+                      className="py-3 px-4 cursor-pointer hover:text-[var(--brand-text)] select-none"
+                    >
+                      {isZh ? '正面词条' : 'Front'}{' '}
+                      {librarySortBy === 'front_asc' ? '↑' : ''}
+                    </th>
                     <th className="py-3 px-4">{isZh ? '背面释义' : 'Back'}</th>
                     <th className="py-3 px-4">{isZh ? '所属牌组' : 'Deck'}</th>
                     <th className="py-3 px-4">{isZh ? '旗标与标签' : 'Flag & Tags'}</th>
-                    <th className="py-3 px-4">{t('masteryLabel')}</th>
-                    <th className="py-3 px-4">{isZh ? '到期状态' : 'Due'}</th>
+                    <th
+                      onClick={() =>
+                        appActions.searchLibraryDebounced({
+                          sortBy: librarySortBy === 'stability_asc' ? 'default' : 'stability_asc',
+                        })
+                      }
+                      className="py-3 px-4 cursor-pointer hover:text-[var(--brand-text)] select-none"
+                    >
+                      {t('masteryLabel')}{' '}
+                      {librarySortBy === 'stability_asc' ? '↑' : ''}
+                    </th>
+                    <th
+                      onClick={() =>
+                        appActions.searchLibraryDebounced({
+                          sortBy:
+                            librarySortBy === 'due_asc'
+                              ? 'lapses_desc'
+                              : librarySortBy === 'lapses_desc'
+                              ? 'default'
+                              : 'due_asc',
+                        })
+                      }
+                      className="py-3 px-4 cursor-pointer hover:text-[var(--brand-text)] select-none"
+                    >
+                      {isZh ? '到期状态' : 'Due'}{' '}
+                      {librarySortBy === 'due_asc'
+                        ? '↑'
+                        : librarySortBy === 'lapses_desc'
+                        ? '(失误↓)'
+                        : ''}
+                    </th>
                     <th className="py-3 px-4 text-right w-20">{isZh ? '操作' : 'Action'}</th>
                   </tr>
                 </thead>
@@ -1532,6 +1781,157 @@ export const LibraryView: React.FC = () => {
             </div>
           )}
 
+          {activeBatchModal === 'removeTag' && (
+            <div
+              className={`px-4 py-3 rounded-2xl border shadow-xl flex flex-col gap-2 min-w-[340px] ${
+                isDark ? 'bg-[#1E1F28] border-[#323442] text-white' : 'bg-white border-[#E5E5EA] text-[#1D1D1F]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="text-[12px] text-[#8E8E93] shrink-0">
+                  {isZh ? '从所选卡片移除标签：' : 'Remove tags:'}
+                </span>
+                <input
+                  type="text"
+                  value={batchRemoveTagInput}
+                  onChange={(e) => setBatchRemoveTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleConfirmBatchRemoveTag();
+                    else if (e.key === 'Escape') setActiveBatchModal('none');
+                  }}
+                  placeholder={isZh ? '输入要移除的标签名...' : 'Tag to remove...'}
+                  autoFocus
+                  className="h-8 flex-1 px-3 rounded-xl border border-[var(--brand)] text-[12px] bg-transparent focus:outline-none"
+                />
+                <button
+                  onClick={() => handleConfirmBatchRemoveTag()}
+                  className="btn-primary !h-8 !px-3.5 !text-[12px]"
+                >
+                  {t('confirm')}
+                </button>
+                <button
+                  onClick={() => setActiveBatchModal('none')}
+                  className="text-xs text-[#8E8E93] cursor-pointer px-1"
+                >
+                  ✕
+                </button>
+              </div>
+              {selectedCardTags.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                  <span className="text-[10px] text-[#8E8E93]">
+                    {isZh ? '点击快速移除：' : 'Quick remove:'}
+                  </span>
+                  {selectedCardTags.slice(0, 8).map((tg) => (
+                    <button
+                      key={tg}
+                      type="button"
+                      onClick={() => handleConfirmBatchRemoveTag(tg)}
+                      className="px-2 py-0.5 rounded-md text-[11px] bg-[var(--status-danger-soft)] text-[var(--status-danger)] hover:opacity-85 cursor-pointer"
+                    >
+                      #{tg} ✕
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeBatchModal === 'findReplace' && (
+            <div
+              className={`px-4 py-3.5 rounded-2xl border shadow-xl flex flex-col gap-2.5 min-w-[440px] ${
+                isDark ? 'bg-[#1E1F28] border-[#323442] text-white' : 'bg-white border-[#E5E5EA] text-[#1D1D1F]'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-semibold">
+                  {isZh
+                    ? `批量查找与替换（所选 ${selectedCardIds.length} 张卡片）`
+                    : `Batch Find & Replace (${selectedCardIds.length} cards)`}
+                </span>
+                <button
+                  onClick={() => setActiveBatchModal('none')}
+                  className="text-xs text-[#8E8E93] cursor-pointer px-1"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={batchFindText}
+                  onChange={(e) => setBatchFindText(e.target.value)}
+                  placeholder={isZh ? '查找内容...' : 'Find text...'}
+                  autoFocus
+                  className={`h-8 px-3 rounded-xl border text-[12px] bg-transparent focus:outline-none focus:border-[var(--brand)] ${
+                    isDark ? 'border-[#323442]' : 'border-[#E5E5EA]'
+                  }`}
+                />
+                <input
+                  type="text"
+                  value={batchReplaceText}
+                  onChange={(e) => setBatchReplaceText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleConfirmBatchFindReplace();
+                  }}
+                  placeholder={isZh ? '替换为（留空即删除）...' : 'Replace with...'}
+                  className={`h-8 px-3 rounded-xl border text-[12px] bg-transparent focus:outline-none focus:border-[var(--brand)] ${
+                    isDark ? 'border-[#323442]' : 'border-[#E5E5EA]'
+                  }`}
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-0.5">
+                <div className="flex items-center gap-3 text-[11px] text-[#8E8E93]">
+                  <div className="flex items-center gap-1">
+                    <span>{isZh ? '范围：' : 'Scope:'}</span>
+                    {(['all', 'front', 'back'] as const).map((sc) => (
+                      <button
+                        key={sc}
+                        type="button"
+                        onClick={() => setBatchFieldScope(sc)}
+                        className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
+                          batchFieldScope === sc
+                            ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold'
+                            : 'hover:bg-black/5 dark:hover:bg-white/5'
+                        }`}
+                      >
+                        {sc === 'all'
+                          ? isZh
+                            ? '全部字段'
+                            : 'All'
+                          : sc === 'front'
+                          ? isZh
+                            ? '仅正面'
+                            : 'Front'
+                          : isZh
+                          ? '仅背面'
+                          : 'Back'}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={batchIgnoreCase}
+                      onChange={(e) => setBatchIgnoreCase(e.target.checked)}
+                      className="rounded cursor-pointer"
+                    />
+                    <span>{isZh ? '忽略大小写' : 'Ignore case'}</span>
+                  </label>
+                </div>
+
+                <button
+                  onClick={handleConfirmBatchFindReplace}
+                  disabled={!batchFindText}
+                  className="btn-primary !h-8 !px-4 !text-[12px] disabled:opacity-40"
+                >
+                  {isZh ? '执行替换' : 'Replace All'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {activeBatchModal === 'moveDeck' && (
             <div
               className={`px-4 py-3 rounded-2xl border shadow-xl flex items-center gap-2.5 ${
@@ -1654,6 +2054,32 @@ export const LibraryView: React.FC = () => {
               }`}
             >
               {t('batchAddTag')}
+            </button>
+
+            <button
+              onClick={() =>
+                setActiveBatchModal((prev) => (prev === 'removeTag' ? 'none' : 'removeTag'))
+              }
+              className={`text-[13px] font-medium cursor-pointer transition-colors ${
+                activeBatchModal === 'removeTag'
+                  ? 'text-[var(--brand-text)] font-bold'
+                  : 'hover:text-[var(--brand-text)]'
+              }`}
+            >
+              {isZh ? '移除标签' : 'Remove Tag'}
+            </button>
+
+            <button
+              onClick={() =>
+                setActiveBatchModal((prev) => (prev === 'findReplace' ? 'none' : 'findReplace'))
+              }
+              className={`text-[13px] font-medium cursor-pointer transition-colors ${
+                activeBatchModal === 'findReplace'
+                  ? 'text-[var(--brand-text)] font-bold'
+                  : 'hover:text-[var(--brand-text)]'
+              }`}
+            >
+              {isZh ? '查找替换' : 'Find & Replace'}
             </button>
 
             <button

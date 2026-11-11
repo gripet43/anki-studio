@@ -19,3 +19,7 @@ Thumbs.db
 # Build artifacts
 *.ankiaddon
 
+# Runtime config：含昵称、减负回执、休假记录等真实学习数据，绝不入库
+# 干净模板见 config.default.json
+config.json
+

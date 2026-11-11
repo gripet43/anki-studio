@@ -14,6 +14,7 @@ import sys
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+from .media_utils import get_media_base_url, get_media_dir
 from .vacation_service import effective_frozen_dates
 
 
@@ -100,7 +101,20 @@ class DeckService:
             "osName": os_name,
             "ankiVersion": anki_ver,
             "platformBadge": f"{os_name} · {anki_ver}",
+            "mediaBaseUrl": get_media_base_url(get_media_dir(self.col)),
         }
+
+    @staticmethod
+    def resolve_profile_sync_key(mw: Any = None) -> str:
+        """Stable profile identifier for per-profile sync verification timestamps."""
+        try:
+            pm = getattr(mw, "pm", None) if mw is not None else None
+            name = getattr(pm, "name", None) if pm is not None else None
+            if isinstance(name, str) and name.strip():
+                return name.strip()
+        except Exception:
+            pass
+        return "default"
 
     @classmethod
     def _get_last_sync_timestamp(cls, col) -> int:
@@ -216,7 +230,20 @@ class DeckService:
 
             has_avalanche = overdue_count >= 30 or (total_due_review + total_due_new) >= 60
 
-            last_sync_ts = self._get_last_sync_timestamp(col)
+            ls_ts = self._get_last_sync_timestamp(col)
+            last_sync_ts = ls_ts
+            if ls_ts > 0:
+                checked_map = cfg.get("last_sync_checked_map")
+                if isinstance(checked_map, dict):
+                    profile_key = self.resolve_profile_sync_key(self.mw)
+                    try:
+                        checked_ts = int(checked_map.get(profile_key, 0) or 0)
+                        if 0 < checked_ts < 100_000_000_000:
+                            checked_ts *= 1000
+                        if checked_ts > last_sync_ts:
+                            last_sync_ts = checked_ts
+                    except Exception:
+                        pass
             return {
                 "userName": profile_name,
                 "greeting": self._get_greeting(now.hour, lang),

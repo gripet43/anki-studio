@@ -15,6 +15,90 @@
 
 ## [Unreleased]
 
+- **[WorkBuddy + Antigravity] `config.json` 脱敏防泄露与 `answer_card` 计时器修复及协同状态全量恢复**：
+  - **历史清理与脱敏打包**（WorkBuddy）：从 15 个提交的 Git 历史中剥离含真实昵称/减负/休假记录的 `config.json`，新增纯净模板 [`config.default.json`](config.default.json)，将 `config.json` 加入 [`.gitignore`](.gitignore)，并调整 [`scripts/build_ankiaddon.py`](scripts/build_ankiaddon.py) 优先读取 `config.default.json` 结合 `PRIVATE_CONFIG_KEYS`（保留 `last_sync_checked_map`）打包。
+  - **答题计时器修复**（WorkBuddy）：在 [`bridge/review_service.py`](bridge/review_service.py) `answer_card` 调用 `col.sched.build_answer` 前先执行 `card.start_timer()`，修复 Anki 26 因 `card.timer_started is None` 抛出 `TypeError` 导致答题静默失败且不写 `revlog` 的问题。
+  - **全量无损恢复**（Antigravity）：利用 Gemini `08:55` 任务备份、`transcript_full.jsonl` 全量重放与 `12:17` `.ankiaddon` 产物对照，100% 字节级无损恢复 `Item #22`（Gemini）、`Item #23–#28`（Antigravity）与 `io-native` / `start_timer`（WorkBuddy）全部改动，并补齐 `test_25_answer_card_starts_timer_before_build_answer` 单测，Python 单测（36 项）、Bundle 审计与 11 场景 471 项冒烟回归全绿通过。
+
+- **[Antigravity] 精简同步胶囊浮窗结构与悬停高亮细节（[SyncStatusPill.tsx](frontend/src/components/dashboard/SyncStatusPill.tsx)）**：
+  - 删除同步浮窗右上角状态徽标（`历史快照 / 同步中 / 刚刚对齐 / 未同步`）以及底部操作栏（`立即同步` 与 `设置` 按钮），避免与外层同步按钮重复。
+  - 将底部说明文案调整为「`此时间代表上次同步云端时间。如有新的修改，请点击按钮完成同步。`」，同步清理无用主题变量，并补充前端断言覆盖。
+  - 移除悬停时左侧状态文字（「上次同步 / 尚未同步」）与 `Y` 快捷键的 `group-hover:text-[var(--brand-text)]` 变蓝样式，仅保留右侧刷新图标在悬停时变蓝高亮；并将图标过渡改为 `motion-safe:transition-[transform,rotate,color]`（Tailwind v4 `rotate-180` 映射到独立的 CSS `rotate` 属性，缺 `rotate` 会导致悬停 180° 旋转动画消失）。
+
+- **[Antigravity] 修复点击「立即同步」后同步胶囊状态/时间未更新的生命周期与 `col.ls` 回写覆盖 Bug**：
+  - **问题根因**：
+    1. **Anki `NO_CHANGES` 不更新数据库 `col.ls`**：当本地与 AnkiWeb 均无变更时，Anki 原生同步以 `NO_CHANGES` 结束，只触发 `gui_hooks.sync_did_finish`，而**不会修改 SQLite `col.ls`**；随后前端 `initFromAnki(true)` 拉取 `get_dashboard()` 又读回 40 分钟前的旧 `col.ls`，把刚设置的“刚刚”覆盖回旧时间。
+    2. **`initFromAnki(true)` 强行清零 `syncJustFinished`**：静默刷新直接把 `syncJustFinished: false` 写入状态，导致 `✓ 同步完成` 瞬时态在几百毫秒内被掐断。
+    3. **异步时序与异常缺失**：`syncCollection()` 使用固定 2200ms 定时器而非等待真实的 `anki:sync-finished` 事件；未登录 `AnkiWeb`（`pm.sync_auth()` 为空）或发生 `handle_sync_error` 异常时无法准确区分真实完成、登录拦截与失败状态；且 `_on_sync_did_finish` 连发 `sync-finished` 与 `collection-updated` 导致双次并发刷新。
+  - **修复内容**：
+    - 后端 [__init__.py](__init__.py) 与 [scripts/build_ankiaddon.py](scripts/build_ankiaddon.py)：拦截 `aqt.sync.handle_sync_error` 识别真实同步异常；在 `_on_sync_did_finish` 校验 `col.ls > 0` 后，将本次验证时间按 profile 持久化到私有配置键 `last_sync_checked_map` 并透传 `synced` / `syncedAt` / `error`。
+    - 后端 [bridge/deck_service.py](bridge/deck_service.py) 与 [bridge/router.py](bridge/router.py)：`get_dashboard` 在 `col.ls > 0` 时合并 `max(col.ls, last_sync_checked_map[profile])`（未同步库 `col.ls == 0` 仍严格保持 `0`）；`action_sync` 检测 `pm.sync_auth()` 与媒体后台同步状态并标记 `asyncPending` / `requiresLogin`。
+    - 前端 [frontend/src/stores/useAppStore.ts](frontend/src/stores/useAppStore.ts)、[frontend/src/App.tsx](frontend/src/App.tsx) 与 [frontend/src/components/dashboard/SyncStatusPill.tsx](frontend/src/components/dashboard/SyncStatusPill.tsx)：引入 `sessionVerifiedSyncTs` 与 `handleNativeSyncFinished` 协调真实完成事件，静默刷新保留 `syncJustFinished` 与单调最新验证时间戳，跳过 `source === 'sync'` 的重复刷新，并确保胶囊 `effectiveNow` 不因 `nowTick` 采样滞后出现偏差。
+  - **验证**：新增 Python 单测 `test_23_sync_no_changes_checked_timestamp_and_requires_login` 与前端审计断言 Item #28，前端编译、Bundle 审计及 Python 单测全部通过。
+
+- **[WorkBuddy] 修复原生 Image Occlusion 卡片只显示 SVG 黑框、底图完全丢失的问题**：
+  - **现象**：打开任何来自 Anki 官方界面或他人分享 `.apkg` 的 `Image Occlusion` 卡片，列表与复习界面都只显示若干半透明黑色矩形，原图不出现，卡片标题是一串 SVG 源码。
+  - **根因**：`search_service._serialize_library_card` 与 `review_service` 都按 `fields[0]` 取正文，而原生遮挡笔记的字段顺序是 `Occlusion`（SVG 覆盖层）、`Image`（底图）、`Header`、`Back Extra`、`Comments`。于是 SVG 被当成正文直出，`Image` 从未参与渲染。插件也没有实现原生模板里的 `canvas` + `anki.imageOcclusion.setup()`——但即便实现也无效：React 的 `dangerouslySetInnerHTML` 不执行 `<script>`。
+  - **修复**：在 [`bridge/media_utils.py`](bridge/media_utils.py) 新增 `render_native_image_occlusion(note)`，把 `Occlusion` 里 `{{cN::<svg><rect …/></svg>}}` 的 viewBox 坐标（0–100）直接当作百分比，生成 `.anki-io-wrap` + `span.anki-io-rect`，复用项目既有的静态遮罩渲染链路；底图取 `Image` 字段，答案面返回原图。`search_service` 与 `review_service` 在取字段前先尝试该函数，命中则整体替换 front/back，未命中回落原逻辑；列表标题回落到 `Header`，不再把 SVG 源码当标题。
+  - **验证**：`io-native` 场景 12 项冒烟全通过（`native-io:frontHtml` 与 `native-io:review` 分别守住列表与复习两条路径）；新增单测 `test_22_native_image_occlusion_renders_static_masks`（含 0 尺寸矩形丢弃、非遮挡笔记回落）；34 项 Python 单测与 Bundle 审计全绿。
+
+- **[Antigravity] 按「方案 B + Modern Web Guidance」重构同步状态胶囊与同步设置页语义体验**：
+  - **问题根因**：原先 [SyncStatusPill.tsx](frontend/src/components/dashboard/SyncStatusPill.tsx) 与 [SettingsModal.tsx](frontend/src/components/settings/SettingsModal.tsx) 在历史同步后恒定展示带光晕的实心绿色圆点及「已同步 (XX分钟前) / 实时同步」，容易误导用户以为处于实时在线一致状态，忽略了同步时间点新旧的相对性。
+  - **改动内容**：
+    - 新增形状语义清晰的共享图标组件 [SyncStateIcon.tsx](frontend/src/components/common/SyncStateIcon.tsx)：仅在同步刚完成的瞬时态短暂展示绿色对勾，常态历史同步展示**中性云朵图标**，从未同步展示**斜杠云朵图标**，同步中展示 **motion-safe 旋转环**（符合 `color` / `accessibility` 不单独依赖颜色区分状态的原则）。
+    - 重构 [translations.ts](frontend/src/i18n/translations.ts)：文案由「已同步 / 已是最新」修正为事实陈述「上次同步 · 40分钟前」与「历史快照」，并采用原生 `Intl.RelativeTimeFormat({ numeric: 'auto', style: 'narrow' })` 与语义化 `<time dateTime={...}>` 输出相对/绝对时间戳。
+    - 升级 [SyncStatusPill.tsx](frontend/src/components/dashboard/SyncStatusPill.tsx)、[index.css](frontend/src/index.css) 与 [SettingsModal.tsx](frontend/src/components/settings/SettingsModal.tsx)：移除冗余 `title`、为飞出信息卡补充键盘焦点（`onFocusCapture`/`onBlurCapture`）与 `Escape` 关闭支持（满足 WCAG 1.4.13），并在 `@media (prefers-reduced-motion: no-preference)` 下补齐微动画与减少动态效果兜底，同时在 `tests/test_frontend_bundle.mjs` 新增 Item #27 校验。
+
+- **[Antigravity] 修复首页点击「进度减负」默认打开历史记录标签页的问题**：
+  - **问题根因**：`frontend/src/components/layout/Sidebar.tsx` 点击「进度减负」按钮时会在存在 `recentReceipt` 且无积压警报时强制传入 `'history'` 打开 `IcuRescueModal`，且 `frontend/src/components/vacation/IcuRescueModal.tsx` 在 `totalDue === 0 && rescueHistory.length > 0` 时也将初始 `activeTab` 回退为 `'history'`。
+  - **修复内容**：移除侧边栏按钮的自动跳转历史记录分支，统一调用 `appActions.openIcuModal('rescue')`；同时简化 `IcuRescueModal.tsx` 初始标签判断为仅在显式请求 `store.icuModalTab === 'history'` 时进入历史记录，默认始终展示「减负方案」（执行减负/撤销后及手动点击标签切换仍保留在历史记录页）。并在 `tests/test_frontend_bundle.mjs` 新增 Item #26 回归断言。
+
+- **[WorkBuddy] 新增与真实数据完全隔离的用户场景测试沙盒（`tests/scenarios/`）**：
+  - **背景**：此前所有验证都跑在真实 collection 上，而该库只有 2 个牌组、2 种笔记类型、0 张隐藏卡。日常路径能测通，但多牌组嵌套、Cloze/图片遮挡、标签体系、积压、状态混杂、空库、大集合性能等问题一次都覆盖不到。多人协作下更需要一套「不碰用户数据」的验证环境。
+  - **技术底座（已实测）**：Anki 26.9.4 自带完整 `anki` Python 包（`/Applications/Anki.app/Contents/Resources/app_packages`，含 `_rsbridge.so`，CPython 3.13），系统 Python 直接 import 即可创建真实 collection，无需 pip 安装或伪造 schema。生成分三段：① 官方 API 建牌组/笔记/卡片并关闭 → ② 标准库 `sqlite3` 直写 `due`/`queue`/`type`/`ivl`/`factor`/`revlog` → ③ 重新用官方 API 打开复验卡片数与队列分布。
+  - **隔离模型**：沙盒固定在 `~/Anki-Test-Env`，用 `Anki -b <沙盒>/base -p 测试账户` 启动，与 `~/Library/Application Support/Anki2` 无交集。三条硬规则：启动必须带 `-b`（无裸启动路径）；插件目录用 **rsync 复制而非软链**（软链会让插件写入的 `config.json` 穿透回开发目录）；首次同步时剥离 `config.json` 的 `custom_nickname` / `last_rescue_receipt` / `vacation_state` / `vacation_history` / `vacation_frozen_dates`，测试环境不携带真实信息。
+  - **新增文件**：[`tests/scenarios/guard.py`](tests/scenarios/guard.py)（路径守卫，`assert_sandboxed` 解析软链后校验，越界直接抛 `IsolationError`）、[`builder.py`](tests/scenarios/builder.py)（四段式生成器，支持媒体素材与脏数据注入，固定 seed 可复现）、[`scenarios.py`](tests/scenarios/scenarios.py)（8 个场景配方）、[`build.py`](tests/scenarios/build.py)（生成 CLI）、[`smoke.py`](tests/scenarios/smoke.py)（无 GUI 冒烟回归）、[`run.sh`](tests/scenarios/run.sh)（同步副本→备份现场→切库→启动）、[`gate.sh`](tests/scenarios/gate.sh)（一键门禁）、[`verify_isolation.py`](tests/scenarios/verify_isolation.py)（6 项隔离自检）、[`README.md`](tests/scenarios/README.md)。
+  - **场景矩阵（11 个）**：`empty`（0 卡空态）、`newbie`（100 卡全新）、`exam`（~800 卡 / 三层牌组 / Basic+Cloze / 30% 新卡 / 标签 / 复习历史，回归主力）、`backlog`（600 卡全逾期）、`mixed`（暂停/隐藏/学习/重学混排）、`power`（3000 卡 / 8 牌组 / 3 笔记类型）、`media`（200 卡 + 4 个真实 PNG/MP3 素材 + 5 个孤立文件）、`occlusion`（60 卡全部为项目自定义 `.anki-io-wrap` 遮挡结构）、`io-native`（30 条 Anki 内置 `Image Occlusion` 笔记，`{{c1::<svg>}}` + canvas 渲染）、`edge`（150 卡注入负数与超大 `due`、`ivl` 含 0 与 2147483647）、`dirty`（120 卡注入空卡、重复笔记、缺失媒体、超长字段）。
+  - **该场景直接促成了一次产品修复**：`io-native` 场景暴露了原生遮挡卡只显示 SVG 黑框、底图丢失的问题。起初以 `warning` 挂起（详见下条机制），确认根因后已按文首条目修复，warning 随之升级为正式断言 `native-io:frontHtml` / `native-io:review`，列表与复习两条路径都守住。
+  - **已知缺陷机制（保留）**：`smoke.py` 的 `runner.warn()` 把「产品确实不支持」与「测试失败」区分开——前者不计入退出码，但每次运行都会汇总打印，避免「全绿 = 功能完整」的错觉。当前无未认领项。
+  - **图片遮挡场景的口径修正**：动手前先探明 Anki 26 原生 Image Occlusion 走 `canvas` + `anki.imageOcclusion.setup()`，而本项目走的是「Basic 笔记 + `.anki-io-wrap` + `span.anki-io-rect` 包 cloze」的自定义方案，两者不同。生成器逐字复刻 `buildImageOcclusionHtml` 的结构；实测确认**后端已消费 cloze 并注入遮罩样式**，因此断言写成「cloze 必须已被消费」而非「保留 cloze」——后者会把正确行为判成失败。
+  - **自动回归（`smoke.py`）**：不启动 GUI，把 `BridgeRouter` 直接接到场景 collection 上，跑前端真实会调的 action 并断言。读路径覆盖 `get_dashboard` / `get_statistics` / `search_cards` / `get_deck_options` / `get_vacation_status` / `get_preferences`；维护路径在 dirty 场景断言 `check_db` 完整性为 ok、`check_empty_cards` 至少检出注入数、`check_media` 至少检出注入的缺失数；遮挡路径断言 `data-io-mode` / `data-io-rect` / 遮罩样式 / 图片 `file://` 齐备且 cloze 已消费；写路径直接查 sqlite 验证 `set_card_flag` 的 flags 低三位、`toggle_suspend` 的 queue=-1、`quick_add` 的卡片数 +1，不相信返回值自报成功。所有返回值额外过一遍非法数值检查（出现 `Infinity` / `NaN` 即失败，因为前端 `JSON.parse` 会抛错）。全部在 `state/smoke/` 副本上跑，11 场景 115 项约 3.6 秒。另加 `gate.sh` 五步门禁（隔离自检 → 补场景 → 可复现性 → 冒烟回归 → 可选项目门禁）。
+  - **可复现性校验**：`python3 build.py --verify-repro <场景>` 会生成两份并比对业务指纹（排除 `id` / `mod` / `due` 这些必然变化的时间字段，只比 notes 正文与 `type/queue/ivl/factor/reps/lapses`）。`exam` / `occlusion` / `dirty` 实测两次生成指纹完全一致。
+
+- **[Antigravity] 修复卡片库/复习预览可见图片但点开编辑显示破图图标的 Bug，并完善编辑器与数据库之间的媒体路径双向往返标准化**：
+  - **问题根因**：Anki 卡片字段（以及原生理卡、图片遮挡模板 `ImageOcclusionEditorModal`）在 `notes.flds` 中以相对文件名保存图片（如 `<img src="paste-xxx.png">`）。此前 [`search_service.py`](bridge/search_service.py) 与 [`review_service.py`](bridge/review_service.py) 仅在生成展示用 `frontHtml` / `backHtml` 时将其改写为 `file:///.../collection.media/...`（因此列表与搜索预览正常显示图片），而下发给编辑弹窗的原始 `fields` 仍保留相对路径；WebView 文档根路径为插件 `web/index.html`，导致 [`CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`TowerWysiwygEditor.tsx`](frontend/src/components/quick-add/TowerWysiwygEditor.tsx) 与 [`ImageOcclusionEditorModal.tsx`](frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx) 加载相对路径时全部 404 破图。
+  - **后端媒体基础路径与双向规范化**：
+    - 提取共享模块 [`bridge/media_utils.py`](bridge/media_utils.py)（提供 `get_media_dir`、`get_media_base_url`、`resolve_media_img_src_for_webview` 与 `normalize_media_html_for_storage`），复用并消除 `search_service` / `review_service` 中的重复图片正则逻辑，支持相对文件名、带空格/中文文件名、无引号 `src` 与携带 `data-anki-media` 的跨机失效 `file://` 兜底修复，且严格跳过 `data-src` 与 `{{c1::...}}` / `[sound:...]`。
+    - [`bridge/deck_service.py`](bridge/deck_service.py) 在 `envInfo`（`get_dashboard` / `get_preferences`）中注入当前集合媒体库根目录 URI `mediaBaseUrl`。
+    - [`bridge/edit_service.py`](bridge/edit_service.py) 在 `quick_add_card` 与 `update_card_inline` 写入 SQLite 前，将属于当前 `collection.media` 的 `file://` 图片地址自动归一化为标准相对文件名，确保兼容 Anki 原生界面、AnkiWeb 云同步与移动端。
+  - **前端编辑态解析**：新增 [`frontend/src/utils/mediaUrl.ts`](frontend/src/utils/mediaUrl.ts)（含从 `frontHtml`/`backHtml` 反推 `collection.media` 路径的二次兜底），并在 [`CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`TowerWysiwygEditor.tsx`](frontend/src/components/quick-add/TowerWysiwygEditor.tsx) 与 [`ImageOcclusionEditorModal.tsx`](frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx) 打开编辑、晚到同步及遮挡应用时自动解析显示 `file://` 媒体图片，同时保持 `originalSnapshot` 与脏检查准确。
+
+- **[Antigravity] 修复卡片库筛选下拉计数与实际结果不一致的 Bug，并消除顶部副标题重复计数文案**：
+  - **数字不一致根因修复**：
+    - **后端全量分面统计**：在 [`bridge/search_service.py`](bridge/search_service.py) 中新增 `_get_collection_total()` 与 `_compute_facet_counts()`，通过单次 SQLite 全表扫描（单测环境平滑回退 `col.get_card()`）结合跨维度过滤查询，随 `search_cards` 下发真实的全库总卡片数 `collectionTotal` 与按其它激活条件交叉统计的 `facetCounts`（覆盖 `statusCounts`、`difficultyCounts`、`flagCounts`、`tagCounts` 与 `tagAllCount`），彻底解决此前前端仅基于分页第 1 页（前 200 条）`libraryCards` 统计导致下拉框显示「已暂停 2」而点击筛选后实际匹配 `47` 张的偏差，且批量操作后统一刷新全库计数与分面状态。
+    - **真实总数不被筛选覆盖**：修复此前 `search_cards` 返回 `"total": len(cids)` 被筛选条件（如 `已暂停`）覆盖后覆盖写入 `libraryTotalCount`，导致「总卡片」变成筛选子集数量（`47 张总卡片`）的问题；保持原有 `"total"` 向后兼容的同时，前端 [`useAppStore.ts`](frontend/src/stores/useAppStore.ts) 改为绑定 `collectionTotal` 与 `libraryFacetCounts`。
+  - **消除重复显示文案**：调整 [`translations.ts`](frontend/src/i18n/translations.ts) 与 [`LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx) 顶部副标题 `librarySub` 为简洁准确的「**共 {total} 张卡片 · {decks} 个牌组**」（英文 `{total} total cards · {decks} decks`），移除原先在标题下与过滤栏右侧（`{n} 张符合条件`）重复出现的「当前匹配 X 张」，且仅在存在实际收敛筛选条件时在过滤栏右侧展示符合条件数量。
+
+- **[Antigravity] 禁止弹窗点击外部灰色遮罩误触关闭，仅保留弹窗自身关闭按钮/Esc 关闭，并补全全局搜索弹窗关闭符号**：
+  - **全量弹窗遮罩防误触**：移除 [`CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)、[`SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`CustomStudyModal.tsx`](frontend/src/components/study/CustomStudyModal.tsx)、[`DecksView.tsx`](frontend/src/components/decks/DecksView.tsx)（牌组选项弹窗）、[`CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`ImageOcclusionEditorModal.tsx`](frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx)、[`VacationModal.tsx`](frontend/src/components/vacation/VacationModal.tsx) 与 [`IcuRescueModal.tsx`](frontend/src/components/vacation/IcuRescueModal.tsx) 外层 `fixed inset-0` 灰色遮罩上的点击关闭事件，彻底杜绝鼠标移出或误点弹窗周边灰色区域导致内容丢失或面板意外关闭的问题（`Esc` 快捷键与弹窗内明确关闭/取消按钮继续保留）。
+  - **全局搜索弹窗关闭符号拆分**：修复 [`CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx) 原先顶部右侧 `✕` 仅在有搜索词时显示且点击只清空搜索文字、不关闭弹窗的交互冲突——在弹窗右上角常驻明确的 `✕` 关闭按钮（绑定关闭面板并标注 `关闭 (Esc)`），并将输入框右侧原有清空功能拆分为独立的「**清空 / Clear**」文本胶囊按钮，避免图标语义混淆。
+
+- **[Antigravity] 全局搜索预览面板新增「复制正面」与「复制背面」悬浮快捷按钮**：
+  - **交互与样式细节**：在 [`CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx) 右侧卡片预览区的「卡片正面」和「卡片背面」区域右上角分别新增「**复制正面**」与「**复制背面**」按钮，基于 Tailwind `group/front` 与 `group/back` 实现**仅当鼠标悬停对应区域（或键盘聚焦内部）时淡入显示**、默认隐身且不引起布局抖动的优雅交互；点击复制后保留 2 秒按钮内嵌绿色「已复制」状态反馈，移除多余的全局成功 Toast 弹窗（仅在复制失败时提示）。
+  - **多行文本保真**：新增 `extractCopyableText()` 辅助函数，在点击复制时通过安全 DOMParser 将卡片 HTML 中的换行与段落结构完整保留为纯文本（如保留选项 A/B/C/D 分行），共享同一套 `renderCopyButton()` 组件与防错位定时器管理。
+
+
+- **[Gemini] 新增三大高阶原生能力：制卡增强套件（模板选择/防重预警/连续制卡与字段固定）、卡片库高阶管理（多维排序/批量查找替换/批量删标）、复习拼写默写检验模式（Type-in-the-Answer）**：
+  - **1. 制卡增强套件（Card Creation Power Suite）**：
+    - **后端**：在 [`bridge/edit_service.py`](bridge/edit_service.py) 与 [`bridge/router.py`](bridge/router.py) 中新增 `get_note_types`（枚举集合内全部 Note Types 及其自定义字段序列）、`check_duplicate`（实时检索 `notes` 表 `sfld` 与首字段，毫秒级识别重复词条并支持 `excludeNoteId` 排除自身）以及升级 `quick_add`（支持指定 `modelId`、开启 `createReverseCard` 一键生成正反双向卡片、开启 `typeAnswerMode` 自动附加 `#默写` 标签及写入自定义扩展字段 `fields`）。
+    - **前端**：在 [`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx) 中新增：① **笔记类型与制卡模式选择器**（支持 `问答题 Basic`、`正反双向卡 Basic + Reversed (2张)`、`拼写默写卡 Basic (type in the answer)`、`填空题 Cloze` 及集合内任意多字段自定义模板）；② **实时防重预警横幅**（输入正面词条时自动检测重复卡片，并支持一键「在卡库中查看」）；③ **字段固定图钉（`📌 固定`）与连续制卡按钮（`保存并继续 +1` / `Cmd+Shift+Enter`）**，固定后的字段或标签在连续建卡时自动保留，大幅提速批量制卡流。
+  - **2. 卡片库高阶管理（Library Multi-Sort, Batch Find & Replace, Batch Tag Removal）**：
+    - **后端**：在 [`bridge/search_service.py`](bridge/search_service.py) 中为 `search_cards` 新增 `sortBy` 多维排序参数（支持 `default`、`lapses_desc` 失误最多、`due_asc` 到期最早、`ivl_asc` 间隔最短、`ivl_desc` 间隔最长、`stability_asc` 熟练度最低、`front_asc` 词条 A→Z、`newest` 最新创建），并在 `_serialize_library_card` 中下发真实 `lapses` 与 `dueRaw`；在 `batch_action` 中新增 `removeTag`（批量移除指定标签）与 `findReplace`（支持按 `all` / `front` / `back` 字段范围及 `ignoreCase` 批量查找替换文本）。
+    - **前端**：在 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx) 与 [`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts) 中新增「排序」下拉胶囊、表格视图可点击排序表头，以及底部批量操作栏的「移除标签」（含已选卡片高频标签一键点选移除）与「查找替换」交互面板。
+  - **3. 复习拼写输入比对模式（Type-in-the-Answer 默写检验与逐字差异高亮）**：
+    - 在 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx) 顶部工具栏新增「⌨️ 默写 (Type)」开关（当卡片带有 `#默写` / `#type-answer` 标签或属于 Type 类模板时自动开启）。问题面提供原生级默写输入框（按 `Enter` 直接提交并翻面），答案面基于 LCS 动态规划算法逐字比对用户输入与标准答案（填空卡自动提取 `{{cN::答案}}` 词条，问答卡提取背面核心释义），以翠绿（匹配）、玫红删除线（多写/错字）、琥珀下划线（漏写）直观呈现拼写差异与匹配度百分比。
+  - **验证**：新增 `test_19_note_types_duplicate_sort_find_replace` 与 Bundle 审计 Item #22，全部 Python 单测、`tsc --noEmit`、前端构建与 Bundle 审计 100% 通过。
+
 - **[Antigravity] 极简打卡副标题：移除连续打卡卡片中的「本周 X / 7」提示**：
   - 在 [`translations.ts`](frontend/src/i18n/translations.ts) 与 [`DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx) 中简化连续打卡卡片副标，移除容易引起理解歧义的「· 本周 X / 7」，保持清爽极简的「**最长 {longest} 天**」（英文对齐为 `Best {longest}d`），使打卡卡片聚焦在当前连续天数与个人最长历史纪录上。
 

@@ -31,6 +31,7 @@ class AnkiModernHost:
     def __init__(self):
         self.webview: Optional[Any] = None
         self.is_modern_visible: bool = False
+        self._sync_error_in_flight: Optional[str] = None
         self.router = BridgeRouter(
             toggle_native_callback=self.toggle_modern_ui,
             config_getter=self.get_config,
@@ -216,6 +217,31 @@ class AnkiModernHost:
         except Exception:
             pass
 
+        try:
+            import aqt.sync
+            if not getattr(aqt.sync, "_anki_modern_sync_err_patched", False):
+                orig_handle_sync_error = getattr(aqt.sync, "handle_sync_error", None)
+                if callable(orig_handle_sync_error):
+                    host = self
+
+                    def modern_handle_sync_error(mw_arg, err, *args, **kwargs):
+                        try:
+                            host._sync_error_in_flight = str(err) if err is not None else "Sync error"
+                        except Exception:
+                            pass
+                        return orig_handle_sync_error(mw_arg, err, *args, **kwargs)
+
+                    aqt.sync.handle_sync_error = modern_handle_sync_error
+                    for mod_name, mod in list(sys.modules.items()):
+                        if mod and getattr(mod, "handle_sync_error", None) is orig_handle_sync_error:
+                            try:
+                                setattr(mod, "handle_sync_error", modern_handle_sync_error)
+                            except Exception:
+                                pass
+                aqt.sync._anki_modern_sync_err_patched = True
+        except Exception:
+            pass
+
     def _on_top_toolbar_init_links(self, links: List[str], toolbar: Any) -> None:
         """
         Layer 3 Anti-Lost Safety Net:
@@ -271,10 +297,12 @@ class AnkiModernHost:
 
     def _on_sync_will_start(self) -> None:
         """Triggered when AnkiWeb cloud sync initiates (including auto-sync on startup)."""
+        self._sync_error_in_flight = None
         self._emit_js_event("anki:sync-started", {"syncing": True})
 
     def _on_sync_did_finish(self) -> None:
         """Triggered when AnkiWeb cloud sync genuinely finishes."""
+        mw = None
         try:
             from aqt import mw
             if mw and hasattr(mw, "app") and mw.app:
@@ -282,7 +310,40 @@ class AnkiModernHost:
                     mw.app.restoreOverrideCursor()
         except Exception:
             pass
-        self._emit_js_event("anki:sync-finished", {"synced": True})
+
+        sync_err = self._sync_error_in_flight
+        self._sync_error_in_flight = None
+        if sync_err:
+            self._emit_js_event("anki:sync-finished", {"synced": False, "error": sync_err})
+            return
+
+        import time as _time
+        from .bridge.deck_service import DeckService
+
+        col = getattr(mw, "col", None) if mw is not None else None
+        ls_ts = DeckService._get_last_sync_timestamp(col) if col is not None else None
+        if ls_ts is not None and ls_ts <= 0:
+            # Collection still has ls == 0 (e.g. un-synced profile or user canceled initial full sync)
+            self._emit_js_event("anki:sync-finished", {"synced": False, "syncedAt": 0})
+            return
+
+        synced_at_ms = int(_time.time() * 1000)
+        # Anki leaves SQLite `col.ls` unchanged when AnkiWeb reports NO_CHANGES.
+        # Persist the verified sync check timestamp per profile when col.ls > 0.
+        if ls_ts is not None and ls_ts > 0:
+            try:
+                profile_key = DeckService.resolve_profile_sync_key(mw)
+                cfg = self.get_config() or {}
+                checked_map = cfg.get("last_sync_checked_map")
+                next_map = dict(checked_map) if isinstance(checked_map, dict) else {}
+                prev_ts = int(next_map.get(profile_key, 0) or 0)
+                next_map[profile_key] = max(prev_ts, synced_at_ms)
+                cfg["last_sync_checked_map"] = next_map
+                self.write_config(cfg)
+            except Exception as e:
+                print(f"[Anki Modern OS] Failed to persist last_sync_checked_map: {e}")
+
+        self._emit_js_event("anki:sync-finished", {"synced": True, "syncedAt": synced_at_ms})
         self._emit_js_event("anki:collection-updated", {"source": "sync"})
 
     def _on_operation_did_execute(self, changes: Any, handler: Any) -> None:

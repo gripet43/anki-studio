@@ -123,14 +123,12 @@ export const VacationModal: React.FC = () => {
 
   return (
     <div
-      onClick={() => appActions.closeVacationModal()}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[5px] select-none modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-labelledby="vacation-modal-title"
     >
       <div
-        onClick={(e) => e.stopPropagation()}
         className={`w-full max-w-[500px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.32)] overflow-hidden transition-all duration-200 flex flex-col max-h-[85vh] ${modalBg}`}
       >
         {/* Header Bar with Integrated Segmented Switcher */}

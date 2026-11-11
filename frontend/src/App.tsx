@@ -43,9 +43,13 @@ export const App: React.FC = () => {
   useEffect(() => {
     appActions.initFromAnki();
 
-    const onCollectionUpdated = () => {
+    const onCollectionUpdated = (e: Event) => {
       // Guard: do not interrupt cold start sync while in progress
       if (getAppState().isInitialSyncing) return;
+      // Sync completion already runs a single coordinated refresh via handleNativeSyncFinished;
+      // skip the paired duplicate `collection-updated` event emitted by `_on_sync_did_finish`.
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.source === 'sync') return;
       appActions.initFromAnki(true);
     };
 
@@ -61,28 +65,14 @@ export const App: React.FC = () => {
       const isZh = getAppState().resolvedLang === 'zh-CN';
       setAppState({
         syncing: true,
+        syncJustFinished: false,
         lastSyncedText: isZh ? '正在同步...' : 'Syncing...',
       });
     };
 
-    const onSyncFinished = () => {
-      // Always release the syncing flag first. Returning early during cold start
-      // left syncing=true forever, which then deadlocked every later sync attempt.
-      setAppState({ syncing: false });
-      // Guard: cold start sync manages its own choreographed reveal
-      if (getAppState().isInitialSyncing) return;
-      const isZh = getAppState().resolvedLang === 'zh-CN';
-      const nowTs = Date.now();
-      setAppState({
-        syncing: false,
-        syncJustFinished: true,
-        lastSyncedTimestamp: nowTs,
-        lastSyncedText: isZh ? '已同步 (刚刚)' : 'Synced (Just now)',
-      });
-      setTimeout(() => {
-        setAppState({ syncJustFinished: false });
-      }, 2600);
-      appActions.initFromAnki(true);
+    const onSyncFinished = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      appActions.handleNativeSyncFinished(detail);
     };
 
     window.addEventListener('anki:collection-updated', onCollectionUpdated);

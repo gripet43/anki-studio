@@ -1,9 +1,30 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatShortcut, translate } from '../../i18n/translations';
 import { appActions, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
 import { copyTextToClipboard } from '../../utils/clipboard';
 import { getDeckColorByHash, renderMathAndRichHtml } from '../../utils/mathRenderer';
 import { getAccentScale } from '../../utils/themeTokens';
+
+function extractCopyableText(htmlContent?: string, fallbackPlain?: string): string {
+  const raw = (htmlContent || '').trim();
+  if (!raw) return (fallbackPlain || '').trim();
+  if (!/[<&]/.test(raw)) return raw;
+  try {
+    const withLineBreaks = raw
+      .replace(/<\/(?:div|p|li|tr|blockquote|h[1-6])>\s*<(?:div|p|li|tr|blockquote|h[1-6])\b[^>]*>/gi, '\n')
+      .replace(/<br\s*\/?>|<\/?(?:div|p|li|tr|blockquote|h[1-6])\b[^>]*>/gi, '\n');
+    const doc = new DOMParser().parseFromString(withLineBreaks, 'text/html');
+    const extracted = (doc.body.textContent || '')
+      .split('\n')
+      .map((line) => line.trimEnd())
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    return extracted || (fallbackPlain || '').trim();
+  } catch {
+    return (fallbackPlain || raw).trim();
+  }
+}
 
 export const CommandPaletteModal: React.FC = () => {
   const {
@@ -24,6 +45,7 @@ export const CommandPaletteModal: React.FC = () => {
   } = useAppStore();
 
   const [copiedSide, setCopiedSide] = useState<'front' | 'back' | 'all' | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isDark = theme === 'dark' || theme === 'oled';
   const isZh = resolvedLang === 'zh-CN';
@@ -90,7 +112,17 @@ export const CommandPaletteModal: React.FC = () => {
 
   useEffect(() => {
     setCopiedSide(null);
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    }
   }, [activeCard?.id, cmdKOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!cmdKOpen) return;
@@ -127,36 +159,83 @@ export const CommandPaletteModal: React.FC = () => {
 
   if (!cmdKOpen) return null;
 
-  // Single copy action for the full card content
-  const handleCopyText = async (rawText: string) => {
+  // Copy handler shared across full card, front side, and back side
+  const handleCopyText = async (rawText: string, side: 'front' | 'back' | 'all' = 'all') => {
     const success = await copyTextToClipboard(rawText);
-    setCopiedSide('all');
+    if (!success) {
+      showToast(isZh ? '复制失败，请重试' : 'Failed to copy');
+      return;
+    }
+    setCopiedSide(side);
 
-    showToast(
-      success
-        ? isZh
-          ? '✓ 已复制卡片内容到剪贴板'
-          : '✓ Copied card to clipboard'
-        : isZh
-        ? '复制失败，请重试'
-        : 'Failed to copy'
-    );
-
-    setTimeout(() => {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => {
       setCopiedSide(null);
+      copyTimerRef.current = null;
     }, 2000);
+  };
+
+  const renderCopyButton = ({
+    side,
+    label,
+    title,
+    getText,
+    hoverRevealClass = '',
+  }: {
+    side: 'front' | 'back' | 'all';
+    label: string;
+    title: string;
+    getText: () => string;
+    hoverRevealClass?: string;
+  }) => {
+    const isCopied = copiedSide === side;
+    const isInlineSide = side !== 'all';
+    return (
+      <button
+        type="button"
+        onClick={() => handleCopyText(getText(), side)}
+        title={title}
+        aria-label={title}
+        className={`${
+          isInlineSide ? 'px-2 py-0.5 min-h-[24px]' : 'px-2.5 py-1'
+        } rounded-md text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
+          isCopied
+            ? 'bg-[var(--status-success-soft)] text-[var(--status-success)] border border-[var(--status-success)]/30 opacity-100 pointer-events-auto'
+            : isDark
+            ? 'bg-white/6 hover:bg-white/12 text-[#8E8E93] hover:text-white border border-transparent'
+            : isInlineSide
+            ? 'bg-white hover:bg-[#EFEFF4] text-[#636366] hover:text-[#1D1D1F] border border-[#E5E5EA] shadow-2xs'
+            : 'bg-[#F2F2F7] hover:bg-[#E5E5EA] text-[#636366] hover:text-[#1D1D1F] border border-transparent'
+        } ${!isCopied ? hoverRevealClass : ''}`}
+      >
+        {isCopied ? (
+          <>
+            <svg className="w-3 h-3 text-[var(--status-success)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>{isZh ? '已复制' : 'Copied'}</span>
+          </>
+        ) : (
+          <>
+            <svg className="w-3 h-3 opacity-75" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <span>{label}</span>
+          </>
+        )}
+      </button>
+    );
   };
 
   return (
     <div
-      onClick={() => setAppState({ cmdKOpen: false })}
       className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 select-none animate-in fade-in duration-150 modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-label={isZh ? '全局命令面板' : 'Command Palette'}
     >
       <div
-        onClick={(e) => e.stopPropagation()}
         className={`w-[840px] max-w-full rounded-2xl border shadow-[0_24px_64px_rgba(0,0,0,0.32)] overflow-hidden transition-colors ${
           isDark ? 'bg-[#181920] border-[#2C2E3A] text-[#F4F4F6]' : 'bg-white border-[#E5E5EA] text-[#1D1D1F]'
         }`}
@@ -196,22 +275,35 @@ export const CommandPaletteModal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => appActions.searchCmdKDebounced('')}
-                className="w-5 h-5 rounded-full flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                title="清空搜索"
+                className={`px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0 transition-colors cursor-pointer ${
+                  isDark
+                    ? 'text-[#A1A1AA] hover:text-white bg-white/6 hover:bg-white/12'
+                    : 'text-[#6E6E73] hover:text-[#1D1D1F] bg-black/5 hover:bg-black/10'
+                }`}
+                title={isZh ? '清空搜索内容' : 'Clear search'}
               >
-                ✕
+                {isZh ? '清空' : 'Clear'}
               </button>
             )}
           </div>
 
-          {hasQuery && cmdKSearching && (
-            <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            {hasQuery && cmdKSearching && (
               <span className="text-[11px] text-[var(--brand-text)] font-medium flex items-center gap-1 mr-1">
                 <span className="w-2 h-2 rounded-full bg-[var(--brand)] animate-ping" />
                 <span>{resolvedLang === 'en' ? 'Searching...' : '检索中...'}</span>
               </span>
-            </div>
-          )}
+            )}
+            <button
+              type="button"
+              onClick={() => setAppState({ cmdKOpen: false })}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+              title={isZh ? '关闭 (Esc)' : 'Close (Esc)'}
+              aria-label={isZh ? '关闭' : 'Close'}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Modal Body: Clean Spotlight-grade Initial State or Search Results Grid */}
@@ -426,51 +518,38 @@ export const CommandPaletteModal: React.FC = () => {
                       <span>{activeCard.deckName}</span>
                     </span>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleCopyText(
-                          `${activeCard.front}\n\n---\n\n${activeCard.back}`
-                        )
-                      }
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
-                        copiedSide === 'all'
-                          ? 'bg-[var(--status-success-soft)] text-[var(--status-success)] border border-[var(--status-success)]/30'
-                          : isDark
-                          ? 'bg-white/5 hover:bg-white/10 text-[#8E8E93] hover:text-white'
-                          : 'bg-[#F2F2F7] hover:bg-[#E5E5EA] text-[#6E6E73] hover:text-[#1D1D1F]'
-                      }`}
-                      title={isZh ? '复制卡片正反面完整内容' : 'Copy card content'}
-                    >
-                      {copiedSide === 'all' ? (
-                        <>
-                          <svg className="w-3 h-3 text-[var(--status-success)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                          <span>{isZh ? '已复制' : 'Copied'}</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-3 h-3 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                          </svg>
-                          <span>{isZh ? '复制卡片' : 'Copy Card'}</span>
-                        </>
-                      )}
-                    </button>
+                    {renderCopyButton({
+                      side: 'all',
+                      label: isZh ? '复制卡片' : 'Copy Card',
+                      title: isZh ? '复制卡片正反面完整内容' : 'Copy card content',
+                      getText: () =>
+                        `${extractCopyableText(activeCard.frontHtml, activeCard.front)}\n\n---\n\n${extractCopyableText(
+                          activeCard.backHtml,
+                          activeCard.back
+                        )}`,
+                    })}
                   </div>
 
                   {/* Clean Card Typography (Direct Flashcard Layout, No Nested Gray Boxes) */}
                   <div
-                    className={`rounded-2xl p-4 border select-text ${
+                    className={`rounded-2xl border select-text overflow-hidden ${
                       isDark ? 'bg-[#15161E] border-[#262834]' : 'bg-[#FAFAFC] border-[#E8E8EE]'
                     }`}
                   >
                     {/* Front Section */}
-                    <div>
-                      <div className="text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1.5">
-                        {resolvedLang === 'en' ? 'Front' : '卡片正面'}
+                    <div className="group/front px-4 pt-3.5 pb-3">
+                      <div className="flex items-center justify-between gap-2 min-h-[24px] mb-1">
+                        <div className="text-[10px] font-semibold text-[#636366] dark:text-[#8E8E93] uppercase tracking-wider">
+                          {resolvedLang === 'en' ? 'Front' : '卡片正面'}
+                        </div>
+                        {renderCopyButton({
+                          side: 'front',
+                          label: isZh ? '复制正面' : 'Copy Front',
+                          title: isZh ? '复制卡片正面内容' : 'Copy front content',
+                          getText: () => extractCopyableText(activeCard.frontHtml, activeCard.front),
+                          hoverRevealClass:
+                            'opacity-0 pointer-events-none group-hover/front:opacity-100 group-hover/front:pointer-events-auto group-focus-within/front:opacity-100 group-focus-within/front:pointer-events-auto',
+                        })}
                       </div>
                       <div
                         className="text-[15px] font-semibold leading-relaxed break-words select-text cursor-text text-[#1D1D1F] dark:text-[#F4F4F6]"
@@ -481,12 +560,22 @@ export const CommandPaletteModal: React.FC = () => {
                     </div>
 
                     {/* Subtle Divider */}
-                    <div className={`my-3 border-t ${isDark ? 'border-[#262834]' : 'border-[#EAEAEF]'}`} />
+                    <div className={`mx-4 border-t ${isDark ? 'border-[#262834]' : 'border-[#EAEAEF]'}`} />
 
                     {/* Back Section */}
-                    <div>
-                      <div className="text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1.5">
-                        {resolvedLang === 'en' ? 'Back' : '卡片背面'}
+                    <div className="group/back px-4 pt-3 pb-3.5">
+                      <div className="flex items-center justify-between gap-2 min-h-[24px] mb-1">
+                        <div className="text-[10px] font-semibold text-[#636366] dark:text-[#8E8E93] uppercase tracking-wider">
+                          {resolvedLang === 'en' ? 'Back' : '卡片背面'}
+                        </div>
+                        {renderCopyButton({
+                          side: 'back',
+                          label: isZh ? '复制背面' : 'Copy Back',
+                          title: isZh ? '复制卡片背面内容' : 'Copy back content',
+                          getText: () => extractCopyableText(activeCard.backHtml, activeCard.back),
+                          hoverRevealClass:
+                            'opacity-0 pointer-events-none group-hover/back:opacity-100 group-hover/back:pointer-events-auto group-focus-within/back:opacity-100 group-focus-within/back:pointer-events-auto',
+                        })}
                       </div>
                       <div
                         className="text-[13px] font-normal leading-relaxed break-words text-[#3A3A3C] dark:text-[#D1D1D6] select-text cursor-text"

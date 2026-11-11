@@ -1320,6 +1320,484 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertFalse((Path(self.temp_media) / "orphan_unused.png").exists())
         self.assertTrue((Path(self.temp_media) / "diagram.png").exists())
 
+    def test_19_note_types_duplicate_sort_find_replace(self):
+        """Verify Note Types, Real-Time Duplicate Check, Bidirectional Creation, Library Multi-Sort, Remove Tag, and Find & Replace."""
+        # Restore clean card texts on 101 and 102
+        note101 = self.mock_col.get_note(101)
+        note101["正面"] = "快速排序"
+        note101["释义"] = "分治算法"
+        note102 = self.mock_col.get_note(102)
+        note102["正面"] = "虚拟内存"
+        note102["释义"] = "页表映射机制"
+        self.mock_col.db.conn.execute(
+            "UPDATE notes SET sfld = '快速排序', flds = '快速排序\x1f分治算法' WHERE id = 101"
+        )
+        self.mock_col.db.conn.execute(
+            "UPDATE notes SET sfld = '虚拟内存', flds = '虚拟内存\x1f页表映射机制' WHERE id = 102"
+        )
+        self.mock_col.db.conn.commit()
+
+        # 1. get_note_types returns available note models with fields
+        nt_res = self._call("get_note_types", {})["data"]
+        self.assertTrue(nt_res["success"])
+        self.assertGreaterEqual(len(nt_res["noteTypes"]), 2)
+        self.assertEqual(nt_res["noteTypes"][0]["name"], "Basic")
+
+        # 2. check_duplicate detects exact duplicate on sfld/front and respects excludeNoteId
+        dup_hit = self._call("check_duplicate", {"front": "快速排序"})["data"]
+        self.assertTrue(dup_hit["isDuplicate"])
+        self.assertGreaterEqual(dup_hit["count"], 1)
+
+        dup_excl = self._call("check_duplicate", {"front": "快速排序", "excludeNoteId": "101"})["data"]
+        self.assertFalse(dup_excl["isDuplicate"])
+
+        dup_miss = self._call("check_duplicate", {"front": "全新不存在的词条XYZ"})["data"]
+        self.assertFalse(dup_miss["isDuplicate"])
+
+        # 3. quick_add with createReverseCard=True and typeAnswerMode=True
+        bi_res = self._call(
+            "quick_add",
+            {
+                "deckId": "1",
+                "front": "TCP 三次握手",
+                "back": "SYN -> SYN+ACK -> ACK",
+                "tags": ["计网"],
+                "createReverseCard": True,
+                "typeAnswerMode": True,
+            },
+        )["data"]
+        self.assertTrue(bi_res["created"])
+        self.assertEqual(bi_res["createdCount"], 2)
+        self.assertIn("默写", self.mock_col.get_note(101).tags)
+
+        # 4. search_cards multi-dimensional sortBy (lapses_desc, ivl_asc, ivl_desc, front_asc)
+        self.mock_col.get_card(201).lapses = 1
+        self.mock_col.get_card(202).lapses = 9
+        self.mock_col.get_card(201).ivl = 30
+        self.mock_col.get_card(202).ivl = 5
+
+        lapses_sorted = self._call("search_cards", {"sortBy": "lapses_desc"})["data"]["cards"]
+        self.assertEqual(lapses_sorted[0]["id"], "202")
+        self.assertEqual(lapses_sorted[0]["lapses"], 9)
+
+        ivl_asc_sorted = self._call("search_cards", {"sortBy": "ivl_asc"})["data"]["cards"]
+        self.assertEqual(ivl_asc_sorted[0]["id"], "202")
+
+        ivl_desc_sorted = self._call("search_cards", {"sortBy": "ivl_desc"})["data"]["cards"]
+        self.assertEqual(ivl_desc_sorted[0]["id"], "201")
+
+        # 5. batch_action(removeTag)
+        note102.tags = ["操作系统", "待清理标签"]
+        rm_tag_res = self._call(
+            "batch_action",
+            {"actionType": "removeTag", "cardIds": ["202"], "tag": "待清理标签"},
+        )["data"]
+        self.assertTrue(rm_tag_res["success"])
+        self.assertNotIn("待清理标签", self.mock_col.get_note(102).tags)
+        self.assertIn("操作系统", self.mock_col.get_note(102).tags)
+
+        # 6. batch_action(findReplace) with fieldScope & ignoreCase
+        fr_res = self._call(
+            "batch_action",
+            {
+                "actionType": "findReplace",
+                "cardIds": ["202"],
+                "findText": "页表映射",
+                "replaceText": "多级页表地址转换",
+                "fieldScope": "back",
+                "ignoreCase": False,
+            },
+        )["data"]
+        self.assertTrue(fr_res["success"])
+        self.assertEqual(fr_res["replacedCount"], 1)
+        self.assertIn("多级页表地址转换", self.mock_col.get_note(102)["释义"])
+
+    def test_20_search_cards_collection_total_and_facet_counts(self):
+        """
+        Verify collectionTotal stays true to the whole collection even under filters,
+        and facetCounts aggregate across ALL cards rather than just page 1 (limit).
+        """
+        from anki_modern_os.bridge.search_service import SearchService
+
+        db = MockDB()
+        cur = db.conn.cursor()
+        cur.execute("DELETE FROM cards")
+        cur.execute("DELETE FROM notes")
+        cur.execute("DELETE FROM revlog")
+
+        # Seed 15 cards across notes:
+        # - Cards 1..5 (page 1 when limit=5): all active future reviews (queue=2, due=25), 0 suspended!
+        # - Cards 6..12 (7 cards beyond page 1!): suspended (queue=-1)
+        # - Card 13: due today (queue=2, due=10), flag=1, FSRS difficulty d=7.2 (high)
+        # - Card 14: new (type=0, queue=0), tag '高频', flag=2, FSRS difficulty d=3.1 (low)
+        # - Card 15: buried (queue=-2), rated today in revlog
+        now_ms = int(time.time() * 1000)
+        for cid in range(1, 16):
+            nid = 1000 + cid
+            tags = " 核心 高频 " if cid in (10, 14) else (" 核心 " if cid <= 5 else " 扩展 ")
+            flags = 1 if cid == 13 else (2 if cid == 14 else 0)
+            if cid <= 5:
+                ctype, queue, due, lapses, data = 2, 2, 25, 0, ""
+            elif 6 <= cid <= 12:
+                ctype, queue, due, lapses, data = 2, -1, 25, (2 if cid == 6 else 0), ""
+            elif cid == 13:
+                ctype, queue, due, lapses, data = 2, 2, 10, 1, '{"d": 7.2, "s": 4.0}'
+            elif cid == 14:
+                ctype, queue, due, lapses, data = 0, 0, 14, 0, '{"d": 3.1, "s": 1.0}'
+            else:
+                ctype, queue, due, lapses, data = 2, -2, 25, 0, ""
+
+            cur.execute(
+                "INSERT INTO notes VALUES (?, ?, 1, 0, 0, ?, ?, ?, 0, 0, '')",
+                (nid, f"g-{cid}", tags, f"Front {cid}\x1fBack {cid}", f"Front {cid}"),
+            )
+            cur.execute(
+                "INSERT INTO cards VALUES (?, ?, 1, 0, 0, 0, ?, ?, ?, 10, 2500, 1, ?, 0, 0, 0, ?, ?)",
+                (cid, nid, ctype, queue, due, lapses, flags, data),
+            )
+        cur.execute("INSERT INTO revlog VALUES (?, 15, 0, 3, 1, 1, 2500, 3000, 1)", (now_ms,))
+        db.conn.commit()
+
+        class SqlBackedCol:
+            def __init__(self, sql_db):
+                self.db = sql_db
+
+                class Sched:
+                    today = 10
+
+                class Decks:
+                    @staticmethod
+                    def get(did, default=False):
+                        return {"id": int(did), "name": "Default"}
+
+                class Tags:
+                    @staticmethod
+                    def all():
+                        return ["核心", "高频", "扩展"]
+
+                self.sched = Sched()
+                self.decks = Decks()
+                self.tags = Tags()
+
+            def card_count(self):
+                return int(self.db.first("SELECT count(*) FROM cards")[0])
+
+            def find_cards(self, query):
+                rows = self.db.all(
+                    "SELECT c.id, c.type, c.queue, c.due, c.flags, n.tags "
+                    "FROM cards c JOIN notes n ON c.nid = n.id ORDER BY c.id ASC"
+                )
+                rated_ids = {int(r[0]) for r in self.db.all("SELECT DISTINCT cid FROM revlog")}
+                tokens = query.split()
+                out = []
+                for cid, ctype, queue, due, flags, tags_str in rows:
+                    if "is:suspended" in tokens and queue != -1:
+                        continue
+                    if "-is:suspended" in tokens and queue == -1:
+                        continue
+                    if "is:buried" in tokens and queue not in (-2, -3):
+                        continue
+                    if "-is:buried" in tokens and queue in (-2, -3):
+                        continue
+                    if "is:new" in tokens and not (ctype == 0 or queue == 0):
+                        continue
+                    if "rated:1" in tokens and cid not in rated_ids:
+                        continue
+                    if "(is:due" in query and not (queue in (1, 3) or (queue == 2 and due <= 10)):
+                        continue
+                    if "is:review" in tokens and not (ctype == 2 and queue == 2):
+                        continue
+                    if "-is:due" in tokens and (queue in (1, 3) or (queue == 2 and due <= 10)):
+                        continue
+                    if "-flag:0" in tokens and (flags & 7) == 0:
+                        continue
+                    matched_flag = True
+                    for tok in tokens:
+                        if tok.startswith("flag:") and (flags & 7) != int(tok.split(":", 1)[1]):
+                            matched_flag = False
+                        if tok.startswith('tag:"') and tok[5:-1] not in tags_str.split():
+                            matched_flag = False
+                    if not matched_flag:
+                        continue
+                    out.append(int(cid))
+                return out
+
+            def get_card(self, cid):
+                row = self.db.first(
+                    "SELECT id, nid, did, type, queue, due, ivl, reps, lapses, flags FROM cards WHERE id = ?",
+                    int(cid),
+                )
+                nrow = self.db.first("SELECT flds, tags FROM notes WHERE id = ?", int(row[1]))
+                flds = nrow[0].split("\x1f")
+                note = MockNote(row[1], {"正面": flds[0], "释义": flds[1]}, nrow[1].split(), cids=[row[0]])
+                c = MockCard(row[0], note, queue=row[4], ctype=row[3], due=row[5], ivl=row[6])
+                c.lapses = row[8]
+                c.flags = row[9]
+                return c
+
+        svc = SearchService(col_getter=lambda: SqlBackedCol(db))
+
+        # 1. Paginated unfiltered query (limit=5): page 1 has 0 suspended cards, yet facetCounts must report 7!
+        res_all = svc.search_cards({"query": "", "status": "all", "offset": 0, "limit": 5})
+        self.assertEqual(len(res_all["cards"]), 5)
+        self.assertEqual(res_all["collectionTotal"], 15)
+        self.assertEqual(res_all["filteredCount"], 15)
+        self.assertEqual(res_all["facetCounts"]["statusCounts"]["all"], 15)
+        self.assertEqual(res_all["facetCounts"]["statusCounts"]["suspended"], 7)
+        self.assertEqual(res_all["facetCounts"]["statusCounts"]["due"], 1)
+        self.assertEqual(res_all["facetCounts"]["statusCounts"]["new"], 1)
+        self.assertEqual(res_all["facetCounts"]["statusCounts"]["completed"], 1)
+        self.assertEqual(res_all["facetCounts"]["statusCounts"]["buried"], 1)
+        self.assertEqual(res_all["facetCounts"]["statusCounts"]["review"], 5)
+        self.assertEqual(res_all["facetCounts"]["difficultyCounts"]["high"], 2)  # card 6 (lapses=2) + card 13 (d=7.2)
+        self.assertEqual(res_all["facetCounts"]["difficultyCounts"]["low"], 1)   # card 14 (d=3.1)
+        self.assertEqual(res_all["facetCounts"]["flagCounts"]["flagged"], 2)
+        self.assertEqual(res_all["facetCounts"]["flagCounts"]["1"], 1)
+        self.assertEqual(res_all["facetCounts"]["flagCounts"]["2"], 1)
+        self.assertEqual(res_all["facetCounts"]["tagAllCount"], 15)
+        self.assertEqual(res_all["facetCounts"]["tagCounts"]["高频"], 2)
+
+        # 2. Selecting status='suspended' must match facetCounts.suspended == 7 and keep collectionTotal == 15
+        res_susp = svc.search_cards({"query": "", "status": "suspended", "offset": 0, "limit": 5})
+        self.assertEqual(res_susp["collectionTotal"], 15)
+        self.assertEqual(res_susp["filteredCount"], 7)
+        self.assertEqual(res_susp["facetCounts"]["statusCounts"]["all"], 15)
+        self.assertEqual(res_susp["facetCounts"]["statusCounts"]["suspended"], 7)
+        self.assertEqual(res_susp["facetCounts"]["difficultyCounts"]["all"], 7)
+        self.assertEqual(res_susp["facetCounts"]["difficultyCounts"]["high"], 1)  # card 6 among suspended
+        self.assertEqual(res_susp["facetCounts"]["tagAllCount"], 7)
+        self.assertEqual(res_susp["facetCounts"]["tagCounts"]["高频"], 1)       # card 10 among suspended
+
+        # 3. Cmd+K / LoadMore with includeFacets=False skips facet aggregation
+        res_no_facets = svc.search_cards({"query": "", "includeFacets": False})
+        self.assertIsNone(res_no_facets["facetCounts"])
+
+    def test_24_editor_media_base_url_and_roundtrip_normalization(self):
+        """Item #25: Verify mediaBaseUrl exposure, safe WebView <img> resolution, and SQLite storage normalization."""
+        from bridge.media_utils import (
+            normalize_media_html_for_storage,
+            resolve_media_img_src_for_webview,
+        )
+
+        # 1. Both get_dashboard and get_preferences expose envInfo.mediaBaseUrl pointing to collection.media
+        dash = self._call("get_dashboard")["data"]
+        prefs = self._call("get_preferences")["data"]
+        expected_base = Path(self.temp_media).resolve().as_uri() + "/"
+        self.assertEqual(dash["envInfo"]["mediaBaseUrl"], expected_base)
+        self.assertEqual(prefs["envInfo"]["mediaBaseUrl"], expected_base)
+
+        # 2. WebView resolver rewrites relative <img> filenames without clobbering Cloze, sound, or data-src
+        raw = (
+            '<div>{{c1::公式}} [sound:rec.mp3] '
+            '<img data-src="keep_attr.png" src="paste-1.png" /> '
+            '<img src=Screen%20Shot.png> '
+            '<img src="https://example.com/x.png" /></div>'
+        )
+        resolved = resolve_media_img_src_for_webview(raw, self.temp_media)
+        self.assertIn("{{c1::公式}}", resolved)
+        self.assertIn("[sound:rec.mp3]", resolved)
+        self.assertIn('data-src="keep_attr.png"', resolved)
+        self.assertIn(f'src="{expected_base}paste-1.png"', resolved)
+        self.assertIn(f'src="{expected_base}Screen%20Shot.png"', resolved)
+        self.assertIn('src="https://example.com/x.png"', resolved)
+
+        # 3. Stale foreign file:// URI with data-anki-media existing in media_dir is rescued
+        rescue_file = Path(self.temp_media) / "rescued shot.png"
+        rescue_file.write_bytes(b"pngdata")
+        stale = '<img src="file:///C:/OtherMachine/rescued%20shot.png" data-anki-media="rescued shot.png">'
+        rescued = resolve_media_img_src_for_webview(stale, self.temp_media)
+        self.assertIn(f'src="{rescue_file.resolve().as_uri()}"', rescued)
+
+        # 4. Saving via quick_add / update_card_inline normalizes local media_dir file:// URIs back to relative filenames
+        front_with_file_url = (
+            f'<div>{{{{c1::测试}}}} <img src="{rescue_file.resolve().as_uri()}" data-anki-media="rescued shot.png" /></div>'
+        )
+        qa = self._call(
+            "quick_add",
+            {"deckId": "1", "front": front_with_file_url, "back": "还剩 38 张", "tags": ["img-test"]},
+        )["data"]
+        self.assertTrue(qa["created"])
+        new_nid = int(qa["noteId"])
+        stored_front = self.mock_col.get_note(new_nid)["Text"]
+        self.assertIn('src="rescued shot.png"', stored_front)
+        self.assertNotIn("file://", stored_front)
+
+        # Same normalization applies on inline update_card_inline
+        up = self._call(
+            "update_card_inline",
+            {
+                "noteId": str(new_nid),
+                "cardId": str(qa["cardId"]),
+                "fields": {
+                    "Text": f'<img src="{expected_base}paste-1.png" />',
+                    "Back Extra": "Updated",
+                },
+            },
+        )["data"]
+        self.assertTrue(up["saved"])
+        self.assertEqual(up["fields"]["Text"], '<img src="paste-1.png" />')
+        # Non-collection file:// outside media_dir is left untouched
+        outside_uri = "file:///tmp/outside_unrelated/pic.png"
+        self.assertEqual(
+            normalize_media_html_for_storage(f'<img src="{outside_uri}">', self.temp_media),
+            f'<img src="{outside_uri}">',
+        )
+
+
+    def test_22_native_image_occlusion_renders_static_masks(self):
+        """原生 Image Occlusion 必须转成静态遮罩，而不是把 SVG 当正文直出。
+
+        回归护栏：search / review 原先都取 ``fields[0]`` 当正文，而原生遮挡卡的
+        第一个字段是 Occlusion（SVG 覆盖层），底图在 Image 字段。结果是用户只看到
+        几个黑矩形、图片完全丢失。修复后统一走 ``render_native_image_occlusion``。
+        """
+        from bridge.media_utils import render_native_image_occlusion
+
+        note = {
+            "Image": '<img src="io_01.png">',
+            "Occlusion": (
+                '{{c1::<svg width="100%" height="100%" viewBox="0 0 100 100">'
+                '<rect x="10" y="20" width="30" height="15" fill="rgba(0,0,0,0.5)" />'
+                "</svg>}}"
+            ),
+            "Header": "遮挡标题",
+        }
+        front, back, title = render_native_image_occlusion(note)
+        self.assertIn("anki-io-wrap", front)
+        self.assertIn('src="io_01.png"', front)
+        self.assertIn("anki-io-rect", front)
+        self.assertIn("left:10.00%", front)
+        self.assertIn("top:20.00%", front)
+        self.assertIn("width:30.00%", front)
+        self.assertIn("height:15.00%", front)
+        # 原始 SVG 不应再出现在正文里
+        self.assertNotIn("<svg", front)
+        self.assertEqual(back, '<img src="io_01.png">')
+        self.assertEqual(title, "遮挡标题")
+
+        # 尺寸为 0 的矩形要丢弃，否则会生成看不见也点不到的遮罩
+        zero = dict(note)
+        zero["Occlusion"] = '{{c1::<svg><rect x="0" y="0" width="0" height="10" /></svg>}}'
+        self.assertEqual(render_native_image_occlusion(zero)[0], "")
+
+        # 非遮挡笔记必须返回空三元组，调用方据此回落
+        self.assertEqual(render_native_image_occlusion({"Front": "x"}), ("", "", ""))
+
+    def test_23_sync_no_changes_checked_timestamp_and_requires_login(self):
+        """Anki NO_CHANGES leaves col.ls unchanged; verified check timestamp must merge cleanly."""
+        from anki_modern_os.bridge.deck_service import DeckService
+
+        profile_key = DeckService.resolve_profile_sync_key(self.mock_mw)
+        stale_ls = 1794313537121
+        fresh_checked = stale_ls + 40 * 60 * 1000
+        self.config_store["last_sync_checked_map"] = {profile_key: fresh_checked}
+
+        # 1. With col.ls > 0 and newer checked timestamp, get_dashboard merges to fresh_checked
+        dash = self._call("get_dashboard", {})["data"]
+        self.assertTrue(dash["synced"])
+        self.assertEqual(dash["syncedAt"], fresh_checked)
+
+        # 2. If col.ls == 0 (never synced / unconfigured profile), never fabricate synced status
+        self.mock_col.ls = 0
+        dash_unsynced = self._call("get_dashboard", {})["data"]
+        self.assertFalse(dash_unsynced["synced"])
+        self.assertEqual(dash_unsynced["syncedAt"], 0)
+
+        # 3. action_sync when pm.sync_auth() returns None triggers native handler (opens login)
+        #    and reports requiresLogin=True with synced=False
+        clicked = {"count": 0}
+        self.mock_mw.on_sync_button_clicked = lambda: clicked.__setitem__("count", clicked["count"] + 1)
+        self.mock_mw.pm.sync_auth = lambda: None
+        login_res = self._call("sync", {})["data"]
+        self.assertEqual(clicked["count"], 1)
+        self.assertFalse(login_res["synced"])
+        self.assertTrue(login_res["requiresLogin"])
+        self.assertTrue(login_res["triggeredNativeSync"])
+        self.assertEqual(login_res["syncedAt"], 0)
+
+        # 4. action_sync when authenticated marks asyncPending=True instead of faking immediate completion
+        self.mock_mw.pm.sync_auth = lambda: b"hkey"
+        auth_res = self._call("sync", {})["data"]
+        self.assertEqual(clicked["count"], 2)
+        self.assertTrue(auth_res["synced"])
+        self.assertTrue(auth_res["asyncPending"])
+        self.assertFalse(auth_res["requiresLogin"])
+
+    def test_25_answer_card_starts_timer_before_build_answer(self):
+        """Anki 26 build_answer reads card.timer_started; answer_card must invoke card.start_timer()."""
+        import types
+
+        card = self.mock_col.get_card(201)
+        card.timer_started = None
+        timer_calls = {"count": 0}
+
+        def start_timer():
+            timer_calls["count"] += 1
+            card.timer_started = 100.0
+
+        card.start_timer = start_timer
+
+        sched_answers = []
+        orig_backend = getattr(self.mock_col, "_backend", None)
+
+        class StubBackend:
+            @staticmethod
+            def get_scheduling_states(cid):
+                return {"cid": cid}
+
+        class StubAnswer:
+            milliseconds_taken = 0
+
+        def fake_build_answer(card, states, rating):
+            if card.timer_started is None:
+                raise TypeError("unsupported operand type(s) for -: 'float' and 'NoneType'")
+            return StubAnswer()
+
+        def fake_answer_card(ans):
+            sched_answers.append(ans.milliseconds_taken)
+
+        anki_mod = types.ModuleType("anki")
+        sched_pkg = types.ModuleType("anki.scheduler")
+        v3_mod = types.ModuleType("anki.scheduler.v3")
+
+        class StubCardAnswer:
+            AGAIN = 1
+            HARD = 2
+            GOOD = 3
+            EASY = 4
+
+        v3_mod.CardAnswer = StubCardAnswer
+        sched_pkg.v3 = v3_mod
+        anki_mod.scheduler = sched_pkg
+
+        saved_modules = {k: sys.modules.get(k) for k in ("anki", "anki.scheduler", "anki.scheduler.v3")}
+        self.mock_col._backend = StubBackend()
+        self.mock_col.sched.build_answer = fake_build_answer
+        self.mock_col.sched.answer_card = fake_answer_card
+        try:
+            sys.modules["anki"] = anki_mod
+            sys.modules["anki.scheduler"] = sched_pkg
+            sys.modules["anki.scheduler.v3"] = v3_mod
+
+            res = self._call("answer_card", {"cardId": "201", "ease": 3, "elapsedMs": 3200})["data"]
+            self.assertTrue(res["answered"])
+            self.assertEqual(timer_calls["count"], 1)
+            self.assertEqual(sched_answers, [3200])
+        finally:
+            if orig_backend is None:
+                delattr(self.mock_col, "_backend")
+            else:
+                self.mock_col._backend = orig_backend
+            if hasattr(self.mock_col.sched, "build_answer"):
+                delattr(self.mock_col.sched, "build_answer")
+            if hasattr(self.mock_col.sched, "answer_card"):
+                delattr(self.mock_col.sched, "answer_card")
+            for k, old in saved_modules.items():
+                if old is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = old
+
 
 if __name__ == "__main__":
     unittest.main()

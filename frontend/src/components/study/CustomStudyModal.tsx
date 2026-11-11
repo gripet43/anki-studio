@@ -221,13 +221,11 @@ export const CustomStudyModal: React.FC = () => {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 select-none animate-in fade-in duration-150"
-      onClick={() => appActions.closeCustomStudyModal()}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={isZh ? '自定义学习与错题特训' : 'Custom Study & Mistake Drills'}
-        onClick={(e) => e.stopPropagation()}
         className={`w-[580px] max-w-full rounded-3xl border shadow-2xl overflow-hidden flex flex-col ${modalSurface}`}
       >
         {/* Header */}

@@ -41,6 +41,7 @@ PRIVATE_CONFIG_KEYS = {
     "vacation_frozen_dates",
     "custom_nickname",
     "safety_ticket",
+    "last_sync_checked_map",
 }
 
 EXCLUDED_NAMES = {
@@ -85,7 +86,11 @@ def create_ankiaddon_package() -> Path:
             if filename == "config.json":
                 # config.json doubles as the add-on's default/schema template.
                 # Ship a sanitized copy so private study data never leaks.
-                raw = json.loads(filepath.read_text(encoding="utf-8"))
+                # 源码仓库里的 config.json 已不入库（含真实昵称/回执/休假记录），
+                # 优先读 config.default.json 这份干净模板。
+                template = ADDON_ROOT / "config.default.json"
+                source = template if template.exists() else filepath
+                raw = json.loads(source.read_text(encoding="utf-8"))
                 for key in PRIVATE_CONFIG_KEYS:
                     raw.pop(key, None)
                 zf.writestr(filename, json.dumps(raw, ensure_ascii=False, indent=2))

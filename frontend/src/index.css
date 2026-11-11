@@ -235,3 +235,50 @@ progress {
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.6s infinite linear;
 }
+
+/* Motion-safe sync & hovercard transitions (defaults to static final state under prefers-reduced-motion: reduce) */
+.animate-draw-check {
+  stroke-dasharray: 28;
+  stroke-dashoffset: 0;
+}
+
+@keyframes sync-shimmer-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes sync-draw-check {
+  from { stroke-dashoffset: 28; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes sync-reveal-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes flyout-enter-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-shimmer-sweep {
+    animation: sync-shimmer-sweep 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  .animate-draw-check {
+    animation: sync-draw-check 0.32s ease-out both;
+  }
+  .animate-sync-reveal {
+    animation: sync-reveal-in 0.24s ease-out both;
+  }
+  .animate-flyout-enter {
+    animation: flyout-enter-in 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@media (forced-colors: active) {
+  .sync-pill-forced-border {
+    border: 1px solid ButtonBorder !important;
+  }
+}

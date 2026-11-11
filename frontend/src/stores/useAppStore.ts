@@ -19,6 +19,8 @@ import {
   EnvInfo,
   isAnkiNativeEnv,
   LibraryCardItem,
+  LibraryFacetCounts,
+  LibrarySortOption,
   RescueReceipt,
   ReviewCardItem,
 } from '../bridge/pycmd';
@@ -28,6 +30,8 @@ export type {
   CustomStudyParams,
   DeckOptionsData,
   LibraryCardItem,
+  LibraryFacetCounts,
+  LibrarySortOption,
   RescueReceipt,
   ReviewCardItem,
 };
@@ -146,6 +150,7 @@ export interface AppState {
   libraryCards: LibraryCardItem[];
   libraryTotalCount: number;
   libraryFilteredCount: number;
+  libraryFacetCounts: LibraryFacetCounts | null;
   libraryHasMoreFromBackend: boolean;
   libraryAllTags: string[];
   librarySearching: boolean;
@@ -157,6 +162,7 @@ export interface AppState {
   filterFlag: FlagFilterValue;
   filterTag: string;
   filterDeckId: string;
+  librarySortBy: LibrarySortOption;
   selectedCardIds: string[];
 
   // Toast Notification
@@ -242,6 +248,7 @@ const initialState: AppState = {
   libraryCards: [],
   libraryTotalCount: 0,
   libraryFilteredCount: 0,
+  libraryFacetCounts: null,
   libraryHasMoreFromBackend: false,
   libraryAllTags: [],
   librarySearching: false,
@@ -253,6 +260,7 @@ const initialState: AppState = {
   filterFlag: 'all',
   filterTag: 'all',
   filterDeckId: 'all',
+  librarySortBy: 'default',
   selectedCardIds: [],
 
   toastMessage: null,
@@ -295,6 +303,45 @@ const LIBRARY_PAGE_SIZE = 200;
 let coldStartInProgress = false;
 let coldStartStartTs = 0;
 
+// Track verified sync completions in this session so Anki `NO_CHANGES` syncs
+// (where SQLite `col.ls` is intentionally left untouched) stay accurate.
+interface NativeSyncFinishResult {
+  ok: boolean;
+  syncedAt?: number;
+  error?: string;
+  reason?: string;
+}
+
+let sessionVerifiedSyncTs = 0;
+let syncJustFinishedTimer: any = null;
+let pendingSyncFinishResolver: ((result: NativeSyncFinishResult) => void) | null = null;
+
+function scheduleSyncJustFinishedClear(durationMs = 2600) {
+  if (syncJustFinishedTimer) clearTimeout(syncJustFinishedTimer);
+  syncJustFinishedTimer = setTimeout(() => {
+    syncJustFinishedTimer = null;
+    setAppState({ syncJustFinished: false });
+  }, durationMs);
+}
+
+function resetSyncIndicatorToSnapshot() {
+  const isZh = state.resolvedLang === 'zh-CN';
+  if (syncJustFinishedTimer) {
+    clearTimeout(syncJustFinishedTimer);
+    syncJustFinishedTimer = null;
+  }
+  setAppState({
+    syncing: false,
+    syncJustFinished: false,
+    lastSyncedText:
+      state.lastSyncedTimestamp > 0
+        ? formatRelativeSyncLabel(state.lastSyncedTimestamp, state.resolvedLang)
+        : isZh
+        ? '尚未同步'
+        : 'Not synced',
+  });
+}
+
 // ---- Actions ----
 
 export const appActions = {
@@ -327,7 +374,9 @@ export const appActions = {
         }),
         callAnki<{
           total: number;
+          collectionTotal?: number;
           filteredCount: number;
+          facetCounts?: LibraryFacetCounts | null;
           hasMore: boolean;
           cards: LibraryCardItem[];
           allTags: string[];
@@ -338,8 +387,10 @@ export const appActions = {
           flag: state.filterFlag,
           tag: state.filterTag,
           deckId: state.filterDeckId,
+          sortBy: state.librarySortBy,
           offset: 0,
           limit: LIBRARY_PAGE_SIZE,
+          includeFacets: true,
         }),
         new Promise((resolve) => {
           const elapsed = Date.now() - startTs;
@@ -362,12 +413,22 @@ export const appActions = {
 
       coldStartInProgress = false;
 
-      const genuineSyncTs = dash?.syncedAt !== undefined ? dash.syncedAt : (state.lastSyncedTimestamp || 0);
+      const hasBackendSyncTs = typeof dash?.syncedAt === 'number';
+      const backendSyncTs = hasBackendSyncTs ? (dash!.syncedAt as number) : 0;
+      if (!silent && hasBackendSyncTs && backendSyncTs <= 0 && sessionVerifiedSyncTs < coldStartStartTs) {
+        // Explicit full reload of an un-synced profile must not inherit an older profile's timestamp
+        sessionVerifiedSyncTs = 0;
+      }
+      const genuineSyncTs = hasBackendSyncTs
+        ? (backendSyncTs > 0 || sessionVerifiedSyncTs > 0
+            ? Math.max(backendSyncTs, sessionVerifiedSyncTs)
+            : 0)
+        : (sessionVerifiedSyncTs > 0 ? sessionVerifiedSyncTs : (state.lastSyncedTimestamp || 0));
 
       setAppState({
         isLoading: false,
         isInitialSyncing: false,
-        syncJustFinished: false,
+        syncJustFinished: silent ? state.syncJustFinished : false,
         decks: realDecks,
         activeDeckId: state.activeDeckId || realDecks[0]?.id || null,
         advancedStats: dash?.advancedStats || EMPTY_ADVANCED_STATS,
@@ -382,7 +443,7 @@ export const appActions = {
         envInfo: dash?.envInfo || state.envInfo,
         lastSyncedTimestamp: genuineSyncTs,
         lastSyncedText: genuineSyncTs > 0
-          ? formatRelativeSyncLabel(genuineSyncTs, effectiveLang)
+          ? formatRelativeSyncLabel(genuineSyncTs, effectiveLang, Math.max(Date.now(), genuineSyncTs))
           : (effectiveLang === 'zh-CN' ? '尚未同步' : 'Not synced'),
         dashboard: dashValid
           ? {
@@ -393,8 +454,9 @@ export const appActions = {
             }
           : EMPTY_DASHBOARD,
         libraryCards: realCards,
-        libraryTotalCount: searchRes?.total ?? realCards.length,
+        libraryTotalCount: searchRes?.collectionTotal ?? searchRes?.total ?? realCards.length,
         libraryFilteredCount: searchRes?.filteredCount ?? realCards.length,
+        libraryFacetCounts: searchRes?.facetCounts ?? state.libraryFacetCounts,
         libraryHasMoreFromBackend: Boolean(searchRes?.hasMore),
         libraryAllTags: searchRes?.allTags || [],
         cmdKResults: state.cmdKQuery.trim() ? state.cmdKResults : [],
@@ -497,6 +559,7 @@ export const appActions = {
     flag?: FlagFilterValue;
     tag?: string;
     deckId?: string;
+    sortBy?: LibrarySortOption;
   }) {
     const nextQuery = overrides?.query !== undefined ? overrides.query : state.librarySearchQuery;
     const nextStatus = overrides?.status !== undefined ? overrides.status : state.filterStatus;
@@ -505,6 +568,7 @@ export const appActions = {
     const nextFlag = overrides?.flag !== undefined ? overrides.flag : state.filterFlag;
     const nextTag = overrides?.tag !== undefined ? overrides.tag : state.filterTag;
     const nextDeckId = overrides?.deckId !== undefined ? overrides.deckId : state.filterDeckId;
+    const nextSortBy = overrides?.sortBy !== undefined ? overrides.sortBy : state.librarySortBy;
 
     setAppState({
       librarySearchQuery: nextQuery,
@@ -513,6 +577,7 @@ export const appActions = {
       filterFlag: nextFlag,
       filterTag: nextTag,
       filterDeckId: nextDeckId,
+      librarySortBy: nextSortBy,
       libraryVisibleCount: 24,
     });
 
@@ -525,7 +590,9 @@ export const appActions = {
       try {
         const res = await callAnki<{
           total: number;
+          collectionTotal?: number;
           filteredCount: number;
+          facetCounts?: LibraryFacetCounts | null;
           hasMore: boolean;
           cards: LibraryCardItem[];
           allTags: string[];
@@ -536,18 +603,24 @@ export const appActions = {
           flag: nextFlag,
           tag: nextTag,
           deckId: nextDeckId,
+          sortBy: nextSortBy,
           offset: 0,
           limit: LIBRARY_PAGE_SIZE,
+          includeFacets: true,
         });
         if (res && Array.isArray(res.cards)) {
-          setAppState({
+          setAppState((prev) => ({
             libraryCards: res.cards,
-            libraryTotalCount: res.total ?? res.cards.length,
+            libraryTotalCount: res.collectionTotal ?? prev.libraryTotalCount,
             libraryFilteredCount: res.filteredCount ?? res.cards.length,
+            libraryFacetCounts:
+              res.facetCounts !== undefined && res.facetCounts !== null
+                ? res.facetCounts
+                : prev.libraryFacetCounts,
             libraryHasMoreFromBackend: Boolean(res.hasMore),
-            libraryAllTags: res.allTags || state.libraryAllTags,
+            libraryAllTags: res.allTags || prev.libraryAllTags,
             librarySearching: false,
-          });
+          }));
         } else {
           setAppState({ librarySearching: false });
         }
@@ -583,8 +656,10 @@ export const appActions = {
           flag: state.filterFlag,
           tag: state.filterTag,
           deckId: state.filterDeckId,
+          sortBy: state.librarySortBy,
           offset: state.libraryCards.length,
           limit: LIBRARY_PAGE_SIZE,
+          includeFacets: false,
         });
         if (res && Array.isArray(res.cards)) {
           const existingIds = new Set(state.libraryCards.map((c) => c.id));
@@ -640,6 +715,7 @@ export const appActions = {
           deckId: 'all',
           offset: 0,
           limit: 200,
+          includeFacets: false,
         });
         if (res && Array.isArray(res.cards)) {
           setAppState({ cmdKResults: res.cards, cmdKSearching: false });
@@ -652,51 +728,183 @@ export const appActions = {
     }, 180);
   },
 
+  handleNativeSyncFinished(detail?: {
+    synced?: boolean;
+    syncedAt?: number;
+    error?: string;
+    reason?: string;
+  }) {
+    const ok = detail?.synced !== false;
+    const isZh = state.resolvedLang === 'zh-CN';
+
+    if (ok) {
+      const verifiedTs =
+        typeof detail?.syncedAt === 'number' && detail.syncedAt > 0
+          ? detail.syncedAt
+          : Date.now();
+      sessionVerifiedSyncTs = Math.max(sessionVerifiedSyncTs, verifiedTs);
+    }
+
+    // If syncCollection() is awaiting this native completion event, hand off so minimum
+    // visual duration, state transitions, and single refresh stay coordinated.
+    if (pendingSyncFinishResolver) {
+      const resolve = pendingSyncFinishResolver;
+      pendingSyncFinishResolver = null;
+      resolve({
+        ok,
+        syncedAt: detail?.syncedAt,
+        error: detail?.error,
+        reason: detail?.reason,
+      });
+      return;
+    }
+
+    // Background / auto / native-toolbar triggered sync completion
+    setAppState({ syncing: false });
+    if (state.isInitialSyncing) return;
+
+    if (!ok) {
+      resetSyncIndicatorToSnapshot();
+      if (detail?.error) {
+        showToast(detail.error);
+      }
+      return;
+    }
+
+    const verifiedTs = sessionVerifiedSyncTs > 0 ? sessionVerifiedSyncTs : Date.now();
+    setAppState({
+      syncing: false,
+      syncJustFinished: true,
+      lastSyncedTimestamp: verifiedTs,
+      lastSyncedText: formatRelativeSyncLabel(verifiedTs, state.resolvedLang, verifiedTs),
+      dashboard: { ...state.dashboard, synced: true, syncedAt: verifiedTs },
+    });
+    scheduleSyncJustFinishedClear(2600);
+    if (isAnkiNativeEnv()) {
+      appActions.initFromAnki(true);
+    }
+  },
+
   async syncCollection() {
     if (state.syncing) return;
     const isZh = state.resolvedLang === 'zh-CN';
-    setAppState({ syncing: true, lastSyncedText: isZh ? '正在同步...' : 'Syncing...' });
+    if (syncJustFinishedTimer) {
+      clearTimeout(syncJustFinishedTimer);
+      syncJustFinishedTimer = null;
+    }
+    setAppState({
+      syncing: true,
+      syncJustFinished: false,
+      lastSyncedText: isZh ? '正在同步...' : 'Syncing...',
+    });
 
     const startTime = Date.now();
-    const MIN_SYNC_VISUAL_MS = 2200; // Guaranteed at least 2.2s of buttery-smooth animation
+    const MIN_SYNC_VISUAL_MS = 1000;
+    let safetyTimer: any = null;
+
+    const finishPromise: Promise<NativeSyncFinishResult> = isAnkiNativeEnv()
+      ? new Promise<NativeSyncFinishResult>((resolve) => {
+          pendingSyncFinishResolver = resolve;
+          safetyTimer = setTimeout(() => {
+            if (pendingSyncFinishResolver === resolve) {
+              pendingSyncFinishResolver = null;
+              resolve({ ok: false, reason: 'timeout' });
+            }
+          }, 25000);
+        })
+      : Promise.resolve<NativeSyncFinishResult>({ ok: true, syncedAt: Date.now() });
 
     try {
-      // 1. Trigger native Anki sync asynchronously
-      let syncPromise: Promise<any> = Promise.resolve({ synced: true });
+      let syncRes: {
+        synced?: boolean;
+        triggeredNativeSync?: boolean;
+        asyncPending?: boolean;
+        mediaSyncInProgress?: boolean;
+        requiresLogin?: boolean;
+        syncedAt?: number;
+      } = { synced: true };
+
       if (isAnkiNativeEnv()) {
         // Do not swallow rejection here: the outer catch must be reachable.
-        syncPromise = callAnki<{ synced?: boolean; triggeredNativeSync?: boolean }>('sync');
+        syncRes = await callAnki('sync');
       }
 
-      // 2. Wait for at least MIN_SYNC_VISUAL_MS without blocking the main rendering thread
-      const [syncRes] = await Promise.all([
-        syncPromise,
-        new Promise((resolve) => setTimeout(resolve, MIN_SYNC_VISUAL_MS)),
-      ]);
+      if (syncRes?.requiresLogin) {
+        if (safetyTimer) clearTimeout(safetyTimer);
+        pendingSyncFinishResolver = null;
+        resetSyncIndicatorToSnapshot();
+        showToast(isZh ? '请在弹出窗口中登录 AnkiWeb 账号' : 'Please sign in to AnkiWeb in the dialog');
+        return;
+      }
+
       if (syncRes && syncRes.synced === false) {
+        if (safetyTimer) clearTimeout(safetyTimer);
+        pendingSyncFinishResolver = null;
         throw new Error(isZh ? '未能触发 AnkiWeb 同步' : 'Failed to trigger AnkiWeb sync');
       }
 
-      const nowTs = Date.now();
+      if (syncRes?.mediaSyncInProgress) {
+        if (safetyTimer) clearTimeout(safetyTimer);
+        pendingSyncFinishResolver = null;
+        const elapsed = Date.now() - startTime;
+        if (elapsed < MIN_SYNC_VISUAL_MS) {
+          await new Promise((resolve) => setTimeout(resolve, MIN_SYNC_VISUAL_MS - elapsed));
+        }
+        resetSyncIndicatorToSnapshot();
+        showToast(isZh ? '后台正在同步媒体文件，稍后完成' : 'Media sync is currently running in the background');
+        return;
+      }
+
+      // If a synchronous mock bridge responded without an async hook cycle, resolve immediately
+      if (isAnkiNativeEnv() && syncRes && syncRes.asyncPending !== true && pendingSyncFinishResolver) {
+        if (safetyTimer) clearTimeout(safetyTimer);
+        const resolve = pendingSyncFinishResolver;
+        pendingSyncFinishResolver = null;
+        resolve({ ok: true, syncedAt: syncRes.syncedAt || Date.now() });
+      }
+
+      const [nativeResult] = await Promise.all([
+        finishPromise,
+        new Promise((resolve) => setTimeout(resolve, MIN_SYNC_VISUAL_MS)),
+      ]);
+      if (safetyTimer) clearTimeout(safetyTimer);
+
+      if (!nativeResult.ok) {
+        if (nativeResult.reason === 'timeout') {
+          resetSyncIndicatorToSnapshot();
+          if (isAnkiNativeEnv()) {
+            appActions.initFromAnki(true);
+          }
+          return;
+        }
+        throw new Error(nativeResult.error || (isZh ? '同步未完成或已取消' : 'Sync did not complete'));
+      }
+
+      const verifiedTs =
+        typeof nativeResult.syncedAt === 'number' && nativeResult.syncedAt > 0
+          ? nativeResult.syncedAt
+          : sessionVerifiedSyncTs > 0
+          ? sessionVerifiedSyncTs
+          : Date.now();
+      sessionVerifiedSyncTs = Math.max(sessionVerifiedSyncTs, verifiedTs);
+
       setAppState({
         syncing: false,
         syncJustFinished: true,
-        lastSyncedTimestamp: nowTs,
-        lastSyncedText: isZh ? '已同步 (刚刚)' : 'Synced (Just now)',
-        dashboard: { ...state.dashboard, synced: true, syncedAt: nowTs },
+        lastSyncedTimestamp: verifiedTs,
+        lastSyncedText: formatRelativeSyncLabel(verifiedTs, state.resolvedLang, verifiedTs),
+        dashboard: { ...state.dashboard, synced: true, syncedAt: verifiedTs },
       });
 
-      setTimeout(() => {
-        setAppState({ syncJustFinished: false });
-      }, 2500);
+      scheduleSyncJustFinishedClear(2600);
 
-      // 3. Defer silent collection reload after animation finishes so SQLite query doesn't cause UI stutter
-      setTimeout(() => {
-        if (isAnkiNativeEnv()) {
-          appActions.initFromAnki(true);
-        }
-      }, 300);
+      // Single coordinated silent refresh to pick up collection changes from AnkiWeb
+      if (isAnkiNativeEnv()) {
+        appActions.initFromAnki(true);
+      }
     } catch (err: any) {
+      if (safetyTimer) clearTimeout(safetyTimer);
+      pendingSyncFinishResolver = null;
       const elapsed = Date.now() - startTime;
       if (elapsed < MIN_SYNC_VISUAL_MS) {
         await new Promise((resolve) => setTimeout(resolve, MIN_SYNC_VISUAL_MS - elapsed));
@@ -2251,7 +2459,17 @@ export const appActions = {
     showToast(state.resolvedLang === 'zh-CN' ? '卡片修改已保存' : 'Card changes saved');
   },
 
-  async quickAddCard(payload: { deckId: string; deckName: string; front: string; back: string; tags: string[] }) {
+  async quickAddCard(payload: {
+    deckId: string;
+    deckName: string;
+    front: string;
+    back: string;
+    tags: string[];
+    modelId?: string;
+    createReverseCard?: boolean;
+    typeAnswerMode?: boolean;
+    fields?: Record<string, string>;
+  }) {
     let createdCardId = `card-${Date.now()}`;
     let createdNoteId = `note-${Date.now()}`;
     const targetDeckName = payload.deckName || state.decks[0]?.name || 'Default';
@@ -2259,7 +2477,7 @@ export const appActions = {
 
     if (isAnkiNativeEnv()) {
       try {
-        const res = await callAnki<{ cardId: string; noteId: string; deckId: string }>('quick_add', {
+        const res = await callAnki<{ cardId: string; noteId: string; deckId: string; createdCount?: number }>('quick_add', {
           ...payload,
           deckId: targetDeckId,
           deckName: targetDeckName,
@@ -2269,7 +2487,9 @@ export const appActions = {
         await appActions.initFromAnki(false);
         showToast(
           state.resolvedLang === 'zh-CN'
-            ? `已添加到「${targetDeckName}」并加入今日学习队列`
+            ? res?.createdCount && res.createdCount > 1
+              ? `已添加到「${targetDeckName}」（共生成 ${res.createdCount} 张正反双向卡片）`
+              : `已添加到「${targetDeckName}」并加入今日学习队列`
             : `Added to "${targetDeckName}"`
         );
         return;
@@ -2277,6 +2497,9 @@ export const appActions = {
     }
 
     const isCloze = payload.front.includes('{{c1::') || payload.back.includes('{{c1::');
+    const effectiveTags = payload.typeAnswerMode && !payload.tags.includes('默写')
+      ? [...payload.tags, '默写']
+      : payload.tags;
     const newLibCard: LibraryCardItem = {
       id: createdCardId,
       noteId: createdNoteId,
@@ -2286,10 +2509,10 @@ export const appActions = {
       back: payload.back || (isCloze ? payload.front : ''),
       frontHtml: payload.front,
       backHtml: payload.back || payload.front,
-      fields: isCloze
+      fields: payload.fields || (isCloze
         ? { Text: payload.front, 'Back Extra': payload.back }
-        : { 正面: payload.front, 释义: payload.back },
-      tags: payload.tags,
+        : { 正面: payload.front, 释义: payload.back }),
+      tags: effectiveTags,
       mastery: 0,
       stability: 0,
       difficultyLevel: 'medium',
@@ -2298,19 +2521,36 @@ export const appActions = {
       suspended: false,
       flags: 0,
       reps: 0,
+      lapses: 0,
       intervalDays: 0,
     };
 
+    const cardsToPrepend: LibraryCardItem[] = [newLibCard];
+    if (payload.createReverseCard && !isCloze && payload.back.trim()) {
+      cardsToPrepend.push({
+        ...newLibCard,
+        id: `${createdCardId}-rev`,
+        noteId: `${createdNoteId}-rev`,
+        front: payload.back,
+        back: payload.front,
+        frontHtml: payload.back,
+        backHtml: payload.front,
+        fields: { 正面: payload.back, 释义: payload.front },
+      });
+    }
+
     setAppState((prev) => ({
-      libraryCards: [newLibCard, ...prev.libraryCards],
-      libraryTotalCount: prev.libraryTotalCount + 1,
-      libraryFilteredCount: prev.libraryFilteredCount + 1,
-      cmdKResults: [newLibCard, ...prev.cmdKResults],
+      libraryCards: [...cardsToPrepend, ...prev.libraryCards],
+      libraryTotalCount: prev.libraryTotalCount + cardsToPrepend.length,
+      libraryFilteredCount: prev.libraryFilteredCount + cardsToPrepend.length,
+      cmdKResults: [...cardsToPrepend, ...prev.cmdKResults],
     }));
 
     showToast(
       state.resolvedLang === 'zh-CN'
-        ? `已添加到「${targetDeckName}」并加入今日学习队列`
+        ? cardsToPrepend.length > 1
+          ? `已添加到「${targetDeckName}」（共生成 ${cardsToPrepend.length} 张正反双向卡片）`
+          : `已添加到「${targetDeckName}」并加入今日学习队列`
         : `Added to "${targetDeckName}"`
     );
   },
@@ -2338,6 +2578,8 @@ export const appActions = {
       | 'unbury'
       | 'setFlag'
       | 'addTag'
+      | 'removeTag'
+      | 'findReplace'
       | 'resetProgress'
       | 'moveDeck'
       | 'delete',
@@ -2346,6 +2588,10 @@ export const appActions = {
       targetDeckId?: string;
       targetDeckName?: string;
       flag?: CardFlagColor;
+      findText?: string;
+      replaceText?: string;
+      fieldScope?: 'all' | 'front' | 'back';
+      ignoreCase?: boolean;
     }
   ) {
     const ids = state.selectedCardIds;
@@ -2361,6 +2607,10 @@ export const appActions = {
           targetDeckId: payload?.targetDeckId,
           targetDeckName: payload?.targetDeckName,
           flag: payload?.flag,
+          findText: payload?.findText,
+          replaceText: payload?.replaceText,
+          fieldScope: payload?.fieldScope,
+          ignoreCase: payload?.ignoreCase,
         });
       } catch {}
     }
@@ -2448,6 +2698,79 @@ export const appActions = {
           ? `已为 ${ids.length} 张卡片添加标签：${newTags.map((t) => `#${t}`).join(' ')}`
           : `Added tags to ${ids.length} cards`
       );
+    } else if (actionType === 'removeTag') {
+      const rawTag = (payload?.tag || '').trim();
+      if (!rawTag) return;
+      const removeSet = new Set(
+        rawTag
+          .split(/[\s,，]+/)
+          .map((t) => t.replace(/^#+/, '').toLowerCase())
+          .filter(Boolean)
+      );
+      setAppState((prev) => ({
+        libraryCards: prev.libraryCards.map((c) => {
+          if (!ids.includes(c.id)) return c;
+          const nextTags = c.tags.filter((t) => !removeSet.has(t.toLowerCase()));
+          return { ...c, tags: nextTags };
+        }),
+      }));
+      showToast(
+        isZh
+          ? `已从所选卡片移除标签：${Array.from(removeSet).map((t) => `#${t}`).join(' ')}`
+          : `Removed tags from ${ids.length} cards`
+      );
+    } else if (actionType === 'findReplace') {
+      const findText = payload?.findText ?? '';
+      const replaceText = payload?.replaceText ?? '';
+      const fieldScope = payload?.fieldScope || 'all';
+      const ignoreCase = Boolean(payload?.ignoreCase);
+      if (!findText) return;
+
+      const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escapeRegExp(findText), ignoreCase ? 'gi' : 'g');
+      let replacedCardCount = 0;
+
+      setAppState((prev) => ({
+        libraryCards: prev.libraryCards.map((c) => {
+          if (!ids.includes(c.id)) return c;
+          let changed = false;
+          let nextFront = c.front;
+          let nextBack = c.back;
+          let nextFrontHtml = c.frontHtml || c.front;
+          let nextBackHtml = c.backHtml || c.back;
+
+          if (fieldScope === 'all' || fieldScope === 'front') {
+            if (regex.test(nextFront) || regex.test(nextFrontHtml)) {
+              nextFront = nextFront.replace(regex, replaceText);
+              nextFrontHtml = nextFrontHtml.replace(regex, replaceText);
+              changed = true;
+            }
+          }
+          if (fieldScope === 'all' || fieldScope === 'back') {
+            if (regex.test(nextBack) || regex.test(nextBackHtml)) {
+              nextBack = nextBack.replace(regex, replaceText);
+              nextBackHtml = nextBackHtml.replace(regex, replaceText);
+              changed = true;
+            }
+          }
+          if (changed) replacedCardCount++;
+          return changed
+            ? {
+                ...c,
+                front: nextFront,
+                back: nextBack,
+                frontHtml: nextFrontHtml,
+                backHtml: nextBackHtml,
+              }
+            : c;
+        }),
+      }));
+
+      showToast(
+        isZh
+          ? `批量查找替换完成：已更新 ${replacedCardCount || ids.length} 张卡片的内容`
+          : `Find & Replace completed on ${replacedCardCount || ids.length} cards`
+      );
     } else if (actionType === 'resetProgress') {
       setAppState((prev) => ({
         libraryCards: prev.libraryCards.map((c) =>
@@ -2484,6 +2807,10 @@ export const appActions = {
           ? `已将 ${ids.length} 张卡片移动至牌组「${targetDeckName}」`
           : `Moved ${ids.length} cards to "${targetDeckName}"`
       );
+    }
+
+    if (isAnkiNativeEnv()) {
+      await appActions.initFromAnki(true);
     }
   },
 

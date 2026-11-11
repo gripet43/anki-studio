@@ -334,6 +334,174 @@ assert(
   'Item #21: Image Occlusion Studio and Import/Export + System Maintenance Tools must be wired across backend and frontend'
 );
 
+// Item #22: Card Creation Power Suite (Note Types, Duplicate Warning, Sticky Pin, Save & Add Another), Library Multi-Sort & Find/Replace, and Reviewer Type-in-the-Answer
+assert(
+  editSrc.includes('get_note_types') &&
+    editSrc.includes('check_duplicate_note') &&
+    editSrc.includes('createReverseCard') &&
+    editorSrc.includes('localDuplicateInfo') &&
+    editorSrc.includes('pinnedFront') &&
+    editorSrc.includes('continuousAddedCount') &&
+    searchSrc.includes('findReplace') &&
+    searchSrc.includes('removeTag') &&
+    librarySrc.includes('sortDropdownOpen') &&
+    librarySrc.includes('handleConfirmBatchFindReplace') &&
+    librarySrc.includes('handleConfirmBatchRemoveTag') &&
+    reviewerSrc.includes('typeAnswerEnabled') &&
+    reviewerSrc.includes('typeAnswerDiff'),
+  'Item #22: Card Creation Power Suite, Library Multi-Sort & Find/Replace, and Reviewer Type-in-the-Answer must be wired across backend and frontend'
+);
+
+// Item #23: Prevent accidental modal dismissal when clicking the dimmed backdrop outside any dialog
+function hasOverlayBackdropClick(src) {
+  const lines = src.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (
+      !lines[i].includes('fixed inset-0') ||
+      !(lines[i].includes('z-50') || lines[i].includes('z-[60]'))
+    ) {
+      continue;
+    }
+    let start = i;
+    while (start > 0 && !lines[start].trimStart().startsWith('<div')) {
+      start--;
+    }
+    let end = i;
+    while (end < lines.length) {
+      const trimmed = lines[end].trimEnd();
+      if (trimmed.endsWith('>') && !trimmed.endsWith('=>')) {
+        break;
+      }
+      end++;
+    }
+    const openTag = lines.slice(start, end + 1).join('\n');
+    if (openTag.includes('onClick=')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const backdropGuardedModals = [
+  ['CommandPaletteModal.tsx', cmdKSrc],
+  ['SettingsModal.tsx', settingsSrc],
+  ['CustomStudyModal.tsx', customStudyModalSrc],
+  ['DecksView.tsx', decksViewSrc],
+  ['CardEditorModal.tsx', editorSrc],
+  ['ImageOcclusionEditorModal.tsx', ioModalSrc],
+  ['VacationModal.tsx', vacationSrc],
+  ['IcuRescueModal.tsx', icuSrc],
+];
+for (const [name, src] of backdropGuardedModals) {
+  assert(
+    !hasOverlayBackdropClick(src),
+    `Item #23: ${name} must not close when clicking its dimmed gray backdrop overlay`
+  );
+}
+assert(
+  cmdKSrc.includes('onClick={() => setAppState({ cmdKOpen: false })}') &&
+    cmdKSrc.includes("aria-label={isZh ? '关闭' : 'Close'}"),
+  'Item #23: CommandPaletteModal must expose a dedicated top-right close button distinct from clearing the search query'
+);
+
+// Item #24: LibraryView collectionTotal, cross-faceted dropdown counts, and deduplicated header subtitle
+assert(
+  searchSrc.includes('collectionTotal') &&
+    searchSrc.includes('_compute_facet_counts') &&
+    storeSrc.includes('libraryFacetCounts') &&
+    storeSrc.includes('collectionTotal') &&
+    librarySrc.includes('libraryFacetCounts') &&
+    librarySrc.includes('hasNarrowingFilter') &&
+    !translationsSrc.includes('当前匹配 {matched} 张'),
+  'Item #24: LibraryView must use true collectionTotal and cross-faceted backend counts without duplicated header matched-count text'
+);
+
+// Item #25: Resolve relative collection.media <img> filenames inside CardEditorModal, TowerWysiwygEditor & ImageOcclusionEditorModal
+const mediaUrlSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/mediaUrl.ts'),
+  'utf-8'
+);
+const wysiwygSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/TowerWysiwygEditor.tsx'),
+  'utf-8'
+);
+const deckSvcSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'bridge/deck_service.py'),
+  'utf-8'
+);
+const editSvcSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'bridge/edit_service.py'),
+  'utf-8'
+);
+assert(
+  deckSvcSrc.includes('"mediaBaseUrl"') &&
+    editSvcSrc.includes('normalize_media_html_for_storage') &&
+    mediaUrlSrc.includes('resolveMediaInHtml') &&
+    mediaUrlSrc.includes('extractMediaBaseUrlFromHtml') &&
+    editorSrc.includes('resolveMediaInHtml') &&
+    editorSrc.includes('mediaBaseUrl={effectiveMediaBaseUrl}') &&
+    wysiwygSrc.includes('resolveMediaInHtml') &&
+    ioModalSrc.includes('resolveMediaSrcValue'),
+  'Item #25: Card editors must resolve relative collection.media images via mediaBaseUrl and normalize file:// URIs on save'
+);
+
+// Item #26: Opening Backlog Relief from Sidebar/Home must always default to the Rescue Plan tab ("减负方案"), not History
+assert(
+  sidebarSrc.includes("openIcuModal('rescue')") &&
+    !sidebarSrc.includes("openIcuModal('history'") &&
+    icuSrc.includes("store.icuModalTab === 'history' ? 'history' : 'rescue'") &&
+    !icuSrc.includes('totalDue === 0 && rescueHistory.length > 0'),
+  'Item #26: Backlog Relief entry must default to rescue plan tab rather than history tab'
+);
+
+// Item #27: Sync Status Pill & Settings Sync Card must follow Scheme B (no permanent glowing green dot; factual snapshot time; Intl.RelativeTimeFormat + WCAG 1.4.13 Escape dismiss)
+const syncStateIconSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/common/SyncStateIcon.tsx'),
+  'utf-8'
+);
+assert(
+  syncStateIconSrc.includes("'snapshot'") &&
+    syncStateIconSrc.includes("'unsynced'") &&
+    syncPillSrc.includes('<SyncStateIcon') &&
+    !syncPillSrc.includes('shadow-[0_0_6px_rgba(47,148,97,0.4)]') &&
+    syncPillSrc.includes('<time') &&
+    syncPillSrc.includes("e.key === 'Escape'") &&
+    settingsSrc.includes('<SyncStateIcon') &&
+    !settingsSrc.includes('w-2.5 h-2.5 rounded-full bg-[var(--status-success)]') &&
+    !settingsSrc.includes('实时同步') &&
+    translationsSrc.includes('Intl.RelativeTimeFormat') &&
+    translationsSrc.includes("synced: '上次同步'") &&
+    translationsSrc.includes("syncStatusProtected: '历史快照'"),
+  'Item #27: Sync status pill and settings card must render neutral snapshot indicators, semantic <time>, Intl.RelativeTimeFormat, and Escape-dismissible hovercard'
+);
+
+// Item #28: Immediate Sync completion lifecycle must preserve verified timestamps even when Anki NO_CHANGES leaves col.ls unchanged
+const item28HostSrc = fs.readFileSync(path.resolve(ADDON_ROOT, '__init__.py'), 'utf-8');
+const item28RouterSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'bridge/router.py'), 'utf-8');
+const item28AppSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'frontend/src/App.tsx'), 'utf-8');
+const item28StoreSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/stores/useAppStore.ts'),
+  'utf-8'
+);
+assert(
+  item28HostSrc.includes('handle_sync_error') &&
+    item28HostSrc.includes('last_sync_checked_map') &&
+    deckSvcSrc.includes('last_sync_checked_map') &&
+    item28RouterSrc.includes('requiresLogin') &&
+    item28RouterSrc.includes('asyncPending') &&
+    item28AppSrc.includes("detail?.source === 'sync'") &&
+    item28AppSrc.includes('handleNativeSyncFinished') &&
+    item28StoreSrc.includes('sessionVerifiedSyncTs') &&
+    item28StoreSrc.includes('pendingSyncFinishResolver') &&
+    item28StoreSrc.includes('silent ? state.syncJustFinished : false') &&
+    syncPillSrc.includes('Math.max(nowTick, lastSyncedTimestamp || 0)') &&
+    syncPillSrc.includes('此时间代表上次同步云端时间。如有新的修改，请点击按钮完成同步。') &&
+    syncPillSrc.includes('motion-safe:transition-[transform,rotate,color]') &&
+    !syncPillSrc.includes("t('syncStatusProtected')") &&
+    !syncPillSrc.includes("t('syncNowAction')"),
+  'Item #28: Sync completion lifecycle must coordinate anki:sync-finished, handle NO_CHANGES via last_sync_checked_map + sessionVerifiedSyncTs, and preserve syncJustFinished across silent refreshes'
+);
+
 const jsBundle = fs.readFileSync(WEB_JS, 'utf-8');
 const cssBundle = fs.readFileSync(WEB_CSS, 'utf-8');
 assert(

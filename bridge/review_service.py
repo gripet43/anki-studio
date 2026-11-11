@@ -17,9 +17,14 @@ import urllib.parse
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .media_utils import (
+    get_media_dir,
+    render_native_image_occlusion,
+    resolve_media_img_src_for_webview,
+)
+
 
 SOUND_TAG_RE = re.compile(r"\[sound:([^\]]+)\]")
-IMG_SRC_RE = re.compile(r'(<img\b[^>]*?\bsrc\s*=\s*)(["\'])([^"\']+)(\2)', flags=re.I)
 CLOZE_RE = re.compile(r"\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}")
 IO_RECT_SPAN_RE = re.compile(
     r'<span\b([^>]*?\bclass\s*=\s*["\'][^"\']*\banki-io-rect\b[^"\']*["\'][^>]*)>\s*\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}\s*</span>',
@@ -375,14 +380,7 @@ class ReviewService:
         }
 
     def _get_media_dir(self, col) -> str:
-        if col is None:
-            return ""
-        try:
-            if hasattr(col, "media") and hasattr(col.media, "dir"):
-                return str(col.media.dir() or "")
-        except Exception:
-            pass
-        return ""
+        return get_media_dir(col)
 
     def _resolve_rich_html_and_audio(
         self, raw_html: str, media_dir: str, cloze_ord: int = 1, is_question_side: bool = False
@@ -406,20 +404,7 @@ class ReviewService:
         processed = SOUND_TAG_RE.sub(_sound_replacer, raw_html)
 
         if media_dir:
-            def _img_replacer(match):
-                prefix, quote, src, suffix = match.groups()
-                src_clean = src.strip()
-                if src_clean.startswith(("http://", "https://", "data:", "file://", "/")):
-                    return match.group(0)
-                decoded_name = urllib.parse.unquote(src_clean)
-                abs_img_path = Path(media_dir) / decoded_name
-                try:
-                    file_uri = abs_img_path.resolve().as_uri()
-                except Exception:
-                    file_uri = f"file://{abs_img_path}"
-                return f"{prefix}{quote}{file_uri}{suffix}"
-
-            processed = IMG_SRC_RE.sub(_img_replacer, processed)
+            processed = resolve_media_img_src_for_webview(processed, media_dir)
 
         if "anki-io-rect" in processed and IO_RECT_SPAN_RE.search(processed):
             target_idx = str(max(1, cloze_ord))
@@ -519,8 +504,14 @@ class ReviewService:
 
             fields_dict = dict(note.items())
             field_keys = list(fields_dict.keys())
-            front_raw = fields_dict.get(field_keys[0], "") if field_keys else ""
-            back_raw = fields_dict.get(field_keys[1], "") if len(field_keys) > 1 else ""
+            # 原生 Image Occlusion 的第一个字段是 Occlusion（SVG 覆盖层），
+            # 底图在 Image 字段。按 field_keys[0] 直出只会显示几个黑矩形。
+            io_front, io_back, io_title = render_native_image_occlusion(note)
+            if io_front:
+                front_raw, back_raw = io_front, io_back
+            else:
+                front_raw = fields_dict.get(field_keys[0], "") if field_keys else ""
+                back_raw = fields_dict.get(field_keys[1], "") if len(field_keys) > 1 else ""
 
             front_rich_q, front_audio = self._resolve_rich_html_and_audio(
                 front_raw, media_dir, cloze_ord=cloze_ord, is_question_side=True
@@ -553,6 +544,7 @@ class ReviewService:
                 media_dir,
                 is_cloze,
                 lang,
+                plain_override=io_title,
             )
 
             predictions = self._predict_intervals(col, card, lang)
@@ -643,10 +635,11 @@ class ReviewService:
         media_dir: str,
         is_cloze: bool,
         lang: str = "zh-CN",
+        plain_override: str = "",
     ) -> Dict[str, str]:
         empty_front = "未命名卡片" if lang == "zh-CN" else "Untitled Card"
         empty_back = "（点击编辑补充背面释义）" if lang == "zh-CN" else "(Click to add back content)"
-        front_plain = self._plain_text_summary(front_raw) or empty_front
+        front_plain = plain_override or self._plain_text_summary(front_raw) or empty_front
         back_plain = self._plain_text_summary(back_raw)
 
         etymology_raw = fields_dict.get("词源") or fields_dict.get("Etymology") or ""
@@ -704,6 +697,12 @@ class ReviewService:
         card = col.get_card(card_id)
         try:
             from anki.scheduler.v3 import CardAnswer
+            # Anki 26 的 build_answer 会读 card.timer_started 计算答题耗时；
+            # 没启动计时器时该值为 None，cards.py 的 time_taken 会直接抛
+            # TypeError: unsupported operand type(s) for -: 'float' and 'NoneType'，
+            # 结果是每次答题都静默失败、卡片从队列消失却没有 revlog。
+            if hasattr(card, "start_timer"):
+                card.start_timer()
             states = col._backend.get_scheduling_states(card.id)
             rating_map = {
                 1: CardAnswer.AGAIN,

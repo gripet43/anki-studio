@@ -1,0 +1,11 @@
+{
+  "debug_mode": false,
+  "dev_server_url": "http://localhost:5173",
+  "auto_launch_modern_ui": true,
+  "toggle_shortcut": "Ctrl+Alt+M",
+  "theme": "light",
+  "accent_color": "indigo",
+  "language": "auto",
+  "collapsed_deck_ids": [],
+  "show_shortcut_hints": false
+}

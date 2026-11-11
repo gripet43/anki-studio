@@ -52,7 +52,12 @@ export const ReviewerView: React.FC = () => {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [flagPopoverOpen, setFlagPopoverOpen] = useState(false);
 
+  // Milestone 3: Type-in-the-Answer (默写检验与逐字差异高亮)
+  const [typeAnswerEnabled, setTypeAnswerEnabled] = useState(false);
+  const [typeAnswerInput, setTypeAnswerInput] = useState('');
+
   const activeInputRef = useRef<HTMLInputElement>(null);
+  const typeAnswerInputRef = useRef<HTMLInputElement>(null);
   const flagMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -78,7 +83,19 @@ export const ReviewerView: React.FC = () => {
   useEffect(() => {
     setConfirmingDelete(false);
     setFlagPopoverOpen(false);
+    setTypeAnswerInput('');
     if (currentCard) {
+      const autoType =
+        currentCard.tags.some(
+          (tg) => tg === '默写' || tg.toLowerCase() === 'type' || tg.toLowerCase() === 'type-answer'
+        ) ||
+        Boolean(
+          currentCard.noteTypeName &&
+            /type|默写|输入|拼写/i.test(currentCard.noteTypeName)
+        );
+      if (autoType) {
+        setTypeAnswerEnabled(true);
+      }
       const fMap =
         currentCard.fields && Object.keys(currentCard.fields).length > 0
           ? { ...currentCard.fields }
@@ -486,6 +503,97 @@ export const ReviewerView: React.FC = () => {
   const activeFlagNum = ((currentCard.flags || 0) & 7) as CardFlagColor;
   const activeFlagSpec = activeFlagNum !== 0 ? ANKI_FLAG_PALETTE[activeFlagNum] : null;
 
+  // Milestone 3: Extract expected target answer and compute character-level LCS diff
+  const expectedTypeTarget = useMemo(() => {
+    if (!currentCard) return '';
+    // For Cloze cards, extract the first {{cN::answer}} token
+    const rawFront = currentCard.front || currentCard.frontHtml || '';
+    const clozeMatch = rawFront.match(/\{\{c\d+::([^:}]+)(?:::[^}]*)?\}\}/i);
+    if (clozeMatch && clozeMatch[1]) {
+      return clozeMatch[1].replace(/<[^>]*>/g, '').trim();
+    }
+    // Otherwise use the stripped plain text of the first non-empty line of meaning/back
+    const rawBack = (currentCard.meaning || currentCard.backHtml || '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/div>|<\/p>/gi, '\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .trim();
+    const firstLine =
+      rawBack
+        .split('\n')
+        .map((l) => l.trim())
+        .find(Boolean) || rawBack;
+    return firstLine.slice(0, 120);
+  }, [currentCard]);
+
+  const typeAnswerDiff = useMemo(() => {
+    const typed = typeAnswerInput.trim();
+    const expected = expectedTypeTarget.trim();
+    if (!expected) {
+      return {
+        accuracy: 100,
+        isExact: true,
+        typedTokens: [] as Array<{ char: string; status: 'match' | 'wrong' }>,
+        expectedTokens: [] as Array<{ char: string; status: 'match' | 'missing' }>,
+      };
+    }
+
+    const a = Array.from(typed);
+    const b = Array.from(expected);
+    const m = a.length;
+    const n = b.length;
+
+    // LCS DP table (case-insensitive comparison for Latin letters)
+    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    const eq = (c1: string, c2: string) => c1.toLowerCase() === c2.toLowerCase();
+
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (eq(a[i - 1], b[j - 1])) {
+          dp[i][j] = dp[i - 1][j - 1] + 1;
+        } else {
+          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+        }
+      }
+    }
+
+    const matchedA = new Array(m).fill(false);
+    const matchedB = new Array(n).fill(false);
+    let i = m;
+    let j = n;
+    while (i > 0 && j > 0) {
+      if (eq(a[i - 1], b[j - 1])) {
+        matchedA[i - 1] = true;
+        matchedB[j - 1] = true;
+        i--;
+        j--;
+      } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+        i--;
+      } else {
+        j--;
+      }
+    }
+
+    const lcsLen = dp[m][n];
+    const maxLen = Math.max(m, n, 1);
+    const accuracy = m === 0 ? 0 : Math.round((lcsLen / maxLen) * 100);
+    const isExact = m > 0 && typed.toLowerCase() === expected.toLowerCase();
+
+    return {
+      accuracy: isExact ? 100 : accuracy,
+      isExact,
+      typedTokens: a.map((ch, idx) => ({
+        char: ch,
+        status: (matchedA[idx] ? 'match' : 'wrong') as 'match' | 'wrong',
+      })),
+      expectedTokens: b.map((ch, idx) => ({
+        char: ch,
+        status: (matchedB[idx] ? 'match' : 'missing') as 'match' | 'missing',
+      })),
+    };
+  }, [typeAnswerInput, expectedTypeTarget]);
+
   return (
     <div className={`fixed inset-0 z-30 flex flex-col select-none overflow-hidden transition-colors ${screenBg}`}>
       {/* Ultra-thin Top Progress Bar */}
@@ -595,6 +703,34 @@ export const ReviewerView: React.FC = () => {
                   {showShortcutHints && <kbd className="text-[10px] opacity-70 font-mono">R</kbd>}
                 </button>
               )}
+
+              {/* Milestone 3: Type-in-the-Answer (默写检验) Toggle Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !typeAnswerEnabled;
+                  setTypeAnswerEnabled(next);
+                  if (next && !isCardFlipped) {
+                    setTimeout(() => typeAnswerInputRef.current?.focus(), 60);
+                  }
+                }}
+                title={
+                  isZh
+                    ? '切换「拼写默写检验 (Type in the Answer)」模式：正面输入答案，翻面逐字比对差异'
+                    : 'Toggle Type-in-the-Answer spelling check mode'
+                }
+                className={`h-8 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
+                  typeAnswerEnabled
+                    ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)]'
+                    : headerBtnSurface
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10" />
+                </svg>
+                <span>{isZh ? '默写' : 'Type'}</span>
+              </button>
 
               {/* 7-Color Flag Quick Picker Button & Popover */}
               <div ref={flagMenuRef} className="relative">
@@ -975,6 +1111,99 @@ export const ReviewerView: React.FC = () => {
                       }`}
                     />
 
+                    {/* Milestone 3: Type-in-the-Answer Character-by-Character Diff Result */}
+                    {(typeAnswerEnabled || typeAnswerInput.trim().length > 0) && expectedTypeTarget && (
+                      <div
+                        className={`mb-5 p-3.5 rounded-2xl border space-y-2 ${
+                          typeAnswerDiff.isExact
+                            ? 'bg-emerald-500/[0.08] border-emerald-500/30'
+                            : typeAnswerInput.trim().length === 0
+                            ? isDark
+                              ? 'bg-[#1C1E26] border-[#2A2C38]'
+                              : 'bg-[#F7F8FA] border-[#E5E5EA]'
+                            : 'bg-amber-500/[0.08] border-amber-500/30'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-semibold flex items-center gap-1.5">
+                            <span>{isZh ? '⌨️ 拼写默写核对' : '⌨️ Type-in-the-Answer Check'}</span>
+                            {typeAnswerInput.trim().length > 0 && (
+                              <span
+                                className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                                  typeAnswerDiff.isExact
+                                    ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                                    : typeAnswerDiff.accuracy >= 60
+                                    ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                                    : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
+                                }`}
+                              >
+                                {typeAnswerDiff.isExact
+                                  ? isZh
+                                    ? '✓ 100% 完全匹配'
+                                    : '✓ 100% Exact Match'
+                                  : isZh
+                                  ? `匹配度 ${typeAnswerDiff.accuracy}%`
+                                  : `Match ${typeAnswerDiff.accuracy}%`}
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[10px] text-[#8E8E93]">
+                            {isZh ? '绿=正确 · 红=多写/错字 · 黄=漏写' : 'Green=Match · Red=Wrong · Amber=Missing'}
+                          </span>
+                        </div>
+
+                        {/* User's Typed Line */}
+                        <div className="flex items-baseline gap-2 text-[13px] font-mono break-all">
+                          <span className="text-[11px] font-sans text-[#8E8E93] shrink-0 w-14">
+                            {isZh ? '你的输入' : 'Typed'}
+                          </span>
+                          {typeAnswerInput.trim().length === 0 ? (
+                            <span className="text-[12px] italic text-[#8E8E93] font-sans">
+                              {isZh ? '（未输入内容）' : '(No answer typed)'}
+                            </span>
+                          ) : (
+                            <div className="flex flex-wrap gap-[1px]">
+                              {typeAnswerDiff.typedTokens.map((tk, idx) => (
+                                <span
+                                  key={idx}
+                                  className={
+                                    tk.status === 'match'
+                                      ? 'px-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-semibold'
+                                      : 'px-0.5 rounded bg-rose-500/20 text-rose-600 dark:text-rose-400 line-through'
+                                  }
+                                >
+                                  {tk.char === ' ' ? '\u00A0' : tk.char}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Expected Target Line (shown when not exact match) */}
+                        {!typeAnswerDiff.isExact && (
+                          <div className="flex items-baseline gap-2 text-[13px] font-mono break-all pt-1 border-t border-black/5 dark:border-white/5">
+                            <span className="text-[11px] font-sans text-[#8E8E93] shrink-0 w-14">
+                              {isZh ? '标准答案' : 'Target'}
+                            </span>
+                            <div className="flex flex-wrap gap-[1px]">
+                              {typeAnswerDiff.expectedTokens.map((tk, idx) => (
+                                <span
+                                  key={idx}
+                                  className={
+                                    tk.status === 'match'
+                                      ? 'px-0.5 rounded text-emerald-700 dark:text-emerald-300'
+                                      : 'px-0.5 rounded bg-amber-500/25 text-amber-700 dark:text-amber-300 font-bold underline'
+                                  }
+                                >
+                                  {tk.char === ' ' ? '\u00A0' : tk.char}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Meaning */}
                     <div
                       className={`text-[17px] font-medium leading-relaxed select-text cursor-text whitespace-pre-wrap break-words [&_img]:max-h-60 [&_img]:rounded-xl [&_img]:my-3 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[14px] ${
@@ -1041,11 +1270,59 @@ export const ReviewerView: React.FC = () => {
                   </>
                 ) : (
                   <div
-                    className={`py-10 flex flex-col items-center justify-center border-t mt-4 ${
+                    className={`py-7 flex flex-col items-center justify-center border-t mt-4 gap-3.5 ${
                       isDark ? 'border-white/[0.05]' : 'border-[#ECECF2]'
                     }`}
                   >
-                    <p className="text-[13px] text-[#8E8E93]">{t('recallPrompt')}</p>
+                    {typeAnswerEnabled ? (
+                      <div className="w-full space-y-2">
+                        <div className="flex items-center justify-between text-[11px] text-[#8E8E93]">
+                          <span className="font-medium text-[var(--brand-text)]">
+                            {isZh ? '⌨️ 拼写默写检验（Type in the Answer）' : '⌨️ Type in the Answer'}
+                          </span>
+                          <span>{isZh ? '按 Enter 提交并翻开核对' : 'Press Enter to check'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            ref={typeAnswerInputRef}
+                            type="text"
+                            value={typeAnswerInput}
+                            onChange={(e) => setTypeAnswerInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                appActions.flipCard();
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                setTypeAnswerEnabled(false);
+                              }
+                            }}
+                            placeholder={
+                              isZh
+                                ? '在此输入你默写的答案（支持英文拼写 / 填空词条）...'
+                                : 'Type your answer here...'
+                            }
+                            autoFocus
+                            className={`flex-1 h-10 px-3.5 rounded-xl border text-[14px] font-medium focus:outline-none focus:border-[var(--brand)] transition-colors ${
+                              isDark
+                                ? 'bg-[#1E202B] border-[#323546] text-white placeholder-[#6E7080]'
+                                : 'bg-[#F8F9FB] border-[#DCDCE4] text-[#1D1D1F] placeholder-[#8E8E98]'
+                            }`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => appActions.flipCard()}
+                            style={{ backgroundColor: brandHex }}
+                            className="h-10 px-4 rounded-xl text-white text-[12px] font-semibold cursor-pointer hover:opacity-95 shrink-0"
+                          >
+                            {isZh ? '核对 ↵' : 'Check ↵'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[13px] text-[#8E8E93]">{t('recallPrompt')}</p>
+                    )}
                   </div>
                 )}
 

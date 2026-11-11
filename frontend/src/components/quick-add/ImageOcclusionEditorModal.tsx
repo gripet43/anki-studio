@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { resolveMediaSrcValue } from '../../utils/mediaUrl';
 
 export interface OcclusionRect {
   id: string;
@@ -18,6 +19,7 @@ interface ImageOcclusionEditorModalProps {
   isDark: boolean;
   isZh: boolean;
   brandHex: string;
+  mediaBaseUrl?: string;
   onSaveImageFile: (file: File) => Promise<string | null>;
   onClose: () => void;
   onApply: (generatedHtml: string, rectCount: number) => void;
@@ -148,6 +150,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
   isDark,
   isZh,
   brandHex,
+  mediaBaseUrl,
   onSaveImageFile,
   onClose,
   onApply,
@@ -186,13 +189,13 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
     if (!open) return;
     const parsed = parseExistingImageOcclusion(initialFrontHtml);
     setTitleText(parsed.titleText);
-    setImgSrc(parsed.imgSrc);
+    setImgSrc(resolveMediaSrcValue(parsed.imgSrc, mediaBaseUrl, parsed.mediaFilename));
     setMediaFilename(parsed.mediaFilename);
     setMode(parsed.mode);
     setRects(parsed.rects);
     setSelectedRectId(parsed.rects[0]?.id || null);
     setInteraction(null);
-  }, [open, initialFrontHtml]);
+  }, [open, initialFrontHtml, mediaBaseUrl]);
 
   const handleImageFile = async (file: File) => {
     if (!file) return;
@@ -378,7 +381,6 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
 
   return (
     <div
-      onClick={onClose}
       className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 select-none animate-in fade-in duration-150"
     >
       <div
