@@ -13,7 +13,7 @@ export const StreakFlameBackdrop: React.FC<{ isDark: boolean }> = ({ isDark }) =
 
   return (
     <svg
-      className="pointer-events-none absolute bottom-0 right-4 h-[142px] w-[186px]"
+      className="pointer-events-none absolute bottom-0 right-4 hidden h-[142px] w-[186px] lg:block"
       viewBox="0 0 150 150"
       preserveAspectRatio="xMaxYMax meet"
       aria-hidden="true"

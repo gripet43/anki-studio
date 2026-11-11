@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+- **[WorkBuddy]** 窗口扩展改为一次性 + 火焰在窄屏隐藏（[__init__.py](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/__init__.py)、[StreakFlameBackdrop.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/dashboard/StreakFlameBackdrop.tsx)）：
+  - **窗口尺寸保护落持久化标记**：`_did_initial_expand` 原为实例级变量，Anki 每次启动都会重置，导致用户手动调小的窗口每次开机都被拉回 1180×760。现改为从 `get_config()["windowInitialExpandDone"]` 初始化，且**只在真正执行过 resize 时**写入该键；窗口本来就够大的用户不写标记，每次启动检查一次但不做任何 resize，完全无感。
+  - **窄屏隐藏火焰**：响应式改版后连胜卡在 `<1024px` 变为底部通栏，原先贴整卡右下角的 142×186 火焰会横向压住「19 天」。给 SVG 加 `hidden lg:block`，宽屏保留背景剪影，窄屏只留干净的连胜区。
+  - 验证：1440 / 720 两种宽度实拍确认宽屏火焰仍在、窄屏消失且文字不再被遮挡；`py_compile`、38 项单测、`tsc`、Bundle 审计、前端构建全绿。
+
 - **[Gemini] Windows 验版报告（2026-11-11）8 项问题全量调查与修复**：
   - **问题 1（首次启动 `prefs21.db` 被判定损坏并重建 + 语言确认框）**：定位根因为 [`tests/scenarios/run.py`](tests/scenarios/run.py) 的 `ensure_profile()` 仅写入了 `(PROFILE, pickle.dumps({}))`，缺失 Anki 26 `ProfileManager.loadMeta()` 强依赖的 `'_global'` 元数据行（导致 `pickle.loads(None)` 抛异常触发数据库重建并重置 `firstRun=True`）。现补齐完整 `_global` 字典（含 `ver: 0`、`firstRun: False`、`defaultLang: 'zh_CN'`、`last_run_version: 260904`、`last_loaded_profile_name`、`suppressUpdate: True`）与标准 profile 配置字典；同时将 `sync_addon()` 由 `shutil.rmtree` 整目录删除改为 `shutil.copytree(..., dirs_exist_ok=True)` 增量覆盖同步，避免一次性删除 65+ 个文件触发批量删除拦截，并在 [`tests/scenarios/paths.py`](tests/scenarios/paths.py) 中自动配置 UTF-8 标准输出流解决 Windows 终端默认代码页乱码。
   - **问题 2（默认窗口尺寸 `683×609` / `820×650` 下首页右侧文案一字一行竖排）**：

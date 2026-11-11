@@ -40,7 +40,9 @@ class AnkiModernHost:
         self.is_modern_visible: bool = False
         self._sync_error_in_flight: Optional[str] = None
         self._orig_min_size: Optional[Any] = None
-        self._did_initial_expand: bool = False
+        self._did_initial_expand: bool = bool(
+            self.get_config().get("windowInitialExpandDone", False)
+        )
         self.router = BridgeRouter(
             toggle_native_callback=self.toggle_modern_ui,
             config_getter=self.get_config,
@@ -566,7 +568,13 @@ class AnkiModernHost:
                     except Exception:
                         pass
                     mw.resize(target_w, target_h)
-                self._did_initial_expand = True
+                    # 只在真正改过窗口时落持久化标记：之后用户手动调小的尺寸不再被启动流程覆盖。
+                    # 窗口本来就够大的用户不写标记，每次启动检查一次但不做任何 resize。
+                    self._did_initial_expand = True
+                    try:
+                        self.write_config({"windowInitialExpandDone": True})
+                    except Exception:
+                        pass
         except Exception:
             pass
 
