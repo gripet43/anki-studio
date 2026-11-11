@@ -1,5 +1,5 @@
 // ============================================================================
-// Anki Modern OS — Modern SaaS Perceptual Color & Theme Token Engine
+// Anki Studio — Modern SaaS Perceptual Color & Theme Token Engine
 // Inspired by Linear (LCH perceptual harmony), Radix Colors (12-step functional
 // scales), Notion (warm low-chroma accents), and Material 3 Dark Theme guidelines.
 // ============================================================================

@@ -1,5 +1,5 @@
 """
-Anki Modern OS — Bridge Package
+Anki Studio — Bridge Package
 Provides seamless IPC communication between the React/Tailwind Modern UI and Anki 26.x Python backend.
 """
 

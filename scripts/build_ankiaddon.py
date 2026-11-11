@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Anki Modern OS — Standard .ankiaddon Packaging Script (Part 3 Task 6)
+Anki Studio — Standard .ankiaddon Packaging Script (Part 3 Task 6)
 1. Optionally builds the React/Vite frontend into `web/`
 2. Packages strictly the runtime whitelist into `anki_modern_os.ankiaddon` (ZIP archive):
    - `__init__.py`

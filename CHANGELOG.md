@@ -20,6 +20,22 @@
   - **答题计时器修复**（WorkBuddy）：在 [`bridge/review_service.py`](bridge/review_service.py) `answer_card` 调用 `col.sched.build_answer` 前先执行 `card.start_timer()`，修复 Anki 26 因 `card.timer_started is None` 抛出 `TypeError` 导致答题静默失败且不写 `revlog` 的问题。
   - **全量无损恢复**（Antigravity）：利用 Gemini `08:55` 任务备份、`transcript_full.jsonl` 全量重放与 `12:17` `.ankiaddon` 产物对照，100% 字节级无损恢复 `Item #22`（Gemini）、`Item #23–#28`（Antigravity）与 `io-native` / `start_timer`（WorkBuddy）全部改动，并补齐 `test_25_answer_card_starts_timer_before_build_answer` 单测，Python 单测（36 项）、Bundle 审计与 11 场景 471 项冒烟回归全绿通过。
 
+- **[WorkBuddy] 测试沙盒第二轮：补齐遮挡与极端值场景，并让数据可复现**：
+  - **场景扩到 11 个**：新增 `media`（200 卡 + 4 个真实素材 + 5 个孤立文件）、`occlusion`（60 卡全为项目自定义 `.anki-io-wrap` 遮挡，1~3 个矩形、hide-all 与 hide-one 混排）、`io-native`（30 条 Anki 内置 `Image Occlusion`，`{{c1::<svg><rect/>}}</svg>}}` + canvas 渲染）、`edge`（150 卡注入负数与超大 `due`、`ivl` 含 0 与 2147483647）、`dirty`（120 卡注入 3 张空卡、2 组重复笔记、3 个缺失媒体引用、1 条超长字段）。
+  - **遮挡两条路径的区别**：Anki 26 原生用 `canvas` + `anki.imageOcclusion.setup()`，而本项目用「Basic 笔记 + `.anki-io-wrap` + `span.anki-io-rect` 包 cloze」的自定义方案。生成器逐字复刻 `buildImageOcclusionHtml` 的结构，否则测到的是另一条渲染路径。
+  - **可复现性校验**：`build.py --verify-repro` 生成两份并比对业务指纹（排除 `id`/`mod`/`due` 这些必然变化的时间字段，只比 notes 正文与 `type/queue/ivl/factor/reps/lapses`），`exam` / `occlusion` / `dirty` 两次生成完全一致。
+  - **非法数值检查**：所有返回值序列化后不得含 `Infinity` / `NaN`——Python 的 json 会写成非法字面量，前端 `JSON.parse` 会当场抛错；`edge` 场景就是为此准备的。
+  - **测试自身暴露并修复的两处缺陷**：① `smoke` 起初只复制 `anki2` 不复制 `.media`，`check_media` 把确实存在的文件误报为缺失；② `dirty` 场景 3 条笔记引用同一个文件名，而 `check_media` 按文件名去重只算 1 个，断言因此失去区分度。
+
+- **[WorkBuddy] 测试沙盒第三轮审查：修正三处会让结论失真的缺陷，业务接口覆盖补到 38/38**：
+  - **① 场景 `due` 量纲错误（影响所有场景）**：`builder` 用 Unix 天数（≈20756）写 review 卡的 `due`，而 Anki 的 `due` 是「距 collection 创建日的天数」（≈0–3）。结果是所有复习卡都被视为几万年后到期——「积压场景」里一张积压卡都没有，进度减负与低能量模式永远空跑。改为从 `col.crt` 推算 `today`；修正后 `backlog` 564/564 全部到期、`exam` 86/489、`power` 304/1993。
+  - **② 测试环境的配置写入语义与产品不一致**：`smoke.py` 的 `config_writer` 原先整体替换，而 `__init__.py` 的 `write_config` 是 `{**old, **new}` 合并。`rescue_backlog` 只写 receipt 两个键时会连带清掉 `vacation_state`，于是 `undo_rescue` 找不到回执、零 diff 断言假失败。
+  - **③ `backlog` 配方方向写反**：`overdue_range=(20, 180)` 是正数（未来到期），改为 `(-180, -20)` 才是逾期。
+  - **新增回归链路（117 → 471 项）**：休假 `set_vacation → cancel` 与减负 `rescue_backlog → undo_rescue` 的**逐卡零 diff**、低能量选卡、牌组 `create → rename → delete`、`save_deck_options` 往返、`batch_action` 加标签落 `notes.tags`、`answer_card` 后 revlog 精确 +1。核心断言从「返回 success」升级为「查 sqlite 对得上」。
+  - **补齐 13 个此前未覆盖的 action**：`get_review_queue`、`preview/start_custom_study`、`check_duplicate`、`save_preferences`、`end_vacation`、`toggle_bury`、`update_card_inline`、`save_pasted_image`、`undo`、`sync`、`sync_collection`、`delete_cards`，业务接口覆盖率 11 → **38/38**。
+  - **门禁有效性验证（变异测试）**：临时让 `render_native_image_occlusion` 直接返回空，`native-io:frontHtml` / `native-io:review` / `native-io:multi-cloze` 三条立即 FAIL；恢复后回到全绿，确认断言不是摆设。
+  - **边界处理**：极端 `due` 下 Anki 会把 relearn 卡规范化成 review 卡，`edge` 场景改为只对调度数值做零 diff、`type/queue` 变化记 warning；无到期复习卡的场景跳过减负/低能量并 warn，而不是判失败。
+
 - **[Antigravity] 精简同步胶囊浮窗结构与悬停高亮细节（[SyncStatusPill.tsx](frontend/src/components/dashboard/SyncStatusPill.tsx)）**：
   - 删除同步浮窗右上角状态徽标（`历史快照 / 同步中 / 刚刚对齐 / 未同步`）以及底部操作栏（`立即同步` 与 `设置` 按钮），避免与外层同步按钮重复。
   - 将底部说明文案调整为「`此时间代表上次同步云端时间。如有新的修改，请点击按钮完成同步。`」，同步清理无用主题变量，并补充前端断言覆盖。

@@ -1,5 +1,5 @@
 // ============================================================================
-// Anki Modern OS — 进度减负 (Schedule Relief & Backlog Smoothing)
+// Anki Studio — 进度减负 (Schedule Relief & Backlog Smoothing)
 // Design Spec:
 // 1. Clean Title: "进度减负" without subtitle explanation.
 // 2. 2-Tab Hierarchy: [减负方案] and [历史记录].

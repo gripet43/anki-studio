@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Anki Modern OS — Shared Media Path Resolution & Storage Normalization Helpers
+Anki Studio — Shared Media Path Resolution & Storage Normalization Helpers
 Resolves relative Anki media filenames (`<img src="foo.png">`) to `file:///.../collection.media/foo.png`
 for WebView preview & WYSIWYG editing, and normalizes `file://` media URIs back into portable
 Anki relative filenames (`src="foo.png"`) before saving notes to SQLite.

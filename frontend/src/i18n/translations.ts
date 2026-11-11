@@ -1,5 +1,5 @@
 // ============================================================================
-// Anki Modern OS — Internationalization (i18n), Relative Sync Time & Shortcuts
+// Anki Studio — Internationalization (i18n), Relative Sync Time & Shortcuts
 // Supports English ('en', default fallback) and Simplified Chinese ('zh-CN'),
 // auto-following Anki client language, plus macOS / Windows / Linux key mapping.
 // ============================================================================

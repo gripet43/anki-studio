@@ -42,8 +42,30 @@ cd tests/scenarios
 
 python3 build.py --list          # 看有哪些场景
 python3 build.py --core          # 生成 empty / newbie / exam
-./run.sh exam                    # 同步插件 → 备份现场 → 切换到 exam → 启动
+./run.sh exam                    # macOS/Linux：同步插件 → 备份现场 → 切换 → 启动
+python3 run.py exam              # Windows（或任意平台）：同样的流程
 ```
+
+## 跨平台
+
+整套测试在 macOS / Windows / Linux 上都能跑，路径按平台自动探测：
+
+| 用途 | macOS | Windows |
+|---|---|---|
+| Anki 自带 Python 包 | `/Applications/Anki.app/Contents/Resources/app_packages` | `%LOCALAPPDATA%\Programs\Anki\app_packages`（也尝试 `_internal` 与 Program Files） |
+| 真实数据目录 | `~/Library/Application Support/Anki2` | `%APPDATA%\Anki2` |
+| 启动器 | `./run.sh <场景>` | `python run.py <场景>` |
+
+探测不到时可以显式覆盖：
+
+```bash
+export ANKI_APP_PACKAGES=/path/to/app_packages   # 含 anki/ 子包
+export ANKI_BIN=/path/to/anki                    # Anki 主程序
+export ANKI_REAL_BASE=/path/to/Anki2             # 真实数据根目录
+```
+
+Windows 上需要 Python 3.10+；`run.py` 用纯标准库实现，不依赖 bash 或 rsync。
+`gate.sh` 是 bash 脚本，在 Windows 上用 Git Bash 运行，或逐条执行它里面的命令。
 
 `run.sh` 每次都会先 rsync 一份最新插件副本，所以改完代码直接重新跑即可，不用手动复制。
 

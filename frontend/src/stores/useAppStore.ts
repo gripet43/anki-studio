@@ -1,5 +1,5 @@
 // ============================================================================
-// Anki Modern OS — Global State Store (100% Real Anki Collection Driven)
+// Anki Studio — Global State Store (100% Real Anki Collection Driven)
 // Implements all 14 audit bug fixes, 9 UX enhancements (semantic sync timestamp,
 // SettingsModal, developer-only DesignSystemView, etc.), dynamic daily workload,
 // Deck Options & FSRS Presets, 7-Color Flags, Custom Study / Mistake Drills,

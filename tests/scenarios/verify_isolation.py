@@ -90,14 +90,27 @@ def check_config() -> None:
     record(not leaked, "配置洁净", f"残留真实字段：{leaked}" if leaked else "无真实运行时字段")
 
 
+def _find_real_collection() -> Path | None:
+    """找真实库里任意 profile 的 collection。
+
+    profile 名各平台不同（macOS 常见「账户 1」，Windows 常见「User 1」），
+    不能写死，否则换平台后真实库指纹检查会静默失效。
+    """
+    if not REAL_ANKI_ROOT.is_dir():
+        return None
+    for candidate in sorted(REAL_ANKI_ROOT.glob("*/collection.anki2")):
+        return candidate
+    return None
+
+
 def check_no_real_collection_in_sandbox() -> None:
     """沙盒里的 collection 必须来自 lib/，不能是真实库的拷贝。
 
-    判据是：真实库存在时，沙盒库的 inode / 大小 / 修改时间都不应与之一致。
+    判据是：真实库存在时，沙盒库的大小不应与之一致。
     """
-    real = REAL_ANKI_ROOT / "账户 1" / "collection.anki2"
+    real = _find_real_collection()
     sandbox_db = SANDBOX_ROOT / "base" / "测试账户" / "collection.anki2"
-    if not real.exists() or not sandbox_db.exists():
+    if real is None or not sandbox_db.exists():
         record(True, "库来源", "真实库或沙盒库不存在，跳过")
         return
     same_size = real.stat().st_size == sandbox_db.stat().st_size
@@ -105,20 +118,33 @@ def check_no_real_collection_in_sandbox() -> None:
 
 
 def check_launcher_guard() -> None:
-    """启动脚本必须强制 -b，且不得存在裸启动路径。"""
-    run_sh = Path(__file__).with_name("run.sh")
-    if not run_sh.exists():
-        record(False, "启动守卫", "run.sh 不存在")
+    """启动逻辑必须强制 ``-b``，且不得存在裸启动路径。
+
+    启动入口已从 ``run.sh`` 迁到跨平台的 ``run.py``（Windows 上没有 bash/rsync）。
+    ``run.sh`` 现在只是薄包装，因此以 ``run.py`` 为检查对象。
+    """
+    runner = Path(__file__).with_name("run.py")
+    if not runner.exists():
+        record(False, "启动守卫", "run.py 不存在")
         return
-    text = run_sh.read_text(encoding="utf-8")
-    has_b = '-b "$BASE"' in text or "-b $BASE" in text
-    # 出现 ANKI_BIN 但没有 -b 的行视为风险（注释行除外）
-    risky = [
+
+    text = runner.read_text(encoding="utf-8")
+    launches = [
         line.strip()
         for line in text.splitlines()
-        if "ANKI_BIN" in line and "exec" in line and "-b" not in line and not line.strip().startswith("#")
+        if not line.strip().startswith("#")
+        and any(call in line for call in ("subprocess.call(", "subprocess.run(", "subprocess.Popen("))
     ]
-    record(has_b and not risky, "启动守卫", f"缺 -b 的启动行：{risky}" if risky or not has_b else "只允许 -b 沙盒启动")
+    if not launches:
+        record(False, "启动守卫", "run.py 里找不到启动调用")
+        return
+
+    missing = [line for line in launches if '"-b"' not in line]
+    record(
+        not missing,
+        "启动守卫",
+        f"缺 -b 的启动行：{missing}" if missing else "只允许 -b 沙盒启动",
+    )
 
 
 def _fingerprint(path: Path) -> dict[str, object]:
@@ -132,9 +158,9 @@ def _baseline_path() -> Path:
 
 
 def cmd_baseline() -> int:
-    real = REAL_ANKI_ROOT / "账户 1" / "collection.anki2"
-    if not real.exists():
-        print(f"找不到真实库：{real}", file=sys.stderr)
+    real = _find_real_collection()
+    if real is None:
+        print(f"在 {REAL_ANKI_ROOT} 下找不到任何 profile 的 collection.anki2", file=sys.stderr)
         return 1
     fp = _fingerprint(real)
     _baseline_path().write_text(json.dumps(fp, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -144,7 +170,10 @@ def cmd_baseline() -> int:
 
 
 def cmd_check() -> int:
-    real = REAL_ANKI_ROOT / "账户 1" / "collection.anki2"
+    real = _find_real_collection()
+    if real is None:
+        record(False, "真实库未被改动", f"在 {REAL_ANKI_ROOT} 下找不到 collection.anki2")
+        return 1
     baseline_file = _baseline_path()
     if not baseline_file.exists():
         record(False, "真实库未被改动", "没有基线，请先运行 --baseline")

@@ -38,21 +38,21 @@ except ImportError:  # 作为 tests.scenarios 包导入时走这个分支
 # Anki 运行时
 # ---------------------------------------------------------------------------
 
-ANKI_PACKAGES = Path("/Applications/Anki.app/Contents/Resources/app_packages")
+try:  # 作为包导入时走相对路径，直接运行脚本时走同级模块
+    from .paths import require_app_packages
+except ImportError:
+    from paths import require_app_packages
 
 
 def load_anki():
     """把 Anki 自带的 Python 包挂到 sys.path 并返回 Collection 类。
 
     不做 pip 安装、不复制包体，避免污染系统环境与产生版本漂移。
+    包目录按平台自动探测，可用环境变量 ``ANKI_APP_PACKAGES`` 覆盖。
     """
-    if not (ANKI_PACKAGES / "anki").is_dir():
-        raise RuntimeError(
-            f"找不到 Anki 的 Python 包：{ANKI_PACKAGES / 'anki'}\n"
-            "测试系统依赖 Anki.app 自带的 anki 包，请确认已安装 Anki 26+。"
-        )
-    if str(ANKI_PACKAGES) not in sys.path:
-        sys.path.insert(0, str(ANKI_PACKAGES))
+    packages = require_app_packages()
+    if str(packages) not in sys.path:
+        sys.path.insert(0, str(packages))
     from anki.collection import Collection  # noqa: PLC0415
 
     return Collection

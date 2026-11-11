@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Anki Modern OS — Comprehensive Unit & Integration Test Suite
+Anki Studio — Comprehensive Unit & Integration Test Suite
 Covers:
 - Part 1 (14 Specific Bugs):
   1. `delete_cards` & `batch_action(delete)` remove notes from SQLite
@@ -667,7 +667,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         """Verify copy_to_clipboard bridge action handles empty and valid strings gracefully."""
         res_empty = self._call("copy_to_clipboard", {"text": ""})
         self.assertIn(res_empty["status"], ["success", "error"])
-        res_text = self._call("copy_to_clipboard", {"text": "Hello Anki Modern OS"})
+        res_text = self._call("copy_to_clipboard", {"text": "Hello Anki Studio"})
         self.assertIn(res_text["status"], ["success", "error"])
 
     def test_09_untruncated_card_content_and_field_update(self):

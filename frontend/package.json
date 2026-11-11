@@ -2,7 +2,7 @@
   "name": "anki-modern-ui",
   "private": true,
   "version": "1.0.0",
-  "description": "Anki Modern OS — 2026 macOS Native-Feel Flashcard UI Suite (React + TypeScript + Tailwind)",
+  "description": "Anki Studio — 2026 macOS Native-Feel Flashcard UI Suite (React + TypeScript + Tailwind)",
   "type": "module",
   "scripts": {
     "dev": "vite",

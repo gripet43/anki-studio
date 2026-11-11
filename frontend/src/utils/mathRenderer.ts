@@ -1,5 +1,5 @@
 // ============================================================================
-// Anki Modern OS — Pure Offline LaTeX / MathJax Formula & Rich HTML Renderer
+// Anki Studio — Pure Offline LaTeX / MathJax Formula & Rich HTML Renderer
 // Converts \( ... \), \[ ... \], $$ ... $$, $ ... $, [latex]...[/latex],
 // [$]...[/$], and Cloze {{c1::...}} into clean, styled HTML without external CDNs.
 // Bug #13 Fix: Escapes `<` and `>` inside LaTeX expressions BEFORE injecting HTML

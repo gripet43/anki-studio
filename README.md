@@ -1,4 +1,4 @@
-# Anki Studio (Anki Modern OS)
+# Anki Studio
 
 > 专为 Anki 打造的现代化、桌面级沉浸式记忆工作区。以 Apple 人机交互设计规范（HIG）为审美基准，与 Anki 24+ 原生生态和 AnkiWeb 云端 100% 双向同步。
 

@@ -1,5 +1,5 @@
 // ============================================================================
-// Anki Modern OS — Strongly-Typed IPC Client (`window.pycmd` Bridge)
+// Anki Studio — Strongly-Typed IPC Client (`window.pycmd` Bridge)
 // Supports <2ms native Python communication in Anki 26.x
 // ============================================================================
 

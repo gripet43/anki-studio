@@ -1,5 +1,5 @@
 // ============================================================================
-// Anki Modern OS — Vacation & Streak Protection Modal
+// Anki Studio — Vacation & Streak Protection Modal
 // Redesigned with Modern Web Guidance: semantic <details>/<summary> progressive
 // disclosure, non-blocking inline confirmations, crisp SVG iconography, and
 // a calm, 3-tier studio information hierarchy.

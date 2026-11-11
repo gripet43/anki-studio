@@ -1,7 +1,7 @@
 import { callAnki, isAnkiNativeEnv } from '../bridge/pycmd';
 
 /**
- * Universal cross-platform copy to clipboard for Anki Modern OS.
+ * Universal cross-platform copy to clipboard for Anki Studio.
  * Tier 1: Native Anki Qt QGuiApplication.clipboard() (100% reliable in Anki WebEngine).
  * Tier 2: Modern Browser navigator.clipboard.writeText().
  * Tier 3: Classic document.execCommand('copy') with invisible textarea.

@@ -14,13 +14,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+try:  # 作为包导入时走相对路径，直接运行脚本时走同级模块
+    from .paths import real_anki_base
+except ImportError:
+    from paths import real_anki_base
+
 HOME = Path.home()
 
 #: 测试沙盒根目录。所有生成物、日志、备份都只能在这里面。
 SANDBOX_ROOT = (HOME / "Anki-Test-Env").resolve()
 
 #: 真实 Anki 数据目录。测试系统对它只允许一种操作：读取插件源码用于同步副本。
-REAL_ANKI_ROOT = (HOME / "Library" / "Application Support" / "Anki2").resolve()
+#: 跨平台：macOS 为 ~/Library/Application Support/Anki2，Windows 为 %APPDATA%\Anki2。
+REAL_ANKI_ROOT = real_anki_base()
 
 #: 真实 collection 文件名，用于额外拦截。
 _REAL_COLLECTION_NAMES = ("collection.anki2", "collection.anki21", "collection.log")

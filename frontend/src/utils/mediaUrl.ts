@@ -1,5 +1,5 @@
 // ============================================================================
-// Anki Modern OS — Media URL Resolution Helpers for Editors & Previews
+// Anki Studio — Media URL Resolution Helpers for Editors & Previews
 // Converts relative Anki media filenames (`<img src="foo.png">`) into displayable
 // `file:///.../collection.media/foo.png` URIs inside WebView / WYSIWYG editors
 // while keeping raw `{{c1::...}}` Cloze syntax and `[sound:...]` untouched.

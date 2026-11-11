@@ -1,5 +1,5 @@
 // ============================================================================
-// Anki Modern OS — Clean Initial State Skeletons (Zero Hardcoded Demo Cards)
+// Anki Studio — Clean Initial State Skeletons (Zero Hardcoded Demo Cards)
 // Part 2 & Part 3 #2 Fix: dailyGoal = 0, remainingForGoal = 0, userName = ''
 // ============================================================================
 

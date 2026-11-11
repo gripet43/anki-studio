@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Anki Modern OS — Comprehensive Bundle & Source Verification Suite
+ * Anki Studio — Comprehensive Bundle & Source Verification Suite
  * Verifies:
  * - Part 1 Guardrails (`__init__.py`):
  *   1. No `HasBottomBar` access; safe `getattr(mw, "bottomWeb", None)`

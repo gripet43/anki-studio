@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Anki Modern OS — Global Search (Cmd+K) & Faceted Library Service
+Anki Studio — Global Search (Cmd+K) & Faceted Library Service
 Provides fast fuzzy search, rich HTML & media preservation, accurate due/review status classification,
 offset/limit pagination (breaking the 500-card ceiling), and batch floating bar operations
 (suspend, unsuspend, custom tags, reset progress, move deck, batch delete).

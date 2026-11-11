@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Anki Modern OS — Vacation & Anti-Burnout / Avalanche Rescue Service
+Anki Studio — Vacation & Anti-Burnout / Avalanche Rescue Service
 Provides:
 1. Vacation Mode (事前请假):
    - Configurable vacation duration (1-30 days), reason, and auto-shifts.

@@ -65,7 +65,7 @@ class AnkiModernHost:
                 # meta.json only, otherwise it ships inside the .ankiaddon.
                 return merged
         except Exception as e:
-            print(f"[Anki Modern OS] writeConfig failed: {e}")
+            print(f"[Anki Studio] writeConfig failed: {e}")
         # Outside the Anki runtime (unit tests / tooling) there is no
         # addonManager, so keep a local fallback for preferences round-tripping.
         try:
@@ -341,7 +341,7 @@ class AnkiModernHost:
                 cfg["last_sync_checked_map"] = next_map
                 self.write_config(cfg)
             except Exception as e:
-                print(f"[Anki Modern OS] Failed to persist last_sync_checked_map: {e}")
+                print(f"[Anki Studio] Failed to persist last_sync_checked_map: {e}")
 
         self._emit_js_event("anki:sync-finished", {"synced": True, "syncedAt": synced_at_ms})
         self._emit_js_event("anki:collection-updated", {"source": "sync"})
@@ -466,7 +466,7 @@ class AnkiModernHost:
         else:
             self.webview.setHtml(
                 "<html><body style='background:#0A0A0D;color:#fff;font-family:sans-serif;padding:40px'>"
-                "<h2>Anki Modern OS</h2><p>Web bundle not found. Run <code>npm run build</code> in frontend/.</p>"
+                "<h2>Anki Studio</h2><p>Web bundle not found. Run <code>npm run build</code> in frontend/.</p>"
                 "</body></html>"
             )
 
@@ -551,7 +551,7 @@ class AnkiModernHost:
 
             self._emit_js_event("anki:collection-updated", {"source": "show_modern_ui"})
         except Exception as e:
-            print(f"[Anki Modern OS] Error presenting Modern UI: {e}")
+            print(f"[Anki Studio] Error presenting Modern UI: {e}")
 
     def hide_modern_ui(self) -> None:
         from aqt import mw

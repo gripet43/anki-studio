@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Anki Modern OS — Review & FSRS Scheduling Service
+Anki Studio — Review & FSRS Scheduling Service
 Handles review queue retrieval (strictly due & new cards by default to protect FSRS!),
 rich HTML & media path resolution (`collection.media`), `[sound:xxx.mp3]` audio extraction & playback,
 Cloze (`{{c1::...}}`) rendering, FSRS 4-level interval predictions, binary/quaternary card grading,

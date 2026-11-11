@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Anki Modern OS — Bridge Router
+Anki Studio — Bridge Router
 Dispatches `modern_anki:<json_payload>` commands from the React Webview to domain services.
 Supports preferences persistence (`get_preferences`, `save_preferences`), image paste
 (`save_pasted_image`), audio playback (`play_audio`), and real AnkiWeb cloud sync (`sync`).
@@ -299,7 +299,7 @@ class BridgeRouter:
                     mw.on_sync()
                     triggered_native = True
             except Exception as e:
-                print(f"[Anki Modern OS] Error triggering native sync: {e}")
+                print(f"[Anki Studio] Error triggering native sync: {e}")
 
         if requires_login:
             return {
@@ -332,7 +332,7 @@ class BridgeRouter:
                 clip.setText(text)
                 return {"copied": True, "length": len(text)}
         except Exception as e:
-            print(f"[Anki Modern OS] Error writing to native clipboard: {e}")
+            print(f"[Anki Studio] Error writing to native clipboard: {e}")
         return {"copied": False}
 
     def action_move_window(self, data: Dict[str, Any]) -> Dict[str, Any]:

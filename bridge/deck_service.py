@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Anki Modern OS — Deck, Dashboard & Statistics Service
+Anki Studio — Deck, Dashboard & Statistics Service
 Provides deck lists (including hierarchical Parent::Child trees), mastery scores,
 dynamic daily workload progress (`completed + dueReview + dueNew`), streak calculation,
 365-day review heatmap (with per-day accuracy), 7-day weekly rhythm (with per-day minutes),

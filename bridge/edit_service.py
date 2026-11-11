@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Anki Modern OS — Inline Edit, Card Inspector, Media Paste & Quick Add Service
+Anki Studio — Inline Edit, Card Inspector, Media Paste & Quick Add Service
 Supports zero-popup WYSIWYG inline field updates across arbitrary multi-field
 and Cloze note templates, tag management, deck relocation, card suspension/deletion,
 7-color user flags, clipboard screenshot pasting into `collection.media`, and Quick Add card creation.
