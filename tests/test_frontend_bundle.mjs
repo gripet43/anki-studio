@@ -154,8 +154,10 @@ assert(
 // Item #10: Keyboard shortcut badges configurable & placeholders streamlined
 assert(
   storeSrc.includes('showShortcutHints') &&
-    translationsSrc.includes("searchPlaceholder: '搜索...'") &&
-    translationsSrc.includes("searchLibraryPlaceholder: '搜索卡片...'"),
+    (translationsSrc.includes("searchPlaceholder: '搜索...'") ||
+      translationsSrc.includes('searchPlaceholder: "搜索..."')) &&
+    (translationsSrc.includes("searchLibraryPlaceholder: '搜索卡片...'") ||
+      translationsSrc.includes('searchLibraryPlaceholder: "搜索卡片..."')),
   'Item #10: Keyboard shortcut hints must be configurable and search placeholders concise'
 );
 
@@ -350,9 +352,11 @@ assert(
     librarySrc.includes('sortDropdownOpen') &&
     librarySrc.includes('handleConfirmBatchFindReplace') &&
     librarySrc.includes('handleConfirmBatchRemoveTag') &&
-    reviewerSrc.includes('typeAnswerEnabled') &&
-    reviewerSrc.includes('typeAnswerDiff'),
-  'Item #22: Card Creation Power Suite, Library Multi-Sort & Find/Replace, and Reviewer Type-in-the-Answer must be wired across backend and frontend'
+    // 默写自检模式已下线：反向断言守住，避免后续被误加回来
+    !reviewerSrc.includes('typeAnswerEnabled') &&
+    !reviewerSrc.includes('typeAnswerDiff') &&
+    reviewerSrc.includes('recallPrompt'),
+  'Item #22: Card Creation Power Suite and Library Multi-Sort & Find/Replace must be wired across backend and frontend; the reviewer type-in self-check must stay removed'
 );
 
 // Item #23: Prevent accidental modal dismissal when clicking the dimmed backdrop outside any dialog
@@ -403,7 +407,9 @@ for (const [name, src] of backdropGuardedModals) {
 }
 assert(
   cmdKSrc.includes('onClick={() => setAppState({ cmdKOpen: false })}') &&
-    cmdKSrc.includes("aria-label={isZh ? '关闭' : 'Close'}"),
+    // 关闭按钮的无障碍标签已从硬编码中英二元组迁到 i18n 字典，两种写法都要认
+    (cmdKSrc.includes("aria-label={isZh ? '关闭' : 'Close'}") ||
+      cmdKSrc.includes("aria-label={t('close')}")),
   'Item #23: CommandPaletteModal must expose a dedicated top-right close button distinct from clearing the search query'
 );
 
@@ -473,8 +479,10 @@ assert(
     !settingsSrc.includes('w-2.5 h-2.5 rounded-full bg-[var(--status-success)]') &&
     !settingsSrc.includes('实时同步') &&
     translationsSrc.includes('Intl.RelativeTimeFormat') &&
-    translationsSrc.includes("synced: '上次同步'") &&
-    translationsSrc.includes("syncStatusProtected: '历史快照'"),
+    (translationsSrc.includes("synced: '上次同步'") ||
+      translationsSrc.includes('synced: "上次同步"')) &&
+    (translationsSrc.includes("syncStatusProtected: '历史快照'") ||
+      translationsSrc.includes('syncStatusProtected: "历史快照"')),
   'Item #27: Sync status pill and settings card must render neutral snapshot indicators, semantic <time>, Intl.RelativeTimeFormat, and Escape-dismissible hovercard'
 );
 
@@ -536,8 +544,10 @@ assert(
 
 // Item #30: Hook 顺序守卫 —— 任何顶层提前 return 之后都不允许再出现 Hook 调用
 // 触发过 React #310 "Rendered more hooks than during the previous render"：
-// ReviewerView 的 `if (isSessionComplete || !currentCard)` 早退位于 expectedTypeTarget /
-// typeAnswerDiff 两个 useMemo 之前，导致「无卡片 / 已完成」与「有卡片」两条路径 Hook 数量不一致。
+// ReviewerView 的 `if (isSessionComplete || !currentCard)` 早退曾位于两个 useMemo 之前，
+// 导致「无卡片 / 已完成」与「有卡片」两条路径 Hook 数量不一致。
+// 那两个 useMemo（expectedTypeTarget / typeAnswerDiff）已随默写自检一起下线，
+// 这里改为纯位置守卫，对新加的 Hook 同样生效。
 const reviewerHookNames = ['useState(', 'useEffect(', 'useMemo(', 'useRef(', 'useCallback('];
 const reviewerLastHookIdx = Math.max(
   ...reviewerHookNames.map((name) => reviewerSrc.lastIndexOf(name))
@@ -546,11 +556,137 @@ const reviewerSessionEarlyReturnIdx = reviewerSrc.lastIndexOf(
   'if (isSessionComplete || !currentCard) {'
 );
 assert(
-  reviewerSessionEarlyReturnIdx > reviewerLastHookIdx &&
-    reviewerSrc.indexOf('const expectedTypeTarget = useMemo(') <
-      reviewerSessionEarlyReturnIdx &&
-    reviewerSrc.indexOf('const typeAnswerDiff = useMemo(') < reviewerSessionEarlyReturnIdx,
-  'Item #30: ReviewerView 的会话完成态提前 return 必须位于所有 Hook（含 expectedTypeTarget / typeAnswerDiff）之后，否则 React 抛 #310'
+  reviewerSessionEarlyReturnIdx > reviewerLastHookIdx,
+  'Item #30: ReviewerView 的会话完成态提前 return 必须位于所有 Hook 之后，否则 React 抛 #310'
+);
+
+// Item #31: 16-Language i18n System aligned with official Anki desktop languages (100% key coverage, zero isZh inline ternaries, Arabic RTL dir="rtl", and flat tiled language grid without <select>)
+const designSystemSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/design-system/DesignSystemView.tsx'),
+  'utf-8'
+);
+assert(
+  deckSrc.includes('SUPPORTED_LANG_CODES') &&
+    deckSrc.includes('normalize_language_code') &&
+    translationsSrc.includes('SUPPORTED_LANGUAGES') &&
+    translationsSrc.includes("'zh-TW'") &&
+    translationsSrc.includes("'pt-BR'") &&
+    translationsSrc.includes('export function isRtlLanguage') &&
+    !translationsSrc.includes('...EN_DICT') &&
+    !translationsSrc.includes('...ZH_CN_DICT') &&
+    appSrc.includes('isRtlLanguage') &&
+    appSrc.includes("rootEl.dir = isRtl ? 'rtl' : 'ltr'") &&
+    appSrc.includes("dir={isRtl ? 'rtl' : 'ltr'}") &&
+    item29IndexCssSrc.includes('[dir="rtl"]') &&
+    settingsSrc.includes('SUPPORTED_LANGUAGES') &&
+    settingsSrc.includes('tiledLanguageOptions') &&
+    !/<select\b/.test(settingsSrc.replace(/\/\/.*$/gm, '')) &&
+    designSystemSrc.includes('SUPPORTED_LANGUAGES') &&
+    designSystemSrc.includes('...SUPPORTED_LANGUAGES.map') &&
+    !/<select\b/.test(designSystemSrc.replace(/\/\/.*$/gm, '')) &&
+    !reviewerSrc.includes('isZh') &&
+    !librarySrc.includes('isZh') &&
+    !dashboardSrc.includes('isZh') &&
+    !settingsSrc.includes('isZh') &&
+    !decksViewSrc.includes('isZh') &&
+    !statsViewSrc.includes('isZh') &&
+    !editorSrc.includes('isZh') &&
+    !cmdKSrc.includes('isZh') &&
+    !vacationSrc.includes('isZh') &&
+    !icuSrc.includes('isZh') &&
+    !customStudyModalSrc.includes('isZh') &&
+    !sidebarSrc.includes('isZh') &&
+    !syncPillSrc.includes('isZh') &&
+    !storeSrc.includes('isZh'),
+  'Item #31: 16-language i18n system must have 100% own key coverage (no ...EN_DICT fallback), zero isZh inline ternaries across all components, Arabic RTL dir="rtl", and flat tiled language selector without <select>'
+);
+
+// Item #32: 快捷搜索「清空」后焦点必须回到输入框
+assert(
+  cmdKSrc.includes('const searchInputRef = useRef<HTMLInputElement>(null)') &&
+    /ref=\{searchInputRef\}/.test(cmdKSrc) &&
+    /onMouseDown=\{\(e\) => e\.preventDefault\(\)\}/.test(cmdKSrc) &&
+    cmdKSrc.includes('searchInputRef.current?.focus()'),
+  'Item #32: CommandPaletteModal 的清空按钮必须在 mousedown 阻止焦点转移，并在 click 后把焦点交还搜索输入框'
+);
+
+// Item #33: 16 语言字典完整性与占位符守卫
+// 背景：i18n 拆成「中英常驻 + 14 种懒加载」后，加文案很容易只补中文/英文，
+// 或把 {n} 写成 {N}（界面上就会露出裸变量）。这条断言把两件事钉死。
+const LOCALE_DIR = path.resolve(ADDON_ROOT, 'frontend/src/i18n/locales');
+const EXPECTED_LOCALES = [
+  'ar', 'de', 'es', 'fr', 'it', 'ja', 'ko',
+  'nl', 'pl', 'pt-BR', 'ru', 'tr', 'vi', 'zh-TW',
+];
+
+function parseFlatDict(src, startMarker, endMarker) {
+  const start = src.indexOf(startMarker);
+  if (start < 0) return null;
+  const rest = src.slice(start + startMarker.length);
+  const end = rest.indexOf(endMarker);
+  const body = end < 0 ? rest : rest.slice(0, end);
+  const map = new Map();
+  for (const line of body.split('\n')) {
+    const m = /^ {2}([A-Za-z0-9_]+):\s*(['"])(.*)\2,?$/.exec(line);
+    if (m) map.set(m[1], m[3]);
+  }
+  return map;
+}
+
+const zhDict = parseFlatDict(translationsSrc, 'const ZH_CN_DICT = {', '\n} as const;');
+const enDict = parseFlatDict(translationsSrc, 'const EN_DICT: TranslationTable = {', '\n};');
+assert(
+  zhDict && zhDict.size > 500,
+  `Item #33: 解析 ZH_CN 基准字典失败（解析到 ${zhDict ? zhDict.size : 0} 条）`
+);
+
+const placeholdersOf = (text) => (text.match(/\{[a-zA-Z0-9_]+\}/g) || []).sort().join(',');
+const dictProblems = [];
+
+function compareDict(label, dict) {
+  if (!dict) {
+    dictProblems.push(`${label}: 解析失败`);
+    return;
+  }
+  const zhKeys = [...zhDict.keys()];
+  const lost = zhKeys.filter((k) => !dict.has(k));
+  const extra = [...dict.keys()].filter((k) => !zhDict.has(k));
+  if (lost.length) dictProblems.push(`${label} 缺 ${lost.length} 键（如 ${lost.slice(0, 3).join(', ')}）`);
+  if (extra.length) dictProblems.push(`${label} 多 ${extra.length} 键（如 ${extra.slice(0, 3).join(', ')}）`);
+  for (const k of zhKeys) {
+    const a = placeholdersOf(zhDict.get(k));
+    const b = placeholdersOf(dict.get(k) || '');
+    if (a !== b) dictProblems.push(`${label}.${k} 占位符不一致：[${a}] vs [${b}]`);
+  }
+}
+
+compareDict('EN', enDict);
+for (const lang of EXPECTED_LOCALES) {
+  const file = path.join(LOCALE_DIR, `${lang}.ts`);
+  if (!fs.existsSync(file)) {
+    dictProblems.push(`${lang}.ts 不存在`);
+    continue;
+  }
+  compareDict(
+    lang,
+    parseFlatDict(
+      fs.readFileSync(file, 'utf-8'),
+      'export const dict: TranslationTable = {',
+      '\n};'
+    )
+  );
+}
+assert(
+  dictProblems.length === 0,
+  `Item #33: 语言字典不一致（首包常驻 + 懒加载 14 种）→\n  ${dictProblems.slice(0, 8).join('\n  ')}`
+);
+
+// 越南语是拉丁字母语言，混进汉字说明翻译时保留了中文词，界面会直接露馅
+const viSrc = fs.readFileSync(path.join(LOCALE_DIR, 'vi.ts'), 'utf-8');
+const viCjkLines = viSrc.split('\n').filter((l) => /[\u4e00-\u9fff]/.test(l));
+assert(
+  viCjkLines.length === 0,
+  `Item #33: 越南语字典残留中文字符 → ${viCjkLines.slice(0, 3).join(' | ')}`
 );
 
 const jsBundle = fs.readFileSync(WEB_JS, 'utf-8');

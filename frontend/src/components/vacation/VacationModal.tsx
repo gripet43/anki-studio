@@ -12,7 +12,6 @@ import { getAccentScale } from '../../utils/themeTokens';
 
 export const VacationModal: React.FC = () => {
   const store = useAppStore();
-  const isZh = store.resolvedLang === 'zh-CN';
   const t = (key: any, params?: any) => translate(store.resolvedLang, key, params);
   const brandHex = getAccentScale(store.accentColor, store.theme).brand;
 
@@ -58,10 +57,9 @@ export const VacationModal: React.FC = () => {
     const start = new Date();
     const end = new Date();
     end.setDate(start.getDate() + Math.max(1, days) - 1);
-    const fmt = (d: Date) =>
-      isZh ? `${d.getMonth() + 1}月${d.getDate()}日` : `${d.getMonth() + 1}/${d.getDate()}`;
+    const fmt = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
     return `${fmt(start)} – ${fmt(end)}`;
-  }, [days, isZh]);
+  }, [days]);
 
   if (!store.vacationModalOpen) return null;
 
@@ -81,7 +79,18 @@ export const VacationModal: React.FC = () => {
       : 'bg-[#F9F9FB] border-[#ECECF2]';
 
   const durationPresets = [1, 3, 7, 14];
-  const reasonPresets = ['身心休整', '临时值班', '差旅出行', '备考冲刺'];
+  const reasonPresets: Array<{ raw: string; labelKey: string }> = [
+    { raw: '身心休整', labelKey: 'vacationReasonRest' },
+    { raw: '临时值班', labelKey: 'vacationReasonShift' },
+    { raw: '差旅出行', labelKey: 'vacationReasonTrip' },
+    { raw: '备考冲刺', labelKey: 'vacationReasonExam' },
+  ];
+
+  const localizeReason = (rawReason?: string) => {
+    const matched = reasonPresets.find((r) => r.raw === rawReason);
+    if (matched) return t(matched.labelKey);
+    return rawReason || t('vacationReasonRest');
+  };
 
   const enabledRulesCount =
     (freezeNewCards ? 1 : 0) + (shiftReviewCards ? 1 : 0) + (freezeStreak ? 1 : 0);
@@ -158,7 +167,7 @@ export const VacationModal: React.FC = () => {
               </h2>
               {isAlreadyActive && (
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--status-success-soft)] text-[var(--status-success)]">
-                  {isZh ? `剩 ${vacation?.remainingDays} 天` : `${vacation?.remainingDays}d left`}
+                  {t('vacationRemainingDays', { n: vacation?.remainingDays ?? 0 })}
                 </span>
               )}
             </div>
@@ -179,7 +188,7 @@ export const VacationModal: React.FC = () => {
                     : 'text-[#8E8E93] hover:text-current'
                 }`}
               >
-                {isAlreadyActive ? (isZh ? '当前状态' : 'Status') : isZh ? '休假设置' : 'Setup'}
+                {isAlreadyActive ? t('vacationTabStatus') : t('vacationTabSetup')}
               </button>
               <button
                 type="button"
@@ -193,7 +202,7 @@ export const VacationModal: React.FC = () => {
                     : 'text-[#8E8E93] hover:text-current'
                 }`}
               >
-                <span>{isZh ? '历史' : 'History'}</span>
+                <span>{t('vacationTabHistory')}</span>
                 {vacationHistory.length > 0 && (
                   <span className="text-[10px] opacity-70 font-mono">
                     {vacationHistory.length}
@@ -205,7 +214,7 @@ export const VacationModal: React.FC = () => {
             <button
               onClick={() => appActions.closeVacationModal()}
               className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors"
-              aria-label="关闭"
+              aria-label={t('close')}
             >
               ✕
             </button>
@@ -223,20 +232,20 @@ export const VacationModal: React.FC = () => {
                     <div className="flex items-center gap-2 text-[var(--status-success)] font-semibold text-[13px]">
                       <span className="w-2 h-2 rounded-full bg-[var(--status-success)]" />
                       <span>
-                        {isZh
-                          ? `休假保护生效中 · ${vacation?.reason || '身心休整'}`
-                          : `Vacation Active · ${vacation?.reason || 'Rest'}`}
+                        {t('vacationActiveStatusBanner', {
+                          reason: localizeReason(vacation?.reason),
+                        })}
                       </span>
                     </div>
                     <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-[var(--status-success-soft)] text-[var(--status-success)] font-semibold font-mono">
-                      {isZh ? `剩余 ${vacation?.remainingDays} 天` : `${vacation?.remainingDays}d left`}
+                      {t('vacationRemainingDays', { n: vacation?.remainingDays ?? 0 })}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2.5 text-[12px]">
                     <div className="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] space-y-0.5">
                       <span className="text-[11px] text-[#8E8E93]">
-                        {isZh ? '起止日期' : 'Date Range'}
+                        {t('vacationDateRangeLabel')}
                       </span>
                       <div className="font-semibold font-mono text-[12px]">
                         {vacation?.startDate} → {vacation?.endDate}
@@ -244,10 +253,10 @@ export const VacationModal: React.FC = () => {
                     </div>
                     <div className="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] space-y-0.5">
                       <span className="text-[11px] text-[#8E8E93]">
-                        {isZh ? '生效规则' : 'Active Safeguards'}
+                        {t('vacationSafeguardsLabel')}
                       </span>
                       <div className="font-semibold text-[12px]">
-                        {isZh ? '新卡暂停 · 连胜已冻结' : 'New Paused · Streak Frozen'}
+                        {t('vacationSafeguardsSummary')}
                       </div>
                     </div>
                   </div>
@@ -264,21 +273,13 @@ export const VacationModal: React.FC = () => {
                   >
                     <div className="text-[13px] font-semibold">
                       {confirmAction === 'end'
-                        ? isZh
-                          ? '确认提前结束休假并恢复每日学习限额？'
-                          : 'End vacation early and resume daily limits?'
-                        : isZh
-                        ? '确认撤销本次休假并将顺延卡片退回今日队列？'
-                        : 'Cancel vacation and return postponed cards to today?'}
+                        ? t('vacationConfirmEndTitle')
+                        : t('vacationConfirmCancelTitle')}
                     </div>
                     <p className="text-[11px] text-[#8E8E93] leading-relaxed">
                       {confirmAction === 'end'
-                        ? isZh
-                          ? '已顺延的卡片日程保持不变，从今天起恢复正常每日新卡投放。'
-                          : 'Postponed cards remain on their new schedule, and daily new cards resume.'
-                        : isZh
-                        ? '适合误触开启休假时使用：所有被推迟的卡片将立即原样恢复至今日待复习。'
-                        : 'All postponed cards will be immediately restored back to today.'}
+                        ? t('vacationConfirmEndSub')
+                        : t('vacationConfirmCancelSub')}
                     </p>
                     <div className="flex items-center justify-end gap-2 pt-1">
                       <button
@@ -287,7 +288,7 @@ export const VacationModal: React.FC = () => {
                         disabled={isSubmitting}
                         className="btn-secondary !h-8 !px-3 !text-[12px]"
                       >
-                        {isZh ? '返回' : 'Back'}
+                        {t('backBtn')}
                       </button>
                       <button
                         type="button"
@@ -303,13 +304,7 @@ export const VacationModal: React.FC = () => {
                             : 'bg-[var(--brand)]'
                         }`}
                       >
-                        {isSubmitting
-                          ? isZh
-                            ? '处理中...'
-                            : 'Processing...'
-                          : isZh
-                          ? '确认执行'
-                          : 'Confirm'}
+                        {isSubmitting ? t('processingText') : t('confirm')}
                       </button>
                     </div>
                   </div>
@@ -318,26 +313,26 @@ export const VacationModal: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setConfirmAction('end')}
-                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer hover:border-[var(--brand-border)] ${cardSurface}`}
+                      className={`p-3.5 rounded-xl border text-start transition-all cursor-pointer hover:border-[var(--brand-border)] ${cardSurface}`}
                     >
                       <div className="text-[12px] font-semibold text-[var(--brand-text)]">
-                        {isZh ? '提前结束休假 (销假)' : 'End Vacation Early'}
+                        {t('endVacationBtn')}
                       </div>
                       <p className="text-[11px] text-[#8E8E93] mt-1 leading-snug">
-                        {isZh ? '恢复正常新卡限额，保留顺延排期' : 'Resume daily limits'}
+                        {t('vacationEndEarlySub')}
                       </p>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setConfirmAction('cancel')}
-                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer hover:border-[var(--status-danger)]/40 ${cardSurface}`}
+                      className={`p-3.5 rounded-xl border text-start transition-all cursor-pointer hover:border-[var(--status-danger)]/40 ${cardSurface}`}
                     >
                       <div className="text-[12px] font-semibold text-[var(--status-danger)]">
-                        {isZh ? '撤销本次休假 (回退)' : 'Revert Vacation'}
+                        {t('vacationRevertBtn')}
                       </div>
                       <p className="text-[11px] text-[#8E8E93] mt-1 leading-snug">
-                        {isZh ? '误触一键撤回，卡片退回今日队列' : 'Restore shifted cards to today'}
+                        {t('vacationRevertSub')}
                       </p>
                     </button>
                   </div>
@@ -373,7 +368,7 @@ export const VacationModal: React.FC = () => {
                                 : 'border-black/8 dark:border-white/10 hover:border-[var(--brand-border)]'
                             }`}
                           >
-                            {d} {isZh ? '天' : 'd'}
+                            {d} {t('daysUnit')}
                           </button>
                         );
                       })}
@@ -409,19 +404,19 @@ export const VacationModal: React.FC = () => {
                   <div className="text-[12px] font-semibold">{t('vacationReasonLabel')}</div>
                   <div className="grid grid-cols-4 gap-1.5">
                     {reasonPresets.map((r) => {
-                      const active = reason === r;
+                      const active = reason === r.raw;
                       return (
                         <button
-                          key={r}
+                          key={r.raw}
                           type="button"
-                          onClick={() => setReason(r)}
+                          onClick={() => setReason(r.raw)}
                           className={`py-1.5 px-2 text-[11px] rounded-lg border transition-all cursor-pointer truncate ${
                             active
                               ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold'
                               : 'border-black/8 dark:border-white/10 text-[#8E8E93] hover:text-current'
                           }`}
                         >
-                          {r}
+                          {t(r.labelKey)}
                         </button>
                       );
                     })}
@@ -444,19 +439,17 @@ export const VacationModal: React.FC = () => {
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                       </svg>
                       <span className="font-medium">
-                        {isZh
-                          ? `已启用 ${enabledRulesCount} 项保护：暂停新卡 · 顺延复习 · 冻结连胜`
-                          : `${enabledRulesCount} safeguards active: Pause new · Shift due · Freeze streak`}
+                        {t('vacationSafeguardsCountSummary', { n: enabledRulesCount })}
                       </span>
                     </div>
                     <span className="text-[11px] text-[var(--brand-text)] font-medium group-open:underline">
-                      {isZh ? '调整' : 'Customize'}
+                      {t('customizeLabel')}
                     </span>
                   </summary>
 
                   <div className="pt-3 mt-3 border-t border-black/5 dark:border-white/6 space-y-2 text-[12px] text-[#8E8E93]">
                     <label className="flex items-center justify-between cursor-pointer py-0.5 hover:text-current">
-                      <span>{t('freezeNewCardsLabel')}（假期新卡上限设为 0）</span>
+                      <span>{t('freezeNewCardsLabel')}</span>
                       <input
                         type="checkbox"
                         checked={freezeNewCards}
@@ -465,7 +458,7 @@ export const VacationModal: React.FC = () => {
                       />
                     </label>
                     <label className="flex items-center justify-between cursor-pointer py-0.5 hover:text-current">
-                      <span>{t('shiftReviewCardsLabel')}（避免归来首日卡片堆积）</span>
+                      <span>{t('shiftReviewCardsLabel')}</span>
                       <input
                         type="checkbox"
                         checked={shiftReviewCards}
@@ -474,7 +467,7 @@ export const VacationModal: React.FC = () => {
                       />
                     </label>
                     <label className="flex items-center justify-between cursor-pointer py-0.5 hover:text-current">
-                      <span>{t('freezeStreakLabel')}（热力图标记冰冻不断签）</span>
+                      <span>{t('freezeStreakLabel')}</span>
                       <input
                         type="checkbox"
                         checked={freezeStreak}
@@ -492,12 +485,10 @@ export const VacationModal: React.FC = () => {
               {vacationHistory.length === 0 ? (
                 <div className={`p-8 rounded-xl border text-center space-y-1.5 ${cardSurface}`}>
                   <div className="text-[13px] font-semibold">
-                    {isZh ? '暂无历史休假记录' : 'No vacation history yet'}
+                    {t('vacationNoHistoryTitle')}
                   </div>
                   <p className="text-[11px] text-[#8E8E93]">
-                    {isZh
-                      ? '开启休假后，系统会自动记录每次休假区间与顺延卡片数量。'
-                      : 'Past vacation periods and shifted card counts will appear here.'}
+                    {t('vacationNoHistorySub')}
                   </p>
                 </div>
               ) : (
@@ -513,20 +504,12 @@ export const VacationModal: React.FC = () => {
 
                   const statusLabel =
                     item.status === 'active'
-                      ? isZh
-                        ? '进行中'
-                        : 'Active'
+                      ? t('statusActive')
                       : item.status === 'cancelled'
-                      ? isZh
-                        ? '已撤销'
-                        : 'Reverted'
+                      ? t('statusReverted')
                       : item.status === 'ended_early'
-                      ? isZh
-                        ? '提前结束'
-                        : 'Ended Early'
-                      : isZh
-                      ? '已完成'
-                      : 'Completed';
+                      ? t('statusEndedEarly')
+                      : t('statusCompleted');
 
                   return (
                     <div
@@ -536,7 +519,7 @@ export const VacationModal: React.FC = () => {
                       <div className="space-y-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-[12px] truncate">
-                            {item.reason} · {item.days} {isZh ? '天' : 'd'}
+                            {localizeReason(item.reason)} · {item.days} {t('daysUnit')}
                           </span>
                           <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusStyle}`}>
                             {statusLabel}
@@ -547,10 +530,10 @@ export const VacationModal: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="text-right shrink-0">
+                      <div className="text-end shrink-0">
                         {item.shiftedCardCount !== undefined && item.shiftedCardCount > 0 && (
                           <div className="text-[11px] font-medium text-[var(--brand-text)]">
-                            {isZh ? `顺延 ${item.shiftedCardCount} 张` : `${item.shiftedCardCount} shifted`}
+                            {t('vacationShiftedCountBadge', { n: item.shiftedCardCount })}
                           </div>
                         )}
                         <div className="text-[10px] text-[#8E8E93] font-mono mt-0.5">
@@ -568,13 +551,7 @@ export const VacationModal: React.FC = () => {
         {/* Footer */}
         <footer className="flex items-center justify-between gap-3 px-5 py-3.5 border-t border-black/5 dark:border-white/8 bg-black/[0.015] dark:bg-white/[0.015] shrink-0">
           <span className="text-[11px] text-[#8E8E93]">
-            {isAlreadyActive
-              ? isZh
-                ? '随时可提前结束或一键撤销回退'
-                : 'End early or revert anytime'
-              : isZh
-              ? '自动同步至 AnkiWeb，不损伤 FSRS 记忆间隔'
-              : 'Preserves 100% of FSRS memory intervals'}
+            {isAlreadyActive ? t('vacationFooterActiveHint') : t('vacationFooterSetupHint')}
           </span>
 
           <div className="flex items-center gap-2.5">
@@ -584,7 +561,7 @@ export const VacationModal: React.FC = () => {
               className="btn-secondary !h-9 !px-4 !text-[12px]"
               disabled={isSubmitting}
             >
-              {isAlreadyActive ? (isZh ? '关闭' : 'Close') : isZh ? '取消' : 'Cancel'}
+              {isAlreadyActive ? t('close') : t('cancel')}
             </button>
 
             {!isAlreadyActive && activeTab === 'status' && (
@@ -596,12 +573,8 @@ export const VacationModal: React.FC = () => {
                 className="btn-primary !h-9 !px-5 !text-[12px]"
               >
                 {isSubmitting
-                  ? isZh
-                    ? '开启中...'
-                    : 'Starting...'
-                  : isZh
-                  ? `开启休假 (${days} 天)`
-                  : `Start Vacation (${days}d)`}
+                  ? t('processingText')
+                  : `${t('startVacationBtn')} (${days} ${t('daysUnit')})`}
               </button>
             )}
           </div>

@@ -18,6 +18,108 @@ from .media_utils import get_media_base_url, get_media_dir
 from .vacation_service import effective_frozen_dates
 
 
+SUPPORTED_LANG_CODES = (
+    "zh-CN",
+    "zh-TW",
+    "en",
+    "ja",
+    "ko",
+    "es",
+    "fr",
+    "de",
+    "ru",
+    "pt-BR",
+    "it",
+    "ar",
+    "vi",
+    "tr",
+    "pl",
+    "nl",
+)
+
+ANKI_LANG_ALIAS_MAP: Dict[str, str] = {
+    "zh-cn": "zh-CN",
+    "zh_cn": "zh-CN",
+    "zh-hans": "zh-CN",
+    "zh": "zh-CN",
+    "zh-tw": "zh-TW",
+    "zh_tw": "zh-TW",
+    "zh-hk": "zh-TW",
+    "zh_hk": "zh-TW",
+    "zh-hant": "zh-TW",
+    "en": "en",
+    "en-us": "en",
+    "en_us": "en",
+    "en-gb": "en",
+    "en_gb": "en",
+    "ja": "ja",
+    "ja-jp": "ja",
+    "ja_jp": "ja",
+    "ko": "ko",
+    "ko-kr": "ko",
+    "ko_kr": "ko",
+    "es": "es",
+    "es-es": "es",
+    "es_es": "es",
+    "es-mx": "es",
+    "es_mx": "es",
+    "es-ar": "es",
+    "es_ar": "es",
+    "fr": "fr",
+    "fr-fr": "fr",
+    "fr_fr": "fr",
+    "fr-ca": "fr",
+    "fr_ca": "fr",
+    "de": "de",
+    "de-de": "de",
+    "de_de": "de",
+    "de-at": "de",
+    "de_at": "de",
+    "ru": "ru",
+    "ru-ru": "ru",
+    "ru_ru": "ru",
+    "pt": "pt-BR",
+    "pt-br": "pt-BR",
+    "pt_br": "pt-BR",
+    "pt-pt": "pt-BR",
+    "pt_pt": "pt-BR",
+    "it": "it",
+    "it-it": "it",
+    "it_it": "it",
+    "ar": "ar",
+    "ar-sa": "ar",
+    "ar_sa": "ar",
+    "vi": "vi",
+    "vi-vn": "vi",
+    "vi_vn": "vi",
+    "tr": "tr",
+    "tr-tr": "tr",
+    "tr_tr": "tr",
+    "pl": "pl",
+    "pl-pl": "pl",
+    "pl_pl": "pl",
+    "nl": "nl",
+    "nl-nl": "nl",
+    "nl_nl": "nl",
+}
+
+
+def normalize_language_code(raw_code: Optional[str], default: str = "zh-CN") -> str:
+    """Normalizes any Anki or browser locale string to one of our 16 canonical language codes."""
+    if not raw_code:
+        return default
+    cleaned = str(raw_code).strip()
+    if cleaned in SUPPORTED_LANG_CODES:
+        return cleaned
+    lower = cleaned.lower()
+    if lower in ANKI_LANG_ALIAS_MAP:
+        return ANKI_LANG_ALIAS_MAP[lower]
+    prefix = lower.split("-")[0].split("_")[0]
+    if prefix in ANKI_LANG_ALIAS_MAP:
+        return ANKI_LANG_ALIAS_MAP[prefix]
+    return default
+
+
 class DeckService:
     """Service interacting with mw.col.decks, mw.col.sched, and revlog statistics."""
 
@@ -35,19 +137,17 @@ class DeckService:
         return self._get_mw()
 
     def _resolve_language(self, override_lang: Optional[str] = None) -> str:
-        """Resolves effective UI language: 'zh-CN' or 'en' (defaulting to English for global fallback)."""
+        """Resolves effective UI language across Anki's 16 supported languages."""
         cfg = self._get_config()
-        pref = override_lang or cfg.get("language", "auto")
-        if pref in ("zh-CN", "zh_CN", "zh-TW", "zh_TW", "zh"):
-            return "zh-CN"
-        if pref in ("en", "en-US", "en_US", "en_GB"):
-            return "en"
+        pref = str(override_lang or cfg.get("language", "auto") or "auto").strip()
+        if pref and pref.lower() != "auto":
+            return normalize_language_code(pref, default="en")
 
         try:
             import anki.lang
             anki_lang = getattr(anki.lang, "current_lang", "") or ""
-            if anki_lang.lower().startswith("zh"):
-                return "zh-CN"
+            if anki_lang:
+                return normalize_language_code(anki_lang, default="en")
             return "en"
         except Exception:
             return "zh-CN"
@@ -959,11 +1059,7 @@ class DeckService:
         weekday_idx = today_date.weekday()
         monday_sec = today_start_sec - (weekday_idx * 86400)
 
-        labels = (
-            ["一", "二", "三", "四", "五", "六", "日"]
-            if lang == "zh-CN"
-            else ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        )
+        labels = self._get_weekday_short_labels(lang)
         days_list = []
         max_session_minutes = 0
 
@@ -1433,26 +1529,66 @@ class DeckService:
 
     @staticmethod
     def _get_greeting(hour: int, lang: str = "zh-CN") -> str:
-        if lang == "en":
-            if 5 <= hour < 12:
-                return "Good morning"
-            elif 12 <= hour < 18:
-                return "Good afternoon"
-            else:
-                return "Good evening"
-        if 5 <= hour < 12:
-            return "上午好"
-        elif 12 <= hour < 18:
-            return "下午好"
-        else:
-            return "晚上好"
+        slot = 0 if 5 <= hour < 12 else (1 if 12 <= hour < 18 else 2)
+        greetings = {
+            "zh-CN": ("上午好", "下午好", "晚上好"),
+            "zh-TW": ("早安", "午安", "晚安"),
+            "en": ("Good morning", "Good afternoon", "Good evening"),
+            "ja": ("おはようございます", "こんにちは", "こんばんは"),
+            "ko": ("좋은 아침입니다", "안녕하세요", "좋은 저녁입니다"),
+            "es": ("Buenos días", "Buenas tardes", "Buenas noches"),
+            "fr": ("Bonjour", "Bon après-midi", "Bonsoir"),
+            "de": ("Guten Morgen", "Guten Tag", "Guten Abend"),
+            "ru": ("Доброе утро", "Добрый день", "Добрый вечер"),
+            "pt-BR": ("Bom dia", "Boa tarde", "Boa noite"),
+            "it": ("Buongiorno", "Buon pomeriggio", "Buonasera"),
+            "ar": ("صباح الخير", "مساء الخير", "مساء الخير"),
+            "vi": ("Chào buổi sáng", "Chào buổi chiều", "Chào buổi tối"),
+            "tr": ("Günaydın", "İyi günler", "İyi akşamlar"),
+            "pl": ("Dzień dobry", "Dzień dobry", "Dobry wieczór"),
+            "nl": ("Goedemorgen", "Goedemiddag", "Goedenavond"),
+        }
+        return greetings.get(lang, greetings["en"])[slot]
+
+    @staticmethod
+    def _get_weekday_short_labels(lang: str = "zh-CN") -> List[str]:
+        table = {
+            "zh-CN": ["一", "二", "三", "四", "五", "六", "日"],
+            "zh-TW": ["一", "二", "三", "四", "五", "六", "日"],
+            "ja": ["月", "火", "水", "木", "金", "土", "日"],
+            "ko": ["월", "화", "수", "목", "금", "토", "일"],
+            "es": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
+            "fr": ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"],
+            "de": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
+            "ru": ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+            "pt-BR": ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
+            "it": ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"],
+            "ar": ["إثن", "ثلا", "أرب", "خمي", "جمع", "سبت", "أحد"],
+            "vi": ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
+            "tr": ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"],
+            "pl": ["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Ndz"],
+            "nl": ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"],
+        }
+        return table.get(lang, ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
 
     @staticmethod
     def _format_date_display(dt: datetime.datetime, lang: str = "zh-CN") -> str:
+        if lang == "zh-CN":
+            weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+            return f"{dt.month}月{dt.day}日 {weekdays[dt.weekday()]}"
+        if lang == "zh-TW":
+            weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+            return f"{dt.month}月{dt.day}日 {weekdays[dt.weekday()]}"
+        if lang == "ja":
+            weekdays = ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"]
+            return f"{dt.month}月{dt.day}日 ({weekdays[dt.weekday()]})"
+        if lang == "ko":
+            weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+            return f"{dt.month}월 {dt.day}일 {weekdays[dt.weekday()]}"
+        short_wd = DeckService._get_weekday_short_labels(lang)[dt.weekday()]
         if lang == "en":
             return dt.strftime("%b %d, %A")
-        weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
-        return f"{dt.month}月{dt.day}日 {weekdays[dt.weekday()]}"
+        return f"{dt.day:02d}/{dt.month:02d} · {short_wd}"
 
     @staticmethod
     def _empty_advanced_stats(lang: str = "zh-CN") -> Dict[str, Any]:
@@ -1516,11 +1652,7 @@ class DeckService:
         cls, lang: str, profile_name: str, env_info: Dict[str, str], cfg: Dict[str, Any]
     ) -> Dict[str, Any]:
         now = datetime.datetime.now()
-        labels = (
-            ["一", "二", "三", "四", "五", "六", "日"]
-            if lang == "zh-CN"
-            else ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        )
+        labels = cls._get_weekday_short_labels(lang)
         return {
             "userName": profile_name,
             "greeting": cls._get_greeting(now.hour, lang),

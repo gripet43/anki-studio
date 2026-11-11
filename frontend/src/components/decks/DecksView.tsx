@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { DeckItem, DeckOptionsData } from '../../bridge/pycmd';
+import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { getAccentScale } from '../../utils/themeTokens';
 
@@ -14,7 +15,8 @@ export const DecksView: React.FC = () => {
     syncing,
     syncJustFinished,
   } = useAppStore();
-  const isZh = resolvedLang === 'zh-CN';
+  const t = (key: any, params?: Record<string, string | number>) =>
+    translate(resolvedLang, key, params);
   const isSyncPending = isInitialSyncing || syncing;
 
   const [newDeckName, setNewDeckName] = useState('');
@@ -96,28 +98,24 @@ export const DecksView: React.FC = () => {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-[22px] font-bold tracking-tight">
-            {isZh ? '牌组管理' : 'Deck Management'}
+            {t('navDecks')}
           </h1>
           {isSyncPending ? (
             <div className="flex items-center gap-2 mt-1">
               <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-ping" />
               <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight">
-                {syncing
-                  ? (isZh ? '正在从云端同步牌组层级与调度进度...' : 'Syncing decks hierarchy from cloud...')
-                  : (isZh ? '正在加载本地牌组层级与调度进度...' : 'Loading deck hierarchy & schedule...')}
+                {syncing ? t('decksSyncingCloud') : t('decksLoadingLocal')}
               </span>
             </div>
           ) : syncJustFinished ? (
             <div className="flex items-center gap-1.5 mt-1 animate-in fade-in duration-300">
               <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight">
-                {isZh ? '✓ 牌组数据已就绪' : '✓ Decks ready'}
+                ✓ {t('syncCompleted')}
               </span>
             </div>
           ) : (
             <p className={`text-[13px] ${subText} mt-0.5`}>
-              {isZh
-                ? `已收纳 ${decks.length} 个牌组与多级知识层级`
-                : `${decks.length} decks organized in hierarchical workspace`}
+              {t('decksTotalCountSub', { n: decks.length })}
             </p>
           )}
         </div>
@@ -127,14 +125,14 @@ export const DecksView: React.FC = () => {
             type="button"
             onClick={() => appActions.openSettings('maintenance')}
             className="btn-secondary !h-10 !px-3.5 flex items-center gap-1.5"
-            title={isZh ? '导入/导出卡片包 (.apkg) 与系统维护工具' : 'Import / Export (.apkg) & Maintenance'}
+            title={t('importExportMaintBtn')}
           >
             <svg className="w-3.5 h-3.5 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            <span>{isZh ? '导入 / 导出与维护' : 'Import / Export'}</span>
+            <span>{t('importExportMaintBtn')}</span>
           </button>
 
           <button
@@ -146,7 +144,7 @@ export const DecksView: React.FC = () => {
               <circle cx="12" cy="12" r="10" />
               <circle cx="12" cy="12" r="4" />
             </svg>
-            <span>{isZh ? '自定义特训 / 错题集' : 'Custom Study'}</span>
+            <span>{t('customStudyEntryBtn')}</span>
           </button>
 
           <button
@@ -154,7 +152,7 @@ export const DecksView: React.FC = () => {
             style={{ backgroundColor: brandHex }}
             className="btn-primary !h-10 !px-4"
           >
-            <span>{isZh ? '+ 新建牌组' : '+ New Deck'}</span>
+            <span>+ {t('newDeckBtn')}</span>
           </button>
         </div>
       </header>
@@ -164,7 +162,7 @@ export const DecksView: React.FC = () => {
         <section className={`rounded-2xl border p-5 space-y-4 ${cardSurface}`}>
           <div className="flex items-center justify-between">
             <h3 className="text-[14px] font-bold">
-              {isZh ? '创建新牌组或子牌组' : 'Create Deck or Subdeck'}
+              {t('createDeckModalTitle')}
             </h3>
             <button
               onClick={() => setShowCreateModal(false)}
@@ -177,7 +175,7 @@ export const DecksView: React.FC = () => {
           <div className="grid grid-cols-12 gap-3 items-end">
             <div className="col-span-4">
               <label className={`block text-[11px] ${subText} mb-1.5`}>
-                {isZh ? '父级牌组（可选，留空则为顶级牌组）' : 'Parent Deck (Optional)'}
+                {t('parentDeckLabel')}
               </label>
               <select
                 value={parentFullName}
@@ -186,7 +184,7 @@ export const DecksView: React.FC = () => {
                   isDark ? 'bg-[#14141A] border-[#2A2C36]' : 'bg-[#F8F8FA] border-[#E5E5EA]'
                 }`}
               >
-                <option value="">{isZh ? '（作为顶级牌组）' : '(Top-level Deck)'}</option>
+                <option value="">{t('topLevelDeckOption')}</option>
                 {decks.map((p) => (
                   <option key={p.id} value={p.fullName}>
                     {p.fullName}
@@ -197,7 +195,7 @@ export const DecksView: React.FC = () => {
 
             <div className="col-span-5">
               <label className={`block text-[11px] ${subText} mb-1.5`}>
-                {isZh ? '牌组名称（也支持直接输入 Parent::Child 格式）' : 'Deck Name (supports Parent::Child)'}
+                {t('deckNameInputLabel')}
               </label>
               <input
                 type="text"
@@ -206,7 +204,7 @@ export const DecksView: React.FC = () => {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleCreateDeck();
                 }}
-                placeholder={isZh ? '例如：公考行测言语理解 或 计算机算法精选题库' : 'e.g., Computer Science::Algorithms'}
+                placeholder={t('deckNamePlaceholder')}
                 autoFocus
                 className={`w-full h-10 px-3.5 rounded-xl border text-[13px] focus:outline-none focus:border-[var(--brand)] ${
                   isDark ? 'bg-[#14141A] border-[#2A2C36]' : 'bg-[#F8F8FA] border-[#E5E5EA]'
@@ -220,13 +218,13 @@ export const DecksView: React.FC = () => {
                 style={{ backgroundColor: brandHex }}
                 className="btn-primary !h-10 flex-1"
               >
-                {isZh ? '确认创建' : 'Create'}
+                {t('confirm')}
               </button>
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="btn-secondary !h-10 !px-4"
               >
-                {isZh ? '取消' : 'Cancel'}
+                {t('cancel')}
               </button>
             </div>
           </div>
@@ -241,12 +239,12 @@ export const DecksView: React.FC = () => {
           }`}
         >
           <div className="col-span-4">
-            {isZh ? '牌组层级名称 (Parent::Child)' : 'Deck Hierarchy (Parent::Child)'}
+            {t('deckTableColHierarchy')}
           </div>
-          <div className="col-span-2">{isZh ? '今日待复习 / 新卡' : 'Due / New'}</div>
-          <div className="col-span-2">{isZh ? '每日限额与 FSRS' : 'Daily Limit & FSRS'}</div>
-          <div className="col-span-4 text-right">
-            {isZh ? '操作（特训 / 预设 / 重命名 / 删除 / 学习）' : 'Actions'}
+          <div className="col-span-2">{t('deckTableColDueNew')}</div>
+          <div className="col-span-2">{t('deckTableColLimitsFsrs')}</div>
+          <div className="col-span-4 text-end">
+            {t('deckTableColActions')}
           </div>
         </div>
 
@@ -288,8 +286,8 @@ export const DecksView: React.FC = () => {
                 >
                   {/* Deck Name + Multi-Level Tree Indentation */}
                   <div
-                    className="col-span-4 flex items-center gap-2.5 min-w-0 pr-2"
-                    style={{ paddingLeft: `${deck.depth * 22}px` }}
+                    className="col-span-4 flex items-center gap-2.5 min-w-0 pe-2"
+                    style={{ paddingInlineStart: `${deck.depth * 22}px` }}
                   >
                     {hasChildren ? (
                       <button
@@ -330,7 +328,7 @@ export const DecksView: React.FC = () => {
                           }}
                           className="px-2.5 py-1 rounded-lg bg-[var(--brand)] text-white text-[11px] cursor-pointer"
                         >
-                          {isZh ? '保存' : 'Save'}
+                          {t('saveNickname')}
                         </button>
                       </div>
                     ) : (
@@ -339,12 +337,12 @@ export const DecksView: React.FC = () => {
                           <span className="truncate">{deck.name}</span>
                           {deck.isChild && (
                             <span className="px-2 py-0.5 rounded bg-[var(--brand-soft)] text-[var(--brand-text)] text-[10px] font-medium shrink-0">
-                              {isZh ? '子牌组' : 'Subdeck'}
+                              {t('subdeckBadge')}
                             </span>
                           )}
                         </div>
                         <div className={`text-[11px] ${subText} truncate`}>
-                          {deck.totalCards} {isZh ? '张' : 'cards'} · {isZh ? '熟练度' : 'Mastery'} {deck.mastery}%
+                          {deck.totalCards} {t('cardsUnit')} · {t('masteryLabel')} {deck.mastery}%
                         </div>
                       </div>
                     )}
@@ -353,19 +351,19 @@ export const DecksView: React.FC = () => {
                   {/* Due / New Pills */}
                   <div className="col-span-2 flex items-center gap-1.5 text-[12px]">
                     <span className="px-2.5 py-0.5 rounded-full bg-[var(--brand-soft)] text-[var(--brand-text)] font-medium">
-                      {isZh ? `复习 ${deck.dueReview}` : `Due ${deck.dueReview}`}
+                      {t('dueReviewPill', { n: deck.dueReview })}
                     </span>
                     <span className="px-2.5 py-0.5 rounded-full bg-[var(--status-warning-soft)] text-[var(--status-warning)] font-medium">
-                      {isZh ? `新卡 ${deck.dueNew}` : `New ${deck.dueNew}`}
+                      {t('dueNewPill', { n: deck.dueNew })}
                     </span>
                   </div>
 
                   {/* Daily Limits & FSRS Retention Summary Pill */}
-                  <div className="col-span-2 pr-3">
+                  <div className="col-span-2 pe-3">
                     <button
                       type="button"
                       onClick={() => handleOpenDeckOptions(deck)}
-                      title={isZh ? '点击配置每日新卡/复习上限与 FSRS 目标留存率' : 'Configure deck scheduling preset & FSRS'}
+                      title={t('deckOptionsTitle')}
                       className={`px-2.5 py-1 rounded-xl border text-[11px] flex items-center gap-1.5 cursor-pointer transition-colors ${
                         isDark
                           ? 'bg-[#14151C] border-[#2A2C36] hover:border-[var(--brand-border)] text-[#C8C8D2]'
@@ -393,13 +391,13 @@ export const DecksView: React.FC = () => {
                           }}
                           className="btn-primary !bg-[var(--status-danger)] !h-8 !px-3 !text-[12px]"
                         >
-                          {isZh ? '确认删除' : 'Confirm'}
+                          {t('confirm')}
                         </button>
                         <button
                           onClick={() => setDeletingDeckId(null)}
                           className="btn-secondary !h-8 !px-2.5 !text-[12px]"
                         >
-                          {isZh ? '取消' : 'Cancel'}
+                          {t('cancel')}
                         </button>
                       </div>
                     ) : (
@@ -409,17 +407,17 @@ export const DecksView: React.FC = () => {
                             type="button"
                             onClick={() => appActions.openCustomStudyModal('mistakes', deck.id)}
                             className="btn-ghost !border !border-black/10 dark:!border-white/10 !h-8 !px-2.5 !text-[11px]"
-                            title={isZh ? '针对此牌组发起错题或旗标特训' : 'Custom Study for this deck'}
+                            title={t('customStudyEntryBtn')}
                           >
-                            {isZh ? '特训' : 'Cram'}
+                            {t('deckActionCram')}
                           </button>
                           <button
                             type="button"
                             onClick={() => handleOpenDeckOptions(deck)}
                             className="btn-ghost !border !border-black/10 dark:!border-white/10 !h-8 !px-2.5 !text-[11px]"
-                            title={isZh ? '牌组调度预设与 FSRS 参数' : 'Deck Options & FSRS'}
+                            title={t('deckOptionsTitle')}
                           >
-                            {isZh ? '预设' : 'Options'}
+                            {t('deckActionOptions')}
                           </button>
                           <button
                             onClick={() => {
@@ -427,16 +425,16 @@ export const DecksView: React.FC = () => {
                               setRenameValue(deck.fullName);
                             }}
                             className="btn-ghost !border !border-black/10 dark:!border-white/10 !h-8 !px-2.5 !text-[11px]"
-                            title={isZh ? '重命名牌组' : 'Rename deck'}
+                            title={t('deckActionRename')}
                           >
-                            {isZh ? '重命名' : 'Rename'}
+                            {t('deckActionRename')}
                           </button>
                           <button
                             onClick={() => setDeletingDeckId(deck.id)}
                             className="btn-ghost !text-[var(--status-danger)] hover:!bg-[var(--status-danger-soft)] !h-8 !px-2 !text-[11px]"
-                            title={isZh ? '删除牌组' : 'Delete deck'}
+                            title={t('batchDelete')}
                           >
-                            {isZh ? '删除' : 'Delete'}
+                            {t('batchDelete')}
                           </button>
                         </div>
 
@@ -446,7 +444,7 @@ export const DecksView: React.FC = () => {
                           className="btn-primary !h-8 !px-3.5 !text-[12px]"
                         >
                           <span className="text-[10px]">▶</span>
-                          <span>{isZh ? '开始学习' : 'Study'}</span>
+                          <span>{t('navStudy')}</span>
                         </button>
                       </>
                     )}
@@ -466,7 +464,7 @@ export const DecksView: React.FC = () => {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label={isZh ? '牌组预设与核心调度参数' : 'Deck Scheduling Options'}
+            aria-label={t('deckOptionsTitle')}
             className={`w-[520px] max-w-full rounded-3xl border shadow-2xl overflow-hidden flex flex-col ${cardSurface}`}
           >
             <header
@@ -476,18 +474,16 @@ export const DecksView: React.FC = () => {
             >
               <div>
                 <h2 className="text-[16px] font-bold tracking-tight">
-                  {isZh ? '牌组预设与核心调度参数' : 'Deck Scheduling Options'}
+                  {t('deckOptionsTitle')}
                 </h2>
                 <p className={`text-[11px] ${subText} mt-0.5`}>
-                  {editingOptionsDeck.fullName} ·{' '}
-                  {isZh
-                    ? `预设组：${editingOptionsDeck.options?.presetName || 'Default'}`
-                    : `Preset: ${editingOptionsDeck.options?.presetName || 'Default'}`}
+                  {editingOptionsDeck.fullName} · {editingOptionsDeck.options?.presetName || 'Default'}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingOptionsDeck(null)}
+                aria-label={t('close')}
                 className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current cursor-pointer"
               >
                 ✕
@@ -504,9 +500,9 @@ export const DecksView: React.FC = () => {
                 >
                   <div className="flex items-center justify-between">
                     <label className="text-[12px] font-semibold">
-                      {isZh ? '每日新卡上限' : 'New Cards / Day'}
+                      {t('deckOptNewPerDayLabel')}
                     </label>
-                    <span className={`text-[11px] ${subText}`}>{isZh ? '张/天' : '/ day'}</span>
+                    <span className={`text-[11px] ${subText}`}>/ {t('daysUnit')}</span>
                   </div>
                   <input
                     type="number"
@@ -543,9 +539,9 @@ export const DecksView: React.FC = () => {
                 >
                   <div className="flex items-center justify-between">
                     <label className="text-[12px] font-semibold">
-                      {isZh ? '每日最大复习数' : 'Max Reviews / Day'}
+                      {t('deckOptRevPerDayLabel')}
                     </label>
-                    <span className={`text-[11px] ${subText}`}>{isZh ? '张/天' : '/ day'}</span>
+                    <span className={`text-[11px] ${subText}`}>/ {t('daysUnit')}</span>
                   </div>
                   <input
                     type="number"
@@ -585,20 +581,14 @@ export const DecksView: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-[12px] font-semibold">
-                      {isZh ? 'FSRS 期望记忆留存率 (Desired Retention)' : 'FSRS Desired Retention'}
+                      {t('deckOptFsrsDesiredRetentionLabel')}
                     </div>
                     <div className={`text-[11px] ${subText} mt-0.5`}>
                       {optDesiredRetention <= 0.85
-                        ? isZh
-                          ? '轻量省时档：复习间隔更长，显著降低每日复习压力'
-                          : 'Lighter workload: longer intervals, fewer daily reviews'
+                        ? t('deckOptRetentionLightSub')
                         : optDesiredRetention >= 0.93
-                        ? isZh
-                          ? '考前高强档：记忆极牢固，但每日复习卡量会显著增加'
-                          : 'High intensity: frequent reviews for maximum exam recall'
-                        : isZh
-                        ? '官方黄金平衡档：兼顾长期记忆稳固度与每日复习负担'
-                        : 'Recommended balance between recall and daily workload'}
+                        ? t('deckOptRetentionHighSub')
+                        : t('deckOptRetentionBalancedSub')}
                     </div>
                   </div>
                   <span className="px-2.5 py-1 rounded-xl bg-[var(--brand-soft)] text-[var(--brand-text)] font-mono text-[14px] font-bold">
@@ -617,25 +607,20 @@ export const DecksView: React.FC = () => {
                 />
 
                 <div className="flex items-center justify-between gap-2 pt-0.5">
-                  {[
-                    { val: 0.85, label: isZh ? '85% 减负' : '85% Light' },
-                    { val: 0.9, label: isZh ? '90% 标准' : '90% Standard' },
-                    { val: 0.93, label: isZh ? '93% 进阶' : '93% High' },
-                    { val: 0.95, label: isZh ? '95% 冲刺' : '95% Sprint' },
-                  ].map((preset) => (
+                  {[0.85, 0.9, 0.93, 0.95].map((val) => (
                     <button
-                      key={preset.val}
+                      key={val}
                       type="button"
-                      onClick={() => setOptDesiredRetention(preset.val)}
+                      onClick={() => setOptDesiredRetention(val)}
                       className={`flex-1 py-1 rounded-lg border text-[11px] font-medium cursor-pointer transition-colors ${
-                        Math.round(optDesiredRetention * 100) === Math.round(preset.val * 100)
+                        Math.round(optDesiredRetention * 100) === Math.round(val * 100)
                           ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)] font-semibold'
                           : isDark
                           ? 'bg-[#1A1B23] border-[#2E303E] text-[#8E8E93]'
                           : 'bg-white border-[#E5E5EA] text-[#636366]'
                       }`}
                     >
-                      {preset.label}
+                      {Math.round(val * 100)}%
                     </button>
                   ))}
                 </div>
@@ -648,11 +633,7 @@ export const DecksView: React.FC = () => {
                 }`}
               >
                 <summary className="text-[12px] font-semibold cursor-pointer flex items-center justify-between list-none">
-                  <span>
-                    {isZh
-                      ? '高级步长与顽固卡设置（学习步长 / 重学步长 / Leech 阈值）'
-                      : 'Learning Steps & Leech Threshold'}
-                  </span>
+                  <span>{t('deckOptAdvancedStepsSummary')}</span>
                   <span className={`text-[11px] ${subText} group-open:rotate-180 transition-transform`}>
                     ▾
                   </span>
@@ -661,7 +642,7 @@ export const DecksView: React.FC = () => {
                 <div className="pt-3.5 mt-3 border-t border-black/5 dark:border-white/5 grid grid-cols-3 gap-3">
                   <div>
                     <label className={`block text-[11px] ${subText} mb-1`}>
-                      {isZh ? '新卡学习步长' : 'Learning Steps'}
+                      {t('deckOptLearningStepsLabel')}
                     </label>
                     <input
                       type="text"
@@ -676,7 +657,7 @@ export const DecksView: React.FC = () => {
 
                   <div>
                     <label className={`block text-[11px] ${subText} mb-1`}>
-                      {isZh ? '遗忘重学步长' : 'Relearning Steps'}
+                      {t('deckOptRelearningStepsLabel')}
                     </label>
                     <input
                       type="text"
@@ -691,7 +672,7 @@ export const DecksView: React.FC = () => {
 
                   <div>
                     <label className={`block text-[11px] ${subText} mb-1`}>
-                      {isZh ? '顽固卡失误阈值' : 'Leech Threshold'}
+                      {t('deckOptLeechThresholdLabel')}
                     </label>
                     <input
                       type="number"
@@ -720,7 +701,7 @@ export const DecksView: React.FC = () => {
                 onClick={() => setEditingOptionsDeck(null)}
                 className="btn-secondary !h-9 !px-4 !text-[12px]"
               >
-                {isZh ? '取消' : 'Cancel'}
+                {t('cancel')}
               </button>
               <button
                 type="button"
@@ -728,7 +709,7 @@ export const DecksView: React.FC = () => {
                 style={{ backgroundColor: brandHex }}
                 className="btn-primary !h-9 !px-5 !text-[12px]"
               >
-                {isZh ? '保存调度参数' : 'Save Options'}
+                {t('saveNickname')}
               </button>
             </footer>
           </div>

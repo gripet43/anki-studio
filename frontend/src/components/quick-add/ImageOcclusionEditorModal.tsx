@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { translate } from '../../i18n/translations';
+import { useAppStore } from '../../stores/useAppStore';
 import { resolveMediaSrcValue } from '../../utils/mediaUrl';
 
 export interface OcclusionRect {
@@ -17,7 +19,6 @@ interface ImageOcclusionEditorModalProps {
   open: boolean;
   initialFrontHtml: string;
   isDark: boolean;
-  isZh: boolean;
   brandHex: string;
   mediaBaseUrl?: string;
   onSaveImageFile: (file: File) => Promise<string | null>;
@@ -50,7 +51,6 @@ export function parseExistingImageOcclusion(rawHtml: string): {
     ? 'hide-one'
     : 'hide-all';
 
-  // Extract image src and data-anki-media
   const imgTagMatch = /<img\b[^>]*>/i.exec(rawHtml);
   let imgSrc = '';
   let mediaFilename = '';
@@ -62,7 +62,6 @@ export function parseExistingImageOcclusion(rawHtml: string): {
     if (mediaM) mediaFilename = mediaM[2];
   }
 
-  // Extract existing .anki-io-rect spans
   const rects: OcclusionRect[] = [];
   const rectRegex =
     /<span\b([^>]*?\bclass\s*=\s*["'][^"']*\banki-io-rect\b[^"']*["'][^>]*)>\s*\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}\s*<\/span>/gi;
@@ -90,7 +89,6 @@ export function parseExistingImageOcclusion(rawHtml: string): {
     }
   }
 
-  // Extract optional title text outside .anki-io-wrap / <img>
   const stripped = rawHtml
     .replace(/<div\b[^>]*?\bclass\s*=\s*["'][^"']*\banki-io-wrap\b[\s\S]*?<\/div>/gi, '')
     .replace(/<img\b[^>]*>/gi, '')
@@ -113,12 +111,9 @@ export function buildImageOcclusionHtml(params: {
   mediaFilename?: string;
   mode: OcclusionMode;
   rects: OcclusionRect[];
-  isZh: boolean;
+  defaultMaskPrefix?: string;
 }): string {
-  const { titleText, imgSrc, mediaFilename, mode, rects, isZh } = params;
-  // Prefer storing relative mediaFilename in src when available so Anki sync & mobile work natively,
-  // while review_service / search_service rewrites relative src to file:// automatically.
-  // Also keep data-anki-media attribute for round-trip editing.
+  const { titleText, imgSrc, mediaFilename, mode, rects, defaultMaskPrefix = 'Area' } = params;
   const effectiveSrc = mediaFilename || imgSrc;
   const mediaAttr = mediaFilename ? ` data-anki-media="${mediaFilename}"` : '';
 
@@ -128,9 +123,7 @@ export function buildImageOcclusionHtml(params: {
       const t = Math.max(0, Math.min(99, r.topPct)).toFixed(2);
       const w = Math.max(1, Math.min(100 - r.leftPct, r.widthPct)).toFixed(2);
       const h = Math.max(1, Math.min(100 - r.topPct, r.heightPct)).toFixed(2);
-      const labelText = (
-        r.label || (isZh ? `遮挡区域 ${i + 1}` : `Area ${i + 1}`)
-      ).replace(/\}\}/g, '');
+      const labelText = (r.label || `${defaultMaskPrefix} ${i + 1}`).replace(/\}\}/g, '');
       return `<span class="anki-io-rect" data-io-rect="${r.clozeIndex}" style="position:absolute;left:${l}%;top:${t}%;width:${w}%;height:${h}%;">{{c${r.clozeIndex}::${labelText}}}</span>`;
     })
     .join('');
@@ -148,13 +141,16 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
   open,
   initialFrontHtml,
   isDark,
-  isZh,
   brandHex,
   mediaBaseUrl,
   onSaveImageFile,
   onClose,
   onApply,
 }) => {
+  const { resolvedLang } = useAppStore();
+  const t = (key: any, params?: Record<string, string | number>) =>
+    translate(resolvedLang, key, params);
+
   const [titleText, setTitleText] = useState('');
   const [imgSrc, setImgSrc] = useState('');
   const [mediaFilename, setMediaFilename] = useState('');
@@ -163,7 +159,6 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
   const [selectedRectId, setSelectedRectId] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // Interactive pointer drawing / dragging state
   const canvasWrapRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [interaction, setInteraction] = useState<
@@ -213,7 +208,6 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
     }
   };
 
-  // Support Cmd+V / Ctrl+V image paste and Backspace/Delete for selected rectangle
   useEffect(() => {
     if (!open) return;
 
@@ -338,7 +332,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
           topPct: top,
           widthPct: width,
           heightPct: height,
-          label: isZh ? `遮挡 ${nextIdx}` : `Mask ${nextIdx}`,
+          label: `c${nextIdx}`,
         };
         setRects((prev) => [...prev, newRect]);
         setSelectedRectId(newRect.id);
@@ -366,7 +360,6 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
       mediaFilename,
       mode,
       rects,
-      isZh,
     });
     onApply(htmlOut, distinctCardCount);
   };
@@ -386,7 +379,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={isZh ? '图片遮挡制卡工作台' : 'Image Occlusion Studio'}
+        aria-label={t('ioStudioTitle')}
         onClick={(e) => e.stopPropagation()}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -408,12 +401,10 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
             </div>
             <div>
               <h2 className="text-[15px] font-bold tracking-tight">
-                {isZh ? '图片遮挡制卡 (Image Occlusion)' : 'Image Occlusion Studio'}
+                {t('ioStudioTitle')}
               </h2>
               <p className="text-[11px] text-[#8E8E93]">
-                {isZh
-                  ? '在图表、解剖图、思维导图或截图上拖拽框选遮挡区域，自动生成多张 Cloze 记忆卡'
-                  : 'Drag rectangles over diagrams or screenshots to generate Cloze occlusion cards'}
+                {t('ioStudioSub')}
               </p>
             </div>
           </div>
@@ -421,6 +412,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
           <button
             type="button"
             onClick={onClose}
+            aria-label={t('close')}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current cursor-pointer"
           >
             ✕
@@ -439,11 +431,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
               type="text"
               value={titleText}
               onChange={(e) => setTitleText(e.target.value)}
-              placeholder={
-                isZh
-                  ? '可选：输入图片标题或提问（如：心脏解剖结构图）...'
-                  : 'Optional: Card title or question prompt...'
-              }
+              placeholder={t('ioTitlePlaceholder')}
               className={`h-8 px-3 rounded-xl border text-[12px] flex-1 focus:outline-none focus:border-[var(--brand)] ${
                 isDark ? 'bg-[#1B1C26] border-[#323444]' : 'bg-white border-[#E2E2EA]'
               }`}
@@ -469,7 +457,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
                   : 'bg-white border-[#E0E0E8] hover:border-[var(--brand)] text-[#3A3A3C]'
               }`}
             >
-              <span>{imgSrc ? (isZh ? '更换图片' : 'Change Image') : (isZh ? '选择图片' : 'Upload Image')}</span>
+              <span>{imgSrc ? t('ioChangeImageBtn') : t('ioUploadImageBtn')}</span>
             </button>
           </div>
 
@@ -483,34 +471,26 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
               <button
                 type="button"
                 onClick={() => setMode('hide-all')}
-                title={
-                  isZh
-                    ? '复习时遮住图中所有框选标签，高亮当前提问的那一个（防上下文剧透）'
-                    : 'Mask all rectangles during review and highlight the active question box'
-                }
+                title={t('ioModeHideAllBtn')}
                 className={`h-7 px-2.5 rounded-lg text-[11px] font-medium cursor-pointer transition-all ${
                   mode === 'hide-all'
                     ? 'bg-[var(--brand)] text-white shadow-2xs'
                     : 'text-[#8E8E93] hover:text-current'
                 }`}
               >
-                {isZh ? '隐藏全部 · 猜当前' : 'Hide All, Guess One'}
+                {t('ioModeHideAllBtn')}
               </button>
               <button
                 type="button"
                 onClick={() => setMode('hide-one')}
-                title={
-                  isZh
-                    ? '复习时仅遮住当前提问的框选区域，其余区域保持可见'
-                    : 'Only mask the active question box and leave other boxes visible'
-                }
+                title={t('ioModeHideOneBtn')}
                 className={`h-7 px-2.5 rounded-lg text-[11px] font-medium cursor-pointer transition-all ${
                   mode === 'hide-one'
                     ? 'bg-[var(--brand)] text-white shadow-2xs'
                     : 'text-[#8E8E93] hover:text-current'
                 }`}
               >
-                {isZh ? '仅隐藏当前' : 'Hide One, Guess One'}
+                {t('ioModeHideOneBtn')}
               </button>
             </div>
           </div>
@@ -535,18 +515,10 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
                 </svg>
               </div>
               <div className="text-[14px] font-bold">
-                {uploadingImage
-                  ? isZh
-                    ? '正在导入图片...'
-                    : 'Importing image...'
-                  : isZh
-                  ? '点击选择本地图片，或直接按 Cmd+V 粘贴截图'
-                  : 'Click to choose an image, or press Cmd+V to paste screenshot'}
+                {uploadingImage ? t('processingText') : t('ioEmptyCanvasTitle')}
               </div>
               <p className="text-[11px] text-[#8E8E93] mt-1.5 max-w-[380px]">
-                {isZh
-                  ? '支持 PNG / JPG / WebP。导入后只需在图片上按住鼠标左键拖拽，即可画出遮挡框'
-                  : 'Supports PNG, JPG, WebP. Once loaded, click and drag on the image to draw occlusion masks.'}
+                {t('ioEmptyCanvasSub')}
               </p>
             </div>
           ) : (
@@ -595,7 +567,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
                             setRects((prev) => prev.filter((item) => item.id !== r.id));
                             setSelectedRectId(null);
                           }}
-                          title={isZh ? '删除此遮挡框 (Delete)' : 'Delete mask'}
+                          title={t('batchDelete')}
                           className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-[#EF4444] text-white text-[11px] font-bold flex items-center justify-center shadow-md cursor-pointer"
                         >
                           ×
@@ -626,13 +598,10 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
                 {selectedRect ? (
                   <div className="flex flex-wrap items-center gap-2.5">
                     <span className="font-semibold text-[var(--brand-text)]">
-                      {isZh ? '已选中遮挡框：' : 'Selected Mask:'}
+                      {t('ioSelectedMaskLabel')}
                     </span>
 
                     <div className="flex items-center gap-1">
-                      <span className="text-[11px] text-[#8E8E93]">
-                        {isZh ? '卡组编号' : 'Group'}
-                      </span>
                       {[1, 2, 3, 4, 5, 6].map((cIdx) => (
                         <button
                           key={cIdx}
@@ -658,7 +627,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
                           prev.map((r) => (r.id === selectedRect.id ? { ...r, label: val } : r))
                         );
                       }}
-                      placeholder={isZh ? '备注名称（可选）' : 'Mask label (optional)'}
+                      placeholder="..."
                       className={`h-7 px-2.5 rounded-lg border text-[11px] w-36 focus:outline-none focus:border-[var(--brand)] ${
                         isDark ? 'bg-[#1A1B24] border-[#323444]' : 'bg-white border-[#E2E2EA]'
                       }`}
@@ -666,13 +635,11 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
                   </div>
                 ) : (
                   <span className="text-[11px] text-[#8E8E93]">
-                    {isZh
-                      ? '提示：在图片上按住鼠标左键拖拽即可新增遮挡框；点击已有遮挡框可移动位置、修改分组（相同 c1 会同时提问）或按 Delete 删除'
-                      : 'Tip: Drag on the image to draw a mask. Click a mask to move, group (same c1 masks test together), or delete.'}
+                    {t('ioCanvasHintText')}
                   </span>
                 )}
 
-                <div className="flex items-center gap-2 ml-auto">
+                <div className="flex items-center gap-2 ms-auto">
                   <button
                     type="button"
                     disabled={rects.length === 0}
@@ -682,7 +649,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
                     }}
                     className="h-7 px-2.5 rounded-lg border border-black/10 dark:border-white/10 text-[11px] text-[#8E8E93] hover:text-current disabled:opacity-40 cursor-pointer"
                   >
-                    {isZh ? '撤销上一步' : 'Undo Last'}
+                    {t('undoBtnShort')}
                   </button>
                   <button
                     type="button"
@@ -693,7 +660,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
                     }}
                     className="h-7 px-2.5 rounded-lg border border-black/10 dark:border-white/10 text-[11px] text-[var(--status-danger)] hover:bg-[var(--status-danger-soft)] disabled:opacity-40 cursor-pointer"
                   >
-                    {isZh ? '清空全部' : 'Clear All'}
+                    {t('clearSearchBtn')}
                   </button>
                 </div>
               </div>
@@ -710,14 +677,10 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
           <div className="text-[12px] text-[#8E8E93]">
             {rects.length > 0 ? (
               <span>
-                {isZh
-                  ? `已框选 ${rects.length} 处遮挡区域 · 将自动生成 ${distinctCardCount} 张独立测试卡`
-                  : `${rects.length} masks drawn · Will generate ${distinctCardCount} sibling cards`}
+                {t('ioMasksCountSummary', { rects: rects.length, cards: distinctCardCount })}
               </span>
             ) : (
-              <span>
-                {isZh ? '请至少在图片上框选 1 处遮挡区域' : 'Draw at least 1 mask on the image to continue'}
-              </span>
+              <span>{t('ioDrawAtLeastOneHint')}</span>
             )}
           </div>
 
@@ -727,7 +690,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
               onClick={onClose}
               className="btn-secondary !h-9 !px-4 !text-[12px]"
             >
-              {isZh ? '取消' : 'Cancel'}
+              {t('cancel')}
             </button>
             <button
               type="button"
@@ -736,9 +699,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
               style={{ backgroundColor: brandHex }}
               className="btn-primary !h-9 !px-5 !text-[12px] disabled:opacity-45"
             >
-              {isZh
-                ? `完成并写入正面 (${distinctCardCount} 张卡)`
-                : `Insert Image Occlusion (${distinctCardCount} cards)`}
+              {t('ioApplyBtn', { cards: distinctCardCount })}
             </button>
           </div>
         </footer>

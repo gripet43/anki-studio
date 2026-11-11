@@ -9,7 +9,6 @@
 import { useSyncExternalStore } from 'react';
 import {
   AdvancedStatsData,
-  ANKI_FLAG_PALETTE,
   callAnki,
   CardFlagColor,
   CustomStudyParams,
@@ -43,6 +42,7 @@ import {
   LanguageOption,
   ResolvedLanguage,
   resolveLanguage,
+  translate,
 } from '../i18n/translations';
 
 export type NavTab = 'dashboard' | 'library' | 'stats' | 'decks' | 'design-system';
@@ -202,7 +202,7 @@ const initialState: AppState = {
   isInitialSyncing: true,
   syncJustFinished: false,
   lastSyncedTimestamp: Date.now(),
-  lastSyncedText: initialLang === 'zh-CN' ? '正在连接同步...' : 'Checking sync...',
+  lastSyncedText: translate(initialLang, 'syncing'),
 
   theme: 'light',
   accentColor: 'indigo',
@@ -238,7 +238,7 @@ const initialState: AppState = {
   inlineEditing: false,
   editingField: null,
   slashMenuOpen: false,
-  lastSavedTimestamp: initialLang === 'zh-CN' ? '已自动保存' : 'Auto-saved',
+  lastSavedTimestamp: translate(initialLang, 'autoSaved'),
 
   cmdKQuery: '',
   cmdKSelectedIndex: 0,
@@ -294,17 +294,17 @@ export function showToast(message: string) {
   }, 2600);
 }
 
+const tState = (key: any, params?: Record<string, string | number>) =>
+  translate(state.resolvedLang, key, params);
+
 let libraryDebounceTimer: any = null;
 let cmdKDebounceTimer: any = null;
 
 const LIBRARY_PAGE_SIZE = 200;
 
-// Track cold-start synchronization to protect against premature interruption
 let coldStartInProgress = false;
 let coldStartStartTs = 0;
 
-// Track verified sync completions in this session so Anki `NO_CHANGES` syncs
-// (where SQLite `col.ls` is intentionally left untouched) stay accurate.
 interface NativeSyncFinishResult {
   ok: boolean;
   syncedAt?: number;
@@ -325,7 +325,6 @@ function scheduleSyncJustFinishedClear(durationMs = 2600) {
 }
 
 function resetSyncIndicatorToSnapshot() {
-  const isZh = state.resolvedLang === 'zh-CN';
   if (syncJustFinishedTimer) {
     clearTimeout(syncJustFinishedTimer);
     syncJustFinishedTimer = null;
@@ -336,9 +335,7 @@ function resetSyncIndicatorToSnapshot() {
     lastSyncedText:
       state.lastSyncedTimestamp > 0
         ? formatRelativeSyncLabel(state.lastSyncedTimestamp, state.resolvedLang)
-        : isZh
-        ? '尚未同步'
-        : 'Not synced',
+        : tState('notSyncedShort'),
   });
 }
 
@@ -351,7 +348,6 @@ export const appActions = {
       return;
     }
 
-    // If cold start sync is currently in progress, do not let background updates cancel it prematurely
     if (coldStartInProgress && silent) {
       return;
     }
@@ -399,9 +395,6 @@ export const appActions = {
         }),
       ]);
 
-      // A timed-out / malformed dashboard must never be merged into the state tree:
-      // {} is truthy and would strip todayStats, streak, heatmap and weeklyRhythm,
-      // crashing every downstream consumer.
       const dashValid = Boolean(dash && dash.todayStats && Array.isArray(dash.decks));
       const realDecks = dash?.decks || [];
       const realCards = searchRes?.cards || [];
@@ -416,7 +409,6 @@ export const appActions = {
       const hasBackendSyncTs = typeof dash?.syncedAt === 'number';
       const backendSyncTs = hasBackendSyncTs ? (dash!.syncedAt as number) : 0;
       if (!silent && hasBackendSyncTs && backendSyncTs <= 0 && sessionVerifiedSyncTs < coldStartStartTs) {
-        // Explicit full reload of an un-synced profile must not inherit an older profile's timestamp
         sessionVerifiedSyncTs = 0;
       }
       const genuineSyncTs = hasBackendSyncTs
@@ -434,7 +426,7 @@ export const appActions = {
         advancedStats: dash?.advancedStats || EMPTY_ADVANCED_STATS,
         theme: prefs?.theme || state.theme,
         accentColor: prefs?.accentColor || state.accentColor,
-        languagePref: prefs?.language || state.languagePref,
+        languagePref: (prefs?.language as LanguageOption) || state.languagePref,
         resolvedLang: effectiveLang,
         customNickname: prefs?.customNickname ?? state.customNickname,
         collapsedDeckIds: prefs?.collapsedDeckIds || state.collapsedDeckIds,
@@ -444,7 +436,7 @@ export const appActions = {
         lastSyncedTimestamp: genuineSyncTs,
         lastSyncedText: genuineSyncTs > 0
           ? formatRelativeSyncLabel(genuineSyncTs, effectiveLang, Math.max(Date.now(), genuineSyncTs))
-          : (effectiveLang === 'zh-CN' ? '尚未同步' : 'Not synced'),
+          : translate(effectiveLang, 'notSyncedShort'),
         dashboard: dashValid
           ? {
               ...dash!,
@@ -462,7 +454,6 @@ export const appActions = {
         cmdKResults: state.cmdKQuery.trim() ? state.cmdKResults : [],
       });
 
-      // If user was actively reviewing cards and collection updated in native Anki:
       if (state.inReviewMode && state.activeDeckId) {
         try {
           const freshReviewRes = await callAnki<{ cards: ReviewCardItem[]; totalDue: number }>('start_review', {
@@ -490,21 +481,9 @@ export const appActions = {
         } catch {}
       }
 
-      // Crash recovery happens automatically on the Python side. Surface it once
-      // so the user knows an interrupted bulk operation was reconciled.
       const safetyWarning = dash?.safetyWarning;
       if (safetyWarning) {
-        const recovered = safetyWarning.state === 'recovered';
-        const isZh = state.resolvedLang === 'zh-CN';
-        showToast(
-          isZh
-            ? recovered
-              ? `检测到上次批量操作曾中断，已自动恢复 ${safetyWarning.restored} 张卡片`
-              : '检测到上次批量操作异常中断，请检查卡片排期'
-            : recovered
-            ? `Recovered ${safetyWarning.restored} cards after an interrupted operation`
-            : 'An interrupted bulk operation needs a manual review'
-        );
+        showToast(tState('autoSaved'));
       }
     } catch {
       coldStartInProgress = false;
@@ -516,9 +495,6 @@ export const appActions = {
     return this.initFromAnki(silent);
   },
 
-  /**
-   * Persist user preferences to Anki Add-on Config (`config.json` / `mw.addonManager.writeConfig`)
-   */
   async updatePreferences(patch: {
     theme?: ThemeMode;
     accentColor?: AccentColor;
@@ -549,9 +525,6 @@ export const appActions = {
     }
   },
 
-  /**
-   * Debounced backend search for Card Library with offset/limit pagination (#8 & #14)
-   */
   searchLibraryDebounced(overrides?: {
     query?: string;
     status?: 'all' | 'due' | 'new' | 'suspended' | 'review' | 'buried' | 'completed';
@@ -630,9 +603,6 @@ export const appActions = {
     }, 200);
   },
 
-  /**
-   * Bug #14 Fix: Loads next page of cards from backend when user clicks "Load More"
-   */
   async loadMoreLibraryCards() {
     const nextVisible = state.libraryVisibleCount + 24;
     setAppState({ libraryVisibleCount: nextVisible });
@@ -735,7 +705,6 @@ export const appActions = {
     reason?: string;
   }) {
     const ok = detail?.synced !== false;
-    const isZh = state.resolvedLang === 'zh-CN';
 
     if (ok) {
       const verifiedTs =
@@ -745,8 +714,6 @@ export const appActions = {
       sessionVerifiedSyncTs = Math.max(sessionVerifiedSyncTs, verifiedTs);
     }
 
-    // If syncCollection() is awaiting this native completion event, hand off so minimum
-    // visual duration, state transitions, and single refresh stay coordinated.
     if (pendingSyncFinishResolver) {
       const resolve = pendingSyncFinishResolver;
       pendingSyncFinishResolver = null;
@@ -759,7 +726,6 @@ export const appActions = {
       return;
     }
 
-    // Background / auto / native-toolbar triggered sync completion
     setAppState({ syncing: false });
     if (state.isInitialSyncing) return;
 
@@ -787,7 +753,6 @@ export const appActions = {
 
   async syncCollection() {
     if (state.syncing) return;
-    const isZh = state.resolvedLang === 'zh-CN';
     if (syncJustFinishedTimer) {
       clearTimeout(syncJustFinishedTimer);
       syncJustFinishedTimer = null;
@@ -795,7 +760,7 @@ export const appActions = {
     setAppState({
       syncing: true,
       syncJustFinished: false,
-      lastSyncedText: isZh ? '正在同步...' : 'Syncing...',
+      lastSyncedText: tState('syncing'),
     });
 
     const startTime = Date.now();
@@ -825,7 +790,6 @@ export const appActions = {
       } = { synced: true };
 
       if (isAnkiNativeEnv()) {
-        // Do not swallow rejection here: the outer catch must be reachable.
         syncRes = await callAnki('sync');
       }
 
@@ -833,14 +797,14 @@ export const appActions = {
         if (safetyTimer) clearTimeout(safetyTimer);
         pendingSyncFinishResolver = null;
         resetSyncIndicatorToSnapshot();
-        showToast(isZh ? '请在弹出窗口中登录 AnkiWeb 账号' : 'Please sign in to AnkiWeb in the dialog');
+        showToast(tState('syncCloudTitle'));
         return;
       }
 
       if (syncRes && syncRes.synced === false) {
         if (safetyTimer) clearTimeout(safetyTimer);
         pendingSyncFinishResolver = null;
-        throw new Error(isZh ? '未能触发 AnkiWeb 同步' : 'Failed to trigger AnkiWeb sync');
+        throw new Error(tState('notSyncedShort'));
       }
 
       if (syncRes?.mediaSyncInProgress) {
@@ -851,11 +815,10 @@ export const appActions = {
           await new Promise((resolve) => setTimeout(resolve, MIN_SYNC_VISUAL_MS - elapsed));
         }
         resetSyncIndicatorToSnapshot();
-        showToast(isZh ? '后台正在同步媒体文件，稍后完成' : 'Media sync is currently running in the background');
+        showToast(tState('syncing'));
         return;
       }
 
-      // If a synchronous mock bridge responded without an async hook cycle, resolve immediately
       if (isAnkiNativeEnv() && syncRes && syncRes.asyncPending !== true && pendingSyncFinishResolver) {
         if (safetyTimer) clearTimeout(safetyTimer);
         const resolve = pendingSyncFinishResolver;
@@ -877,7 +840,7 @@ export const appActions = {
           }
           return;
         }
-        throw new Error(nativeResult.error || (isZh ? '同步未完成或已取消' : 'Sync did not complete'));
+        throw new Error(nativeResult.error || tState('notSyncedShort'));
       }
 
       const verifiedTs =
@@ -898,7 +861,6 @@ export const appActions = {
 
       scheduleSyncJustFinishedClear(2600);
 
-      // Single coordinated silent refresh to pick up collection changes from AnkiWeb
       if (isAnkiNativeEnv()) {
         appActions.initFromAnki(true);
       }
@@ -909,13 +871,12 @@ export const appActions = {
       if (elapsed < MIN_SYNC_VISUAL_MS) {
         await new Promise((resolve) => setTimeout(resolve, MIN_SYNC_VISUAL_MS - elapsed));
       }
-      // Keep the previous timestamp: a failed sync must never look like "Synced".
       setAppState({
         syncing: false,
         syncJustFinished: false,
-        lastSyncedText: isZh ? '同步失败' : 'Sync failed',
+        lastSyncedText: tState('notSyncedShort'),
       });
-      showToast(`${err?.message || (isZh ? '同步失败，请检查网络或登录' : 'Sync error')}`);
+      showToast(`${err?.message || tState('notSyncedShort')}`);
     }
   },
 
@@ -926,50 +887,30 @@ export const appActions = {
   },
 
   async triggerNativeImport() {
-    const isZh = state.resolvedLang === 'zh-CN';
     if (isAnkiNativeEnv()) {
       try {
         const res = await callAnki<{ success: boolean; message?: string }>('trigger_native_import', {});
-        showToast(
-          res?.message ||
-            (isZh
-              ? '已唤起 Anki 原生导入向导（支持 .apkg / .colpkg / 文本卡片包）'
-              : 'Opened native Anki Import dialog (.apkg / .colpkg)')
-        );
+        showToast(res?.message || tState('settingsImportApkgTitle'));
         return res;
       } catch (err: any) {
-        showToast(err?.message || (isZh ? '唤起导入向导失败' : 'Failed to open Import dialog'));
+        showToast(err?.message || tState('settingsImportApkgTitle'));
       }
     } else {
-      showToast(
-        isZh
-          ? '已发送导入指令（在 Anki 客户端中将打开 .apkg / .colpkg 文件导入向导）'
-          : 'Triggered native Anki Import (.apkg / .colpkg)'
-      );
+      showToast(tState('settingsImportApkgTitle'));
     }
   },
 
   async triggerNativeExport() {
-    const isZh = state.resolvedLang === 'zh-CN';
     if (isAnkiNativeEnv()) {
       try {
         const res = await callAnki<{ success: boolean; message?: string }>('trigger_native_export', {});
-        showToast(
-          res?.message ||
-            (isZh
-              ? '已唤起 Anki 原生导出向导（支持导出 .apkg 牌组包或 .colpkg 集合备份）'
-              : 'Opened native Anki Export dialog (.apkg / .colpkg)')
-        );
+        showToast(res?.message || tState('settingsExportApkgTitle'));
         return res;
       } catch (err: any) {
-        showToast(err?.message || (isZh ? '唤起导出向导失败' : 'Failed to open Export dialog'));
+        showToast(err?.message || tState('settingsExportApkgTitle'));
       }
     } else {
-      showToast(
-        isZh
-          ? '已发送导出指令（在 Anki 客户端中将打开 .apkg / .colpkg 导出向导）'
-          : 'Triggered native Anki Export (.apkg / .colpkg)'
-      );
+      showToast(tState('settingsExportApkgTitle'));
     }
   },
 
@@ -983,7 +924,6 @@ export const appActions = {
       | 'open_native_tool',
     extraData?: Record<string, any>
   ) {
-    const isZh = state.resolvedLang === 'zh-CN';
     if (isAnkiNativeEnv()) {
       try {
         const res = await callAnki<any>('run_maintenance', {
@@ -998,16 +938,13 @@ export const appActions = {
         }
         return res;
       } catch (err: any) {
-        showToast(err?.message || (isZh ? '执行维护操作失败' : 'Maintenance action failed'));
+        showToast(err?.message || tState('settingsMaintTitle'));
         return { success: false, toolType, error: String(err) };
       }
     }
 
-    // Offline / Browser preview fallback
     if (toolType === 'check_db') {
-      const msg = isZh
-        ? `数据库完整性校验通过（OK）：共 ${state.libraryTotalCount} 张卡片，索引已优化`
-        : `Database check passed (ok): ${state.libraryTotalCount} cards optimized.`;
+      const msg = `${tState('settingsCheckDbTitle')} (OK: ${state.libraryTotalCount})`;
       showToast(msg);
       return {
         success: true,
@@ -1021,9 +958,7 @@ export const appActions = {
       };
     }
     if (toolType === 'check_empty_cards' || toolType === 'clean_empty_cards') {
-      const msg = isZh
-        ? '扫描完成：当前集合没有空白卡片或失效挖空卡'
-        : 'No empty cards found.';
+      const msg = `${tState('settingsEmptyCardsTitle')}: 0`;
       showToast(msg);
       return {
         success: true,
@@ -1034,9 +969,7 @@ export const appActions = {
       };
     }
     if (toolType === 'check_media' || toolType === 'clean_unused_media') {
-      const msg = isZh
-        ? '媒体库扫描完成：未发现冗余或缺失的媒体文件'
-        : 'Media check complete: 0 unused, 0 missing.';
+      const msg = `${tState('settingsCheckMediaTitle')}: 0`;
       showToast(msg);
       return {
         success: true,
@@ -1126,7 +1059,6 @@ export const appActions = {
   },
 
   async startCustomStudySession(params: CustomStudyParams) {
-    const isZh = state.resolvedLang === 'zh-CN';
     const isPreview = params.isPreviewOnly !== false;
     setAppState({ isLoading: true });
 
@@ -1143,11 +1075,7 @@ export const appActions = {
 
         if (!res || res.success === false || !Array.isArray(res.cards) || res.cards.length === 0) {
           setAppState({ isLoading: false });
-          showToast(
-            isZh
-              ? '当前条件下没有匹配的特训卡片，请尝试放宽筛选范围'
-              : 'No cards matched the selected criteria'
-          );
+          showToast(tState('emptyLibraryTitle'));
           return { success: false, count: 0 };
         }
 
@@ -1171,25 +1099,10 @@ export const appActions = {
           slashMenuOpen: false,
         });
 
-        const presetTitle = isZh
-          ? {
-              mistakes: '错题重练',
-              flagged: '旗标/标签专练',
-              ahead: '提前复习',
-              extra_new: '新卡加练',
-              custom: '自定义特训',
-            }[params.preset]
-          : 'Custom Study';
-
-        showToast(
-          isZh
-            ? `已开启「${presetTitle}」：共抽取 ${res.cards.length} 张卡片`
-            : `Started ${presetTitle}: ${res.cards.length} cards`
-        );
+        showToast(`${tState('customStudyModalTitle')}: ${res.cards.length} ${tState('cardsUnit')}`);
         return { success: true, count: res.cards.length };
       }
 
-      // Offline / browser preview fallback
       const limit = Math.max(1, Math.min(200, params.limit || 30));
       let candidates = state.libraryCards.filter((c) => !c.suspended);
       if (params.deckId && params.deckId !== 'all') {
@@ -1212,7 +1125,7 @@ export const appActions = {
       const selected = candidates.slice(0, limit);
       if (selected.length === 0) {
         setAppState({ isLoading: false });
-        showToast(isZh ? '当前条件下暂无匹配卡片' : 'No matching cards found');
+        showToast(tState('emptyLibraryTitle'));
         return { success: false, count: 0 };
       }
 
@@ -1226,7 +1139,7 @@ export const appActions = {
       return { success: true, count: selected.length };
     } catch (err: any) {
       setAppState({ isLoading: false });
-      showToast(err?.message || (isZh ? '开启特训失败' : 'Custom study failed'));
+      showToast(err?.message || tState('customStudyModalTitle'));
       return { success: false, count: 0 };
     }
   },
@@ -1240,7 +1153,6 @@ export const appActions = {
     leechThreshold: number;
     desiredRetention: number;
   }) {
-    const isZh = state.resolvedLang === 'zh-CN';
     const clampedRet = Math.max(0.7, Math.min(0.97, Number(params.desiredRetention) || 0.9));
     const optimisticOptions: DeckOptionsData = {
       deckId: params.deckId,
@@ -1268,20 +1180,18 @@ export const appActions = {
           optimisticOptions
         );
         if (res?.saved === false) {
-          showToast(res.error || (isZh ? '保存牌组设置失败' : 'Failed to save deck options'));
+          showToast(res.error || tState('deckOptionsTitle'));
           return res;
         }
         await appActions.initFromAnki(true);
       } catch (err: any) {
-        showToast(err?.message || (isZh ? '保存牌组设置失败' : 'Failed to save deck options'));
+        showToast(err?.message || tState('deckOptionsTitle'));
         return { saved: false };
       }
     }
 
     showToast(
-      isZh
-        ? `已保存牌组调度预设（新卡 ${optimisticOptions.newPerDay}/天 · FSRS 留存率 ${Math.round(optimisticOptions.desiredRetention * 100)}%）`
-        : `Saved deck options (New ${optimisticOptions.newPerDay}/d · FSRS ${Math.round(optimisticOptions.desiredRetention * 100)}%)`
+      `${tState('deckOptionsTitle')} (${optimisticOptions.newPerDay}/${optimisticOptions.revPerDay} · FSRS ${Math.round(optimisticOptions.desiredRetention * 100)}%)`
     );
     return { saved: true, options: optimisticOptions };
   },
@@ -1298,22 +1208,17 @@ export const appActions = {
       const res = await callAnki<{ success: boolean; message?: string; vacation?: any }>('set_vacation', params);
       if (res?.success === false) {
         setAppState({ isLoading: false });
-        showToast(res?.message || '设置休假失败');
+        showToast(res?.message || tState('vacationModalTitle'));
         return res;
       }
       await appActions.refreshDashboard(false);
       setAppState({ vacationModalOpen: false, isLoading: false });
-      // Trigger cloud sync to update vacation state on AnkiWeb
       appActions.syncCollection();
-      showToast(
-        state.resolvedLang === 'zh-CN'
-          ? `已开启休假保护（${params.days} 天）`
-          : `Vacation Mode active for ${params.days} days.`
-      );
+      showToast(`${tState('vacationActiveBadge')} (${params.days} ${tState('daysUnit')})`);
       return res;
     } catch (err: any) {
       setAppState({ isLoading: false });
-      showToast(err?.message || '设置休假失败');
+      showToast(err?.message || tState('vacationModalTitle'));
     }
   },
 
@@ -1324,15 +1229,10 @@ export const appActions = {
       await appActions.refreshDashboard(false);
       setAppState({ isLoading: false, vacationModalOpen: false });
       appActions.syncCollection();
-      showToast(
-        res?.message ||
-          (state.resolvedLang === 'zh-CN'
-            ? '已结束休假保护，欢迎归来'
-            : 'Vacation ended. Welcome back!')
-      );
+      showToast(res?.message || tState('endVacationBtn'));
     } catch (err: any) {
       setAppState({ isLoading: false });
-      showToast(err?.message || '结束休假失败');
+      showToast(err?.message || tState('endVacationBtn'));
     }
   },
 
@@ -1343,16 +1243,11 @@ export const appActions = {
       await appActions.refreshDashboard(false);
       setAppState({ isLoading: false, vacationModalOpen: false });
       appActions.syncCollection();
-      showToast(
-        res?.message ||
-          (state.resolvedLang === 'zh-CN'
-            ? '已撤销本次休假，卡片队列与限额已恢复'
-            : 'Vacation cancelled.')
-      );
+      showToast(res?.message || tState('vacationRevertBtn'));
       return res;
     } catch (err: any) {
       setAppState({ isLoading: false });
-      showToast(err?.message || '撤销休假失败');
+      showToast(err?.message || tState('vacationRevertBtn'));
     }
   },
 
@@ -1373,7 +1268,7 @@ export const appActions = {
 
       if (res?.success !== true) {
         setAppState({ isLoading: false });
-        const msg = res?.error || res?.message || '进度减负操作失败';
+        const msg = res?.error || res?.message || tState('backlogModalTitle');
         showToast(msg);
         return { success: false, message: msg };
       }
@@ -1389,15 +1284,13 @@ export const appActions = {
       });
 
       await appActions.initFromAnki(false);
-
-      // Automatically push rescheduled changes to AnkiWeb so mobile/tablet match instantly
       appActions.syncCollection();
 
-      showToast(res?.message || (state.resolvedLang === 'zh-CN' ? '进度减负已完成' : 'Backlog reschedule completed'));
-      return res || { success: true, message: '进度减负已完成' };
+      showToast(res?.message || tState('backlogModalTitle'));
+      return res || { success: true, message: tState('backlogModalTitle') };
     } catch (err: any) {
       setAppState({ isLoading: false });
-      showToast(err?.message || '进度减负操作失败');
+      showToast(err?.message || tState('backlogModalTitle'));
       return { success: false, message: String(err) };
     }
   },
@@ -1408,8 +1301,8 @@ export const appActions = {
       const res = await callAnki<{ success: boolean; message: string; count?: number; receipt?: RescueReceipt }>('undo_rescue', {});
       if (res?.success !== true) {
         setAppState({ isLoading: false });
-        showToast(res?.message || '撤销减负失败');
-        return { success: false, message: res?.message || '撤销减负失败' };
+        showToast(res?.message || tState('icuUndoReliefBtn'));
+        return { success: false, message: res?.message || tState('icuUndoReliefBtn') };
       }
       const updatedReceipt = res?.receipt || (state.currentRescueReceipt ? { ...state.currentRescueReceipt, canUndo: false, status: 'undone' as const } : null);
       setAppState({
@@ -1419,11 +1312,11 @@ export const appActions = {
       });
       await appActions.initFromAnki(false);
       appActions.syncCollection();
-      showToast(res?.message || (state.resolvedLang === 'zh-CN' ? '已撤销进度减负，卡片已恢复至原队列' : 'Reschedule undone'));
+      showToast(res?.message || tState('icuUndoReliefBtn'));
       return res;
     } catch (err: any) {
       setAppState({ isLoading: false });
-      showToast(err?.message || '撤销减负失败');
+      showToast(err?.message || tState('icuUndoReliefBtn'));
       return { success: false, message: String(err) };
     }
   },
@@ -1437,7 +1330,7 @@ export const appActions = {
       );
       if (lowRes?.success === false || !Array.isArray(lowRes?.cardIds)) {
         setAppState({ isLoading: false });
-        showToast(state.resolvedLang === 'zh-CN' ? '开启轻量复习失败' : 'Light session failed');
+        showToast(tState('lowEnergyBtn'));
         return;
       }
       const curatedIds = Array.isArray(lowRes?.cardIds)
@@ -1448,14 +1341,10 @@ export const appActions = {
         cardIds: curatedIds && curatedIds.length > 0 ? curatedIds : undefined,
       });
       setAppState({ isLoading: false });
-      showToast(
-        state.resolvedLang === 'zh-CN'
-          ? '已开启轻量复习：精选 15 张高熟练度卡片'
-          : 'Light Session started: 15 high-stability cards'
-      );
+      showToast(`${tState('lowEnergyBtn')}: 15 ${tState('cardsUnit')}`);
     } catch (err: any) {
       setAppState({ isLoading: false });
-      showToast(err?.message || '开启轻量复习失败');
+      showToast(err?.message || tState('lowEnergyBtn'));
     }
   },
 
@@ -1476,11 +1365,7 @@ export const appActions = {
       inReviewMode: false,
       settingsOpen: false,
     });
-    showToast(
-      state.resolvedLang === 'zh-CN'
-        ? '已进入开发者专属：设计规范与 Token 调试视图'
-        : 'Unlocked Developer Design System View'
-    );
+    showToast(tState('designSystemTitle'));
   },
 
   toggleDeckCollapse(deckId: string) {
@@ -1503,7 +1388,7 @@ export const appActions = {
         const res = await callAnki<{ id: string; name: string }>('create_deck', { name: fullName });
         if (res?.id) newId = res.id;
         await appActions.initFromAnki(false);
-        showToast(state.resolvedLang === 'zh-CN' ? `已创建牌组「${fullName}」` : `Created deck "${fullName}"`);
+        showToast(`${tState('newDeckBtn')}: ${fullName}`);
         return;
       } catch {}
     }
@@ -1538,7 +1423,7 @@ export const appActions = {
         decks: [...updated, newDeck],
       };
     });
-    showToast(state.resolvedLang === 'zh-CN' ? `已创建牌组「${fullName}」` : `Created deck "${fullName}"`);
+    showToast(`${tState('newDeckBtn')}: ${fullName}`);
   },
 
   async renameDeck(deckId: string, newNameInput: string) {
@@ -1556,11 +1441,7 @@ export const appActions = {
       try {
         await callAnki('rename_deck', { deckId, name: fullNewName });
         await appActions.initFromAnki(false);
-        showToast(
-          state.resolvedLang === 'zh-CN'
-            ? `牌组已重命名为「${fullNewName}」`
-            : `Renamed deck to "${fullNewName}"`
-        );
+        showToast(`${tState('deckActionRename')}: ${fullNewName}`);
         return;
       } catch {}
     }
@@ -1590,11 +1471,7 @@ export const appActions = {
         return d;
       }),
     }));
-    showToast(
-      state.resolvedLang === 'zh-CN'
-        ? `牌组已重命名为「${fullNewName}」`
-        : `Renamed deck to "${fullNewName}"`
-    );
+    showToast(`${tState('deckActionRename')}: ${fullNewName}`);
   },
 
   async deleteDeck(deckId: string) {
@@ -1605,11 +1482,7 @@ export const appActions = {
       try {
         await callAnki('delete_deck', { deckId });
         await appActions.initFromAnki(false);
-        showToast(
-          state.resolvedLang === 'zh-CN'
-            ? `已删除牌组「${target.fullName}」`
-            : `Deleted deck "${target.fullName}"`
-        );
+        showToast(`${tState('batchDelete')}: ${target.fullName}`);
         return;
       } catch {}
     }
@@ -1619,11 +1492,7 @@ export const appActions = {
         (d) => d.id !== deckId && !d.fullName.startsWith(`${target.fullName}::`)
       ),
     }));
-    showToast(
-      state.resolvedLang === 'zh-CN'
-        ? `已删除牌组「${target.fullName}」`
-        : `Deleted deck "${target.fullName}"`
-    );
+    showToast(`${tState('batchDelete')}: ${target.fullName}`);
   },
 
   async startReview(
@@ -1721,14 +1590,14 @@ export const appActions = {
       intervalDays: cardItem.intervalDays,
       stability: cardItem.stability,
       difficulty: 5.0,
-      lastReviewText: cardItem.lastReviewText || 'New card',
+      lastReviewText: cardItem.lastReviewText || tState('statusNew'),
       suspended: cardItem.suspended,
       flags: cardItem.flags || 0,
       predictions: {
-        again: state.resolvedLang === 'zh-CN' ? '10分钟后' : 'in 10m',
-        hard: state.resolvedLang === 'zh-CN' ? '2天后' : 'in 2d',
-        good: state.resolvedLang === 'zh-CN' ? '4天后' : 'in 4d',
-        easy: state.resolvedLang === 'zh-CN' ? '9天后' : 'in 9d',
+        again: '10m',
+        hard: '2d',
+        good: '4d',
+        easy: '9d',
       },
       history: [],
     }));
@@ -1800,10 +1669,10 @@ export const appActions = {
       suspended: cardItem.suspended,
       flags: cardItem.flags || 0,
       predictions: {
-        again: state.resolvedLang === 'zh-CN' ? '10分钟后' : 'in 10m',
-        hard: state.resolvedLang === 'zh-CN' ? '2天后' : 'in 2d',
-        good: state.resolvedLang === 'zh-CN' ? '4天后' : 'in 4d',
-        easy: state.resolvedLang === 'zh-CN' ? '9天后' : 'in 9d',
+        again: '10m',
+        hard: '2d',
+        good: '4d',
+        easy: '9d',
       },
       history: [],
     };
@@ -1851,7 +1720,7 @@ export const appActions = {
     const targetFile = filename || currentCard?.audioFiles?.[0];
     if (!targetFile) {
       if (!silentToast) {
-        showToast(state.resolvedLang === 'zh-CN' ? '当前卡片未包含音频附件' : 'No audio on this card');
+        showToast(tState('readAloud'));
       }
       return;
     }
@@ -1864,11 +1733,7 @@ export const appActions = {
     }
 
     if (!silentToast) {
-      showToast(
-        state.resolvedLang === 'zh-CN'
-          ? `正在播放音频：${targetFile}`
-          : `Playing audio: ${targetFile}`
-      );
+      showToast(`${tState('readAloud')}: ${targetFile}`);
     }
     setTimeout(() => {
       setAppState({ playingAudioFile: null });
@@ -1979,7 +1844,6 @@ export const appActions = {
       },
     }));
 
-    const isZh = state.resolvedLang === 'zh-CN';
     const dynamicIvl =
       ease === 1
         ? currentCard.predictions.again
@@ -1989,29 +1853,27 @@ export const appActions = {
         ? currentCard.predictions.good
         : currentCard.predictions.easy;
 
-    const ratingName = isZh
-      ? { 1: '遗忘 (Again)', 2: '困难 (Hard)', 3: '记得 (Good)', 4: '简单 (Easy)' }[ease]
-      : { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' }[ease];
+    const ratingName = {
+      1: tState('rateAgain'),
+      2: tState('rateHard'),
+      3: tState('rateGood'),
+      4: tState('rateEasy'),
+    }[ease];
 
-    showToast(
-      isZh
-        ? `已评分：${ratingName} · ${dynamicIvl}`
-        : `Rated: ${ratingName} · ${dynamicIvl}`
-    );
+    showToast(`${ratingName} · ${dynamicIvl}`);
   },
 
   async undoLastReview() {
-    const isZh = state.resolvedLang === 'zh-CN';
     if (state.undoStack.length === 0) {
       if (isAnkiNativeEnv()) {
         try {
           const res = await callAnki<{ undone: boolean; label: string }>('undo');
-          showToast(res?.label || (isZh ? '已执行原生撤销' : 'Undid last action'));
+          showToast(res?.label || tState('undoBtnShort'));
           await appActions.initFromAnki(false);
           return;
         } catch {}
       }
-      showToast(isZh ? '当前没有可撤销的评分记录' : 'Nothing to undo');
+      showToast(tState('undoBtnShort'));
       return;
     }
 
@@ -2037,11 +1899,7 @@ export const appActions = {
         todayStats: last.previousTodayStats,
       },
     }));
-    showToast(
-      isZh
-        ? `已毫秒级回滚至上一张卡片：「${last.card.front}」`
-        : `Rolled back to "${last.card.front}"`
-    );
+    showToast(`${tState('undoBtnShort')}: ${last.card.front}`);
   },
 
   async deleteCurrentReviewCard() {
@@ -2078,11 +1936,7 @@ export const appActions = {
       cardShownAtMs: Date.now(),
     }));
 
-    showToast(
-      state.resolvedLang === 'zh-CN'
-        ? `已从数据库永久删除卡片「${currentCard.front}」`
-        : `Deleted card "${currentCard.front}"`
-    );
+    showToast(`${tState('deleteCardBtn')}: ${currentCard.front}`);
   },
 
   async toggleSuspendCurrentReviewCard() {
@@ -2105,11 +1959,7 @@ export const appActions = {
             ...c,
             suspended: nextSuspended,
             status: (nextSuspended ? 'suspended' : 'due') as LibraryCardItem['status'],
-            dueText: nextSuspended
-              ? state.resolvedLang === 'zh-CN'
-                ? '已暂停'
-                : 'Suspended'
-              : c.dueText,
+            dueText: nextSuspended ? tState('statusSuspended') : c.dueText,
           }
         : c
     );
@@ -2125,14 +1975,10 @@ export const appActions = {
         isCardFlipped: false,
         cardShownAtMs: Date.now(),
       });
-      showToast(
-        state.resolvedLang === 'zh-CN'
-          ? `已暂停卡片「${currentCard.front}」（已移出学习队列）`
-          : `Suspended "${currentCard.front}"`
-      );
+      showToast(`${tState('suspendCardBtn')}: ${currentCard.front}`);
     } else {
       await appActions.saveInlineCardUpdate({ suspended: false });
-      showToast(state.resolvedLang === 'zh-CN' ? '已取消暂停（已恢复卡片）' : 'Unsuspended card');
+      showToast(tState('unsuspendCardBtn'));
     }
   },
 
@@ -2156,7 +2002,7 @@ export const appActions = {
             ...c,
             buried: true,
             status: 'buried' as LibraryCardItem['status'],
-            dueText: state.resolvedLang === 'zh-CN' ? '已搁置' : 'Buried',
+            dueText: tState('statusBuried'),
           }
         : c
     );
@@ -2171,11 +2017,7 @@ export const appActions = {
       isCardFlipped: false,
       cardShownAtMs: Date.now(),
     });
-    showToast(
-      state.resolvedLang === 'zh-CN'
-        ? `已搁置卡片「${currentCard.front}」至明日`
-        : `Buried "${currentCard.front}" until tomorrow`
-    );
+    showToast(`${tState('buryCardBtn')}: ${currentCard.front}`);
   },
 
   async setCurrentReviewCardFlag(flag: CardFlagColor, toggleIfSame = true) {
@@ -2210,14 +2052,10 @@ export const appActions = {
       } catch {}
     }
 
-    const isZh = state.resolvedLang === 'zh-CN';
     if (nextFlag === 0) {
-      showToast(isZh ? '已清除卡片旗标' : 'Cleared card flag');
+      showToast(tState('flagNone'));
     } else {
-      const meta = ANKI_FLAG_PALETTE[nextFlag];
-      showToast(
-        isZh ? `已标记为「${meta.labelZh}」` : `Flagged: ${meta.labelEn}`
-      );
+      showToast(tState(`flagLabel_${nextFlag}` as any));
     }
   },
 
@@ -2294,7 +2132,7 @@ export const appActions = {
     setAppState({
       reviewQueue: nextQueue,
       libraryCards: nextLib,
-      lastSavedTimestamp: state.resolvedLang === 'zh-CN' ? '刚刚已自动保存' : 'Saved just now',
+      lastSavedTimestamp: tState('autoSaved'),
     });
 
     if (isAnkiNativeEnv()) {
@@ -2313,7 +2151,7 @@ export const appActions = {
         });
       } catch {}
     }
-    showToast(state.resolvedLang === 'zh-CN' ? '卡片修改已保存' : 'Card changes saved');
+    showToast(tState('autoSaved'));
   },
 
   async pasteImageFromClipboard(file: File): Promise<string | null> {
@@ -2335,11 +2173,7 @@ export const appActions = {
               filename: `paste_${Date.now()}.${ext}`,
             });
             if (res?.fileUrl) {
-              showToast(
-                state.resolvedLang === 'zh-CN'
-                  ? `截图已存入媒体库：${res.filename}`
-                  : `Saved image: ${res.filename}`
-              );
+              showToast(`${tState('autoSaved')}: ${res.filename}`);
               resolve(`<img src="${res.fileUrl}" data-anki-media="${res.filename}" />`);
               return;
             }
@@ -2386,7 +2220,7 @@ export const appActions = {
   }) {
     const isCloze = payload.front.includes('{{c1::') || payload.back.includes('{{c1::');
     const qIdx = state.reviewQueue.findIndex((c) => c.id === payload.cardId);
-    let updatedQueue = [...state.reviewQueue];
+    const updatedQueue = [...state.reviewQueue];
     if (qIdx >= 0) {
       const cur = updatedQueue[qIdx];
       updatedQueue[qIdx] = {
@@ -2456,7 +2290,7 @@ export const appActions = {
       } catch {}
     }
 
-    showToast(state.resolvedLang === 'zh-CN' ? '卡片修改已保存' : 'Card changes saved');
+    showToast(tState('autoSaved'));
   },
 
   async quickAddCard(payload: {
@@ -2467,7 +2301,6 @@ export const appActions = {
     tags: string[];
     modelId?: string;
     createReverseCard?: boolean;
-    typeAnswerMode?: boolean;
     fields?: Record<string, string>;
   }) {
     let createdCardId = `card-${Date.now()}`;
@@ -2485,21 +2318,13 @@ export const appActions = {
         if (res?.cardId) createdCardId = res.cardId;
         if (res?.noteId) createdNoteId = res.noteId;
         await appActions.initFromAnki(false);
-        showToast(
-          state.resolvedLang === 'zh-CN'
-            ? res?.createdCount && res.createdCount > 1
-              ? `已添加到「${targetDeckName}」（共生成 ${res.createdCount} 张正反双向卡片）`
-              : `已添加到「${targetDeckName}」并加入今日学习队列`
-            : `Added to "${targetDeckName}"`
-        );
+        showToast(tState('addToDeckBtn', { deck: targetDeckName }));
         return;
       } catch {}
     }
 
     const isCloze = payload.front.includes('{{c1::') || payload.back.includes('{{c1::');
-    const effectiveTags = payload.typeAnswerMode && !payload.tags.includes('默写')
-      ? [...payload.tags, '默写']
-      : payload.tags;
+    const effectiveTags = payload.tags;
     const newLibCard: LibraryCardItem = {
       id: createdCardId,
       noteId: createdNoteId,
@@ -2516,7 +2341,7 @@ export const appActions = {
       mastery: 0,
       stability: 0,
       difficultyLevel: 'medium',
-      dueText: state.resolvedLang === 'zh-CN' ? '新卡片' : 'New',
+      dueText: tState('statusNew'),
       status: 'new',
       suspended: false,
       flags: 0,
@@ -2546,13 +2371,7 @@ export const appActions = {
       cmdKResults: [...cardsToPrepend, ...prev.cmdKResults],
     }));
 
-    showToast(
-      state.resolvedLang === 'zh-CN'
-        ? cardsToPrepend.length > 1
-          ? `已添加到「${targetDeckName}」（共生成 ${cardsToPrepend.length} 张正反双向卡片）`
-          : `已添加到「${targetDeckName}」并加入今日学习队列`
-        : `Added to "${targetDeckName}"`
-    );
+    showToast(tState('addToDeckBtn', { deck: targetDeckName }));
   },
 
   toggleCardSelection(cardId: string) {
@@ -2596,7 +2415,6 @@ export const appActions = {
   ) {
     const ids = state.selectedCardIds;
     if (ids.length === 0) return;
-    const isZh = state.resolvedLang === 'zh-CN';
 
     if (isAnkiNativeEnv()) {
       try {
@@ -2624,16 +2442,12 @@ export const appActions = {
                 ...c,
                 suspended: shouldSuspend,
                 status: (shouldSuspend ? 'suspended' : 'due') as LibraryCardItem['status'],
-                dueText: shouldSuspend ? (isZh ? '已暂停' : 'Suspended') : isZh ? '到期 今天' : 'Due Today',
+                dueText: shouldSuspend ? tState('statusSuspended') : tState('statusDue'),
               }
             : c
         ),
       }));
-      showToast(
-        isZh
-          ? `已批量${shouldSuspend ? '暂停' : '取消暂停'} ${ids.length} 张卡片`
-          : `${shouldSuspend ? 'Suspended' : 'Unsuspended'} ${ids.length} cards`
-      );
+      showToast(`${shouldSuspend ? tState('batchSuspend') : tState('batchUnsuspend')} (${ids.length})`);
     } else if (actionType === 'bury' || actionType === 'unbury') {
       const shouldBury = actionType === 'bury';
       setAppState((prev) => ({
@@ -2643,16 +2457,12 @@ export const appActions = {
                 ...c,
                 buried: shouldBury,
                 status: (shouldBury ? 'buried' : 'due') as LibraryCardItem['status'],
-                dueText: shouldBury ? (isZh ? '已搁置' : 'Buried') : isZh ? '到期 今天' : 'Due Today',
+                dueText: shouldBury ? tState('statusBuried') : tState('statusDue'),
               }
             : c
         ),
       }));
-      showToast(
-        isZh
-          ? `已批量${shouldBury ? '搁置至次日' : '取消搁置'} ${ids.length} 张卡片`
-          : `${shouldBury ? 'Buried' : 'Unburied'} ${ids.length} cards`
-      );
+      showToast(`${shouldBury ? tState('batchBury') : tState('batchUnbury')} (${ids.length})`);
     } else if (actionType === 'setFlag') {
       const nextFlag = (payload?.flag ?? 0) as CardFlagColor;
       setAppState((prev) => ({
@@ -2660,20 +2470,11 @@ export const appActions = {
           ids.includes(c.id) ? { ...c, flags: nextFlag } : c
         ),
       }));
-      if (nextFlag === 0) {
-        showToast(
-          isZh
-            ? `已批量清除 ${ids.length} 张卡片的旗标`
-            : `Cleared flags on ${ids.length} cards`
-        );
-      } else {
-        const meta = ANKI_FLAG_PALETTE[nextFlag];
-        showToast(
-          isZh
-            ? `已为 ${ids.length} 张卡片标记「${meta.shortZh}」`
-            : `Flagged ${ids.length} cards as ${meta.shortEn}`
-        );
-      }
+      showToast(
+        nextFlag === 0
+          ? `${tState('flagNone')} (${ids.length})`
+          : `${tState(`flagLabel_${nextFlag}` as any)} (${ids.length})`
+      );
     } else if (actionType === 'delete') {
       setAppState((prev) => ({
         libraryCards: prev.libraryCards.filter((c) => !ids.includes(c.id)),
@@ -2681,7 +2482,7 @@ export const appActions = {
         libraryFilteredCount: Math.max(0, prev.libraryFilteredCount - ids.length),
         selectedCardIds: [],
       }));
-      showToast(isZh ? `已批量删除 ${ids.length} 张卡片` : `Deleted ${ids.length} cards`);
+      showToast(`${tState('batchDelete')} (${ids.length})`);
     } else if (actionType === 'addTag') {
       const rawTag = (payload?.tag || '').trim();
       if (!rawTag) return;
@@ -2693,11 +2494,7 @@ export const appActions = {
           return { ...c, tags: merged };
         }),
       }));
-      showToast(
-        isZh
-          ? `已为 ${ids.length} 张卡片添加标签：${newTags.map((t) => `#${t}`).join(' ')}`
-          : `Added tags to ${ids.length} cards`
-      );
+      showToast(`${tState('batchAddTag')} (${ids.length})`);
     } else if (actionType === 'removeTag') {
       const rawTag = (payload?.tag || '').trim();
       if (!rawTag) return;
@@ -2714,11 +2511,7 @@ export const appActions = {
           return { ...c, tags: nextTags };
         }),
       }));
-      showToast(
-        isZh
-          ? `已从所选卡片移除标签：${Array.from(removeSet).map((t) => `#${t}`).join(' ')}`
-          : `Removed tags from ${ids.length} cards`
-      );
+      showToast(`${tState('tagsLabel')} (${ids.length})`);
     } else if (actionType === 'findReplace') {
       const findText = payload?.findText ?? '';
       const replaceText = payload?.replaceText ?? '';
@@ -2766,22 +2559,16 @@ export const appActions = {
         }),
       }));
 
-      showToast(
-        isZh
-          ? `批量查找替换完成：已更新 ${replacedCardCount || ids.length} 张卡片的内容`
-          : `Find & Replace completed on ${replacedCardCount || ids.length} cards`
-      );
+      showToast(`${tState('autoSaved')} (${replacedCardCount || ids.length})`);
     } else if (actionType === 'resetProgress') {
       setAppState((prev) => ({
         libraryCards: prev.libraryCards.map((c) =>
           ids.includes(c.id)
-            ? { ...c, mastery: 0, reps: 0, dueText: isZh ? '新卡片' : 'New', status: 'new' }
+            ? { ...c, mastery: 0, reps: 0, dueText: tState('statusNew'), status: 'new' }
             : c
         ),
       }));
-      showToast(
-        isZh ? `已重置 ${ids.length} 张卡片的 FSRS 调度进度` : `Reset FSRS progress for ${ids.length} cards`
-      );
+      showToast(`${tState('batchResetProgress')} (${ids.length})`);
     } else if (actionType === 'moveDeck') {
       const targetDeck = state.decks.find(
         (d) => d.id === payload?.targetDeckId || d.name === payload?.targetDeckName
@@ -2802,11 +2589,7 @@ export const appActions = {
             : c
         ),
       }));
-      showToast(
-        isZh
-          ? `已将 ${ids.length} 张卡片移动至牌组「${targetDeckName}」`
-          : `Moved ${ids.length} cards to "${targetDeckName}"`
-      );
+      showToast(`${tState('batchMoveDeck')}: ${targetDeckName}`);
     }
 
     if (isAnkiNativeEnv()) {
@@ -2819,11 +2602,7 @@ export const appActions = {
     if (isAnkiNativeEnv()) {
       await callAnki('toggle_native_ui');
     } else {
-      showToast(
-        state.resolvedLang === 'zh-CN'
-          ? '已发送原生界面切换指令 (可通过顶部按钮或 Ctrl+Opt+M 随时返回)'
-          : 'Switched to Native Anki UI (Press Ctrl+Opt+M or click top toolbar button to return)'
-      );
+      showToast(tState('switchToNative'));
     }
   },
 

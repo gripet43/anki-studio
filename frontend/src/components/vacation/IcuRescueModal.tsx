@@ -14,17 +14,12 @@ import { getAccentScale } from '../../utils/themeTokens';
 
 export const IcuRescueModal: React.FC = () => {
   const store = useAppStore();
-  const isZh = store.resolvedLang === 'zh-CN';
   const t = (key: any, params?: any) => translate(store.resolvedLang, key, params);
   const brandHex = getAccentScale(store.accentColor, store.theme).brand;
 
   const backlog = store.dashboard.backlog;
   const totalDue = backlog?.totalDue || store.dashboard.todayStats.totalPending || 0;
   const rescueHistory: RescueReceipt[] = store.dashboard.rescueHistory || [];
-  const latestReceipt: RescueReceipt | null =
-    rescueHistory.length > 0
-      ? rescueHistory[0]
-      : store.currentRescueReceipt || store.dashboard.lastRescueReceipt || null;
 
   // Tabs: only 2 tabs now ("rescue" = 减负方案, "history" = 历史记录)
   const [activeTab, setActiveTab] = useState<'rescue' | 'history'>(
@@ -90,7 +85,7 @@ export const IcuRescueModal: React.FC = () => {
   const handleExecuteRescue = async () => {
     setIsSubmitting(true);
     try {
-      const res = await appActions.rescueBacklog({
+      await appActions.rescueBacklog({
         mode,
         days,
       });
@@ -115,13 +110,6 @@ export const IcuRescueModal: React.FC = () => {
   const toggleExpand = (id: string) => {
     setExpandedId((prev) => (prev === id ? null : id));
   };
-
-  // Whether the latest relief can be undone
-  const canUndoLatest = Boolean(
-    rescueHistory.length > 0 &&
-      rescueHistory[0].canUndo &&
-      rescueHistory[0].status !== 'undone'
-  );
 
   return (
     <div
@@ -173,7 +161,7 @@ export const IcuRescueModal: React.FC = () => {
                     : 'text-[#8E8E93] hover:text-current'
                 }`}
               >
-                {isZh ? '减负方案' : 'Plan'}
+                {t('icuTabPlan')}
               </button>
               <button
                 type="button"
@@ -187,7 +175,7 @@ export const IcuRescueModal: React.FC = () => {
                     : 'text-[#8E8E93] hover:text-current'
                 }`}
               >
-                <span>{isZh ? '历史记录' : 'History'}</span>
+                <span>{t('vacationTabHistory')}</span>
                 {rescueHistory.length > 0 && (
                   <span className="text-[10px] opacity-75 font-mono">
                     {rescueHistory.length}
@@ -199,7 +187,7 @@ export const IcuRescueModal: React.FC = () => {
             <button
               onClick={() => appActions.closeIcuModal()}
               className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors"
-              aria-label="关闭"
+              aria-label={t('close')}
             >
               ✕
             </button>
@@ -217,36 +205,28 @@ export const IcuRescueModal: React.FC = () => {
               >
                 <div>
                   <div className="text-[11px] text-[#8E8E93]">
-                    {isZh ? '当前待复习卡片' : 'Current Due Cards'}
+                    {t('icuCurrentDueCardsLabel')}
                   </div>
                   <div className="text-[20px] font-bold tracking-tight mt-0.5">
                     {totalDue}{' '}
                     <span className="text-[12px] font-normal text-[#8E8E93]">
-                      {isZh ? '张' : 'cards'}
+                      {t('cardsUnit')}
                     </span>
                   </div>
                 </div>
 
                 <div className="text-[#8E8E93] opacity-50 text-base">→</div>
 
-                <div className="text-right">
+                <div className="text-end">
                   <div className="text-[11px] text-[#8E8E93]">
                     {mode === 'amortize'
-                      ? isZh
-                        ? `平摊至未来 ${days} 天后`
-                        : `Spread over ${days} days`
-                      : isZh
-                      ? `整体推迟 ${days} 天后`
-                      : `Postponed by ${days} days`}
+                      ? t('icuSpreadOverDaysSub', { n: days })
+                      : t('icuPostponedByDaysSub', { n: days })}
                   </div>
                   <div className="text-[18px] font-bold text-[var(--brand-text)] mt-0.5">
                     {mode === 'amortize'
-                      ? isZh
-                        ? `日均 +${perDayEstimate} 张`
-                        : `~${perDayEstimate} / day`
-                      : isZh
-                      ? '今日待办清零'
-                      : '0 due today'}
+                      ? t('icuPerDayAddEstimate', { n: perDayEstimate })
+                      : t('icuZeroDueToday')}
                   </div>
                 </div>
               </div>
@@ -256,7 +236,7 @@ export const IcuRescueModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setMode('amortize')}
-                  className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all ${
+                  className={`p-3.5 rounded-xl border text-start cursor-pointer transition-all ${
                     mode === 'amortize'
                       ? 'border-[var(--brand)] bg-[var(--brand-soft)] shadow-2xs ring-1 ring-[var(--brand)]'
                       : `${cardSurface} hover:border-[var(--brand-border)]`
@@ -265,7 +245,7 @@ export const IcuRescueModal: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-[13px]">{t('amortizeOptionTitle')}</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--brand-soft-strong)] text-[var(--brand-text)] font-semibold">
-                      {isZh ? '推荐' : 'Best'}
+                      {t('recommendedBadge')}
                     </span>
                   </div>
                   <p className="text-[11px] text-[#8E8E93] mt-1.5 leading-relaxed">
@@ -276,7 +256,7 @@ export const IcuRescueModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setMode('shift')}
-                  className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all ${
+                  className={`p-3.5 rounded-xl border text-start cursor-pointer transition-all ${
                     mode === 'shift'
                       ? 'border-[var(--brand)] bg-[var(--brand-soft)] shadow-2xs ring-1 ring-[var(--brand)]'
                       : `${cardSurface} hover:border-[var(--brand-border)]`
@@ -295,14 +275,10 @@ export const IcuRescueModal: React.FC = () => {
               <div className={`p-4 rounded-xl border space-y-3 ${cardSurface}`}>
                 <div className="flex items-center justify-between text-[12px]">
                   <span className="font-semibold">
-                    {mode === 'amortize'
-                      ? t('amortizeDaysLabel')
-                      : isZh
-                      ? '顺延天数'
-                      : 'Shift Days'}
+                    {mode === 'amortize' ? t('amortizeDaysLabel') : t('shiftDaysLabel')}
                   </span>
                   <span className="font-mono font-semibold text-[var(--brand-text)]">
-                    {days} {isZh ? '天' : 'days'}
+                    {days} {t('daysUnit')}
                   </span>
                 </div>
 
@@ -318,7 +294,7 @@ export const IcuRescueModal: React.FC = () => {
                           : 'border-black/8 dark:border-white/10 hover:border-[var(--brand-border)]'
                       }`}
                     >
-                      {d} {isZh ? '天' : 'd'}
+                      {d} {t('daysUnit')}
                     </button>
                   ))}
                 </div>
@@ -343,19 +319,16 @@ export const IcuRescueModal: React.FC = () => {
               {rescueHistory.length === 0 ? (
                 <div className={`p-8 rounded-xl border text-center space-y-1.5 ${cardSurface}`}>
                   <div className="text-[13px] font-semibold">
-                    {isZh ? '暂无历史减负记录' : 'No history records'}
+                    {t('icuNoHistoryTitle')}
                   </div>
                   <p className="text-[11px] text-[#8E8E93]">
-                    {isZh
-                      ? '执行积压平摊后，所有存证排布明细与撤销入口将保存在此处。'
-                      : 'Past schedule smoothing operations and verification receipts will be listed here.'}
+                    {t('icuNoHistorySub')}
                   </p>
                 </div>
               ) : (
                 rescueHistory.map((item, index) => {
                   const isLatest = index === 0;
                   const isUndone = item.status === 'undone' || item.canUndo === false;
-                  // Only the latest entry (index 0) is permitted to undo!
                   const canUndoThisItem = isLatest && item.canUndo && !isUndone;
                   const isExpanded = expandedId === item.id;
 
@@ -380,12 +353,14 @@ export const IcuRescueModal: React.FC = () => {
                             </div>
                             <div className="text-[11px] text-[#8E8E93]">
                               {item.mode === 'amortize'
-                                ? isZh
-                                  ? `已平摊 ${item.rescheduledCount} 张卡片至未来 ${item.days} 天`
-                                  : `Distributed ${item.rescheduledCount} cards over ${item.days} days`
-                                : isZh
-                                ? `已顺延 ${item.rescheduledCount} 张卡片 ${item.days} 天`
-                                : `Shifted ${item.rescheduledCount} cards by ${item.days} days`}
+                                ? t('icuDistributedSummary', {
+                                    count: item.rescheduledCount,
+                                    days: item.days,
+                                  })
+                                : t('icuShiftedSummary', {
+                                    count: item.rescheduledCount,
+                                    days: item.days,
+                                  })}
                               {' · '}
                               <span className="font-mono opacity-80">ID: {item.id}</span>
                             </div>
@@ -399,20 +374,16 @@ export const IcuRescueModal: React.FC = () => {
                                   type="button"
                                   onClick={() => setConfirmUndoId(item.id)}
                                   className="h-7 px-2.5 rounded-lg border border-[var(--status-danger)]/35 text-[var(--status-danger)] hover:bg-[var(--status-danger-soft)] text-[11px] font-medium cursor-pointer transition-colors shrink-0"
-                                  title={isZh ? '撤销最近一次减负操作' : 'Undo recent relief'}
+                                  title={t('icuUndoReliefBtn')}
                                 >
-                                  {isZh ? (item.mode === 'shift' ? '撤销顺延' : '撤销平摊') : 'Undo'}
+                                  {t('icuUndoReliefBtn')}
                                 </button>
                               ) : null
                             ) : (
                               <span className="text-[11px] px-2 py-0.5 rounded bg-black/5 dark:bg-white/10 text-[#8E8E93]">
                                 {item.status === 'undone'
-                                  ? isZh
-                                    ? '已撤销'
-                                    : 'Reverted'
-                                  : isZh
-                                  ? '已归档'
-                                  : 'Archived'}
+                                  ? t('statusReverted')
+                                  : t('statusArchived')}
                               </span>
                             )}
 
@@ -420,9 +391,9 @@ export const IcuRescueModal: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => toggleExpand(item.id)}
-                              className="text-[11px] text-[var(--brand-text)] hover:underline font-medium cursor-pointer shrink-0 ml-1"
+                              className="text-[11px] text-[var(--brand-text)] hover:underline font-medium cursor-pointer shrink-0 ms-1"
                             >
-                              {isExpanded ? (isZh ? '收起 ▴' : 'Collapse ▴') : isZh ? '详情 ▾' : 'Inspect ▾'}
+                              {isExpanded ? `${t('collapseLabel')} ▴` : `${t('inspectLabel')} ▾`}
                             </button>
                           </div>
                         </div>
@@ -431,9 +402,7 @@ export const IcuRescueModal: React.FC = () => {
                         {confirmUndoId === item.id && canUndoThisItem && (
                           <div className="p-3 rounded-lg bg-[var(--status-danger-soft)] border border-[var(--status-danger)]/25 flex items-center justify-between gap-3 animate-in fade-in duration-150">
                             <span className="text-[11px] text-[var(--status-danger)] font-medium">
-                              {isZh
-                                ? '确认撤销最近一次减负？所有卡片将原样退回今日待复习队列。'
-                                : 'Restore all rescheduled cards back to today?'}
+                              {t('icuConfirmUndoPrompt')}
                             </span>
                             <div className="flex items-center gap-1.5 shrink-0">
                               <button
@@ -442,7 +411,7 @@ export const IcuRescueModal: React.FC = () => {
                                 disabled={isUndoing}
                                 className="px-2.5 py-1 rounded-md text-[11px] border border-black/10 dark:border-white/10 cursor-pointer"
                               >
-                                {isZh ? '取消' : 'Cancel'}
+                                {t('cancel')}
                               </button>
                               <button
                                 type="button"
@@ -450,13 +419,7 @@ export const IcuRescueModal: React.FC = () => {
                                 disabled={isUndoing}
                                 className="px-2.5 py-1 rounded-md text-[11px] bg-[var(--status-danger)] text-white font-semibold cursor-pointer"
                               >
-                                {isUndoing
-                                  ? isZh
-                                    ? '撤销中...'
-                                    : 'Undoing...'
-                                  : isZh
-                                  ? '确认撤销'
-                                  : 'Confirm'}
+                                {isUndoing ? t('processingText') : t('confirm')}
                               </button>
                             </div>
                           </div>
@@ -469,13 +432,13 @@ export const IcuRescueModal: React.FC = () => {
                           {/* 3-Metric Integrity Strip */}
                           <div className="grid grid-cols-3 gap-2 pt-1 text-[11px]">
                             <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-black/[0.025] dark:bg-white/[0.03]">
-                              <span className="text-[#8E8E93]">{isZh ? '卡片总数' : 'Total'}</span>
+                              <span className="text-[#8E8E93]">{t('icuTotalCardsLabel')}</span>
                               <span className="font-mono font-semibold text-[var(--status-success)]">
                                 {item.totalCardsAfter.toLocaleString()}
                               </span>
                             </div>
                             <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-black/[0.025] dark:bg-white/[0.03]">
-                              <span className="text-[#8E8E93]">{isZh ? '丢失校验' : 'Lost'}</span>
+                              <span className="text-[#8E8E93]">{t('icuLostCheckLabel')}</span>
                               <span
                                 className={`font-mono font-semibold ${
                                   (item.lostCards ?? 0) > 0
@@ -488,7 +451,7 @@ export const IcuRescueModal: React.FC = () => {
                             </div>
                             <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-black/[0.025] dark:bg-white/[0.03]">
                               <span className="text-[#8E8E93]">
-                                {isZh ? '改期张数' : 'Rescheduled'}
+                                {t('icuRescheduledCountLabel')}
                               </span>
                               <span className="font-mono font-semibold text-[var(--brand-text)]">
                                 {(item.rescheduledCount ?? 0).toLocaleString()}
@@ -500,17 +463,16 @@ export const IcuRescueModal: React.FC = () => {
                           <div className="space-y-2 pt-1">
                             <div className="flex items-center justify-between text-[12px]">
                               <span className="font-semibold">
-                                {isZh
-                                  ? `未来 ${item.days} 天每日排布`
-                                  : `${item.days}-Day Distribution`}
+                                {t('icuDayDistributionTitle', { days: item.days })}
                               </span>
                               <span className="text-[11px] text-[#8E8E93] font-mono">
-                                ~{Math.ceil(item.rescheduledCount / Math.max(1, item.days))}{' '}
-                                {isZh ? '张/天' : '/ day'}
+                                {t('icuPerDayAddEstimate', {
+                                  n: Math.ceil(item.rescheduledCount / Math.max(1, item.days)),
+                                })}
                               </span>
                             </div>
 
-                            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                            <div className="space-y-1.5 max-h-40 overflow-y-auto pe-1">
                               {(item.dayDistribution || []).map((day) => {
                                 const maxCount = Math.max(
                                   ...(item.dayDistribution || []).map((d) => d.count),
@@ -535,7 +497,7 @@ export const IcuRescueModal: React.FC = () => {
                                         }}
                                       />
                                     </div>
-                                    <span className="w-12 shrink-0 text-right font-mono font-semibold">
+                                    <span className="w-12 shrink-0 text-end font-mono font-semibold">
                                       +{day.count}
                                     </span>
                                   </div>
@@ -548,19 +510,19 @@ export const IcuRescueModal: React.FC = () => {
                           <details className="rounded-xl border border-black/8 dark:border-white/8 px-3.5 py-2.5 text-[12px] group">
                             <summary className="flex items-center justify-between cursor-pointer list-none select-none">
                               <span className="font-medium text-[#8E8E93] group-hover:text-current transition-colors">
-                                {isZh
-                                  ? `查看顺延卡片抽检明细 (${(item.cardSamples || []).length} 张样本)`
-                                  : `Inspect card samples (${(item.cardSamples || []).length})`}
+                                {t('icuInspectCardSamplesSummary', {
+                                  n: (item.cardSamples || []).length,
+                                })}
                               </span>
                               <span className="text-[11px] text-[var(--brand-text)] font-medium">
-                                {isZh ? '展开 ▾' : 'Expand ▾'}
+                                {t('inspectLabel')} ▾
                               </span>
                             </summary>
 
                             <div className="pt-2.5 mt-2.5 border-t border-black/5 dark:border-white/6 space-y-2">
                               <input
                                 type="text"
-                                placeholder={isZh ? '筛选抽检卡片或牌组...' : 'Filter samples...'}
+                                placeholder={t('icuFilterSamplesPlaceholder')}
                                 value={sampleSearch}
                                 onChange={(e) => setSampleSearch(e.target.value)}
                                 className="w-full h-7 text-[11px] px-2 rounded-lg border border-black/10 dark:border-white/10 bg-transparent focus:outline-none focus:border-[var(--brand)]"
@@ -569,7 +531,7 @@ export const IcuRescueModal: React.FC = () => {
                               <div className="max-h-32 overflow-y-auto divide-y divide-black/5 dark:divide-white/5 text-[11px]">
                                 {filteredSamples.length === 0 ? (
                                   <div className="py-2.5 text-center text-[#8E8E93]">
-                                    {isZh ? '无匹配样本' : 'No matching samples'}
+                                    {t('icuNoMatchingSamples')}
                                   </div>
                                 ) : (
                                   filteredSamples.map((card) => (
@@ -580,10 +542,7 @@ export const IcuRescueModal: React.FC = () => {
                                       <div className="min-w-0 flex-1">
                                         <div className="font-medium truncate">{card.front}</div>
                                         <div className="text-[10px] text-[#8E8E93] truncate">
-                                          {card.deckName} ·{' '}
-                                          {isZh
-                                            ? `原间隔 ${card.intervalDays}天`
-                                            : `ivl ${card.intervalDays}d`}
+                                          {card.deckName} · ivl {card.intervalDays}d
                                         </div>
                                       </div>
                                       <span className="shrink-0 px-1.5 py-0.5 rounded bg-[var(--brand-soft)] text-[var(--brand-text)] font-mono text-[10px]">
@@ -599,9 +558,7 @@ export const IcuRescueModal: React.FC = () => {
                           {/* Historical notice for superseded records */}
                           {!isLatest && (
                             <div className="text-[10px] text-[#8E8E93] pt-1">
-                              {isZh
-                                ? 'ℹ️ 此记录为历史减负存证（根据状态依赖原则，仅最近一次减负支持撤销回退）。'
-                                : 'ℹ️ Historical record (only the most recent relief can be undone).'}
+                              {t('icuHistoricalRecordNote')}
                             </div>
                           )}
                         </div>
@@ -622,7 +579,7 @@ export const IcuRescueModal: React.FC = () => {
               onClick={() => appActions.closeIcuModal()}
               className="btn-secondary !h-9 !px-4 !text-[12px]"
             >
-              {isZh ? '关闭' : 'Close'}
+              {t('close')}
             </button>
 
             {activeTab === 'rescue' && (
@@ -633,17 +590,7 @@ export const IcuRescueModal: React.FC = () => {
                 style={{ backgroundColor: brandHex }}
                 className="btn-primary !h-9 !px-5 !text-[12px]"
               >
-                {isSubmitting
-                  ? isZh
-                    ? '正在重排...'
-                    : 'Applying...'
-                  : mode === 'amortize'
-                  ? isZh
-                    ? `平摊至 ${days} 天`
-                    : `Distribute (${days}d)`
-                  : isZh
-                  ? `顺延 ${days} 天`
-                  : `Postpone (${days}d)`}
+                {isSubmitting ? t('processingText') : `${t('executeRescueBtn')} (${days}d)`}
               </button>
             )}
           </div>

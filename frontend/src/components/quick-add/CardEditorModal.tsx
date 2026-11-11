@@ -11,7 +11,7 @@ import { TowerWysiwygEditor } from './TowerWysiwygEditor';
 const FRONT_ALIASES = ['正面', 'Front', 'Text', '文字', '问题', 'Question', 'Word', 'Expression'];
 const BACK_ALIASES = ['背面', 'Back', 'Meaning', '释义', '答案', 'Back Extra', 'Answer', '背面额外', 'Examples', '例句'];
 
-export type NoteCreationPreset = 'basic' | 'reversed' | 'type_answer' | 'cloze' | string;
+export type NoteCreationPreset = 'basic' | 'reversed' | 'cloze' | string;
 
 interface NoteTypeOption {
   id: string;
@@ -19,7 +19,6 @@ interface NoteTypeOption {
   isCloze: boolean;
   fields: string[];
   isReversed?: boolean;
-  isTypeAnswer?: boolean;
 }
 
 function normalizeTextForDup(raw: string): string {
@@ -48,7 +47,6 @@ export const CardEditorModal: React.FC = () => {
     libraryAllTags,
   } = useAppStore();
 
-  const isZh = resolvedLang === 'zh-CN';
   const isDark = theme === 'dark' || theme === 'oled';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
@@ -101,7 +99,6 @@ export const CardEditorModal: React.FC = () => {
   const deckDropdownRef = useRef<HTMLDivElement>(null);
   const noteTypeDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Formatting helper compatible with Tower WYSIWYG and Cloze auto-increment
   const applyFormatting = (type: 'bold' | 'italic' | 'cloze' | 'math' | 'code' | 'highlight' | 'list' | 'clear') => {
     if (type === 'cloze') {
       void renderMathAndRichHtml;
@@ -137,7 +134,6 @@ export const CardEditorModal: React.FC = () => {
     if (!quickAddOpen) return;
 
     if (editingCardData) {
-      // Edit Mode
       const initDeckId = editingCardData.deckId || decks[0]?.id || '1';
       const allFields = editingCardData.fields || {};
 
@@ -190,7 +186,6 @@ export const CardEditorModal: React.FC = () => {
         deckId: initDeckId,
       });
     } else {
-      // Create Mode
       const fallbackDeckId = decks[0]?.id || '1';
       setSelectedDeckId(fallbackDeckId);
       setSelectedPreset('basic');
@@ -217,8 +212,6 @@ export const CardEditorModal: React.FC = () => {
     setConfirmDiscardOpen(false);
     setBackendDupCount(0);
     setBackendDupPreview('');
-    // `decks` is intentionally NOT a dependency: any background refresh replaces
-    // the array reference and used to silently wipe the user's unsaved draft.
   }, [quickAddOpen, editingCardData]);
 
   // Click outside dropdowns to close
@@ -236,7 +229,7 @@ export const CardEditorModal: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [deckDropdownOpen, noteTypeDropdownOpen]);
 
-  // Real-time Duplicate Detection (Instant local check + debounced SQLite check)
+  // Real-time Duplicate Detection
   const localDuplicateInfo = useMemo(() => {
     const norm = normalizeTextForDup(front);
     if (!norm || norm.length < 1) {
@@ -314,7 +307,6 @@ export const CardEditorModal: React.FC = () => {
     );
   }, [front, back, selectedPreset]);
 
-  // Handle selecting a Note Type / Preset in Create Mode
   const handleSelectNotePreset = (presetId: NoteCreationPreset, customModel?: NoteTypeOption) => {
     setSelectedPreset(presetId);
     setNoteTypeDropdownOpen(false);
@@ -338,25 +330,21 @@ export const CardEditorModal: React.FC = () => {
 
   const activePresetLabel = useMemo(() => {
     if (front.includes('anki-io-wrap')) {
-      return isZh ? '图片遮挡模板' : 'Image Occlusion';
+      return t('ioButtonLabel');
     }
     if (selectedPreset === 'reversed') {
-      return isZh ? '正反双向问答卡 (2张)' : 'Basic + Reversed (2x)';
-    }
-    if (selectedPreset === 'type_answer') {
-      return isZh ? '拼写默写检验卡' : 'Type in the Answer';
+      return t('notePresetReversedTitle');
     }
     if (isCloze) {
-      return isZh ? 'Cloze 挖空模板' : 'Cloze Deletion';
+      return t('clozeBadge');
     }
     const foundCustom = customNoteTypes.find((m) => `model:${m.id}` === selectedPreset);
     if (foundCustom) {
       return foundCustom.name;
     }
-    return isZh ? '标准问答卡 (Basic)' : 'Basic Card';
-  }, [front, selectedPreset, isCloze, customNoteTypes, isZh]);
+    return t('notePresetBasicTitle');
+  }, [front, selectedPreset, isCloze, customNoteTypes, resolvedLang]);
 
-  // Filtered decks for deck selector popover
   const filteredDecks = useMemo(() => {
     const q = deckSearchQuery.trim().toLowerCase();
     if (!q) return decks;
@@ -369,7 +357,6 @@ export const CardEditorModal: React.FC = () => {
     return decks.find((d) => d.id === selectedDeckId) || decks[0] || { id: '1', name: 'Default', fullName: 'Default' };
   }, [decks, selectedDeckId]);
 
-  // Matching tags for autocomplete based on user input
   const tagAutocompleteMatches = useMemo(() => {
     const q = tagInput.trim().toLowerCase();
     if (!q) return [];
@@ -392,7 +379,6 @@ export const CardEditorModal: React.FC = () => {
     }
   };
 
-  // Global Keyboard shortcut listener for modal
   const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
@@ -406,7 +392,6 @@ export const CardEditorModal: React.FC = () => {
     }
   };
 
-  // Tag creation
   const handleAddTag = () => {
     const clean = tagInput.trim();
     if (clean && !tags.includes(clean)) {
@@ -416,7 +401,6 @@ export const CardEditorModal: React.FC = () => {
     }
   };
 
-  // Save / Submit
   const handleSubmit = async () => {
     if (!front.trim() || submitting) return;
     setSubmitting(true);
@@ -463,7 +447,6 @@ export const CardEditorModal: React.FC = () => {
           tags,
           modelId: customModelId,
           createReverseCard: selectedPreset === 'reversed',
-          typeAnswerMode: selectedPreset === 'type_answer',
           fields: Object.keys(extraClean).length > 0 ? extraClean : undefined,
         });
 
@@ -523,7 +506,7 @@ export const CardEditorModal: React.FC = () => {
                   <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
                 </svg>
               )}
-              <span>{isEditMode ? (isZh ? '编辑卡片' : 'Edit Card') : (isZh ? '新建卡片' : 'New Card')}</span>
+              <span>{isEditMode ? t('editCardTitle') : t('newCardModalTitle')}</span>
             </span>
 
             {/* Deck Selector Popover Trigger */}
@@ -552,7 +535,7 @@ export const CardEditorModal: React.FC = () => {
               {/* Deck Selector Popover Menu */}
               {deckDropdownOpen && (
                 <div
-                  className={`absolute left-0 top-8.5 z-50 w-[240px] rounded-xl border shadow-xl p-1.5 space-y-1 backdrop-blur-xl ${
+                  className={`absolute start-0 top-8.5 z-50 w-[240px] rounded-xl border shadow-xl p-1.5 space-y-1 backdrop-blur-xl ${
                     isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
                   }`}
                 >
@@ -561,7 +544,7 @@ export const CardEditorModal: React.FC = () => {
                       type="text"
                       value={deckSearchQuery}
                       onChange={(e) => setDeckSearchQuery(e.target.value)}
-                      placeholder={isZh ? '搜索目标牌组...' : 'Search decks...'}
+                      placeholder={t('searchPlaceholder')}
                       className={`w-full h-7 px-2 rounded-lg border text-[11px] focus:outline-none focus:border-[var(--brand)] ${
                         isDark ? 'bg-[#13141C] border-[#343644]' : 'bg-[#F4F4F6] border-[#E5E5EA]'
                       }`}
@@ -613,13 +596,13 @@ export const CardEditorModal: React.FC = () => {
                 } ${
                   front.includes('anki-io-wrap')
                     ? 'bg-[#F59E0B]/15 text-[#F59E0B] border-[#F59E0B]/35'
-                    : isCloze || selectedPreset === 'reversed' || selectedPreset === 'type_answer'
+                    : isCloze || selectedPreset === 'reversed'
                     ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
                     : isDark
                     ? 'border-[#343644] bg-[#21222E] hover:border-[var(--brand-border)] text-[#D8D8E0]'
                     : 'border-[#E0E0E6] bg-[#F4F4F6] hover:border-[var(--brand-border)] text-[#3A3A3C]'
                 }`}
-                title={isZh ? '切换笔记模板或制卡模式（问答 / 正反双向 / 拼写默写 / 挖空）' : 'Select Note Type / Card Mode'}
+                title={activePresetLabel}
               >
                 <span className="max-w-[140px] truncate">{activePresetLabel}</span>
                 {!isEditMode && (
@@ -631,34 +614,26 @@ export const CardEditorModal: React.FC = () => {
 
               {!isEditMode && noteTypeDropdownOpen && (
                 <div
-                  className={`absolute left-0 top-8.5 z-50 w-[265px] rounded-xl border shadow-xl p-1.5 space-y-1 backdrop-blur-xl ${
+                  className={`absolute start-0 top-8.5 z-50 w-[265px] rounded-xl border shadow-xl p-1.5 space-y-1 backdrop-blur-xl ${
                     isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
                   }`}
                 >
-                  <div className="px-2 py-1 text-[10px] text-[#8E8E93] font-semibold">
-                    {isZh ? '核心制卡模式' : 'Core Note Modes'}
-                  </div>
                   {(
                     [
                       {
                         id: 'basic',
-                        title: isZh ? '标准问答卡 (Basic)' : 'Basic (Front → Back)',
-                        desc: isZh ? '正面提问、背面作答（1 张卡）' : 'Standard 1-way flashcard',
+                        title: t('notePresetBasicTitle'),
+                        desc: t('notePresetBasicDesc'),
                       },
                       {
                         id: 'reversed',
-                        title: isZh ? '正反双向问答卡 (Basic + Reversed)' : 'Basic (and reversed card)',
-                        desc: isZh ? '同时生成「正→反」与「反→正」2 张卡' : 'Generates both Front→Back and Back→Front',
-                      },
-                      {
-                        id: 'type_answer',
-                        title: isZh ? '拼写默写检验卡 (Type in Answer)' : 'Basic (type in the answer)',
-                        desc: isZh ? '复习时提供输入框，翻面逐字比对默写差异' : 'Prompts typed input during review with diff check',
+                        title: t('notePresetReversedTitle'),
+                        desc: t('notePresetReversedDesc'),
                       },
                       {
                         id: 'cloze',
-                        title: isZh ? 'Cloze 填空挖空卡' : 'Cloze Deletion',
-                        desc: isZh ? '按 {{c1::...}} 挖空序号生成多张联动卡' : 'Generates sibling cards per {{c1::...}} index',
+                        title: t('notePresetClozeTitle'),
+                        desc: t('notePresetClozeDesc'),
                       },
                     ] as const
                   ).map((opt) => {
@@ -668,7 +643,7 @@ export const CardEditorModal: React.FC = () => {
                         key={opt.id}
                         type="button"
                         onClick={() => handleSelectNotePreset(opt.id)}
-                        className={`w-full px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                        className={`w-full px-2.5 py-1.5 rounded-lg text-start cursor-pointer transition-colors ${
                           isSel
                             ? 'bg-[var(--brand)] text-white'
                             : isDark
@@ -690,9 +665,6 @@ export const CardEditorModal: React.FC = () => {
                   {customNoteTypes.filter((m) => m.fields.length > 2).length > 0 && (
                     <>
                       <div className="my-1 border-t border-black/5 dark:border-white/5" />
-                      <div className="px-2 py-0.5 text-[10px] text-[#8E8E93] font-semibold">
-                        {isZh ? '集合自定义多字段模板' : 'Custom Note Types'}
-                      </div>
                       {customNoteTypes
                         .filter((m) => m.fields.length > 2)
                         .map((m) => {
@@ -703,7 +675,7 @@ export const CardEditorModal: React.FC = () => {
                               key={m.id}
                               type="button"
                               onClick={() => handleSelectNotePreset(pKey, m)}
-                              className={`w-full px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                              className={`w-full px-2.5 py-1.5 rounded-lg text-start cursor-pointer transition-colors ${
                                 isSel
                                   ? 'bg-[var(--brand)] text-white'
                                   : isDark
@@ -714,7 +686,7 @@ export const CardEditorModal: React.FC = () => {
                               <div className="text-[12px] font-semibold flex items-center justify-between">
                                 <span className="truncate">{m.name}</span>
                                 <span className={`text-[10px] font-mono ${isSel ? 'text-white/80' : 'text-[#8E8E93]'}`}>
-                                  {m.fields.length} {isZh ? '字段' : 'flds'}
+                                  {m.fields.length}
                                 </span>
                               </div>
                             </button>
@@ -739,7 +711,7 @@ export const CardEditorModal: React.FC = () => {
                   ? 'border-[#343644] bg-[#21222E] hover:border-[var(--brand-border)] text-[#D8D8E0]'
                   : 'border-[#E0E0E6] bg-[#F4F4F6] hover:border-[var(--brand-border)] text-[#3A3A3C]'
               }`}
-              title={isZh ? '打开图片遮挡制卡工作台 (Image Occlusion)' : 'Open Image Occlusion Studio'}
+              title={t('ioStudioTitle')}
             >
               <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="3" y="3" width="18" height="18" rx="3" />
@@ -747,13 +719,7 @@ export const CardEditorModal: React.FC = () => {
                 <path d="m21 15-5-5L5 21" />
               </svg>
               <span>
-                {front.includes('anki-io-wrap')
-                  ? isZh
-                    ? '编辑图片遮挡'
-                    : 'Edit Occlusion'
-                  : isZh
-                  ? '图片遮挡'
-                  : 'Image Occlusion'}
+                {front.includes('anki-io-wrap') ? t('ioEditButtonLabel') : t('ioButtonLabel')}
               </span>
             </button>
 
@@ -761,7 +727,8 @@ export const CardEditorModal: React.FC = () => {
               type="button"
               onClick={handleAttemptClose}
               className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 text-xs cursor-pointer transition-colors"
-              title={isZh ? '关闭' : 'Close'}
+              title={t('close')}
+              aria-label={t('close')}
             >
               ✕
             </button>
@@ -776,9 +743,7 @@ export const CardEditorModal: React.FC = () => {
               <div className="flex items-center gap-2 min-w-0">
                 <span className="font-bold shrink-0">⚠️</span>
                 <span className="font-medium truncate">
-                  {isZh
-                    ? `检测到重复卡片：卡库中已存在 ${effectiveDuplicateCount} 张相同正面词条的卡片`
-                    : `Duplicate detected: ${effectiveDuplicateCount} existing card(s) share this front text`}
+                  {t('duplicateDetectedBanner', { n: effectiveDuplicateCount })}
                 </span>
               </div>
               <button
@@ -786,22 +751,18 @@ export const CardEditorModal: React.FC = () => {
                 onClick={handleJumpToDuplicateInLibrary}
                 className="px-2.5 py-1 rounded-lg bg-[var(--status-warning)] text-white text-[11px] font-semibold shrink-0 cursor-pointer hover:opacity-90"
               >
-                {isZh ? '在卡库中查看' : 'View in Library'}
+                {t('viewInLibraryBtn')}
               </button>
             </div>
           )}
 
           {/* Front WYSIWYG Box (Tower Editor) */}
           <TowerWysiwygEditor
-            label={`${frontFieldName} (${isZh ? '正面 / 问题' : 'Front'})`}
-            badge={isZh ? '必填' : 'Required'}
+            label={`${frontFieldName} (${t('cardFrontLabel')})`}
+            badge={t('requiredBadge')}
             value={front}
             onChange={(val) => setFront(val)}
-            placeholder={
-              isZh
-                ? '输入词条、概念、题目，支持直接 Cmd+V 粘贴截图，或选取文字按 Cmd+Shift+C 挖空...'
-                : 'Enter question, term, or select text and press Cmd+Shift+C to cloze...'
-            }
+            placeholder={t('editorFrontPlaceholder')}
             minHeight={130}
             isDark={isDark}
             accentColor={brandHex}
@@ -813,33 +774,13 @@ export const CardEditorModal: React.FC = () => {
 
           {/* Back WYSIWYG Box (Tower Editor) */}
           <TowerWysiwygEditor
-            label={`${backFieldName} (${
-              selectedPreset === 'type_answer'
-                ? isZh
-                  ? '标准默写答案'
-                  : 'Expected Type Answer'
-                : isZh
-                ? '背面 / 释义解答'
-                : 'Back'
-            })`}
+            label={`${backFieldName} (${t('cardBackLabel')})`}
             badge={
-              selectedPreset === 'reversed'
-                ? isZh
-                  ? '双向卡反面'
-                  : 'Reversed Side'
-                : selectedPreset === 'type_answer'
-                ? isZh
-                  ? '默写比对基准'
-                  : 'Diff Target'
-                : undefined
+              selectedPreset === 'reversed' ? t('notePresetReversedTitle') : undefined
             }
             value={back}
             onChange={(val) => setBack(val)}
-            placeholder={
-              isZh
-                ? '输入详细释义、解析、例句，支持插入表格、项目列表、代码块或直接按 Cmd+V 粘贴截图...'
-                : 'Enter explanation, examples, or paste screenshots with Cmd+V...'
-            }
+            placeholder={t('editorBackPlaceholder')}
             minHeight={150}
             isDark={isDark}
             accentColor={brandHex}
@@ -849,7 +790,7 @@ export const CardEditorModal: React.FC = () => {
             showCloze={true}
           />
 
-          {/* Additional Fields (if note has custom fields) */}
+          {/* Additional Fields */}
           {Object.keys(additionalFields).length > 0 && (
             <div className="pt-1">
               <button
@@ -859,14 +800,12 @@ export const CardEditorModal: React.FC = () => {
               >
                 <span>{showMoreFields ? '▾' : '▸'}</span>
                 <span>
-                  {isZh
-                    ? `查看额外字段 (${Object.keys(additionalFields).length})`
-                    : `More Fields (${Object.keys(additionalFields).length})`}
+                  {t('moreFieldsBtn', { n: Object.keys(additionalFields).length })}
                 </span>
               </button>
 
               {showMoreFields && (
-                <div className="mt-3 space-y-3 pl-2 border-l-2 border-[var(--brand-border)]">
+                <div className="mt-3 space-y-3 ps-2 border-s-2 border-[var(--brand-border)]">
                   {Object.entries(additionalFields).map(([fKey, fVal]) => (
                     <div key={fKey} className="space-y-1">
                       <label className="block text-[11px] text-[#8E8E93] font-medium">{fKey}</label>
@@ -891,7 +830,7 @@ export const CardEditorModal: React.FC = () => {
           {/* Tags Section */}
           <div className="space-y-2 pt-1">
             <label className="block text-[12px] font-semibold text-[#8E8E93]">
-              {isZh ? '标签' : 'Tags'}
+              {t('tagsLabel')}
             </label>
 
             {/* Active Tags Pills */}
@@ -909,7 +848,7 @@ export const CardEditorModal: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setTags(tags.filter((tItem) => tItem !== tg))}
-                    className="opacity-50 hover:opacity-100 hover:text-[var(--status-danger)] cursor-pointer ml-0.5"
+                    className="opacity-50 hover:opacity-100 hover:text-[var(--status-danger)] cursor-pointer ms-0.5"
                   >
                     ×
                   </button>
@@ -932,7 +871,7 @@ export const CardEditorModal: React.FC = () => {
                         setTagInput('');
                       }
                     }}
-                    placeholder={isZh ? '输入标签名称...' : 'Tag name...'}
+                    placeholder={t('tagFilterLabel')}
                     className={`h-7 px-2.5 rounded-lg border text-[11px] focus:outline-none focus:border-[var(--brand)] ${
                       isDark ? 'bg-[#1C1D26] border-[#343644]' : 'bg-[#FAFAFC] border-[#E0E0E6]'
                     }`}
@@ -943,7 +882,7 @@ export const CardEditorModal: React.FC = () => {
                     onClick={handleAddTag}
                     className="btn-primary !h-7 !px-2.5 !text-[11px]"
                   >
-                    {isZh ? '添加' : 'Add'}
+                    {t('addTagBtn')}
                   </button>
                   <button
                     type="button"
@@ -953,19 +892,16 @@ export const CardEditorModal: React.FC = () => {
                     }}
                     className="h-7 px-1.5 text-[12px] text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white cursor-pointer"
                   >
-                    {isZh ? '取消' : 'Cancel'}
+                    {t('cancel')}
                   </button>
 
                   {/* Smart Tag Autocomplete Dropdown */}
                   {tagAutocompleteMatches.length > 0 && (
                     <div
-                      className={`absolute left-0 top-8.5 z-50 w-44 max-h-40 overflow-y-auto rounded-xl border shadow-xl p-1 backdrop-blur-xl ${
+                      className={`absolute start-0 top-8.5 z-50 w-44 max-h-40 overflow-y-auto rounded-xl border shadow-xl p-1 backdrop-blur-xl ${
                         isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
                       }`}
                     >
-                      <div className="px-2 py-0.5 text-[10px] text-[#8E8E93] font-medium">
-                        {isZh ? '匹配已有标签' : 'Matching Tags'}
-                      </div>
                       {tagAutocompleteMatches.map((st) => (
                         <button
                           key={st}
@@ -977,7 +913,7 @@ export const CardEditorModal: React.FC = () => {
                             }
                             setTagInput('');
                           }}
-                          className={`w-full text-left px-2 py-1 text-[11px] font-medium rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors ${
+                          className={`w-full text-start px-2 py-1 text-[11px] font-medium rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors ${
                             isDark
                               ? 'hover:bg-white/10 text-[#D8D8E0]'
                               : 'hover:bg-black/5 text-[#3A3A3C]'
@@ -1000,8 +936,7 @@ export const CardEditorModal: React.FC = () => {
                       : 'border-dashed border-[#D2D2D8] hover:border-[var(--brand)] text-[#6E6E73] hover:text-black'
                   }`}
                 >
-                  <span>+</span>
-                  <span>{isZh ? '添加' : 'Add'}</span>
+                  <span>{t('addTagBtn')}</span>
                 </button>
               )}
             </div>
@@ -1019,7 +954,7 @@ export const CardEditorModal: React.FC = () => {
             {isEditMode && hasChanges && (
               <span className="text-[var(--status-warning)] font-medium flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]" />
-                <span>{isZh ? '有未保存修改' : 'Unsaved changes'}</span>
+                <span>{t('unsavedChangesBadge')}</span>
               </span>
             )}
           </div>
@@ -1031,7 +966,7 @@ export const CardEditorModal: React.FC = () => {
               onClick={handleAttemptClose}
               className="btn-secondary !h-9 !px-3.5"
             >
-              {isZh ? '取消' : 'Cancel'}
+              {t('cancel')}
             </button>
 
             <button
@@ -1044,12 +979,8 @@ export const CardEditorModal: React.FC = () => {
               {submitting && <span className="animate-spin text-xs">⟳</span>}
               <span>
                 {isEditMode
-                  ? isZh
-                    ? '保存修改'
-                    : 'Save Changes'
-                  : isZh
-                  ? `添加至「${currentDeck.name}」`
-                  : `Add to "${currentDeck.name}"`}
+                  ? t('saveChangesBtn')
+                  : t('addToDeckBtn', { deck: currentDeck.name })}
               </span>
             </button>
           </div>
@@ -1069,12 +1000,10 @@ export const CardEditorModal: React.FC = () => {
               }`}
             >
               <div className="font-bold text-[15px]">
-                {isZh ? '放弃未保存的修改？' : 'Discard unsaved changes?'}
+                {t('discardUnsavedTitle')}
               </div>
               <p className="text-[12px] text-[#8E8E93] leading-relaxed">
-                {isZh
-                  ? '您在正面或背面编辑的内容尚未保存，关闭后将丢失这些更改。'
-                  : 'You have unsaved changes in this card. If you close now, those changes will be lost.'}
+                {t('discardUnsavedSub')}
               </p>
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
@@ -1085,7 +1014,7 @@ export const CardEditorModal: React.FC = () => {
                     isDark ? 'border-[#343648] hover:bg-white/5' : 'border-[#E5E5EA] hover:bg-black/5'
                   }`}
                 >
-                  {isZh ? '继续编辑' : 'Keep Editing'}
+                  {t('keepEditingBtn')}
                 </button>
                 <button
                   type="button"
@@ -1095,7 +1024,7 @@ export const CardEditorModal: React.FC = () => {
                   }}
                   className="h-8 px-3.5 rounded-xl bg-[var(--status-danger)] text-white text-[12px] font-semibold cursor-pointer hover:opacity-90 transition-opacity"
                 >
-                  {isZh ? '放弃更改' : 'Discard'}
+                  {t('discardBtn')}
                 </button>
               </div>
             </div>
@@ -1107,7 +1036,6 @@ export const CardEditorModal: React.FC = () => {
           open={ioEditorOpen}
           initialFrontHtml={front}
           isDark={isDark}
-          isZh={isZh}
           brandHex={brandHex}
           mediaBaseUrl={effectiveMediaBaseUrl}
           onSaveImageFile={appActions.pasteImageFromClipboard}
@@ -1115,11 +1043,7 @@ export const CardEditorModal: React.FC = () => {
           onApply={(generatedHtml, rectCount) => {
             setFront(resolveMediaInHtml(generatedHtml, effectiveMediaBaseUrl));
             setIoEditorOpen(false);
-            showToast(
-              isZh
-                ? `已生成图片遮挡图层（共 ${rectCount} 张联动挖空卡）`
-                : `Inserted Image Occlusion (${rectCount} sibling cards)`
-            );
+            showToast(t('ioApplyBtn', { cards: rectCount }));
           }}
         />
       </div>

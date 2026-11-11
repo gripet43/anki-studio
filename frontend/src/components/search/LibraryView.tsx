@@ -45,7 +45,6 @@ export const LibraryView: React.FC = () => {
 
   const isSyncPending = isInitialSyncing || syncing || isLoading;
 
-  const isZh = resolvedLang === 'zh-CN';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
@@ -380,29 +379,33 @@ export const LibraryView: React.FC = () => {
     setActiveBatchModal('none');
   };
 
-  const statusLabels: Record<string, string> = isZh
-    ? {
-        all: '全部',
-        due: '待复习',
-        new: '新卡片',
-        completed: '今日已完成',
-        review: '未到期复习卡',
-        suspended: '已暂停',
-        buried: '已搁置',
-      }
-    : {
-        all: 'All',
-        due: 'Due Now',
-        new: 'New',
-        completed: 'Completed Today',
-        review: 'Undue Review',
-        suspended: 'Suspended',
-        buried: 'Buried',
-      };
+  const statusLabels: Record<string, string> = {
+    all: t('filterAll'),
+    due: t('statusDue'),
+    new: t('statusNew'),
+    completed: t('statusCompleted'),
+    review: t('statusUndueReview'),
+    suspended: t('statusSuspended'),
+    buried: t('statusBuried'),
+  };
 
-  const difficultyLabels: Record<string, string> = isZh
-    ? { all: '全部', high: '高', medium: '中', low: '低' }
-    : { all: 'All', high: 'High', medium: 'Med', low: 'Low' };
+  const difficultyLabels: Record<string, string> = {
+    all: t('filterAll'),
+    high: t('diffHigh'),
+    medium: t('diffMedium'),
+    low: t('diffLow'),
+  };
+
+  const sortLabels: Record<LibrarySortOption, string> = {
+    default: t('sortDefault'),
+    lapses_desc: t('sortLapsesDesc'),
+    ivl_asc: t('sortIvlAsc'),
+    ivl_desc: t('sortIvlDesc'),
+    due_asc: t('sortDueAsc'),
+    stability_asc: t('sortStabilityAsc'),
+    front_asc: t('sortFrontAsc'),
+    newest: t('sortNewest'),
+  };
 
   const activeDeckObj = decks.find((d) => d.id === filterDeckId);
   const activeFlagSpec =
@@ -445,7 +448,7 @@ export const LibraryView: React.FC = () => {
                 <circle cx="12" cy="12" r="10" />
                 <circle cx="12" cy="12" r="4" />
               </svg>
-              <span>{isZh ? '专项特训' : 'Custom Study'}</span>
+              <span>{t('customStudyEntryBtn')}</span>
             </button>
 
             <div
@@ -559,7 +562,7 @@ export const LibraryView: React.FC = () => {
 
               {statusDropdownOpen && (
                 <div
-                  className={`absolute left-0 top-10 z-40 w-[220px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
+                  className={`absolute start-0 top-10 z-40 w-[220px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
                 >
                   {(
                     [
@@ -645,7 +648,7 @@ export const LibraryView: React.FC = () => {
 
               {diffDropdownOpen && (
                 <div
-                  className={`absolute left-0 top-10 z-40 w-[190px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
+                  className={`absolute start-0 top-10 z-40 w-[190px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
                 >
                   {(
                     [
@@ -730,17 +733,13 @@ export const LibraryView: React.FC = () => {
                   </svg>
                 )}
                 <span>
-                  {isZh ? '旗标' : 'Flag'} ·{' '}
+                  {t('flagFilterLabel')} ·{' '}
                   {filterFlag === 'all'
                     ? statusLabels.all
                     : filterFlag === 'flagged'
-                    ? isZh
-                      ? '任意有旗标'
-                      : 'Flagged'
+                    ? t('anyFlaggedOption')
                     : activeFlagSpec
-                    ? isZh
-                      ? activeFlagSpec.shortZh
-                      : activeFlagSpec.shortEn
+                    ? t(`flagShort_${filterFlag}` as any)
                     : statusLabels.all}
                 </span>
                 <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -750,7 +749,7 @@ export const LibraryView: React.FC = () => {
 
               {flagDropdownOpen && (
                 <div
-                  className={`absolute left-0 top-10 z-40 w-[225px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
+                  className={`absolute start-0 top-10 z-40 w-[225px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
                 >
                   <button
                     type="button"
@@ -766,7 +765,7 @@ export const LibraryView: React.FC = () => {
                         : 'hover:bg-[#F4F4F6]'
                     }`}
                   >
-                    <span>{isZh ? '全部卡片' : 'All Cards'}</span>
+                    <span>{t('filterAll')}</span>
                     <span className="px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/5 text-[10px] text-[#8E8E93]">
                       {flagCountsMap.all}
                     </span>
@@ -786,7 +785,7 @@ export const LibraryView: React.FC = () => {
                         : 'hover:bg-[#F4F4F6]'
                     }`}
                   >
-                    <span>{isZh ? '任意有旗标' : 'Any Flagged'}</span>
+                    <span>{t('anyFlaggedOption')}</span>
                     <span className="px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/5 text-[10px] text-[#8E8E93]">
                       {flagCountsMap.flagged}
                     </span>
@@ -820,7 +819,7 @@ export const LibraryView: React.FC = () => {
                             className="w-2.5 h-2.5 rounded-full shrink-0"
                             style={{ backgroundColor: spec.hex }}
                           />
-                          <span>{isZh ? spec.labelZh : spec.labelEn}</span>
+                          <span>{t(`flagLabel_${fNum}` as any)}</span>
                         </div>
                         <span className="px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/5 text-[10px] text-[#8E8E93]">
                           {cnt}
@@ -864,7 +863,7 @@ export const LibraryView: React.FC = () => {
 
               {tagDropdownOpen && (
                 <div
-                  className={`absolute left-0 top-10 z-40 w-[260px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2.5 space-y-2 ${popoverSurface}`}
+                  className={`absolute start-0 top-10 z-40 w-[260px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2.5 space-y-2 ${popoverSurface}`}
                 >
                   {/* Search filter input inside dropdown */}
                   <div
@@ -888,14 +887,14 @@ export const LibraryView: React.FC = () => {
                       type="text"
                       value={tagSearchInput}
                       onChange={(e) => setTagSearchInput(e.target.value)}
-                      placeholder={isZh ? '搜索标签名称...' : 'Filter tags...'}
+                      placeholder={t('searchPlaceholder')}
                       autoFocus
                       className="w-full bg-transparent focus:outline-none text-[12px]"
                     />
                   </div>
 
                   {/* Tag Options List */}
-                  <div className="max-h-[220px] overflow-y-auto space-y-0.5 pr-0.5">
+                  <div className="max-h-[220px] overflow-y-auto space-y-0.5 pe-0.5">
                     <button
                       type="button"
                       onClick={() => {
@@ -910,7 +909,7 @@ export const LibraryView: React.FC = () => {
                           : 'hover:bg-[#F4F4F6]'
                       }`}
                     >
-                      <span>{isZh ? '全部标签' : 'All Tags'}</span>
+                      <span>{t('anyTagOption')}</span>
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] text-[#8E8E93]">
                           {tagAllCount}
@@ -951,7 +950,7 @@ export const LibraryView: React.FC = () => {
                       })
                     ) : (
                       <div className="py-4 text-center text-[11px] text-[#8E8E93]">
-                        {isZh ? '未找到匹配标签' : 'No matching tags'}
+                        {t('emptyLibraryTitle')}
                       </div>
                     )}
                   </div>
@@ -992,7 +991,7 @@ export const LibraryView: React.FC = () => {
 
               {deckDropdownOpen && (
                 <div
-                  className={`absolute left-0 top-10 z-40 w-[260px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2.5 space-y-2 ${popoverSurface}`}
+                  className={`absolute start-0 top-10 z-40 w-[260px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2.5 space-y-2 ${popoverSurface}`}
                 >
                   <div
                     className={`h-8 px-2.5 rounded-xl border flex items-center gap-2 text-[12px] ${
@@ -1015,13 +1014,13 @@ export const LibraryView: React.FC = () => {
                       type="text"
                       value={deckSearchInput}
                       onChange={(e) => setDeckSearchInput(e.target.value)}
-                      placeholder={isZh ? '搜索牌组名称...' : 'Filter decks...'}
+                      placeholder={t('searchPlaceholder')}
                       autoFocus
                       className="w-full bg-transparent focus:outline-none text-[12px]"
                     />
                   </div>
 
-                  <div className="max-h-[220px] overflow-y-auto space-y-0.5 pr-0.5">
+                  <div className="max-h-[220px] overflow-y-auto space-y-0.5 pe-0.5">
                     <button
                       type="button"
                       onClick={() => {
@@ -1036,7 +1035,7 @@ export const LibraryView: React.FC = () => {
                           : 'hover:bg-[#F4F4F6]'
                       }`}
                     >
-                      <span>{isZh ? '全部牌组' : 'All Decks'}</span>
+                      <span>{t('allDecksOption')}</span>
                       {filterDeckId === 'all' && <span className="text-[var(--brand-text)]">✓</span>}
                     </button>
 
@@ -1096,32 +1095,7 @@ export const LibraryView: React.FC = () => {
                   <path d="M17 4v16" />
                 </svg>
                 <span>
-                  {isZh ? '排序' : 'Sort'} ·{' '}
-                  {
-                    (
-                      isZh
-                        ? {
-                            default: '默认顺序',
-                            lapses_desc: '失误最多 ↓',
-                            ivl_asc: '间隔最短 ↑',
-                            ivl_desc: '间隔最长 ↓',
-                            due_asc: '到期最早 ↑',
-                            stability_asc: '熟练度最低 ↑',
-                            front_asc: '词条 A→Z',
-                            newest: '最新添加 ↓',
-                          }
-                        : {
-                            default: 'Default',
-                            lapses_desc: 'Most Lapses ↓',
-                            ivl_asc: 'Shortest Ivl ↑',
-                            ivl_desc: 'Longest Ivl ↓',
-                            due_asc: 'Earliest Due ↑',
-                            stability_asc: 'Lowest Mastery ↑',
-                            front_asc: 'Front A→Z',
-                            newest: 'Newest First ↓',
-                          }
-                    )[librarySortBy]
-                  }
+                  {t('sortFilterLabel')} · {sortLabels[librarySortBy]}
                 </span>
                 <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <path d="m6 9 6 6 6-6" />
@@ -1130,27 +1104,27 @@ export const LibraryView: React.FC = () => {
 
               {sortDropdownOpen && (
                 <div
-                  className={`absolute left-0 top-10 z-40 w-[230px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
+                  className={`absolute start-0 top-10 z-40 w-[230px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
                 >
                   {(
                     [
-                      { key: 'default', zh: '默认顺序（智能优先）', en: 'Default Order' },
-                      { key: 'lapses_desc', zh: '失误最多（顽固错题 ↓）', en: 'Most Lapses ↓' },
-                      { key: 'due_asc', zh: '到期最早（排期优先 ↑）', en: 'Earliest Due ↑' },
-                      { key: 'ivl_asc', zh: '间隔最短（新学/薄弱 ↑）', en: 'Shortest Interval ↑' },
-                      { key: 'ivl_desc', zh: '间隔最长（高稳定卡 ↓）', en: 'Longest Interval ↓' },
-                      { key: 'stability_asc', zh: '熟练度最低（待巩固 ↑）', en: 'Lowest Mastery ↑' },
-                      { key: 'front_asc', zh: '正面词条（字母 A→Z）', en: 'Front A→Z' },
-                      { key: 'newest', zh: '最新创建（时间倒序 ↓）', en: 'Newest Added ↓' },
-                    ] as Array<{ key: LibrarySortOption; zh: string; en: string }>
-                  ).map((opt) => {
-                    const isSelected = librarySortBy === opt.key;
+                      'default',
+                      'lapses_desc',
+                      'due_asc',
+                      'ivl_asc',
+                      'ivl_desc',
+                      'stability_asc',
+                      'front_asc',
+                      'newest',
+                    ] as LibrarySortOption[]
+                  ).map((optKey) => {
+                    const isSelected = librarySortBy === optKey;
                     return (
                       <button
-                        key={opt.key}
+                        key={optKey}
                         type="button"
                         onClick={() => {
-                          appActions.searchLibraryDebounced({ sortBy: opt.key });
+                          appActions.searchLibraryDebounced({ sortBy: optKey });
                           setSortDropdownOpen(false);
                         }}
                         className={`w-full px-3 py-2 rounded-xl text-[12px] flex items-center justify-between cursor-pointer transition-colors ${
@@ -1161,7 +1135,7 @@ export const LibraryView: React.FC = () => {
                             : 'hover:bg-[#F4F4F6]'
                         }`}
                       >
-                        <span>{isZh ? opt.zh : opt.en}</span>
+                        <span>{sortLabels[optKey]}</span>
                         {isSelected && <span className="text-[var(--brand-text)]">✓</span>}
                       </button>
                     );
@@ -1182,7 +1156,7 @@ export const LibraryView: React.FC = () => {
                     deckId: 'all',
                     sortBy: 'default',
                   });
-                  showToast(isZh ? '已重置所有筛选与排序条件' : 'Filters and sort reset');
+                  showToast(t('resetFilters'));
                 }}
                 className={`h-8 px-3.5 rounded-full text-[12px] font-medium cursor-pointer transition-all active:scale-95 ${
                   isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-[#1D1D1F] hover:bg-black/10'
@@ -1272,7 +1246,7 @@ export const LibraryView: React.FC = () => {
                 }}
                 className="btn-primary mt-2 !h-9 !px-4 !text-[12px]"
               >
-                <span>{isZh ? '清空所有筛选条件' : 'Clear all filters'}</span>
+                <span>{t('resetFilters')}</span>
               </button>
             )}
           </div>
@@ -1328,7 +1302,7 @@ export const LibraryView: React.FC = () => {
 
                         {cardFlagSpec && (
                           <span
-                            title={isZh ? cardFlagSpec.labelZh : cardFlagSpec.labelEn}
+                            title={t(`flagLabel_${cardFlagNum}` as any)}
                             style={{
                               backgroundColor: cardFlagSpec.bgSoft,
                               color: cardFlagSpec.hex,
@@ -1339,22 +1313,22 @@ export const LibraryView: React.FC = () => {
                               className="w-1.5 h-1.5 rounded-full shrink-0"
                               style={{ backgroundColor: cardFlagSpec.hex }}
                             />
-                            <span>{isZh ? cardFlagSpec.shortZh : cardFlagSpec.shortEn}</span>
+                            <span>{t(`flagShort_${cardFlagNum}` as any)}</span>
                           </span>
                         )}
 
                         {/* Status Badge if special state */}
                         {isSuspended ? (
                           <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--status-warning-soft)] text-[var(--status-warning)] shrink-0">
-                            {isZh ? '已暂停' : 'Suspended'}
+                            {t('statusSuspended')}
                           </span>
                         ) : isBuried ? (
                           <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-black/5 dark:bg-white/10 text-[#555558] dark:text-[#A1A1A6] shrink-0">
-                            {isZh ? '已搁置' : 'Buried'}
+                            {t('statusBuried')}
                           </span>
                         ) : card.status === 'new' ? (
                           <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--status-info-soft)] text-[var(--status-info)] shrink-0">
-                            {isZh ? '新卡' : 'New'}
+                            {t('statusNew')}
                           </span>
                         ) : null}
                       </div>
@@ -1388,16 +1362,8 @@ export const LibraryView: React.FC = () => {
                             appActions.toggleCardSelection(card.id);
                           }}
                           aria-pressed={isSelected}
-                          aria-label={
-                            isSelected
-                              ? isZh
-                                ? `取消选择：${card.front}`
-                                : `Deselect card: ${card.front}`
-                              : isZh
-                              ? `选择卡片：${card.front}`
-                              : `Select card: ${card.front}`
-                          }
-                          className={`-my-1 -mr-1 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-opacity cursor-pointer focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 ${
+                          aria-label={card.front}
+                          className={`-my-1 -me-1 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-opacity cursor-pointer focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 ${
                             isSelected || anySelected
                               ? 'opacity-100'
                               : 'opacity-40 group-hover:opacity-100'
@@ -1453,7 +1419,7 @@ export const LibraryView: React.FC = () => {
                           />
                         ) : (
                           <p className="library-card-snippet-body opacity-50 italic select-none">
-                            {isZh ? '（无背面内容）' : '(No back content)'}
+                            {t('noBackContentPlaceholder')}
                           </p>
                         )}
                       </div>
@@ -1499,9 +1465,9 @@ export const LibraryView: React.FC = () => {
                           e.stopPropagation();
                           appActions.openCardEditor(card);
                         }}
-                        aria-label={isZh ? `编辑卡片：${card.front}` : `Edit card: ${card.front}`}
+                        aria-label={t('editCardTitle')}
                         className="library-card-edit-btn min-h-6.5 h-6.5 px-2.5 rounded-lg text-[11px] font-medium inline-flex items-center gap-1 cursor-pointer transition-colors bg-[var(--brand-soft)] text-[var(--brand-text)] hover:bg-[var(--brand)] hover:text-white shrink-0 shadow-2xs focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
-                        title={isZh ? '编辑卡片' : 'Edit card'}
+                        title={t('editCardTitle')}
                       >
                         <svg
                           className="w-3 h-3 shrink-0"
@@ -1516,7 +1482,7 @@ export const LibraryView: React.FC = () => {
                           <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
                           <path d="m15 5 4 4" />
                         </svg>
-                        <span>{isZh ? '编辑' : 'Edit'}</span>
+                        <span>{t('editBtnShort')}</span>
                       </button>
                     </footer>
                   </article>
@@ -1541,14 +1507,14 @@ export const LibraryView: React.FC = () => {
         ) : (
           <>
             <div className={`rounded-2xl border overflow-hidden shadow-xs ${cardSurface}`}>
-              <table className="w-full table-fixed text-left border-collapse text-[13px]">
+              <table className="w-full table-fixed text-start border-collapse text-[13px]">
                 <thead>
                   <tr
                     className={`border-b text-[11px] ${subText} ${
                       isDark ? 'border-[#2A2C36] bg-white/[0.02]' : 'border-[#EFEFF4] bg-[#FAFAFC]'
                     }`}
                   >
-                    <th className="py-3 px-4 w-12">{isZh ? '选择' : 'Sel'}</th>
+                    <th className="py-3 px-4 w-12">{t('selectColHeader')}</th>
                     <th
                       onClick={() =>
                         appActions.searchLibraryDebounced({
@@ -1557,12 +1523,12 @@ export const LibraryView: React.FC = () => {
                       }
                       className="py-3 px-4 cursor-pointer hover:text-[var(--brand-text)] select-none"
                     >
-                      {isZh ? '正面词条' : 'Front'}{' '}
+                      {t('cardFrontLabel')}{' '}
                       {librarySortBy === 'front_asc' ? '↑' : ''}
                     </th>
-                    <th className="py-3 px-4">{isZh ? '背面释义' : 'Back'}</th>
-                    <th className="py-3 px-4 w-28">{isZh ? '所属牌组' : 'Deck'}</th>
-                    <th className="py-3 px-4 w-36">{isZh ? '旗标与标签' : 'Flag & Tags'}</th>
+                    <th className="py-3 px-4">{t('cardBackLabel')}</th>
+                    <th className="py-3 px-4 w-28">{t('deckLabel')}</th>
+                    <th className="py-3 px-4 w-36">{t('tagsLabel')}</th>
                     <th
                       onClick={() =>
                         appActions.searchLibraryDebounced({
@@ -1587,14 +1553,14 @@ export const LibraryView: React.FC = () => {
                       }
                       className="py-3 px-4 w-28 cursor-pointer hover:text-[var(--brand-text)] select-none"
                     >
-                      {isZh ? '到期状态' : 'Due'}{' '}
+                      {t('statusDue')}{' '}
                       {librarySortBy === 'due_asc'
                         ? '↑'
                         : librarySortBy === 'lapses_desc'
-                        ? '(失误↓)'
+                        ? '↓'
                         : ''}
                     </th>
-                    <th className="py-3 px-4 text-right w-20">{isZh ? '操作' : 'Action'}</th>
+                    <th className="py-3 px-4 text-end w-20">{t('actionColHeader')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1626,15 +1592,7 @@ export const LibraryView: React.FC = () => {
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => appActions.toggleCardSelection(card.id)}
-                              aria-label={
-                                isSelected
-                                  ? isZh
-                                    ? `取消选择：${card.front}`
-                                    : `Deselect card: ${card.front}`
-                                  : isZh
-                                  ? `选择卡片：${card.front}`
-                                  : `Select card: ${card.front}`
-                              }
+                              aria-label={card.front}
                               className="rounded cursor-pointer w-4 h-4"
                             />
                           </label>
@@ -1679,7 +1637,7 @@ export const LibraryView: React.FC = () => {
                                   className="w-1.5 h-1.5 rounded-full shrink-0"
                                   style={{ backgroundColor: cardFlagSpec.hex }}
                                 />
-                                <span>{isZh ? cardFlagSpec.shortZh : cardFlagSpec.shortEn}</span>
+                                <span>{t(`flagShort_${cardFlagNum}` as any)}</span>
                               </span>
                             )}
                             {card.tags.slice(0, 2).map((tItem) => (
@@ -1711,11 +1669,11 @@ export const LibraryView: React.FC = () => {
                           <div className="flex items-center gap-1.5">
                             {isSuspended ? (
                               <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--status-warning-soft)] text-[var(--status-warning)]">
-                                {isZh ? '已暂停' : 'Suspended'}
+                                {t('statusSuspended')}
                               </span>
                             ) : isBuried ? (
                               <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-black/5 dark:bg-white/10 text-[#555558] dark:text-[#A1A1A6]">
-                                {isZh ? '已搁置' : 'Buried'}
+                                {t('statusBuried')}
                               </span>
                             ) : (
                               <>
@@ -1733,17 +1691,17 @@ export const LibraryView: React.FC = () => {
                             )}
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-3 px-4 text-end">
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               appActions.openCardEditor(card);
                             }}
-                            aria-label={isZh ? `编辑卡片：${card.front}` : `Edit card: ${card.front}`}
+                            aria-label={t('editCardTitle')}
                             className="min-h-6 h-6 px-2 rounded-lg text-[11px] font-medium text-[var(--brand-text)] hover:bg-[var(--brand-soft)] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                           >
-                            {isZh ? '编辑' : 'Edit'}
+                            {t('editBtnShort')}
                           </button>
                         </td>
                       </tr>
@@ -1772,15 +1730,15 @@ export const LibraryView: React.FC = () => {
 
       {/* Floating Batch Operations Bar */}
       {selectedCardIds.length > 0 && (
-        <div className="fixed bottom-6 left-[calc(50%+120px)] -translate-x-1/2 z-30 flex flex-col items-center gap-2.5">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2.5">
           {activeBatchModal === 'setFlag' && (
             <div
               className={`px-4 py-3 rounded-2xl border shadow-xl flex items-center gap-2 ${
                 isDark ? 'bg-[#1E1F28] border-[#323442] text-white' : 'bg-white border-[#E5E5EA] text-[#1D1D1F]'
               }`}
             >
-              <span className="text-[12px] text-[#8E8E93] mr-1">
-                {isZh ? '批量标记旗标：' : 'Set flag:'}
+              <span className="text-[12px] text-[#8E8E93] me-1">
+                {t('flagFilterLabel')}:
               </span>
               {([1, 2, 3, 4, 5, 6, 7] as Array<Exclude<CardFlagColor, 0>>).map((fNum) => {
                 const spec = ANKI_FLAG_PALETTE[fNum];
@@ -1792,7 +1750,7 @@ export const LibraryView: React.FC = () => {
                       appActions.executeBatchAction('setFlag', { flag: fNum });
                       setActiveBatchModal('none');
                     }}
-                    title={isZh ? spec.labelZh : spec.labelEn}
+                    title={t(`flagLabel_${fNum}` as any)}
                     style={{
                       backgroundColor: spec.bgSoft,
                       borderColor: spec.borderHex,
@@ -1801,7 +1759,7 @@ export const LibraryView: React.FC = () => {
                     className="h-7 px-2.5 rounded-xl border text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer hover:scale-105 transition-transform"
                   >
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: spec.hex }} />
-                    <span>{isZh ? spec.shortZh : spec.shortEn}</span>
+                    <span>{t(`flagShort_${fNum}` as any)}</span>
                   </button>
                 );
               })}
@@ -1813,7 +1771,7 @@ export const LibraryView: React.FC = () => {
                 }}
                 className="h-7 px-2.5 rounded-xl border border-black/10 dark:border-white/10 text-[11px] text-[#8E8E93] hover:text-[var(--status-danger)] cursor-pointer"
               >
-                {isZh ? '清除' : 'Clear'}
+                {t('flagNone')}
               </button>
             </div>
           )}
@@ -1825,7 +1783,7 @@ export const LibraryView: React.FC = () => {
               }`}
             >
               <span className="text-[12px] text-[#8E8E93]">
-                {isZh ? '为所选卡片添加标签：' : 'Add tags:'}
+                {t('batchAddTag')}:
               </span>
               <input
                 type="text"
@@ -1835,7 +1793,7 @@ export const LibraryView: React.FC = () => {
                   if (e.key === 'Enter') handleConfirmBatchTag();
                   else if (e.key === 'Escape') setActiveBatchModal('none');
                 }}
-                placeholder={isZh ? '输入标签名（空格分隔）...' : 'Tag names...'}
+                placeholder={t('tagsLabel')}
                 autoFocus
                 className="h-8 px-3 rounded-xl border border-[var(--brand)] text-[12px] bg-transparent focus:outline-none"
               />
@@ -1862,7 +1820,7 @@ export const LibraryView: React.FC = () => {
             >
               <div className="flex items-center gap-2.5">
                 <span className="text-[12px] text-[#8E8E93] shrink-0">
-                  {isZh ? '从所选卡片移除标签：' : 'Remove tags:'}
+                  {t('batchRemoveTag')}:
                 </span>
                 <input
                   type="text"
@@ -1872,7 +1830,7 @@ export const LibraryView: React.FC = () => {
                     if (e.key === 'Enter') handleConfirmBatchRemoveTag();
                     else if (e.key === 'Escape') setActiveBatchModal('none');
                   }}
-                  placeholder={isZh ? '输入要移除的标签名...' : 'Tag to remove...'}
+                  placeholder={t('tagsLabel')}
                   autoFocus
                   className="h-8 flex-1 px-3 rounded-xl border border-[var(--brand)] text-[12px] bg-transparent focus:outline-none"
                 />
@@ -1891,9 +1849,6 @@ export const LibraryView: React.FC = () => {
               </div>
               {selectedCardTags.length > 0 && (
                 <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                  <span className="text-[10px] text-[#8E8E93]">
-                    {isZh ? '点击快速移除：' : 'Quick remove:'}
-                  </span>
                   {selectedCardTags.slice(0, 8).map((tg) => (
                     <button
                       key={tg}
@@ -1917,9 +1872,7 @@ export const LibraryView: React.FC = () => {
             >
               <div className="flex items-center justify-between">
                 <span className="text-[12px] font-semibold">
-                  {isZh
-                    ? `批量查找与替换（所选 ${selectedCardIds.length} 张卡片）`
-                    : `Batch Find & Replace (${selectedCardIds.length} cards)`}
+                  {t('batchFindReplace')} ({t('selectedCountBadge', { n: selectedCardIds.length })})
                 </span>
                 <button
                   onClick={() => setActiveBatchModal('none')}
@@ -1934,7 +1887,7 @@ export const LibraryView: React.FC = () => {
                   type="text"
                   value={batchFindText}
                   onChange={(e) => setBatchFindText(e.target.value)}
-                  placeholder={isZh ? '查找内容...' : 'Find text...'}
+                  placeholder={t('findTextPlaceholder')}
                   autoFocus
                   className={`h-8 px-3 rounded-xl border text-[12px] bg-transparent focus:outline-none focus:border-[var(--brand)] ${
                     isDark ? 'border-[#323442]' : 'border-[#E5E5EA]'
@@ -1947,7 +1900,7 @@ export const LibraryView: React.FC = () => {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleConfirmBatchFindReplace();
                   }}
-                  placeholder={isZh ? '替换为（留空即删除）...' : 'Replace with...'}
+                  placeholder={t('replaceWithPlaceholder')}
                   className={`h-8 px-3 rounded-xl border text-[12px] bg-transparent focus:outline-none focus:border-[var(--brand)] ${
                     isDark ? 'border-[#323442]' : 'border-[#E5E5EA]'
                   }`}
@@ -1957,7 +1910,6 @@ export const LibraryView: React.FC = () => {
               <div className="flex items-center justify-between pt-0.5">
                 <div className="flex items-center gap-3 text-[11px] text-[#8E8E93]">
                   <div className="flex items-center gap-1">
-                    <span>{isZh ? '范围：' : 'Scope:'}</span>
                     {(['all', 'front', 'back'] as const).map((sc) => (
                       <button
                         key={sc}
@@ -1970,16 +1922,10 @@ export const LibraryView: React.FC = () => {
                         }`}
                       >
                         {sc === 'all'
-                          ? isZh
-                            ? '全部字段'
-                            : 'All'
+                          ? t('scopeAllFields')
                           : sc === 'front'
-                          ? isZh
-                            ? '仅正面'
-                            : 'Front'
-                          : isZh
-                          ? '仅背面'
-                          : 'Back'}
+                          ? t('cardFrontLabel')
+                          : t('cardBackLabel')}
                       </button>
                     ))}
                   </div>
@@ -1990,7 +1936,7 @@ export const LibraryView: React.FC = () => {
                       onChange={(e) => setBatchIgnoreCase(e.target.checked)}
                       className="rounded cursor-pointer"
                     />
-                    <span>{isZh ? '忽略大小写' : 'Ignore case'}</span>
+                    <span>{t('ignoreCaseLabel')}</span>
                   </label>
                 </div>
 
@@ -1999,7 +1945,7 @@ export const LibraryView: React.FC = () => {
                   disabled={!batchFindText}
                   className="btn-primary !h-8 !px-4 !text-[12px] disabled:opacity-40"
                 >
-                  {isZh ? '执行替换' : 'Replace All'}
+                  {t('confirm')}
                 </button>
               </div>
             </div>
@@ -2012,7 +1958,7 @@ export const LibraryView: React.FC = () => {
               }`}
             >
               <span className="text-[12px] text-[#8E8E93]">
-                {isZh ? '移动到目标牌组：' : 'Move to deck:'}
+                {t('batchMoveDeck')}:
               </span>
               <select
                 value={batchTargetDeckId}
@@ -2049,9 +1995,7 @@ export const LibraryView: React.FC = () => {
               }`}
             >
               <span className="text-[12px] text-[var(--status-danger)] font-medium">
-                {isZh
-                  ? `确认永久删除所选的 ${selectedCardIds.length} 张卡片吗？`
-                  : `Permanently delete ${selectedCardIds.length} selected cards?`}
+                {t('confirmBatchDeletePrompt', { n: selectedCardIds.length })}
               </span>
               <button
                 onClick={handleConfirmBatchDelete}
@@ -2115,7 +2059,7 @@ export const LibraryView: React.FC = () => {
                   : 'hover:text-[var(--brand-text)]'
               }`}
             >
-              {isZh ? '标旗' : 'Flag'}
+              {t('flagFilterLabel')}
             </button>
 
             <button
@@ -2139,7 +2083,7 @@ export const LibraryView: React.FC = () => {
                   : 'hover:text-[var(--brand-text)]'
               }`}
             >
-              {isZh ? '移除标签' : 'Remove Tag'}
+              {t('batchRemoveTag')}
             </button>
 
             <button
@@ -2152,7 +2096,7 @@ export const LibraryView: React.FC = () => {
                   : 'hover:text-[var(--brand-text)]'
               }`}
             >
-              {isZh ? '查找替换' : 'Find & Replace'}
+              {t('batchFindReplace')}
             </button>
 
             <button

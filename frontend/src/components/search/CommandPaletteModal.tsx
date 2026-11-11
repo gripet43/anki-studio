@@ -40,17 +40,17 @@ export const CommandPaletteModal: React.FC = () => {
     theme,
     accentColor,
     resolvedLang,
-    showShortcutHints,
     envInfo,
   } = useAppStore();
 
   const [copiedSide, setCopiedSide] = useState<'front' | 'back' | 'all' | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const isDark = theme === 'dark' || theme === 'oled';
-  const isZh = resolvedLang === 'zh-CN';
-  const t = (key: any) => translate(resolvedLang, key);
-  const cmdEnterLabel = formatShortcut('Cmd Enter', envInfo.platform);
+  const t = (key: any, params?: Record<string, string | number>) =>
+    translate(resolvedLang, key, params);
+  formatShortcut('Cmd Enter', envInfo.platform);
 
   const brandHex = getAccentScale(accentColor, theme).brand;
 
@@ -69,7 +69,7 @@ export const CommandPaletteModal: React.FC = () => {
     );
     const tagPill = firstTag
       ? { label: `#${firstTag}`, query: `tag:${firstTag}`, icon: tagIcon }
-      : { label: isZh ? '按标签检索' : 'Tags', query: 'tag:', icon: tagIcon };
+      : { label: t('tagFilterLabel'), query: 'tag:', icon: tagIcon };
 
     const firstDeck = decks && decks.length > 0 ? decks[0] : null;
     const deckIcon = (
@@ -79,15 +79,15 @@ export const CommandPaletteModal: React.FC = () => {
     );
     const deckPill = firstDeck
       ? {
-          label: isZh ? `牌组 · ${firstDeck.name}` : `Deck: ${firstDeck.name}`,
+          label: `${t('deckFilterLabel')} · ${firstDeck.name}`,
           query: `deck:${firstDeck.name}`,
           icon: deckIcon,
         }
-      : { label: isZh ? '按牌组检索' : 'Decks', query: 'deck:', icon: deckIcon };
+      : { label: t('deckFilterLabel'), query: 'deck:', icon: deckIcon };
 
     return [
       {
-        label: isZh ? '待复习' : 'Due Cards',
+        label: t('statusDue'),
         query: 'is:due',
         icon: (
           <svg className="w-3 h-3 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -97,7 +97,7 @@ export const CommandPaletteModal: React.FC = () => {
         ),
       },
       {
-        label: isZh ? '新卡片' : 'New Cards',
+        label: t('statusNew'),
         query: 'is:new',
         icon: (
           <svg className="w-3 h-3 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -108,7 +108,7 @@ export const CommandPaletteModal: React.FC = () => {
       tagPill,
       deckPill,
     ];
-  }, [libraryAllTags, decks, isZh]);
+  }, [libraryAllTags, decks, resolvedLang]);
 
   useEffect(() => {
     setCopiedSide(null);
@@ -159,11 +159,10 @@ export const CommandPaletteModal: React.FC = () => {
 
   if (!cmdKOpen) return null;
 
-  // Copy handler shared across full card, front side, and back side
   const handleCopyText = async (rawText: string, side: 'front' | 'back' | 'all' = 'all') => {
     const success = await copyTextToClipboard(rawText);
     if (!success) {
-      showToast(isZh ? '复制失败，请重试' : 'Failed to copy');
+      showToast(t('copyFailedToast'));
       return;
     }
     setCopiedSide(side);
@@ -213,7 +212,7 @@ export const CommandPaletteModal: React.FC = () => {
             <svg className="w-3 h-3 text-[var(--status-success)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
               <polyline points="20 6 9 17 4 12" />
             </svg>
-            <span>{isZh ? '已复制' : 'Copied'}</span>
+            <span>{t('copiedBadge')}</span>
           </>
         ) : (
           <>
@@ -233,7 +232,7 @@ export const CommandPaletteModal: React.FC = () => {
       className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 select-none animate-in fade-in duration-150 modal-contain-scroll"
       role="dialog"
       aria-modal="true"
-      aria-label={isZh ? '全局命令面板' : 'Command Palette'}
+      aria-label={t('cmdPaletteAriaLabel')}
     >
       <div
         className={`w-[840px] max-w-full rounded-2xl border shadow-[0_24px_64px_rgba(0,0,0,0.32)] overflow-hidden transition-colors ${
@@ -260,53 +259,55 @@ export const CommandPaletteModal: React.FC = () => {
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
+              ref={searchInputRef}
               type="text"
               value={cmdKQuery}
               onChange={(e) => appActions.searchCmdKDebounced(e.target.value)}
-              placeholder={
-                resolvedLang === 'en'
-                  ? 'Search cards or decks...'
-                  : '搜索卡片或牌组...'
-              }
+              placeholder={t('cmdKSearchPlaceholder')}
               autoFocus
               className="w-full bg-transparent text-[15px] font-medium focus:outline-none placeholder:text-[#8E8E93]"
             />
             {cmdKQuery && (
               <button
                 type="button"
-                onClick={() => appActions.searchCmdKDebounced('')}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  appActions.searchCmdKDebounced('');
+                  searchInputRef.current?.focus();
+                }}
                 className={`px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0 transition-colors cursor-pointer ${
                   isDark
                     ? 'text-[#A1A1AA] hover:text-white bg-white/6 hover:bg-white/12'
                     : 'text-[#6E6E73] hover:text-[#1D1D1F] bg-black/5 hover:bg-black/10'
                 }`}
-                title={isZh ? '清空搜索内容' : 'Clear search'}
+                title={t('clearSearchBtn')}
+                aria-label={t('clearSearchBtn')}
               >
-                {isZh ? '清空' : 'Clear'}
+                {t('clearSearchBtn')}
               </button>
             )}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
             {hasQuery && cmdKSearching && (
-              <span className="text-[11px] text-[var(--brand-text)] font-medium flex items-center gap-1 mr-1">
+              <span className="text-[11px] text-[var(--brand-text)] font-medium flex items-center gap-1 me-1">
                 <span className="w-2 h-2 rounded-full bg-[var(--brand)] animate-ping" />
-                <span>{resolvedLang === 'en' ? 'Searching...' : '检索中...'}</span>
+                <span>{t('searchingShort')}</span>
               </span>
             )}
             <button
               type="button"
               onClick={() => setAppState({ cmdKOpen: false })}
               className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-              title={isZh ? '关闭 (Esc)' : 'Close (Esc)'}
-              aria-label={isZh ? '关闭' : 'Close'}
+              title={`${t('close')} (Esc)`}
+              aria-label={t('close')}
             >
               ✕
             </button>
           </div>
         </div>
 
-        {/* Modal Body: Clean Spotlight-grade Initial State or Search Results Grid */}
+        {/* Modal Body: Clean Spotlight-grade Initial State (Search Cards & Decks) or Search Results Grid */}
         {!hasQuery ? (
           <div className="h-[410px] flex flex-col items-center justify-center text-center px-8 py-5 select-none relative overflow-hidden">
             {/* Ambient Background Gradient Aura */}
@@ -320,19 +321,16 @@ export const CommandPaletteModal: React.FC = () => {
             {/* Seamless 100% Vector Stacked Cards Artwork */}
             <div className="relative mb-3 flex items-center justify-center select-none">
               <div className="relative w-28 h-20 flex items-center justify-center">
-                {/* Back Left Card */}
                 <div
                   className={`absolute w-20 h-13 rounded-xl border shadow-sm -rotate-12 -translate-x-3 -translate-y-1 transition-transform ${
                     isDark ? 'bg-[#22232E]/80 border-white/10' : 'bg-[#F2F2F7] border-black/8'
                   }`}
                 />
-                {/* Back Right Card */}
                 <div
                   className={`absolute w-20 h-13 rounded-xl border shadow-sm rotate-8 translate-x-3 -translate-y-0.5 transition-transform ${
                     isDark ? 'bg-[#282936]/90 border-white/12' : 'bg-[#EAEAEF] border-black/8'
                   }`}
                 />
-                {/* Center Frosted Card */}
                 <div
                   className={`relative w-22 h-15 rounded-xl border shadow-md backdrop-blur-md flex flex-col justify-between p-2.5 z-10 border-[var(--brand-border)] ${
                     isDark ? 'bg-[#1C1D26]/95' : 'bg-white/95'
@@ -352,12 +350,10 @@ export const CommandPaletteModal: React.FC = () => {
 
             {/* Title & Refined Subtitle */}
             <div className="text-[16px] font-semibold tracking-tight text-[#1D1D1F] dark:text-[#F4F4F6]">
-              {resolvedLang === 'en' ? 'Search Cards & Decks' : '搜索卡片与知识库'}
+              {t('cmdKEmptyHeroTitle')}
             </div>
             <p className="text-[12px] text-[#8E8E93] mt-1 max-w-[340px] leading-relaxed">
-              {resolvedLang === 'en'
-                ? 'Type any keyword for instant search, or tap quick filters'
-                : '输入关键词即享毫秒级检索，或点选下方快捷分类'}
+              {t('cmdKEmptyHeroSub')}
             </p>
 
             {/* Interactive Smart Quick Filter Pills */}
@@ -400,12 +396,10 @@ export const CommandPaletteModal: React.FC = () => {
               </svg>
             </div>
             <div className="text-[15px] font-semibold tracking-tight text-[#1D1D1F] dark:text-[#F4F4F6]">
-              {isZh ? `未找到与「${cmdKQuery}」匹配的卡片` : `No cards matching "${cmdKQuery}"`}
+              {t('cmdKNoResultsTitle', { q: cmdKQuery })}
             </div>
             <p className="text-[12px] text-[#8E8E93] mt-1.5 max-w-[320px] leading-relaxed">
-              {isZh
-                ? '请尝试检查拼写、更换关键词，或清空筛选条件'
-                : 'Check spelling, try broader keywords, or clear search'}
+              {t('cmdKNoResultsSub')}
             </p>
             <div className="flex items-center gap-2.5 mt-4">
               <button
@@ -413,7 +407,7 @@ export const CommandPaletteModal: React.FC = () => {
                 onClick={() => appActions.searchCmdKDebounced('')}
                 className="btn-primary !h-8 !px-4 !text-[12px]"
               >
-                {isZh ? '清空搜索词' : 'Clear search'}
+                {t('clearSearchBtn')}
               </button>
               {libraryCards.length > 0 && (
                 <button
@@ -427,203 +421,199 @@ export const CommandPaletteModal: React.FC = () => {
                       : 'border-[#E5E5EA] text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-black/5'
                   }`}
                 >
-                  {isZh ? '浏览全部卡片库' : 'Browse All Library'}
+                  {t('browseAllLibraryBtn')}
                 </button>
               )}
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-12 h-[410px]">
-          {/* Left Column: Streamlined Card List */}
-          <div
-            className={`col-span-5 p-2 overflow-y-auto border-r flex flex-col justify-between ${
-              isDark ? 'border-[#262834]' : 'border-[#EBEBF0]'
-            }`}
-          >
-            <div className="space-y-1">
-              {displayedResults.map((item, idx) => {
-                const isSelected = idx === cmdKSelectedIndex;
-                const deckDot = getDeckColorByHash(item.deckId || item.deckName);
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => setAppState({ cmdKSelectedIndex: idx })}
-                    onDoubleClick={() => {
-                      setAppState({ cmdKOpen: false });
-                      appActions.openCardEditor(item);
-                    }}
-                    className={`px-3 py-2 rounded-xl flex items-center gap-2.5 cursor-pointer transition-all ${
-                      isSelected
-                        ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] shadow-2xs'
-                        : isDark
-                        ? 'hover:bg-white/5 text-[#D1D1D6]'
-                        : 'hover:bg-[#F5F5F8] text-[#3A3A3C]'
-                    }`}
-                  >
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: deckDot }}
-                    />
+            {/* Left Column: Streamlined Card List */}
+            <div
+              className={`col-span-5 p-2 overflow-y-auto border-e flex flex-col justify-between ${
+                isDark ? 'border-[#262834]' : 'border-[#EBEBF0]'
+              }`}
+            >
+              <div className="space-y-1">
+                {displayedResults.map((item, idx) => {
+                  const isSelected = idx === cmdKSelectedIndex;
+                  const deckDot = getDeckColorByHash(item.deckId || item.deckName);
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setAppState({ cmdKSelectedIndex: idx })}
+                      onDoubleClick={() => {
+                        setAppState({ cmdKOpen: false });
+                        appActions.openCardEditor(item);
+                      }}
+                      className={`px-3 py-2 rounded-xl flex items-center gap-2.5 cursor-pointer transition-all ${
+                        isSelected
+                          ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] shadow-2xs'
+                          : isDark
+                          ? 'hover:bg-white/5 text-[#D1D1D6]'
+                          : 'hover:bg-[#F5F5F8] text-[#3A3A3C]'
+                      }`}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: deckDot }}
+                      />
 
-                    <div className="min-w-0 flex-1">
-                      <div
-                        className={`text-[13px] font-semibold truncate leading-snug ${
-                          isSelected ? 'text-[var(--brand-text)]' : ''
-                        }`}
-                      >
-                        {item.front}
-                      </div>
-                      <div className="text-[11px] text-[#8E8E93] truncate mt-0.5 flex items-center gap-1.5">
-                        <span className="font-medium text-[var(--brand-text)]">
-                          {item.deckName}
-                        </span>
-                        <span>·</span>
-                        <span className="truncate">{item.back.slice(0, 26)}</span>
+                      <div className="min-w-0 flex-1">
+                        <div
+                          className={`text-[13px] font-semibold truncate leading-snug ${
+                            isSelected ? 'text-[var(--brand-text)]' : ''
+                          }`}
+                        >
+                          {item.front}
+                        </div>
+                        <div className="text-[11px] text-[#8E8E93] truncate mt-0.5 flex items-center gap-1.5">
+                          <span className="font-medium text-[var(--brand-text)]">
+                            {item.deckName}
+                          </span>
+                          <span>·</span>
+                          <span className="truncate">{item.back.slice(0, 26)}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAppState({
+                    cmdKOpen: false,
+                    activeTab: 'library',
+                  });
+                  appActions.searchLibraryDebounced({ query: cmdKQuery });
+                }}
+                className="mt-2 py-1.5 text-center text-[11px] font-medium text-[var(--brand-text)] hover:underline cursor-pointer"
+              >
+                {t('cmdKViewAllInLibrary', { n: displayedResults.length })}
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setAppState({
-                  cmdKOpen: false,
-                  activeTab: 'library',
-                });
-                appActions.searchLibraryDebounced({ query: cmdKQuery });
-              }}
-              className="mt-2 py-1.5 text-center text-[11px] font-medium text-[var(--brand-text)] hover:underline cursor-pointer"
-            >
-              {resolvedLang === 'en'
-                ? `View all ${displayedResults.length} in Library →`
-                : `在卡片库中浏览全部 ${displayedResults.length} 条 →`}
-            </button>
-          </div>
+            {/* Right Column: Clean Flashcard Preview with Single Copy Action */}
+            <div className="col-span-7 p-4 flex flex-col justify-between overflow-y-auto select-text">
+              {activeCard ? (
+                <>
+                  <div className="space-y-3">
+                    {/* Header: Deck Badge & Single Copy Button */}
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1.5 bg-[var(--brand-soft)] text-[var(--brand-text)]">
+                        <span
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{ backgroundColor: getDeckColorByHash(activeCard.deckId || activeCard.deckName) }}
+                        />
+                        <span>{activeCard.deckName}</span>
+                      </span>
 
-          {/* Right Column: Clean Flashcard Preview with Single Copy Action */}
-          <div className="col-span-7 p-4 flex flex-col justify-between overflow-y-auto select-text">
-            {activeCard ? (
-              <>
-                <div className="space-y-3">
-                  {/* Header: Deck Badge & Single Copy Button */}
-                  <div className="flex items-center justify-between">
-                    <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1.5 bg-[var(--brand-soft)] text-[var(--brand-text)]">
-                      <span
-                        className="w-1.5 h-1.5 rounded-full"
-                        style={{ backgroundColor: getDeckColorByHash(activeCard.deckId || activeCard.deckName) }}
-                      />
-                      <span>{activeCard.deckName}</span>
-                    </span>
-
-                    {renderCopyButton({
-                      side: 'all',
-                      label: isZh ? '复制卡片' : 'Copy Card',
-                      title: isZh ? '复制卡片正反面完整内容' : 'Copy card content',
-                      getText: () =>
-                        `${extractCopyableText(activeCard.frontHtml, activeCard.front)}\n\n---\n\n${extractCopyableText(
-                          activeCard.backHtml,
-                          activeCard.back
-                        )}`,
-                    })}
-                  </div>
-
-                  {/* Clean Card Typography (Direct Flashcard Layout, No Nested Gray Boxes) */}
-                  <div
-                    className={`rounded-2xl border select-text overflow-hidden ${
-                      isDark ? 'bg-[#15161E] border-[#262834]' : 'bg-[#FAFAFC] border-[#E8E8EE]'
-                    }`}
-                  >
-                    {/* Front Section */}
-                    <div className="group/front px-4 pt-3.5 pb-3">
-                      <div className="flex items-center justify-between gap-2 min-h-[24px] mb-1">
-                        <div className="text-[10px] font-semibold text-[#636366] dark:text-[#8E8E93] uppercase tracking-wider">
-                          {resolvedLang === 'en' ? 'Front' : '卡片正面'}
-                        </div>
-                        {renderCopyButton({
-                          side: 'front',
-                          label: isZh ? '复制正面' : 'Copy Front',
-                          title: isZh ? '复制卡片正面内容' : 'Copy front content',
-                          getText: () => extractCopyableText(activeCard.frontHtml, activeCard.front),
-                          hoverRevealClass:
-                            'opacity-0 pointer-events-none group-hover/front:opacity-100 group-hover/front:pointer-events-auto group-focus-within/front:opacity-100 group-focus-within/front:pointer-events-auto',
-                        })}
-                      </div>
-                      <div
-                        className="text-[15px] font-semibold leading-relaxed break-words select-text cursor-text text-[#1D1D1F] dark:text-[#F4F4F6]"
-                        dangerouslySetInnerHTML={{
-                          __html: renderMathAndRichHtml(activeCard.frontHtml || activeCard.front),
-                        }}
-                      />
+                      {renderCopyButton({
+                        side: 'all',
+                        label: t('copyCardBtn'),
+                        title: t('copyCardBtn'),
+                        getText: () =>
+                          `${extractCopyableText(activeCard.frontHtml, activeCard.front)}\n\n---\n\n${extractCopyableText(
+                            activeCard.backHtml,
+                            activeCard.back
+                          )}`,
+                      })}
                     </div>
 
-                    {/* Subtle Divider */}
-                    <div className={`mx-4 border-t ${isDark ? 'border-[#262834]' : 'border-[#EAEAEF]'}`} />
-
-                    {/* Back Section */}
-                    <div className="group/back px-4 pt-3 pb-3.5">
-                      <div className="flex items-center justify-between gap-2 min-h-[24px] mb-1">
-                        <div className="text-[10px] font-semibold text-[#636366] dark:text-[#8E8E93] uppercase tracking-wider">
-                          {resolvedLang === 'en' ? 'Back' : '卡片背面'}
+                    {/* Clean Card Typography (Direct Flashcard Layout, No Nested Gray Boxes) */}
+                    <div
+                      className={`rounded-2xl border select-text overflow-hidden ${
+                        isDark ? 'bg-[#15161E] border-[#262834]' : 'bg-[#FAFAFC] border-[#E8E8EE]'
+                      }`}
+                    >
+                      {/* Front Section */}
+                      <div className="group/front px-4 pt-3.5 pb-3">
+                        <div className="flex items-center justify-between gap-2 min-h-[24px] mb-1">
+                          <div className="text-[10px] font-semibold text-[#636366] dark:text-[#8E8E93] uppercase tracking-wider">
+                            {t('cardFrontLabel')}
+                          </div>
+                          {renderCopyButton({
+                            side: 'front',
+                            label: t('copyFrontBtn'),
+                            title: t('copyFrontBtn'),
+                            getText: () => extractCopyableText(activeCard.frontHtml, activeCard.front),
+                            hoverRevealClass:
+                              'opacity-0 pointer-events-none group-hover/front:opacity-100 group-hover/front:pointer-events-auto group-focus-within/front:opacity-100 group-focus-within/front:pointer-events-auto',
+                          })}
                         </div>
-                        {renderCopyButton({
-                          side: 'back',
-                          label: isZh ? '复制背面' : 'Copy Back',
-                          title: isZh ? '复制卡片背面内容' : 'Copy back content',
-                          getText: () => extractCopyableText(activeCard.backHtml, activeCard.back),
-                          hoverRevealClass:
-                            'opacity-0 pointer-events-none group-hover/back:opacity-100 group-hover/back:pointer-events-auto group-focus-within/back:opacity-100 group-focus-within/back:pointer-events-auto',
-                        })}
+                        <div
+                          className="text-[15px] font-semibold leading-relaxed break-words select-text cursor-text text-[#1D1D1F] dark:text-[#F4F4F6]"
+                          dangerouslySetInnerHTML={{
+                            __html: renderMathAndRichHtml(activeCard.frontHtml || activeCard.front),
+                          }}
+                        />
                       </div>
-                      <div
-                        className="text-[13px] font-normal leading-relaxed break-words text-[#3A3A3C] dark:text-[#D1D1D6] select-text cursor-text"
-                        dangerouslySetInnerHTML={{
-                          __html: renderMathAndRichHtml(activeCard.backHtml || activeCard.back),
-                        }}
-                      />
+
+                      {/* Subtle Divider */}
+                      <div className={`mx-4 border-t ${isDark ? 'border-[#262834]' : 'border-[#EAEAEF]'}`} />
+
+                      {/* Back Section */}
+                      <div className="group/back px-4 pt-3 pb-3.5">
+                        <div className="flex items-center justify-between gap-2 min-h-[24px] mb-1">
+                          <div className="text-[10px] font-semibold text-[#636366] dark:text-[#8E8E93] uppercase tracking-wider">
+                            {t('cardBackLabel')}
+                          </div>
+                          {renderCopyButton({
+                            side: 'back',
+                            label: t('copyBackBtn'),
+                            title: t('copyBackBtn'),
+                            getText: () => extractCopyableText(activeCard.backHtml, activeCard.back),
+                            hoverRevealClass:
+                              'opacity-0 pointer-events-none group-hover/back:opacity-100 group-hover/back:pointer-events-auto group-focus-within/back:opacity-100 group-focus-within/back:pointer-events-auto',
+                          })}
+                        </div>
+                        <div
+                          className="text-[13px] font-normal leading-relaxed break-words text-[#3A3A3C] dark:text-[#D1D1D6] select-text cursor-text"
+                          dangerouslySetInnerHTML={{
+                            __html: renderMathAndRichHtml(activeCard.backHtml || activeCard.back),
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Compact SRS Metadata */}
+                    <div className="flex items-center justify-between text-[11px] text-[#8E8E93] px-1">
+                      <span className="font-mono">
+                        {activeCard.dueText || t('statusDue')}
+                      </span>
+                      <span className="font-mono text-[10px]">
+                        {t('masteryLabel')} {activeCard.mastery}% · {t('stabilityLabel')} {activeCard.stability}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Compact SRS Metadata */}
-                  <div className="flex items-center justify-between text-[11px] text-[#8E8E93] px-1">
-                    <span className="font-mono">
-                      {activeCard.dueText || (resolvedLang === 'en' ? 'Due Today' : '待复习')}
-                    </span>
-                    <span className="font-mono text-[10px]">
-                      {resolvedLang === 'en'
-                        ? `Mastery ${activeCard.mastery}% · Stability ${activeCard.stability}`
-                        : `熟练度 ${activeCard.mastery}% · 稳定度 ${activeCard.stability}`}
-                    </span>
+                  {/* Single Primary Action Button */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAppState({ cmdKOpen: false });
+                        appActions.openCardEditor(activeCard);
+                      }}
+                      className="btn-primary w-full !h-9 !text-[12px]"
+                    >
+                      <span>{t('editInCardEditorBtn')}</span>
+                      <kbd className="px-1.5 py-0.5 rounded bg-white/20 text-[10px] font-mono leading-none">
+                        ↵
+                      </kbd>
+                    </button>
                   </div>
+                </>
+              ) : (
+                <div className="h-full flex items-center justify-center text-[12px] text-[#8E8E93]">
+                  {t('noCardSelectedText')}
                 </div>
-
-                {/* Single Primary Action Button */}
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAppState({ cmdKOpen: false });
-                      appActions.openCardEditor(activeCard);
-                    }}
-                    className="btn-primary w-full !h-9 !text-[12px]"
-                  >
-                    <span>{resolvedLang === 'en' ? 'Edit in Card Editor' : '在编辑器中修改'}</span>
-                    <kbd className="px-1.5 py-0.5 rounded bg-white/20 text-[10px] font-mono leading-none">
-                      ↵
-                    </kbd>
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="h-full flex items-center justify-center text-[12px] text-[#8E8E93]">
-                {resolvedLang === 'en' ? 'No card selected' : '无匹配卡片预览'}
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
         {/* Footer Bar */}
         <div
@@ -633,13 +623,9 @@ export const CommandPaletteModal: React.FC = () => {
         >
           <span>
             {hasQuery && displayedResults.length > 0
-              ? resolvedLang === 'en'
-                ? `Total ${displayedResults.length} results`
-                : `共 ${displayedResults.length} 条结果`
+              ? t('matchedCountText', { n: displayedResults.length })
               : !hasQuery
-              ? resolvedLang === 'en'
-                ? `Library: ${libraryTotalCount || libraryCards.length || 0} cards`
-                : `记忆库共 ${libraryTotalCount || libraryCards.length || 0} 张卡片`
+              ? `${t('libraryTitle')}: ${libraryTotalCount || libraryCards.length || 0} ${t('cardsUnit')}`
               : ''}
           </span>
         </div>

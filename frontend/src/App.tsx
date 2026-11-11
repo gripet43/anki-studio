@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useReducer } from 'react';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { DecksView } from './components/decks/DecksView';
 import { DesignSystemView } from './components/design-system/DesignSystemView';
@@ -12,6 +12,7 @@ import { StatsView } from './components/stats/StatsView';
 import { CustomStudyModal } from './components/study/CustomStudyModal';
 import { VacationModal } from './components/vacation/VacationModal';
 import { IcuRescueModal } from './components/vacation/IcuRescueModal';
+import { ensureLanguageLoaded, isLanguageLoaded, isRtlLanguage, translate } from './i18n/translations';
 import { appActions, getAppState, setAppState, showToast, useAppStore } from './stores/useAppStore';
 import { buildThemeCssVars } from './utils/themeTokens';
 
@@ -24,21 +25,40 @@ export const App: React.FC = () => {
     settingsOpen,
     theme,
     accentColor,
+    resolvedLang,
     toastMessage,
   } = useAppStore();
 
   const themeVars = useMemo(() => buildThemeCssVars(accentColor, theme), [accentColor, theme]);
+  const isRtl = isRtlLanguage(resolvedLang);
 
-  // Synchronize CSS variables & theme class onto document.documentElement so portals and
-  // root-level styles (scrollbars, selection, inputs) always reflect the active theme & accent.
+  // 语言字典懒加载：中英已随首包常驻，其余 14 种在切到对应语言时才拉一个 chunk。
+  // 加载完成后强制重渲染一次，让已经渲染出去的文案换成目标语言。
+  const [, forceLanguageRender] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    let alive = true;
+    if (!isLanguageLoaded(resolvedLang)) {
+      void ensureLanguageLoaded(resolvedLang).then(() => {
+        if (alive) forceLanguageRender();
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [resolvedLang]);
+
+  // Synchronize CSS variables, theme class, and language/RTL direction onto document.documentElement
+  // so portals and root-level styles always reflect the active theme, accent, and text direction.
   useEffect(() => {
     const rootEl = document.documentElement;
     rootEl.classList.toggle('dark', theme === 'dark' || theme === 'oled');
     rootEl.classList.toggle('oled', theme === 'oled');
+    rootEl.dir = isRtl ? 'rtl' : 'ltr';
+    rootEl.lang = resolvedLang;
     for (const [k, v] of Object.entries(themeVars)) {
       rootEl.style.setProperty(k, v);
     }
-  }, [theme, themeVars]);
+  }, [theme, themeVars, isRtl, resolvedLang]);
 
   useEffect(() => {
     appActions.initFromAnki();
@@ -62,11 +82,11 @@ export const App: React.FC = () => {
     };
 
     const onSyncStarted = () => {
-      const isZh = getAppState().resolvedLang === 'zh-CN';
+      const lang = getAppState().resolvedLang;
       setAppState({
         syncing: true,
         syncJustFinished: false,
-        lastSyncedText: isZh ? '正在同步...' : 'Syncing...',
+        lastSyncedText: translate(lang, 'syncing'),
       });
     };
 
@@ -160,6 +180,7 @@ export const App: React.FC = () => {
 
   return (
     <div
+      dir={isRtl ? 'rtl' : 'ltr'}
       style={themeVars as React.CSSProperties}
       className={`w-screen h-screen overflow-hidden flex font-sans antialiased ${rootBg}`}
     >

@@ -18,7 +18,6 @@ export const SyncStatusPill: React.FC = () => {
     showShortcutHints,
   } = useAppStore();
 
-  const isZh = resolvedLang === 'zh-CN';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
@@ -131,16 +130,10 @@ export const SyncStatusPill: React.FC = () => {
   const isoTimestamp = hasSynced ? new Date(lastSyncedTimestamp).toISOString() : undefined;
 
   const triggerAriaLabel = isSyncActive
-    ? isZh
-      ? '正在与 AnkiWeb 同步'
-      : 'Syncing with AnkiWeb'
+    ? t('syncingAnkiWebAria')
     : hasSynced
-    ? isZh
-      ? `立即与 AnkiWeb 同步，上次同步：${relativeTimeStr}（${detailedTimeStr}），快捷键 Y`
-      : `Sync with AnkiWeb now, last synced ${relativeTimeStr} (${detailedTimeStr}), shortcut Y`
-    : isZh
-    ? '尚未与 AnkiWeb 同步，点击立即同步，快捷键 Y'
-    : 'Not synced with AnkiWeb yet, click to sync now, shortcut Y';
+    ? t('syncNowWithSnapshotAria', { rel: relativeTimeStr, abs: detailedTimeStr })
+    : t('syncNotYetAria');
 
   return (
     <div
@@ -157,7 +150,7 @@ export const SyncStatusPill: React.FC = () => {
         onClick={() => handleTriggerSync()}
         disabled={isSyncActive}
         aria-label={triggerAriaLabel}
-        className={`group relative h-9 pl-3.5 pr-2.5 rounded-full border text-[12px] flex items-center gap-2 transition-colors duration-200 backdrop-blur-md motion-safe:active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] sync-pill-forced-border ${pillSurface} ${
+        className={`group relative h-9 ps-3.5 pe-2.5 rounded-full border text-[12px] flex items-center gap-2 transition-colors duration-200 backdrop-blur-md motion-safe:active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] sync-pill-forced-border ${pillSurface} ${
           isSyncActive
             ? 'ring-1 ring-[var(--status-warning)]/30 cursor-default'
             : syncJustFinished
@@ -175,9 +168,7 @@ export const SyncStatusPill: React.FC = () => {
           {isSyncActive ? (
             <span className="text-[12px] font-semibold text-[var(--status-warning)] tracking-tight motion-safe:animate-pulse truncate">
               {isInitialSyncing && !syncing
-                ? isZh
-                  ? '本地卡库就绪中...'
-                  : 'Loading local...'
+                ? t('loadingLocalCollection')
                 : t('syncing')}
             </span>
           ) : syncJustFinished ? (
@@ -201,7 +192,7 @@ export const SyncStatusPill: React.FC = () => {
             </div>
           ) : (
             <span className="font-medium text-[12px] text-[var(--text-secondary)] leading-none">
-              {isZh ? '尚未同步' : 'Not synced'}
+              {t('notSyncedShort')}
             </span>
           )}
         </div>
@@ -252,7 +243,7 @@ export const SyncStatusPill: React.FC = () => {
       {/* Honest Snapshot Details Hovercard */}
       {isFlyoutOpen && (
         <div
-          className={`absolute right-0 top-11 z-50 w-[280px] max-w-[calc(100vw-2rem)] rounded-2xl border p-3.5 backdrop-blur-xl animate-flyout-enter sync-pill-forced-border ${popoverSurface}`}
+          className={`absolute end-0 top-11 z-50 w-[280px] max-w-[calc(100vw-2rem)] rounded-2xl border p-3.5 backdrop-blur-xl animate-flyout-enter sync-pill-forced-border ${popoverSurface}`}
         >
           {/* Header */}
           <div className="flex items-center gap-2 pb-2.5 border-b border-black/[0.06] dark:border-white/[0.08]">
@@ -276,7 +267,7 @@ export const SyncStatusPill: React.FC = () => {
           {/* Time & Snapshot Fact */}
           <div className="py-2.5 space-y-1 text-[11px]">
             <div className="flex items-center justify-between text-[var(--text-secondary)]">
-              <span>{isZh ? '上次同步' : 'Last sync'}</span>
+              <span>{t('synced')}</span>
               {hasSynced ? (
                 <time
                   dateTime={isoTimestamp}
@@ -286,31 +277,27 @@ export const SyncStatusPill: React.FC = () => {
                 </time>
               ) : (
                 <span className="font-mono text-[#1D1D1F] dark:text-[#E5E5EA]">
-                  {isZh ? '从未同步' : 'Never'}
+                  {t('neverSyncedShort')}
                 </span>
               )}
             </div>
             {hasSynced && detailedTimeStr && (
-              <div className="text-[10px] text-[var(--text-secondary)] text-right font-mono tabular-nums">
+              <div className="text-[10px] text-[var(--text-secondary)] text-end font-mono tabular-nums">
                 <time dateTime={isoTimestamp}>{detailedTimeStr}</time>
               </div>
             )}
             {!hasSynced && (
-              <div className="text-[10px] text-[var(--text-secondary)] text-right">
-                {isZh ? '暂无云端同步记录' : 'No cloud sync record'}
+              <div className="text-[10px] text-[var(--text-secondary)] text-end">
+                {t('noCloudSyncRecord')}
               </div>
             )}
           </div>
 
-          {/* Sync Guidance Footnote */}
+          {/* Sync Guidance Footnote (此时间代表上次同步云端时间。如有新的修改，请点击按钮完成同步。) */}
           <div className="pt-2.5 text-[10.5px] leading-relaxed text-[var(--text-secondary)] border-t border-black/[0.04] dark:border-white/[0.04]">
             {hasSynced
-              ? isZh
-                ? '此时间代表上次同步云端时间。如有新的修改，请点击按钮完成同步。'
-                : 'This timestamp reflects the last cloud sync. If you have new edits, click the button to sync.'
-              : isZh
-              ? '暂无云端同步记录。如有需要，请点击按钮完成同步。'
-              : 'No cloud sync record yet. Click the button to sync.'}
+              ? t('syncSnapshotFootnote')
+              : t('syncNoRecordFootnote')}
           </div>
         </div>
       )}

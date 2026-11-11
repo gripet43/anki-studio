@@ -1354,7 +1354,8 @@ class BridgeRouterAuditTest(unittest.TestCase):
         dup_miss = self._call("check_duplicate", {"front": "全新不存在的词条XYZ"})["data"]
         self.assertFalse(dup_miss["isDuplicate"])
 
-        # 3. quick_add with createReverseCard=True and typeAnswerMode=True
+        # 3. quick_add with createReverseCard=True
+        #    「默写卡」预设已下线，即使旧调用方仍传 typeAnswerMode，也不应再注入「默写」标签
         bi_res = self._call(
             "quick_add",
             {
@@ -1368,7 +1369,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         )["data"]
         self.assertTrue(bi_res["created"])
         self.assertEqual(bi_res["createdCount"], 2)
-        self.assertIn("默写", self.mock_col.get_note(101).tags)
+        self.assertNotIn("默写", self.mock_col.get_note(101).tags)
 
         # 4. search_cards multi-dimensional sortBy (lapses_desc, ivl_asc, ivl_desc, front_asc)
         self.mock_col.get_card(201).lapses = 1
@@ -1797,6 +1798,49 @@ class BridgeRouterAuditTest(unittest.TestCase):
                     sys.modules.pop(k, None)
                 else:
                     sys.modules[k] = old
+
+    def test_26_multi_language_16_locales_resolution_and_formatting(self):
+        """Verify 16 official Anki languages resolution, alias mapping, greetings, and weekday labels."""
+        from anki_modern_os.bridge.deck_service import (
+            SUPPORTED_LANG_CODES,
+            DeckService,
+            normalize_language_code,
+        )
+
+        self.assertEqual(len(SUPPORTED_LANG_CODES), 16)
+        # Verify Anki locale aliases normalize to canonical 16 codes
+        self.assertEqual(normalize_language_code("zh_CN"), "zh-CN")
+        self.assertEqual(normalize_language_code("zh_TW"), "zh-TW")
+        self.assertEqual(normalize_language_code("zh-HK"), "zh-TW")
+        self.assertEqual(normalize_language_code("ja_JP"), "ja")
+        self.assertEqual(normalize_language_code("ko_KR"), "ko")
+        self.assertEqual(normalize_language_code("pt_BR"), "pt-BR")
+        self.assertEqual(normalize_language_code("es_ES"), "es")
+        self.assertEqual(normalize_language_code("fr_FR"), "fr")
+        self.assertEqual(normalize_language_code("de_DE"), "de")
+        self.assertEqual(normalize_language_code("ru_RU"), "ru")
+        self.assertEqual(normalize_language_code("it_IT"), "it")
+        self.assertEqual(normalize_language_code("ar_SA"), "ar")
+        self.assertEqual(normalize_language_code("vi_VN"), "vi")
+        self.assertEqual(normalize_language_code("tr_TR"), "tr")
+        self.assertEqual(normalize_language_code("pl_PL"), "pl")
+        self.assertEqual(normalize_language_code("nl_NL"), "nl")
+
+        # Verify save_preferences + get_dashboard across multiple languages
+        for lang_code, expected_mon in (
+            ("ja", "月"),
+            ("ko", "월"),
+            ("zh-TW", "一"),
+            ("es", "Lun"),
+            ("de", "Mo"),
+            ("ru", "Пн"),
+        ):
+            save_res = self._call("save_preferences", {"language": lang_code})["data"]
+            self.assertEqual(save_res["preferences"]["language"], lang_code)
+            dash = self._call("get_dashboard", {})["data"]
+            self.assertEqual(dash["language"], lang_code)
+            self.assertEqual(dash["weeklyRhythm"]["days"][0]["label"], expected_mon)
+            self.assertTrue(len(DeckService._get_greeting(9, lang_code)) > 0)
 
 
 if __name__ == "__main__":

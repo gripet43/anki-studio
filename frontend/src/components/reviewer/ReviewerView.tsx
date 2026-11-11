@@ -32,7 +32,6 @@ export const ReviewerView: React.FC = () => {
   } = useAppStore();
 
   const isDark = theme === 'dark' || theme === 'oled';
-  const isZh = resolvedLang === 'zh-CN';
   const brandHex = getAccentScale(accentColor, theme).brand;
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
@@ -52,12 +51,7 @@ export const ReviewerView: React.FC = () => {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [flagPopoverOpen, setFlagPopoverOpen] = useState(false);
 
-  // Milestone 3: Type-in-the-Answer (默写检验与逐字差异高亮)
-  const [typeAnswerEnabled, setTypeAnswerEnabled] = useState(false);
-  const [typeAnswerInput, setTypeAnswerInput] = useState('');
-
   const activeInputRef = useRef<HTMLInputElement>(null);
-  const typeAnswerInputRef = useRef<HTMLInputElement>(null);
   const flagMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -83,19 +77,7 @@ export const ReviewerView: React.FC = () => {
   useEffect(() => {
     setConfirmingDelete(false);
     setFlagPopoverOpen(false);
-    setTypeAnswerInput('');
     if (currentCard) {
-      const autoType =
-        currentCard.tags.some(
-          (tg) => tg === '默写' || tg.toLowerCase() === 'type' || tg.toLowerCase() === 'type-answer'
-        ) ||
-        Boolean(
-          currentCard.noteTypeName &&
-            /type|默写|输入|拼写/i.test(currentCard.noteTypeName)
-        );
-      if (autoType) {
-        setTypeAnswerEnabled(true);
-      }
       const fMap =
         currentCard.fields && Object.keys(currentCard.fields).length > 0
           ? { ...currentCard.fields }
@@ -185,9 +167,7 @@ export const ReviewerView: React.FC = () => {
             ...prev,
             [activeFieldKey]: `${prev[activeFieldKey] || ''} {{c1::...}}`,
           }));
-          showToast(
-            resolvedLang === 'zh-CN' ? '已插入一键挖空 {{c1::...}}' : 'Inserted Cloze {{c1::...}}'
-          );
+          showToast(t('clozeBadge'));
         }
         return;
       }
@@ -347,99 +327,6 @@ export const ReviewerView: React.FC = () => {
     ? 'bg-[#121318]/95 border-white/[0.07] text-white'
     : 'bg-white/95 border-[#E5E5EA] text-[#1D1D1F] shadow-[-12px_0_36px_rgba(0,0,0,0.06)]';
 
-  // Milestone 3: Extract expected target answer and compute character-level LCS diff
-  // 必须放在会话完成态的提前 return 之前：否则「无卡片 / 已完成」与「有卡片」两条渲染路径的 Hook 数量不一致，
-  // React 会抛 #310 "Rendered more hooks than during the previous render"。
-  const expectedTypeTarget = useMemo(() => {
-    if (!currentCard) return '';
-    // For Cloze cards, extract the first {{cN::answer}} token
-    const rawFront = currentCard.front || currentCard.frontHtml || '';
-    const clozeMatch = rawFront.match(/\{\{c\d+::([^:}]+)(?:::[^}]*)?\}\}/i);
-    if (clozeMatch && clozeMatch[1]) {
-      return clozeMatch[1].replace(/<[^>]*>/g, '').trim();
-    }
-    // Otherwise use the stripped plain text of the first non-empty line of meaning/back
-    const rawBack = (currentCard.meaning || currentCard.backHtml || '')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/div>|<\/p>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .trim();
-    const firstLine =
-      rawBack
-        .split('\n')
-        .map((l) => l.trim())
-        .find(Boolean) || rawBack;
-    return firstLine.slice(0, 120);
-  }, [currentCard]);
-
-  const typeAnswerDiff = useMemo(() => {
-    const typed = typeAnswerInput.trim();
-    const expected = expectedTypeTarget.trim();
-    if (!expected) {
-      return {
-        accuracy: 100,
-        isExact: true,
-        typedTokens: [] as Array<{ char: string; status: 'match' | 'wrong' }>,
-        expectedTokens: [] as Array<{ char: string; status: 'match' | 'missing' }>,
-      };
-    }
-
-    const a = Array.from(typed);
-    const b = Array.from(expected);
-    const m = a.length;
-    const n = b.length;
-
-    // LCS DP table (case-insensitive comparison for Latin letters)
-    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
-    const eq = (c1: string, c2: string) => c1.toLowerCase() === c2.toLowerCase();
-
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        if (eq(a[i - 1], b[j - 1])) {
-          dp[i][j] = dp[i - 1][j - 1] + 1;
-        } else {
-          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-        }
-      }
-    }
-
-    const matchedA = new Array(m).fill(false);
-    const matchedB = new Array(n).fill(false);
-    let i = m;
-    let j = n;
-    while (i > 0 && j > 0) {
-      if (eq(a[i - 1], b[j - 1])) {
-        matchedA[i - 1] = true;
-        matchedB[j - 1] = true;
-        i--;
-        j--;
-      } else if (dp[i - 1][j] >= dp[i][j - 1]) {
-        i--;
-      } else {
-        j--;
-      }
-    }
-
-    const lcsLen = dp[m][n];
-    const maxLen = Math.max(m, n, 1);
-    const accuracy = m === 0 ? 0 : Math.round((lcsLen / maxLen) * 100);
-    const isExact = m > 0 && typed.toLowerCase() === expected.toLowerCase();
-
-    return {
-      accuracy: isExact ? 100 : accuracy,
-      isExact,
-      typedTokens: a.map((ch, idx) => ({
-        char: ch,
-        status: (matchedA[idx] ? 'match' : 'wrong') as 'match' | 'wrong',
-      })),
-      expectedTokens: b.map((ch, idx) => ({
-        char: ch,
-        status: (matchedB[idx] ? 'match' : 'missing') as 'match' | 'missing',
-      })),
-    };
-  }, [typeAnswerInput, expectedTypeTarget]);
-
   // ============== SESSION COMPLETE CELEBRATION SCREEN (Light & Dark Adapted) ==============
   if (isSessionComplete || !currentCard) {
     return (
@@ -448,7 +335,7 @@ export const ReviewerView: React.FC = () => {
 
         <header
           className={`h-16 ${
-            isMac ? 'pl-[82px] pr-7' : 'px-7'
+            isMac ? 'ps-[82px] pe-7' : 'px-7'
           } flex items-center justify-between border-b ${
             isDark ? 'border-white/[0.04]' : 'border-[#E5E5EA]'
           }`}
@@ -512,7 +399,7 @@ export const ReviewerView: React.FC = () => {
                 }`}
               >
                 <div className="text-[22px] font-bold text-[var(--brand-text)]">
-                  {avgSecDisplay} {resolvedLang === 'zh-CN' ? '秒' : 's'}
+                  {avgSecDisplay} {t('secondsUnitShort')}
                 </div>
                 <div className="text-[11px] text-[#8E8E93] mt-1">{t('sessionAvgTimeLabel')}</div>
               </div>
@@ -541,7 +428,7 @@ export const ReviewerView: React.FC = () => {
             isDark ? 'border-white/[0.04]' : 'border-[#E5E5EA]'
           }`}
         >
-          <span>{resolvedLang === 'zh-CN' ? '今日记忆任务已同步完成' : 'Study progress synced'}</span>
+          <span>{t('reviewCompletedSub')}</span>
           <span>
             {showShortcutHints ? `Esc · ${formatShortcut('Cmd Z', platform)}` : 'Esc'}
           </span>
@@ -565,25 +452,25 @@ export const ReviewerView: React.FC = () => {
     {
       id: 'bold',
       icon: 'B',
-      label: resolvedLang === 'zh-CN' ? '加粗' : 'Bold',
-      action: () => appendToActiveField('<b>重点内容</b>'),
+      label: 'Bold',
+      action: () => appendToActiveField('<b>...</b>'),
     },
     {
       id: 'code',
       icon: '<>',
-      label: resolvedLang === 'zh-CN' ? '语法高亮代码块' : 'Code Block',
+      label: 'Code',
       action: () => appendToActiveField('<code>code</code>'),
     },
     {
       id: 'latex',
       icon: '∑',
-      label: resolvedLang === 'zh-CN' ? 'LaTeX 公式' : 'LaTeX Formula',
+      label: 'LaTeX',
       action: () => appendToActiveField('\\( E = mc^2 \\)'),
     },
     {
       id: 'cloze',
       icon: '[]',
-      label: resolvedLang === 'zh-CN' ? '一键挖空' : 'Cloze Deletion',
+      label: t('clozeBadge'),
       action: () => appendToActiveField('{{c1::...}}'),
     },
   ];
@@ -609,7 +496,7 @@ export const ReviewerView: React.FC = () => {
       {/* Top Header Bar */}
       <header
         className={`h-16 ${
-          isMac ? 'pl-[82px] pr-7' : 'px-7'
+          isMac ? 'ps-[82px] pe-7' : 'px-7'
         } flex items-center justify-between border-b ${
           isDark ? 'border-white/[0.04]' : 'border-[#E5E5EA]'
         }`}
@@ -666,7 +553,7 @@ export const ReviewerView: React.FC = () => {
                     : 'border-[#E5E5EA] text-[#6E6E73] hover:text-black hover:bg-black/5'
                 }`}
               >
-                {resolvedLang === 'zh-CN' ? '取消' : 'Cancel'}
+                {t('cancel')}
               </button>
 
               <button
@@ -682,7 +569,7 @@ export const ReviewerView: React.FC = () => {
                     : 'opacity-70 hover:opacity-100'
                 }`}
               >
-                {resolvedLang === 'zh-CN' ? '保存' : 'Save'}
+                {t('saveChangesBtn')}
               </button>
             </div>
           ) : (
@@ -706,44 +593,12 @@ export const ReviewerView: React.FC = () => {
                 </button>
               )}
 
-              {/* Milestone 3: Type-in-the-Answer (默写检验) Toggle Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  const next = !typeAnswerEnabled;
-                  setTypeAnswerEnabled(next);
-                  if (next && !isCardFlipped) {
-                    setTimeout(() => typeAnswerInputRef.current?.focus(), 60);
-                  }
-                }}
-                title={
-                  isZh
-                    ? '切换「拼写默写检验 (Type in the Answer)」模式：正面输入答案，翻面逐字比对差异'
-                    : 'Toggle Type-in-the-Answer spelling check mode'
-                }
-                className={`h-8 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
-                  typeAnswerEnabled
-                    ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)]'
-                    : headerBtnSurface
-                }`}
-              >
-                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="2" y="4" width="20" height="16" rx="2" />
-                  <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10" />
-                </svg>
-                <span>{isZh ? '默写' : 'Type'}</span>
-              </button>
-
               {/* 7-Color Flag Quick Picker Button & Popover */}
               <div ref={flagMenuRef} className="relative">
                 <button
                   type="button"
                   onClick={() => setFlagPopoverOpen((prev) => !prev)}
-                  title={
-                    isZh
-                      ? `卡片旗标 (${formatShortcut('Cmd 1-7', platform)})`
-                      : `Card Flag (${formatShortcut('Cmd 1-7', platform)})`
-                  }
+                  title={`${t('flagFilterLabel')} (${formatShortcut('Cmd 1-7', platform)})`}
                   style={
                     activeFlagSpec
                       ? {
@@ -768,20 +623,20 @@ export const ReviewerView: React.FC = () => {
                     <line x1="4" y1="22" x2="4" y2="15" />
                   </svg>
                   {activeFlagSpec && (
-                    <span>{isZh ? activeFlagSpec.shortZh : activeFlagSpec.shortEn}</span>
+                    <span>{t(`flagShort_${activeFlagNum}` as any)}</span>
                   )}
                 </button>
 
                 {flagPopoverOpen && (
                   <div
-                    className={`absolute right-0 top-10 z-50 w-[210px] rounded-2xl border shadow-2xl p-2 space-y-0.5 backdrop-blur-xl ${
+                    className={`absolute end-0 top-10 z-50 w-[210px] rounded-2xl border shadow-2xl p-2 space-y-0.5 backdrop-blur-xl ${
                       isDark
                         ? 'bg-[#181922]/96 border-[#2E303E] text-white'
                         : 'bg-white/96 border-[#E5E5EA] text-[#1D1D1F]'
                     }`}
                   >
                     <div className="px-2.5 py-1 text-[10px] text-[#8E8E93] flex items-center justify-between">
-                      <span>{isZh ? '7 色旗标标记' : '7-Color Flags'}</span>
+                      <span>{t('flagFilterLabel')}</span>
                       <span className="font-mono">{formatShortcut('Cmd 1-7', platform)}</span>
                     </div>
                     {([1, 2, 3, 4, 5, 6, 7] as Array<Exclude<CardFlagColor, 0>>).map((fNum) => {
@@ -806,7 +661,7 @@ export const ReviewerView: React.FC = () => {
                               className="w-2.5 h-2.5 rounded-full shrink-0"
                               style={{ backgroundColor: spec.hex }}
                             />
-                            <span>{isZh ? spec.labelZh : spec.labelEn}</span>
+                            <span>{t(`flagLabel_${fNum}` as any)}</span>
                           </div>
                           <span className="text-[10px] font-mono text-[#8E8E93]">
                             {isSel ? '✓' : fNum}
@@ -823,7 +678,7 @@ export const ReviewerView: React.FC = () => {
                         }}
                         className="w-full px-2.5 py-1.5 rounded-xl text-[11px] text-[#8E8E93] hover:text-[var(--status-danger)] flex items-center justify-between cursor-pointer border-t border-black/5 dark:border-white/5 mt-1 pt-1.5"
                       >
-                        <span>{isZh ? '清除旗标' : 'Clear Flag'}</span>
+                        <span>{t('flagNone')}</span>
                         <span className="font-mono text-[10px]">0</span>
                       </button>
                     )}
@@ -869,7 +724,7 @@ export const ReviewerView: React.FC = () => {
         {/* Scrollable Center Pane for Flashcard */}
         <div
           className={`flex-1 overflow-y-auto px-6 py-6 flex flex-col items-center transition-all duration-300 ${
-            inspectorOpen ? '-translate-x-28' : ''
+            inspectorOpen ? 'ltr:-translate-x-28 rtl:translate-x-28' : ''
           }`}
         >
           <div className="my-auto flex flex-col items-center w-full max-w-[580px]">
@@ -971,16 +826,16 @@ export const ReviewerView: React.FC = () => {
                   }`}
                 >
                   <span className={hasDraftChanges ? 'text-[var(--status-warning)] font-medium' : ''}>
-                    {hasDraftChanges
-                      ? (resolvedLang === 'zh-CN' ? '● 有未保存修改' : '● Unsaved changes')
-                      : (resolvedLang === 'zh-CN' ? '未修改' : 'Unchanged')}
+                    {hasDraftChanges ? `● ${t('unsavedChangesBadge')}` : t('autoSaved')}
                   </span>
-                  <span>{formatShortcut('Cmd Enter', platform)} 保存 · Esc 取消</span>
+                  <span>
+                    {formatShortcut('Cmd Enter', platform)} {t('saveChangesBtn')} · Esc {t('cancel')}
+                  </span>
                 </div>
 
                 {slashMenuOpen && (
                   <div
-                    className={`absolute left-20 -bottom-44 w-[240px] rounded-2xl border shadow-2xl p-2 z-40 ${
+                    className={`absolute start-20 -bottom-44 w-[240px] rounded-2xl border shadow-2xl p-2 z-40 ${
                       isDark
                         ? 'bg-[#1C1D24] border-white/[0.1] text-white'
                         : 'bg-white border-[#E5E5EA] text-[#1D1D1F]'
@@ -1028,7 +883,7 @@ export const ReviewerView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => appActions.setCurrentReviewCardFlag(0, false)}
-                        title={isZh ? '点击清除旗标' : 'Click to clear flag'}
+                        title={t('flagNone')}
                         style={{
                           backgroundColor: activeFlagSpec.bgSoft,
                           borderColor: activeFlagSpec.borderHex,
@@ -1040,7 +895,7 @@ export const ReviewerView: React.FC = () => {
                           className="w-2 h-2 rounded-full shrink-0"
                           style={{ backgroundColor: activeFlagSpec.hex }}
                         />
-                        <span>{isZh ? activeFlagSpec.shortZh : activeFlagSpec.shortEn}</span>
+                        <span>{t(`flagShort_${activeFlagNum}` as any)}</span>
                       </button>
                     )}
 
@@ -1113,99 +968,6 @@ export const ReviewerView: React.FC = () => {
                       }`}
                     />
 
-                    {/* Milestone 3: Type-in-the-Answer Character-by-Character Diff Result */}
-                    {(typeAnswerEnabled || typeAnswerInput.trim().length > 0) && expectedTypeTarget && (
-                      <div
-                        className={`mb-5 p-3.5 rounded-2xl border space-y-2 ${
-                          typeAnswerDiff.isExact
-                            ? 'bg-emerald-500/[0.08] border-emerald-500/30'
-                            : typeAnswerInput.trim().length === 0
-                            ? isDark
-                              ? 'bg-[#1C1E26] border-[#2A2C38]'
-                              : 'bg-[#F7F8FA] border-[#E5E5EA]'
-                            : 'bg-amber-500/[0.08] border-amber-500/30'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-semibold flex items-center gap-1.5">
-                            <span>{isZh ? '⌨️ 拼写默写核对' : '⌨️ Type-in-the-Answer Check'}</span>
-                            {typeAnswerInput.trim().length > 0 && (
-                              <span
-                                className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
-                                  typeAnswerDiff.isExact
-                                    ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                                    : typeAnswerDiff.accuracy >= 60
-                                    ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
-                                    : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
-                                }`}
-                              >
-                                {typeAnswerDiff.isExact
-                                  ? isZh
-                                    ? '✓ 100% 完全匹配'
-                                    : '✓ 100% Exact Match'
-                                  : isZh
-                                  ? `匹配度 ${typeAnswerDiff.accuracy}%`
-                                  : `Match ${typeAnswerDiff.accuracy}%`}
-                              </span>
-                            )}
-                          </span>
-                          <span className="text-[10px] text-[#8E8E93]">
-                            {isZh ? '绿=正确 · 红=多写/错字 · 黄=漏写' : 'Green=Match · Red=Wrong · Amber=Missing'}
-                          </span>
-                        </div>
-
-                        {/* User's Typed Line */}
-                        <div className="flex items-baseline gap-2 text-[13px] font-mono break-all">
-                          <span className="text-[11px] font-sans text-[#8E8E93] shrink-0 w-14">
-                            {isZh ? '你的输入' : 'Typed'}
-                          </span>
-                          {typeAnswerInput.trim().length === 0 ? (
-                            <span className="text-[12px] italic text-[#8E8E93] font-sans">
-                              {isZh ? '（未输入内容）' : '(No answer typed)'}
-                            </span>
-                          ) : (
-                            <div className="flex flex-wrap gap-[1px]">
-                              {typeAnswerDiff.typedTokens.map((tk, idx) => (
-                                <span
-                                  key={idx}
-                                  className={
-                                    tk.status === 'match'
-                                      ? 'px-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-semibold'
-                                      : 'px-0.5 rounded bg-rose-500/20 text-rose-600 dark:text-rose-400 line-through'
-                                  }
-                                >
-                                  {tk.char === ' ' ? '\u00A0' : tk.char}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Expected Target Line (shown when not exact match) */}
-                        {!typeAnswerDiff.isExact && (
-                          <div className="flex items-baseline gap-2 text-[13px] font-mono break-all pt-1 border-t border-black/5 dark:border-white/5">
-                            <span className="text-[11px] font-sans text-[#8E8E93] shrink-0 w-14">
-                              {isZh ? '标准答案' : 'Target'}
-                            </span>
-                            <div className="flex flex-wrap gap-[1px]">
-                              {typeAnswerDiff.expectedTokens.map((tk, idx) => (
-                                <span
-                                  key={idx}
-                                  className={
-                                    tk.status === 'match'
-                                      ? 'px-0.5 rounded text-emerald-700 dark:text-emerald-300'
-                                      : 'px-0.5 rounded bg-amber-500/25 text-amber-700 dark:text-amber-300 font-bold underline'
-                                  }
-                                >
-                                  {tk.char === ' ' ? '\u00A0' : tk.char}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
                     {/* Meaning */}
                     <div
                       className={`text-[17px] font-medium leading-relaxed select-text cursor-text whitespace-pre-wrap break-words [&_img]:max-h-60 [&_img]:rounded-xl [&_img]:my-3 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[14px] ${
@@ -1276,55 +1038,7 @@ export const ReviewerView: React.FC = () => {
                       isDark ? 'border-white/[0.05]' : 'border-[#ECECF2]'
                     }`}
                   >
-                    {typeAnswerEnabled ? (
-                      <div className="w-full space-y-2">
-                        <div className="flex items-center justify-between text-[11px] text-[#8E8E93]">
-                          <span className="font-medium text-[var(--brand-text)]">
-                            {isZh ? '⌨️ 拼写默写检验（Type in the Answer）' : '⌨️ Type in the Answer'}
-                          </span>
-                          <span>{isZh ? '按 Enter 提交并翻开核对' : 'Press Enter to check'}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            ref={typeAnswerInputRef}
-                            type="text"
-                            value={typeAnswerInput}
-                            onChange={(e) => setTypeAnswerInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                appActions.flipCard();
-                              } else if (e.key === 'Escape') {
-                                e.preventDefault();
-                                setTypeAnswerEnabled(false);
-                              }
-                            }}
-                            placeholder={
-                              isZh
-                                ? '在此输入你默写的答案（支持英文拼写 / 填空词条）...'
-                                : 'Type your answer here...'
-                            }
-                            autoFocus
-                            className={`flex-1 h-10 px-3.5 rounded-xl border text-[14px] font-medium focus:outline-none focus:border-[var(--brand)] transition-colors ${
-                              isDark
-                                ? 'bg-[#1E202B] border-[#323546] text-white placeholder-[#6E7080]'
-                                : 'bg-[#F8F9FB] border-[#DCDCE4] text-[#1D1D1F] placeholder-[#8E8E98]'
-                            }`}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => appActions.flipCard()}
-                            style={{ backgroundColor: brandHex }}
-                            className="h-10 px-4 rounded-xl text-white text-[12px] font-semibold cursor-pointer hover:opacity-95 shrink-0"
-                          >
-                            {isZh ? '核对 ↵' : 'Check ↵'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-[13px] text-[#8E8E93]">{t('recallPrompt')}</p>
-                    )}
+                    <p className="text-[13px] text-[#8E8E93]">{t('recallPrompt')}</p>
                   </div>
                 )}
 
@@ -1346,7 +1060,7 @@ export const ReviewerView: React.FC = () => {
                       ))}
                       {currentCard.tags.length > 2 && (
                         <span
-                          title={currentCard.tags.slice(2).map((t) => `#${t}`).join(', ')}
+                          title={currentCard.tags.slice(2).map((tItem) => `#${tItem}`).join(', ')}
                           className={`px-1.5 py-0.5 rounded-md text-[10px] cursor-help ${
                             isDark
                               ? 'bg-white/[0.04] text-[#7E7E86]'
@@ -1358,7 +1072,7 @@ export const ReviewerView: React.FC = () => {
                       )}
                     </div>
                     {currentCard.reps > 0 && (
-                      <span className="text-[11px] text-[#8E8E93] shrink-0 ml-auto font-mono">
+                      <span className="text-[11px] text-[#8E8E93] shrink-0 ms-auto font-mono">
                         {t('reviewedCountText', {
                           reps: currentCard.reps,
                           last: currentCard.lastReviewText,
@@ -1378,7 +1092,7 @@ export const ReviewerView: React.FC = () => {
         <footer
           className={`shrink-0 pb-6 pt-3 px-6 flex flex-col items-center justify-center border-t border-black/[0.04] dark:border-white/[0.04] transition-all duration-300 z-10 ${
             isDark ? 'bg-[#0E0F14]/92' : 'bg-[#F8F8FA]/92'
-          } backdrop-blur-md ${inspectorOpen ? '-translate-x-28' : ''}`}
+          } backdrop-blur-md ${inspectorOpen ? 'ltr:-translate-x-28 rtl:translate-x-28' : ''}`}
         >
           <div className="w-[560px] max-w-full h-[58px]">
             {!isCardFlipped ? (
@@ -1406,7 +1120,7 @@ export const ReviewerView: React.FC = () => {
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-all bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger)]`}
                 >
-                  <div className={showShortcutHints ? 'text-left' : 'text-center'}>
+                  <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[13px] font-semibold">{t('rateAgain')}</div>
                     <div className="text-[11px] opacity-75">
                       {currentCard.predictions.again}
@@ -1425,7 +1139,7 @@ export const ReviewerView: React.FC = () => {
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-all bg-[var(--status-warning-soft)] border-[var(--status-warning)]/35 hover:border-[var(--status-warning)] text-[var(--status-warning)]`}
                 >
-                  <div className={showShortcutHints ? 'text-left' : 'text-center'}>
+                  <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[13px] font-semibold">{t('rateHard')}</div>
                     <div className="text-[11px] opacity-75">
                       {currentCard.predictions.hard}
@@ -1444,7 +1158,7 @@ export const ReviewerView: React.FC = () => {
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-all bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success)]`}
                 >
-                  <div className={showShortcutHints ? 'text-left' : 'text-center'}>
+                  <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[13px] font-semibold">{t('rateGood')}</div>
                     <div className="text-[11px] opacity-75">
                       {currentCard.predictions.good}
@@ -1463,7 +1177,7 @@ export const ReviewerView: React.FC = () => {
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-all bg-[var(--status-info-soft)] border-[var(--status-info)]/35 hover:border-[var(--status-info)] text-[var(--status-info)]`}
                 >
-                  <div className={showShortcutHints ? 'text-left' : 'text-center'}>
+                  <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[13px] font-semibold">{t('rateEasy')}</div>
                     <div className="text-[11px] opacity-75">
                       {currentCard.predictions.easy}
@@ -1485,7 +1199,7 @@ export const ReviewerView: React.FC = () => {
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-all active:scale-[0.98] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger)]`}
                 >
-                  <div className={showShortcutHints ? 'text-left' : 'text-center'}>
+                  <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[14px] font-semibold">{t('rateAgain')}</div>
                     <div className="text-[11px] opacity-75 mt-0.5">
                       {currentCard.predictions.again}
@@ -1504,7 +1218,7 @@ export const ReviewerView: React.FC = () => {
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-all active:scale-[0.98] bg-[var(--brand-soft)] border-[var(--brand-border)] hover:border-[var(--brand)] text-[var(--brand-text)]`}
                 >
-                  <div className={showShortcutHints ? 'text-left' : 'text-center'}>
+                  <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[15px] font-bold">{t('rateGood')}</div>
                     <div className="text-[11px] opacity-80 mt-0.5">
                       {currentCard.predictions.good}
@@ -1528,8 +1242,8 @@ export const ReviewerView: React.FC = () => {
             >
               {formatShortcut(
                 isCardFlipped
-                  ? '按住 Option 展开四档评分 (1重来 / 2困难 / 3记得 / 4简单) · Cmd+1~7 标记旗标 · Cmd Z 撤销'
-                  : 'Space / Enter 翻开答案 · Cmd+1~7 标记旗标 · R 音频 · Cmd Z 撤销',
+                  ? `Option (1 ${t('rateAgain')} / 2 ${t('rateHard')} / 3 ${t('rateGood')} / 4 ${t('rateEasy')}) · Cmd+1~7 · Cmd Z`
+                  : `Space / Enter ${t('showAnswerBtn')} · Cmd+1~7 · R · Cmd Z`,
                 platform
               )}
             </button>
@@ -1539,8 +1253,8 @@ export const ReviewerView: React.FC = () => {
 
         {/* RIGHT INSPECTOR DRAWER (Light & Dark Adapted) */}
         {inspectorOpen && (
-          <aside className={`absolute right-0 top-0 bottom-0 w-[300px] backdrop-blur-xl border-l p-6 flex flex-col justify-between z-40 ${inspectorSurface}`}>
-            <div className="space-y-5 overflow-y-auto pr-0.5">
+          <aside className={`absolute end-0 top-0 bottom-0 w-[300px] backdrop-blur-xl border-s p-6 flex flex-col justify-between z-40 ${inspectorSurface}`}>
+            <div className="space-y-5 overflow-y-auto pe-0.5">
               <div className="flex items-center justify-between">
                 <h3 className="text-[14px] font-semibold">{t('cardInfoTitle')}</h3>
                 <button
@@ -1554,12 +1268,10 @@ export const ReviewerView: React.FC = () => {
               {/* 7-Color Flag Picker inside Inspector */}
               <div>
                 <div className="flex items-center justify-between text-[11px] text-[#8E8E93] mb-2">
-                  <span>{isZh ? '7 色旗标' : 'Card Flag'}</span>
+                  <span>{t('flagFilterLabel')}</span>
                   <span className="font-mono text-[10px]">
                     {activeFlagSpec
-                      ? isZh
-                        ? activeFlagSpec.labelZh
-                        : activeFlagSpec.labelEn
+                      ? t(`flagLabel_${activeFlagNum}` as any)
                       : formatShortcut('Cmd 1-7', platform)}
                   </span>
                 </div>
@@ -1572,7 +1284,7 @@ export const ReviewerView: React.FC = () => {
                         key={fNum}
                         type="button"
                         onClick={() => appActions.setCurrentReviewCardFlag(fNum, true)}
-                        title={`${isZh ? spec.labelZh : spec.labelEn} (${formatShortcut(`Cmd+${fNum}`, platform)})`}
+                        title={`${t(`flagLabel_${fNum}` as any)} (${formatShortcut(`Cmd+${fNum}`, platform)})`}
                         className={`w-7 h-7 rounded-xl border flex items-center justify-center cursor-pointer transition-all ${
                           isSel
                             ? 'scale-110 ring-2 ring-offset-1 dark:ring-offset-[#121318]'
@@ -1593,7 +1305,7 @@ export const ReviewerView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => appActions.setCurrentReviewCardFlag(0, false)}
-                    title={isZh ? '清除旗标 (Cmd+0)' : 'Clear Flag (Cmd+0)'}
+                    title={`${t('flagNone')} (Cmd+0)`}
                     className={`w-7 h-7 rounded-xl border text-[11px] flex items-center justify-center cursor-pointer transition-colors ${
                       activeFlagNum === 0
                         ? 'opacity-40'
@@ -1712,9 +1424,9 @@ export const ReviewerView: React.FC = () => {
                       ? 'bg-[#1A1B22] border-white/[0.08] text-[#C8C8D2] hover:bg-white/10'
                       : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#EFEFF4]'
                   }`}
-                  title={isZh ? '搁置此卡片至明日复习' : 'Bury card until tomorrow'}
+                  title={t('buryCardBtn')}
                 >
-                  {isZh ? '搁置卡片' : 'Bury'}
+                  {t('batchBury')}
                 </button>
 
                 <button
@@ -1725,7 +1437,7 @@ export const ReviewerView: React.FC = () => {
                       ? 'bg-[#1A1B22] border-white/[0.08] text-[#C8C8D2] hover:bg-white/10'
                       : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#EFEFF4]'
                   }`}
-                  title={isZh ? '长期暂停此卡片，移出学习队列' : 'Suspend card indefinitely'}
+                  title={t('suspendCardBtn')}
                 >
                   {currentCard.suspended ? t('unsuspendCardBtn') : t('suspendCardBtn')}
                 </button>
@@ -1738,7 +1450,7 @@ export const ReviewerView: React.FC = () => {
                       appActions.deleteCurrentReviewCard();
                     }}
                     className="h-8 rounded-xl bg-[var(--status-danger)] text-white text-[11px] font-semibold cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--status-danger)] focus-visible:outline-offset-2"
-                    aria-label={isZh ? '确认删除卡片' : 'Confirm delete card'}
+                    aria-label={t('deleteCardBtn')}
                   >
                     {t('confirm')}
                   </button>

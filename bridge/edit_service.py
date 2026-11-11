@@ -313,10 +313,6 @@ class EditService:
         requested_model_id = str(data.get("modelId", "") or "").strip()
         requested_model_name = str(data.get("modelName", "") or "").strip()
         create_reverse = bool(data.get("createReverseCard", False))
-        type_answer_mode = bool(data.get("typeAnswerMode", False))
-
-        if type_answer_mode and "type-answer" not in tags and "默写" not in tags:
-            tags.append("默写")
 
         if not front:
             raise ValueError("Card front content cannot be empty")

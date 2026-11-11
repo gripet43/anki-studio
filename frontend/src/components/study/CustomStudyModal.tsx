@@ -6,6 +6,7 @@ import {
   CustomStudyParams,
   isAnkiNativeEnv,
 } from '../../bridge/pycmd';
+import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { getAccentScale } from '../../utils/themeTokens';
 
@@ -22,7 +23,8 @@ export const CustomStudyModal: React.FC = () => {
     resolvedLang,
   } = useAppStore();
 
-  const isZh = resolvedLang === 'zh-CN';
+  const t = (key: any, params?: Record<string, string | number>) =>
+    translate(resolvedLang, key, params);
   const isDark = theme === 'dark' || theme === 'oled';
   const brandHex = getAccentScale(accentColor, theme).brand;
 
@@ -130,18 +132,14 @@ export const CustomStudyModal: React.FC = () => {
 
   const presets: Array<{
     id: CustomStudyParams['preset'];
-    titleZh: string;
-    titleEn: string;
-    descZh: string;
-    descEn: string;
+    titleKey: string;
+    descKey: string;
     icon: React.ReactNode;
   }> = [
     {
       id: 'mistakes',
-      titleZh: '错题集重练',
-      titleEn: 'Mistake Drill',
-      descZh: '抽取近期评分「遗忘」或高频失误卡片集中攻克',
-      descEn: 'Drill recently forgotten (Again) or high-lapse cards',
+      titleKey: 'customStudyPresetMistakesTitle',
+      descKey: 'customStudyPresetMistakesDesc',
       icon: (
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="12" cy="12" r="10" />
@@ -152,10 +150,8 @@ export const CustomStudyModal: React.FC = () => {
     },
     {
       id: 'flagged',
-      titleZh: '旗标 / 标签专练',
-      titleEn: 'Flag & Tag Cram',
-      descZh: '按 7 色旗标或特定知识点标签定向抽卡刷题',
-      descEn: 'Target cards by 7-color flags or specific topic tags',
+      titleKey: 'customStudyPresetFlaggedTitle',
+      descKey: 'customStudyPresetFlaggedDesc',
       icon: (
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
@@ -165,10 +161,8 @@ export const CustomStudyModal: React.FC = () => {
     },
     {
       id: 'ahead',
-      titleZh: '考前突击 / 提前复习',
-      titleEn: 'Review Ahead',
-      descZh: '提前拉取未来数天即将到期的复习卡片进行冲刺',
-      descEn: 'Pull review cards due in the next N days ahead of schedule',
+      titleKey: 'customStudyPresetAheadTitle',
+      descKey: 'customStudyPresetAheadDesc',
       icon: (
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
@@ -177,10 +171,8 @@ export const CustomStudyModal: React.FC = () => {
     },
     {
       id: 'extra_new',
-      titleZh: '今日新卡加练',
-      titleEn: 'Extra New Cards',
-      descZh: '突破每日新卡默认上限，额外抽取未学新卡',
-      descEn: 'Study additional unseen new cards beyond today’s limit',
+      titleKey: 'customStudyPresetExtraNewTitle',
+      descKey: 'customStudyPresetExtraNewDesc',
       icon: (
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <line x1="12" y1="5" x2="12" y2="19" />
@@ -225,7 +217,7 @@ export const CustomStudyModal: React.FC = () => {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={isZh ? '自定义学习与错题特训' : 'Custom Study & Mistake Drills'}
+        aria-label={t('customStudyModalTitle')}
         className={`w-[580px] max-w-full rounded-3xl border shadow-2xl overflow-hidden flex flex-col ${modalSurface}`}
       >
         {/* Header */}
@@ -244,12 +236,10 @@ export const CustomStudyModal: React.FC = () => {
             </div>
             <div>
               <h2 className="text-[16px] font-bold tracking-tight">
-                {isZh ? '自定义学习与专项特训' : 'Custom Study & Cram'}
+                {t('customStudyModalTitle')}
               </h2>
               <p className={`text-[11px] ${subText}`}>
-                {isZh
-                  ? '定向抽卡刷题，支持纯特训预览或正式计入 FSRS 排期'
-                  : 'Curate targeted study queues by mistakes, flags, tags, or due horizon'}
+                {t('customStudyModalSub')}
               </p>
             </div>
           </div>
@@ -257,6 +247,7 @@ export const CustomStudyModal: React.FC = () => {
           <button
             type="button"
             onClick={() => appActions.closeCustomStudyModal()}
+            aria-label={t('close')}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
           >
             ✕
@@ -274,7 +265,7 @@ export const CustomStudyModal: React.FC = () => {
                   key={item.id}
                   type="button"
                   onClick={() => handleSelectPreset(item.id)}
-                  className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                  className={`p-3.5 rounded-2xl border text-start transition-all cursor-pointer flex items-start gap-3 ${
                     active
                       ? 'bg-[var(--brand-surface)] border-[var(--brand)] ring-1 ring-[var(--brand)]/30'
                       : `${cardBg} hover:border-[var(--brand-border)]`
@@ -291,10 +282,10 @@ export const CustomStudyModal: React.FC = () => {
                   </div>
                   <div className="min-w-0">
                     <div className="text-[13px] font-semibold">
-                      {isZh ? item.titleZh : item.titleEn}
+                      {t(item.titleKey)}
                     </div>
                     <div className={`text-[11px] ${subText} mt-0.5 leading-snug`}>
-                      {isZh ? item.descZh : item.descEn}
+                      {t(item.descKey)}
                     </div>
                   </div>
                 </button>
@@ -308,7 +299,7 @@ export const CustomStudyModal: React.FC = () => {
               {/* Target Deck */}
               <div>
                 <label className={`block text-[11px] font-medium ${subText} mb-1.5`}>
-                  {isZh ? '目标牌组范围' : 'Target Deck'}
+                  {t('customStudyTargetDeckLabel')}
                 </label>
                 <select
                   value={deckId}
@@ -317,7 +308,7 @@ export const CustomStudyModal: React.FC = () => {
                     isDark ? 'bg-[#1A1B23] border-[#2E303E]' : 'bg-white border-[#E5E5EA]'
                   }`}
                 >
-                  <option value="all">{isZh ? '全部牌组 (All Decks)' : 'All Decks'}</option>
+                  <option value="all">{t('allDecksOption')}</option>
                   {decks.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.fullName || d.name}
@@ -331,12 +322,8 @@ export const CustomStudyModal: React.FC = () => {
                 <div>
                   <label className={`block text-[11px] font-medium ${subText} mb-1.5`}>
                     {preset === 'mistakes'
-                      ? isZh
-                        ? '错题回溯天数（含历史高频失误卡）'
-                        : 'Mistake Lookback Window'
-                      : isZh
-                      ? '提前复习未来天数'
-                      : 'Review Ahead Days'}
+                      ? t('customStudyMistakeWindowLabel')
+                      : t('customStudyAheadDaysLabel')}
                   </label>
                   <div className="flex items-center gap-1.5">
                     {(preset === 'mistakes' ? [1, 3, 7, 14, 30] : [1, 3, 7, 14]).map((dVal) => (
@@ -352,13 +339,7 @@ export const CustomStudyModal: React.FC = () => {
                             : 'bg-white border-[#E5E5EA] hover:border-[var(--brand-border)]'
                         }`}
                       >
-                        {dVal === 1 && preset === 'mistakes'
-                          ? isZh
-                            ? '今天'
-                            : '1d'
-                          : isZh
-                          ? `${dVal}天`
-                          : `${dVal}d`}
+                        {dVal}d
                       </button>
                     ))}
                   </div>
@@ -366,7 +347,7 @@ export const CustomStudyModal: React.FC = () => {
               ) : (
                 <div>
                   <label className={`block text-[11px] font-medium ${subText} mb-1.5`}>
-                    {isZh ? '限定标签（可选）' : 'Filter by Tag'}
+                    {t('customStudyFilterByTagLabel')}
                   </label>
                   <select
                     value={tag}
@@ -375,7 +356,7 @@ export const CustomStudyModal: React.FC = () => {
                       isDark ? 'bg-[#1A1B23] border-[#2E303E]' : 'bg-white border-[#E5E5EA]'
                     }`}
                   >
-                    <option value="all">{isZh ? '不限标签' : 'Any Tag'}</option>
+                    <option value="all">{t('anyTagOption')}</option>
                     {availableTags.map((tg) => (
                       <option key={tg} value={tg}>
                         #{tg}
@@ -390,7 +371,7 @@ export const CustomStudyModal: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className={`text-[11px] font-medium ${subText}`}>
-                  {isZh ? '按旗标颜色筛选' : 'Filter by Flag Color'}
+                  {t('customStudyFilterByFlagLabel')}
                 </label>
                 {flag !== 'all' && (
                   <button
@@ -398,7 +379,7 @@ export const CustomStudyModal: React.FC = () => {
                     onClick={() => setFlag('all')}
                     className="text-[11px] text-[var(--brand-text)] hover:underline cursor-pointer"
                   >
-                    {isZh ? '重置为不限' : 'Reset'}
+                    {t('resetFilters')}
                   </button>
                 )}
               </div>
@@ -415,7 +396,7 @@ export const CustomStudyModal: React.FC = () => {
                       : 'bg-white border-[#E5E5EA] text-[#636366]'
                   }`}
                 >
-                  {isZh ? '全部' : 'All'}
+                  {t('filterAll')}
                 </button>
 
                 <button
@@ -429,7 +410,7 @@ export const CustomStudyModal: React.FC = () => {
                       : 'bg-white border-[#E5E5EA] text-[#636366]'
                   }`}
                 >
-                  {isZh ? '任意有旗标' : 'Any Flagged'}
+                  {t('anyFlaggedOption')}
                 </button>
 
                 {([1, 2, 3, 4, 5, 6, 7] as Array<Exclude<CardFlagColor, 0>>).map((fNum) => {
@@ -440,7 +421,7 @@ export const CustomStudyModal: React.FC = () => {
                       key={fNum}
                       type="button"
                       onClick={() => setFlag(isSel ? 'all' : String(fNum))}
-                      title={isZh ? meta.labelZh : meta.labelEn}
+                      title={t(`flagLabel_${fNum}` as any)}
                       className={`h-8 px-2.5 rounded-xl border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-all ${
                         isSel
                           ? 'ring-2 ring-offset-1 dark:ring-offset-[#14151C]'
@@ -462,7 +443,7 @@ export const CustomStudyModal: React.FC = () => {
                         className="w-2.5 h-2.5 rounded-full shrink-0"
                         style={{ backgroundColor: meta.hex }}
                       />
-                      <span>{isZh ? meta.shortZh : meta.shortEn}</span>
+                      <span>{t(`flagShort_${fNum}` as any)}</span>
                     </button>
                   );
                 })}
@@ -473,7 +454,7 @@ export const CustomStudyModal: React.FC = () => {
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div>
                 <label className={`block text-[11px] font-medium ${subText} mb-1.5`}>
-                  {isZh ? '抽卡数量上限' : 'Session Limit'}
+                  {t('customStudySessionLimitLabel')}
                 </label>
                 <div className="flex items-center gap-1.5">
                   {[15, 30, 50, 100].map((cnt) => (
@@ -497,7 +478,7 @@ export const CustomStudyModal: React.FC = () => {
 
               <div>
                 <label className={`block text-[11px] font-medium ${subText} mb-1.5`}>
-                  {isZh ? '出场顺序' : 'Card Order'}
+                  {t('customStudyCardOrderLabel')}
                 </label>
                 <select
                   value={sortOrder}
@@ -506,14 +487,10 @@ export const CustomStudyModal: React.FC = () => {
                     isDark ? 'bg-[#1A1B23] border-[#2E303E]' : 'bg-white border-[#E5E5EA]'
                   }`}
                 >
-                  <option value="lapses_desc">
-                    {isZh ? '失误次数最多优先' : 'Most Lapses First'}
-                  </option>
-                  <option value="ivl_asc">
-                    {isZh ? '记忆间隔最短（最薄弱）优先' : 'Shortest Interval First'}
-                  </option>
-                  <option value="random">{isZh ? '随机乱序抽卡' : 'Random Shuffle'}</option>
-                  <option value="due_asc">{isZh ? '按到期先后顺序' : 'By Due Date'}</option>
+                  <option value="lapses_desc">{t('sortLapsesDesc')}</option>
+                  <option value="ivl_asc">{t('sortIvlAsc')}</option>
+                  <option value="random">{t('sortRandom')}</option>
+                  <option value="due_asc">{t('sortDueAsc')}</option>
                 </select>
               </div>
             </div>
@@ -526,16 +503,12 @@ export const CustomStudyModal: React.FC = () => {
           >
             <div>
               <div className="text-[12px] font-semibold">
-                {isZh ? '纯特训刷题模式（不改动原 FSRS 排期）' : 'Cram Preview Mode (Do not alter FSRS schedule)'}
+                {t('customStudyCramPreviewTitle')}
               </div>
               <div className={`text-[11px] ${subText} mt-0.5`}>
                 {isPreviewOnly
-                  ? isZh
-                    ? '推荐：考前突击或错题复盘时开启，可反复刷题而不打乱正常复习间隔'
-                    : 'Recommended for exam cramming: practice freely without changing card due dates'
-                  : isZh
-                  ? '当前已关闭：本次特训的评分结果将直接写入 FSRS 调度数据库'
-                  : 'Disabled: ratings in this session will update FSRS intervals in database'}
+                  ? t('customStudyCramPreviewOnSub')
+                  : t('customStudyCramPreviewOffSub')}
               </div>
             </div>
 
@@ -564,15 +537,16 @@ export const CustomStudyModal: React.FC = () => {
         >
           <div className="text-[12px]">
             {previewLoading ? (
-              <span className={subText}>{isZh ? '正在统计匹配卡片...' : 'Counting matches...'}</span>
+              <span className={subText}>{t('searchingShort')}</span>
             ) : matchedCount !== null ? (
               <span className={matchedCount > 0 ? 'font-medium' : 'text-[var(--status-warning)]'}>
-                {isZh
-                  ? `符合条件共 ${matchedCount} 张 · 本轮将抽取 ${Math.min(limit, matchedCount)} 张`
-                  : `${matchedCount} matched · Studying ${Math.min(limit, matchedCount)} cards`}
+                {t('customStudyMatchedSummary', {
+                  matched: matchedCount,
+                  limit: Math.min(limit, matchedCount),
+                })}
               </span>
             ) : (
-              <span className={subText}>{isZh ? '按条件筛选专属队列' : 'Ready to start'}</span>
+              <span className={subText}>{t('customStudyModalSub')}</span>
             )}
           </div>
 
@@ -582,7 +556,7 @@ export const CustomStudyModal: React.FC = () => {
               onClick={() => appActions.closeCustomStudyModal()}
               className="btn-secondary !h-9 !px-4 !text-[12px]"
             >
-              {isZh ? '取消' : 'Cancel'}
+              {t('cancel')}
             </button>
 
             <button
@@ -594,9 +568,8 @@ export const CustomStudyModal: React.FC = () => {
             >
               <span>▶</span>
               <span>
-                {isZh
-                  ? `开始特训${matchedCount ? ` (${Math.min(limit, matchedCount)})` : ''}`
-                  : 'Start Session'}
+                {t('customStudyStartSessionBtn')}
+                {matchedCount ? ` (${Math.min(limit, matchedCount)})` : ''}
               </span>
             </button>
           </div>

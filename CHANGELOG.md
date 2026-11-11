@@ -15,6 +15,74 @@
 
 ## [Unreleased]
 
+- **[WorkBuddy]** 「自定义学习」入口按钮与弹窗标题统一（[translations.ts](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/i18n/translations.ts)、[locales/](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/i18n/locales)）：
+  - 按钮原为「自定义学习 / 错题特训」、弹窗标题为「自定义学习与错题集特训」，但点进去是通用自定义学习面板（可按状态 / 难度 / 标签 / 牌组组合筛选，错题集只是其中一个预设），副标题名不副实。两处统一为「自定义学习」。
+  - 16 种语言的 `customStudyEntryBtn` / `customStudyModalTitle` 同步去掉副标题（EN: `Custom Study / Cram` → `Custom Study`；DE: `Benutzerdefiniertes Lernen & Fehlertraining` → `Benutzerdefiniertes Lernen`…），避免只有中文变短、其他语言仍拖着一长串。
+  - 验证：`tsc` 0 错误、Bundle 审计 ALL PASSED、37 项单测通过、产物 677.04 kB。
+
+- **[WorkBuddy]** 首页三处视觉收敛（[DashboardView.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/dashboard/DashboardView.tsx)）：
+  - **连胜火焰去掉柔化**：`StreakFlameBackdrop` 只保留清晰的火苗剪影——移除 `feGaussianBlur`（`stdDeviation=2`）与底部那层径向光晕，两者叠加会在卡片底边糊出一片橙雾；底部改用渐变自身的 `stop-opacity` 淡出，被卡片圆角裁切时不留硬边。透明度从 0.20 → 0.22（深色 0.28 → 0.30），补偿去掉柔化后的视觉重量。
+  - **移除牌组卡片常驻播放键**：右下角默认不再显示圆形 ▶，只在悬停时出现「查看 / 学习」两个胶囊；给按钮容器补 `min-h-7` 占位，避免悬停瞬间卡片高度抖动。
+  - **统计标签并入信息行**：「待复习 / 新卡 / 已完成」三个 pill 从按钮行右侧搬到「预计 N 分钟」后面，与剩余卡数同行展示；按钮行只保留「开始今日学习 / 轻量复习 / 自定义学习」等动作，行动与数据分层更清楚。
+  - **连胜数字去图标改色**：去掉「19 天」前面那个 20px 火苗图标，数字本身改为火焰色 `#FF8A00`（与背景火焰渐变中段同色），把「火」的语义从图标交给数字；`天` 与「最长 N 天」保持次级灰，层级仍然清楚。
+  - 验证：`tsc --noEmit` 0 错误、Bundle 审计 ALL CHECKS PASSED、产物 677.62 kB。
+
+- **[WorkBuddy]** 语言字典拆包（首包 −392 kB）+ 越南语修正 + `Item #33` 字典守卫（[translations.ts](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/i18n/translations.ts)、[locales/](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/i18n/locales)、[App.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/App.tsx)）：
+  - **拆分**：`translations.ts` 从 8902 行降到 1490 行，14 种语言移到 `i18n/locales/*.ts`，只留 zh-CN / en 两份常驻首包（这两份是最常用、也最不能接受首屏闪烁的）。
+  - **懒加载**：新增 `ensureLanguageLoaded` / `isLanguageLoaded`；`App.tsx` 在 `resolvedLang` 变化时按需 `import()` 对应 chunk，加载完成后用 `useReducer` 强制重渲染一次。`translate()` 保持同步，查表顺序 `LAZY_DICTS → DICT → EN → key`，加载失败也只会回落英文、不阻塞渲染。
+  - **体积**：主包 **1,070.69 → 678.43 kB**（gzip 288.28 → 179.13 kB）；另出 14 个语言 chunk，每个 25–37 kB（gzip 9.7–11.7 kB），切到该语言时才拉。
+  - **越南语修正**：`customStudyPresetMistakesTitle`（"Đặc训"）、`icuNoHistorySub`（"lưu快照"）、`streakRulesTooltipBody`（"chuỗi打卡"）三条中越混杂改为纯越语表述。
+  - **守卫**：新增 `Item #33`——16 份字典的 key 集合与中文基准逐一对齐、占位符集合逐键比对、越南语不得出现 CJK 字符。三条断言都做过变异测试（`{n}`→`{N}`、删掉 `backBtn`、塞入汉字），确认会红而不是空跑。
+  - 验证：`tsc --noEmit` 0 错误、Bundle 审计 ALL CHECKS PASSED、37 项 Python 单测通过；实测切到日语时懒加载 chunk 正确加载并完成渲染。
+
+- **[WorkBuddy]** 首页与侧边栏四处交互修正（[Sidebar.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/layout/Sidebar.tsx)、[DashboardView.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/dashboard/DashboardView.tsx)、[translations.ts](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/i18n/translations.ts)）：
+  - **logo 可点击回首页**：侧边栏左上角 app 图标由装饰性 `<div>` 改为 `<button>`，点击切到「今日概览」。父级挂了 `onMouseDown={startWindowDrag}` 做窗口拖动，按钮上补 `stopPropagation`，否则点击会被拖拽逻辑吃掉。
+  - **「管理」右对齐**：`btn-ghost` 自带 `padding: 0 0.625rem` + `height: 2rem`，原先只覆盖 `!px-2`，文字右侧仍留 8px 空白，看起来偏左。改为 `!h-auto !ps-2 !pe-0`，让文字贴内容区右边界（与左侧留白对称）。
+  - **侧边栏牌组行悬停双动作**：每行悬停时把待复习数字换成「查看 / 学习」两个图标按钮——查看 → 卡片库并 `searchLibraryDebounced({ deckId })` 过滤到该牌组；学习 → `startReview(deckId)`。移开即复原，静态时不增加视觉噪音。
+  - **首页牌组卡片同样处理**：默认仍是一个播放键，悬停后替换为「查看」「学习」两个胶囊按钮（查看为描边次要按钮、学习为品牌色主按钮），行为与侧边栏一致，`stopPropagation` 避免冒泡触发整卡点击。
+  - **牌组数量文案去重**：无子牌组时 `topLevelDecks.length === decks.length`，原副标题「N 个主牌组 · 共 N 个牌组」是同义反复。改为该场景只输出一次数量（新增 `decksTotalOnly`），有子牌组时才显示「N 个主牌组 · 共 M 个牌组」。
+  - **i18n**：新增 `viewDeckBtn` / `studyDeckBtn` / `decksTotalOnly` 三个键，16 个语言字典全部按字母序补齐（不走英文兜底），满足本轮 `Item #31` 的「组件内零 `isZh` 内联三元」约束。
+  - 验证：`tsc --noEmit` 0 错误、Bundle 审计 ALL CHECKS PASSED、37 项 Python 单测通过、`npm run build` 已重建产物。
+
+- **[Gemini] 多语言系统深度重构：组件层 100% 接入 `t()`（清零 474 处 `isZh` 三元表达式）、16 国语言 100% 独立词条覆盖、阿拉伯语 RTL 布局与设置页平铺语言网格**：
+  - **1. 组件层彻底消除硬编码 `isZh ? '中文' : 'English'`（解决根本原因）**：重构 [`App.tsx`](frontend/src/App.tsx)、[`Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)、[`DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`SyncStatusPill.tsx`](frontend/src/components/dashboard/SyncStatusPill.tsx)、[`LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)、[`ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`DecksView.tsx`](frontend/src/components/decks/DecksView.tsx)、[`StatsView.tsx`](frontend/src/components/stats/StatsView.tsx)、[`CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`ImageOcclusionEditorModal.tsx`](frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx)、[`TowerWysiwygEditor.tsx`](frontend/src/components/quick-add/TowerWysiwygEditor.tsx)、[`CustomStudyModal.tsx`](frontend/src/components/study/CustomStudyModal.tsx)、[`VacationModal.tsx`](frontend/src/components/vacation/VacationModal.tsx)、[`IcuRescueModal.tsx`](frontend/src/components/vacation/IcuRescueModal.tsx)、[`SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`DesignSystemView.tsx`](frontend/src/components/design-system/DesignSystemView.tsx) 与 [`useAppStore.ts`](frontend/src/stores/useAppStore.ts)，将全仓 474 处 `isZh ? ... : ...` 与 `{ zh, en }` 内联三元表达式全部替换为统一 `t(...)` 字典调用，`frontend/src/` 下 `isZh` 残留清零。
+  - **2. 16 国语言 100% 自有翻译覆盖率（零 `...EN_DICT` / `...ZH_CN_DICT` 回退混排）**：将 [`frontend/src/i18n/translations.ts`](frontend/src/i18n/translations.ts) 词条库扩展至 **526 个键**，并为全部 16 种官方语言（`zh-CN`、`zh-TW`、`en`、`ja`、`ko`、`es`、`fr`、`de`、`ru`、`pt-BR`、`it`、`ar`、`vi`、`tr`、`pl`、`nl`）提供 **100% 独立原生翻译（共 8,416 条独立词条）**，彻底移除 `...EN_DICT` 与 `...ZH_CN_DICT` 展开回退，杜绝切换德语/法语/日语后弹窗与设置页回退英文的混排问题。
+  - **3. 阿拉伯语（`ar`）原生 RTL 从右向左排版支持**：在 [`translations.ts`](frontend/src/i18n/translations.ts) 中新增 `isRtlLanguage()`，在 [`App.tsx`](frontend/src/App.tsx) 中动态同步 `document.documentElement.dir = isRtl ? 'rtl' : 'ltr'`、`document.documentElement.lang` 与根容器 `dir` 属性，并在 [`index.css`](frontend/src/index.css) 及各导航/弹窗组件中采用 CSS 逻辑属性（`border-e`、`ps-*`、`pe-*`、`ms-*`、`me-*`、`start-*`、`end-*`、`text-start`）与 `[dir="rtl"]` 双向文字隔离规则。
+  - **4. 设置中心平铺展示全部语言（移除下拉框）**：在 [`SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx) 与 [`DesignSystemView.tsx`](frontend/src/components/design-system/DesignSystemView.tsx) 中彻底移除 `<select>` 语言下拉框，改为 `grid-cols-3 sm:grid-cols-4` 响应式平铺卡片网格，直观展示「自动跟随 Anki」及全部 16 种语言的母语名称、英文名称与激活状态。
+  - **5. 验证**：升级 [`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs) `Item #31` 门禁断言（强制校验零 `...EN_DICT` 回退、零 `isZh`、RTL `dir="rtl"` 与无 `<select>` 平铺语言网格），`tsc --noEmit`、前端构建、Bundle 审计与 38 项 Python 单测 100% 通过。
+
+- **[WorkBuddy]** 下线「默写」相关功能：复习界面的自检模式 + 制卡弹窗的默写卡预设（[ReviewerView.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/reviewer/ReviewerView.tsx)、[CardEditorModal.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/quick-add/CardEditorModal.tsx)）：
+  - **下线理由**：比对目标只取第一个 `{{cN::}}` 或背面首行（截 120 字），多空卡与长答案判不准；LCS 逐字评分只影响显示、不写回调度，对「这一步该评 Again 还是 Good」没有决策价值。另外它的 10 个文案键从未进过字典，界面上一直显示 `typeAnswerModeBtn` 这类原始标识符（已核 HEAD 版本，不是本轮回退）。
+  - **删除范围**：`typeAnswerEnabled` / `typeAnswerInput` / `typeAnswerInputRef`；卡片切换时按 `默写` / `type` / `type-answer` 标签与笔记类型名自动开启的 `autoType` 逻辑；`expectedTypeTarget` 与 `typeAnswerDiff` 两个 useMemo（含整套 LCS 动态规划）；工具栏开关按钮、翻面后的逐字对比面板、正面的默写输入框。正面底部保留原有 `recallPrompt` 提示，布局不变。
+  - **连带下线制卡预设**：制卡弹窗的「默写卡」（`selectedPreset === 'type_answer'`）一并移除——预设列表项、`NoteCreationPreset` 字面量、`NoteTypeOption.isTypeAnswer`、`typeAnswerMode` 传参、预设标题与背面徽章分支全部清掉；后端 [`edit_service.py`](bridge/edit_service.py) 的 `type_answer_mode` 参数与「自动补 `默写` 标签」逻辑同步删除，[`useAppStore.ts`](frontend/src/stores/useAppStore.ts) 的对应标签注入也一并去掉（`effectiveTags` 直接取 `payload.tags`）。
+  - **测试同步**：`test_bridge` 第 3 段由「必定注入默写标签」改为「即使旧调用方仍传 `typeAnswerMode` 也不再注入」；`Item #30` 去掉对已删两个 `useMemo` 的引用，只保留「最后一个 Hook 必须早于会话完成态 return」的位置守卫。
+  - **防回归**：`tests/test_frontend_bundle.mjs` 的 `Item #22` 从正向断言改为反向断言（`!typeAnswerEnabled`、`!typeAnswerDiff`，同时要求 `recallPrompt` 仍在），Bundle 审计与 37 项 Python 单测全绿。
+
+- **[WorkBuddy]** 「连续打卡」标题新增计数规则说明浮层（[DashboardView.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/dashboard/DashboardView.tsx)）：
+  - 标题右侧加 14px 灰色 info 图标（`cursor-help`），hover 或键盘聚焦弹出 248px 说明卡，解释连胜的判定口径。
+  - **文案严格对齐后端实现**（`deck_service._build_heatmap_and_streak`）：活跃日 = `revlog` 中 `type < 4 AND ease > 0` 的任意一次作答（答错也算）；今天尚无记录时 `cursor` 回退到昨天判定，所以早上打开不会清零；`frozen_dates`（休假冻结日）计入活跃、不断连胜。
+  - **不被裁切**：卡片的 `overflow-hidden` 从 `<section>` 移到专管火焰的裁剪层，否则浮层会被卡片圆角切掉；浮层 `z-50`，`group-hover/streak` + `group-focus-within/streak` 双通道触发，键盘可达。
+
+- **[WorkBuddy]** 首页「今日学习进度」卡片新增连胜火焰背景（[StreakFlameBackdrop.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/dashboard/StreakFlameBackdrop.tsx)、[DashboardView.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/dashboard/DashboardView.tsx)）：
+  - 在卡片右侧「连续打卡 / 最长 N 天」区域铺一层低透明度暖色火焰插画，把「连胜」的意象做成大面积淡背景，而不是只靠 20px 的小火苗图标。
+  - **形状**：双尖浅谷的火苗轮廓（谷深约占全高 28%，刻意避开对称双尖的「兔耳感」与单尖的「水滴感」），底部圆弧展开；底部叠一层径向暖光，制造「光从下方升起」。
+  - **淡出处理**：`feGaussianBlur(2)` 虚化边缘，渐变最低端 `stop-opacity` 归零——被卡片圆角裁切时不会留下水平硬线（此前一版在卡片底边有明显橙线）。
+  - **层叠**：卡片 `<section>` 补 `relative overflow-hidden` 承载背景，中间内容与连胜区块包 `relative z-10`，保证文字、按钮始终在火焰之上；火焰本身 `pointer-events-none` + `aria-hidden`，不参与交互与读屏。
+  - **主题**：浅色 0.20、深色 0.28（深底上橙色容易发闷，需略提），色相走 `#FF4D21 → #FF8A00 → #FFB23C`。
+  - 验证：在 Vite dev（5173）用无头 Chrome 截图逐版比对形状与浓度，还原 mock 数据后 `tsc`/门禁复核。
+
+- **[WorkBuddy]** 修复快捷搜索（Cmd+K）点「清空」后光标丢失（[CommandPaletteModal.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/search/CommandPaletteModal.tsx)）：
+  - **现象**：首页点开快捷搜索、输入关键词后点「清空」，焦点不在输入框，必须再点一次才能继续输入。
+  - **根因**：清空按钮 `onClick` 只调 `appActions.searchCmdKDebounced('')`；`mousedown` 时浏览器把焦点交给按钮，随后 `cmdKQuery` 变空、按钮被 `{cmdKQuery && …}` 条件卸载，焦点落到 `body`，输入框彻底失焦。
+  - **修复**：为输入框补 `searchInputRef`；按钮 `onMouseDown` 阻止默认行为（焦点不离开输入框，中文输入法也不被中断），`onClick` 清空后 `searchInputRef.current?.focus()` 显式交还焦点；顺带给按钮补 `aria-label`。
+  - **验证**：`tests/test_frontend_bundle.mjs` 新增 `Item #32`，并用变异测试确认有效——删掉 `focus()` 调用后该断言立即失败，恢复后全绿；`tsc --noEmit` 0 错误、Python 单测 37 项通过、`npm run build` 已重建产物。
+
+- **[Gemini] 新增对齐 Anki 官方客户端的 16 国多语言国际化系统（Multi-Language i18n System）**：
+  - **16 国语言全量对齐**：对齐 Anki 桌面端核心支持的 16 种官方语言：简体中文（`zh-CN`）、繁體中文（`zh-TW`）、English（`en`）、日本語（`ja`）、한국어（`ko`）、Español（`es`）、Français（`fr`）、Deutsch（`de`）、Русский（`ru`）、Português (Brasil)（`pt-BR`）、Italiano（`it`）、العربية（`ar`）、Tiếng Việt（`vi`）、Türkçe（`tr`）、Polski（`pl`）、Nederlands（`nl`），并支持「跟随 Anki 客户端（`auto`）」自动读取 `anki.lang.current_lang`。
+  - **后端语言归一化与本地化**：在 [`bridge/deck_service.py`](bridge/deck_service.py) 中新增 `SUPPORTED_LANG_CODES`、`ANKI_LANG_ALIAS_MAP` 与 `normalize_language_code()`（兼容 `zh_CN`、`zh_TW`、`ja_JP`、`pt_BR` 等 Anki 底层 locale 命名），并为 16 种语言提供原生问候语（`_get_greeting`）、7 日星期短标签（`_get_weekday_short_labels`）与日期格式化（`_format_date_display`）。
+  - **前端多语言字典引擎与设置中心选择器**：重构 [`frontend/src/i18n/translations.ts`](frontend/src/i18n/translations.ts)，内置 16 国完整翻译字典（`DICT`）、`SUPPORTED_LANGUAGES` 元数据、浏览器/客户端语言自动探测以及基于 `Intl.RelativeTimeFormat` / `Intl.DateTimeFormat` 的多语言时间格式化；升级 [`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx) 与 [`frontend/src/components/design-system/DesignSystemView.tsx`](frontend/src/components/design-system/DesignSystemView.tsx) 的语言切换卡片，提供 16 国语言下拉选择器与高频语言一键胶囊切换。
+  - **验证**：新增 Python 单测 `test_26_multi_language_16_locales_resolution_and_formatting` 与 Bundle 审计 `Item #31`，前端编译、Bundle 审计与 Python 单测全部通过。
+
 - **[WorkBuddy]** 修复复习界面渲染崩溃（React `#310 Rendered more hooks than during the previous render`，[ReviewerView.tsx](file:///Users/gripet/Library/Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/reviewer/ReviewerView.tsx)）：
   - **根因**：`// Milestone 3` 的 `expectedTypeTarget` 与 `typeAnswerDiff` 两个 `useMemo` 写在 `if (isSessionComplete || !currentCard)` 早退**之后**。进入复习模式时 `reviewQueue` 先为空（渲染完成态，Hook 数量少 2 个），队列异步到达后同一实例再次渲染便多出 2 个 Hook → React 直接抛 #310，整屏被渲染异常兜底页接管。
   - **修复**：将两个 `useMemo` 上移至早退之前（均在内部保留 `!currentCard` / `!expected` 空值守卫），使两条渲染路径的 Hook 数量恒定；`orderedFieldKeys`、`activeFlagNum` 等纯计算仍留在早退之后。

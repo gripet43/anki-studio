@@ -21,7 +21,6 @@ export const Sidebar: React.FC = () => {
     settingsOpen,
   } = useAppStore();
 
-  const isZh = resolvedLang === 'zh-CN';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
@@ -105,7 +104,7 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside
-      className={`w-[240px] shrink-0 h-screen flex flex-col border-r select-none transition-colors duration-200 ${sidebarBg}`}
+      className={`w-[240px] shrink-0 h-screen flex flex-col border-e select-none transition-colors duration-200 ${sidebarBg}`}
     >
       {/* macOS Traffic Lights Spacer & Drag Area (Immersive Titlebar) */}
       {envInfo.platform === 'mac' && (
@@ -122,11 +121,17 @@ export const Sidebar: React.FC = () => {
         onDoubleClick={handleWindowDoubleClick}
         className={`px-5 ${envInfo.platform === 'mac' ? 'pt-1 pb-4' : 'pt-5 pb-4'} flex items-center gap-3 cursor-default select-none`}
       >
-        <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center shadow-xs transition-colors duration-200 border border-black/5 dark:border-white/10 bg-black/[0.025] dark:bg-white/[0.05]"
+        <button
+          type="button"
+          onClick={() => appActions.setActiveTab('dashboard')}
+          // 父级在 mousedown 上挂了窗口拖拽，不拦截的话点击会被拖拽逻辑吃掉
+          onMouseDown={(e) => e.stopPropagation()}
+          title={t('navDashboard')}
+          aria-label={t('navDashboard')}
+          className="w-9 h-9 rounded-xl flex items-center justify-center shadow-xs transition-colors duration-200 border border-black/5 dark:border-white/10 bg-black/[0.025] dark:bg-white/[0.05] hover:bg-[var(--brand-soft)] hover:border-[var(--brand-border)] cursor-pointer"
         >
           <AnkiStudioLogo size={22} />
-        </div>
+        </button>
         <div
           onClick={handleVersionBadgeClick}
           title="Anki Studio"
@@ -143,7 +148,7 @@ export const Sidebar: React.FC = () => {
           className={`btn-secondary w-full ${
             showShortcutHints ? 'justify-between' : 'justify-center'
           }`}
-          title={isZh ? '快速创建新卡片 (快捷键 N)' : 'Quick add card (Shortcut N)'}
+          title={t('quickAddTooltip')}
         >
           <span className="flex items-center gap-2">
             <svg
@@ -226,7 +231,7 @@ export const Sidebar: React.FC = () => {
           </span>
           <button
             onClick={() => appActions.setActiveTab('decks')}
-            className={`btn-ghost !text-[11px] !px-2 !py-0.5 ${
+            className={`btn-ghost !text-[11px] !h-auto !ps-2 !pe-0 !py-0.5 ${
               activeTab === 'decks'
                 ? '!bg-[var(--brand-soft)] !text-[var(--brand-text)] font-semibold'
                 : '!text-[var(--brand-text)]'
@@ -246,8 +251,8 @@ export const Sidebar: React.FC = () => {
             return (
               <div
                 key={deck.id}
-                style={{ paddingLeft: `${deck.depth * 14}px` }}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[13px] transition-colors ${navHoverBg}`}
+                style={{ paddingInlineStart: `${deck.depth * 14}px` }}
+                className={`group/deck w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[13px] transition-colors ${navHoverBg}`}
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   {hasChildren ? (
@@ -262,22 +267,65 @@ export const Sidebar: React.FC = () => {
                     </button>
                   ) : (
                     <span
-                      className="w-2 h-2 rounded-full shrink-0 ml-1"
+                      className="w-2 h-2 rounded-full shrink-0 ms-1"
                       style={{ backgroundColor: dotColor }}
                     />
                   )}
                   <button
                     onClick={() => appActions.startReview(deck.id)}
-                    className="truncate text-left flex-1 cursor-pointer"
+                    className="truncate text-start flex-1 cursor-pointer"
                   >
                     {deck.name}
                   </button>
                 </div>
                 {(deck.dueReview + deck.dueNew) > 0 && (
-                  <span className={`text-[11px] font-mono ${mutedText}`}>
+                  <span
+                    className={`text-[11px] font-mono ${mutedText} group-hover/deck:hidden`}
+                  >
                     {deck.dueReview + deck.dueNew}
                   </span>
                 )}
+                {/* 悬停时把待复习数字换成「查看 / 学习」两个动作 */}
+                <div className="hidden group-hover/deck:flex items-center gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    title={t('viewInLibraryBtn')}
+                    aria-label={t('viewInLibraryBtn')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAppState({ activeTab: 'library' });
+                      appActions.searchLibraryDebounced({ deckId: deck.id });
+                    }}
+                    className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-[var(--brand-soft)] transition-colors cursor-pointer"
+                  >
+                    <svg
+                      className="w-3 h-3"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="3" y="4" width="18" height="16" rx="2" />
+                      <line x1="3" y1="9" x2="21" y2="9" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    title={t('navStudy')}
+                    aria-label={t('startTodayStudy')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      appActions.startReview(deck.id);
+                    }}
+                    className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-[var(--brand-soft)] transition-colors cursor-pointer"
+                  >
+                    <svg className="w-2.5 h-2.5 fill-current ms-0.5" viewBox="0 0 24 24">
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -288,7 +336,7 @@ export const Sidebar: React.FC = () => {
       <div className="px-3 pb-2.5">
         <div
           role="toolbar"
-          aria-label={isZh ? '学习节奏辅助工具' : 'Study Rhythm Tools'}
+          aria-label={t('studyRhythmToolsAria')}
           className={`p-1 rounded-xl border grid grid-cols-2 gap-1 transition-colors ${
             isDark ? 'bg-white/[0.025] border-white/[0.07]' : 'bg-[#F5F6F8] border-[#E5E7EB]'
           }`}
@@ -304,11 +352,7 @@ export const Sidebar: React.FC = () => {
                 ? 'text-[#9A9CA6] hover:text-white hover:bg-white/[0.06] hover:shadow-2xs'
                 : 'text-[#5C5E66] hover:text-[#111215] hover:bg-white hover:shadow-2xs'
             }`}
-            title={
-              isZh
-                ? '休假模式：暂停每日新卡、顺延到期复习、冻结连胜记录'
-                : 'Vacation Mode: Pause new cards & preserve streak'
-            }
+            title={t('vacationBtnTooltip')}
           >
             <svg
               className="w-3.5 h-3.5 shrink-0 opacity-80"
@@ -329,9 +373,7 @@ export const Sidebar: React.FC = () => {
             </svg>
             <span className="truncate">
               {dashboard.vacation?.isActive
-                ? isZh
-                  ? `休假中 · ${dashboard.vacation.remainingDays}d`
-                  : `Active · ${dashboard.vacation.remainingDays}d`
+                ? t('vacationActiveShort', { n: dashboard.vacation.remainingDays })
                 : t('vacationBtn')}
             </span>
             {dashboard.vacation?.isActive && (
@@ -350,11 +392,7 @@ export const Sidebar: React.FC = () => {
                 ? 'text-[#9A9CA6] hover:text-white hover:bg-white/[0.06] hover:shadow-2xs'
                 : 'text-[#5C5E66] hover:text-[#111215] hover:bg-white hover:shadow-2xs'
             }`}
-            title={
-              isZh
-                ? '进度减负：当待复习卡片积压过多时，无损平摊至未来数天'
-                : 'Backlog Relief: Smoothly distribute overdue cards across upcoming days'
-            }
+            title={t('backlogRescueTooltip')}
           >
             <svg
               className="w-3.5 h-3.5 shrink-0 opacity-80"
@@ -383,7 +421,7 @@ export const Sidebar: React.FC = () => {
         <button
           type="button"
           onClick={() => setAppState({ settingsOpen: true })}
-          title={resolvedLang === 'zh-CN' ? '点击打开偏好设置' : 'Click to open Settings'}
+          title={t('openSettingsTooltip')}
           className={`w-full px-2.5 py-2 rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
             settingsOpen
               ? navActiveBg
@@ -399,7 +437,7 @@ export const Sidebar: React.FC = () => {
             >
               {userDisplay.slice(0, 1).toUpperCase()}
             </div>
-            <div className="min-w-0 text-left">
+            <div className="min-w-0 text-start">
               <div className="text-[13px] font-medium leading-tight truncate">
                 {userDisplay}
               </div>
@@ -411,7 +449,7 @@ export const Sidebar: React.FC = () => {
 
           <svg className="w-4 h-4 text-[#8E8E93]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1-2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </button>
       </div>

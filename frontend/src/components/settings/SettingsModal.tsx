@@ -5,7 +5,9 @@ import {
   formatAbsoluteSyncTooltip,
   formatRelativeSyncLabel,
   formatShortcut,
+  getLanguageMeta,
   LanguageOption,
+  SUPPORTED_LANGUAGES,
   translate,
 } from '../../i18n/translations';
 import {
@@ -15,7 +17,7 @@ import {
   ThemeMode,
   useAppStore,
 } from '../../stores/useAppStore';
-import { ACCENT_COLOR_LIST, ACCENT_THEMES, getAccentScale } from '../../utils/themeTokens';
+import { ACCENT_COLOR_LIST, getAccentScale } from '../../utils/themeTokens';
 
 type SettingsTab = 'appearance' | 'shortcuts' | 'sync' | 'maintenance' | 'native' | 'about';
 
@@ -43,7 +45,6 @@ export const SettingsModal: React.FC = () => {
   const [emptyReport, setEmptyReport] = useState<any | null>(null);
   const [mediaReport, setMediaReport] = useState<any | null>(null);
 
-  const isZh = resolvedLang === 'zh-CN';
   const isDark = theme === 'dark' || theme === 'oled';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
@@ -95,25 +96,38 @@ export const SettingsModal: React.FC = () => {
 
   const subText = 'text-[#8E8E93]';
   const shortcutHint = formatShortcut('Ctrl + Opt + M', envInfo.platform);
-  const currentAccentMeta = ACCENT_THEMES[accentColor] || ACCENT_THEMES.indigo;
   const currentScale = getAccentScale(accentColor, theme);
 
   const themeOptions: Array<{ id: ThemeMode; label: string; desc: string }> = [
-    { id: 'light', label: t('themeLight'), desc: isZh ? '柔和纸感 · 低眩光' : 'Warm paper contrast' },
-    { id: 'dark', label: t('themeDark'), desc: isZh ? 'Linear 级深灰层次' : 'Linear slate elevation' },
-    { id: 'oled', label: t('themeOled'), desc: isZh ? '纯粹深邃黑 · 夜间沉浸' : 'True pitch dark' },
+    { id: 'light', label: t('themeLight'), desc: t('themeLightDesc') },
+    { id: 'dark', label: t('themeDark'), desc: t('themeDarkDesc') },
+    { id: 'oled', label: t('themeOled'), desc: t('themeOledDesc') },
   ];
 
-  const languageOptions: Array<{ id: LanguageOption; label: string }> = [
-    { id: 'auto', label: t('langAuto') },
-    { id: 'zh-CN', label: t('langZh') },
-    { id: 'en', label: t('langEn') },
+  const currentLangMeta = getLanguageMeta(resolvedLang);
+
+  // Tiled language grid items: Auto + 16 official Anki languages (no <select> dropdown)
+  const tiledLanguageOptions: Array<{
+    id: LanguageOption;
+    nativeName: string;
+    subLabel: string;
+  }> = [
+    {
+      id: 'auto',
+      nativeName: t('langAuto'),
+      subLabel: `Auto · ${currentLangMeta.nativeName}`,
+    },
+    ...SUPPORTED_LANGUAGES.map((item) => ({
+      id: item.id as LanguageOption,
+      nativeName: item.nativeName,
+      subLabel: item.englishName,
+    })),
   ];
 
   const tabs: Array<{ id: SettingsTab; icon: React.ReactNode; label: string }> = [
     {
       id: 'appearance',
-      label: isZh ? '外观与显示' : 'Appearance',
+      label: t('settingsTabAppearance'),
       icon: (
         <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
@@ -126,7 +140,7 @@ export const SettingsModal: React.FC = () => {
     },
     {
       id: 'shortcuts',
-      label: isZh ? '快捷键' : 'Shortcuts',
+      label: t('settingsTabShortcuts'),
       icon: (
         <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect width="20" height="14" x="2" y="5" rx="2" />
@@ -136,7 +150,7 @@ export const SettingsModal: React.FC = () => {
     },
     {
       id: 'sync',
-      label: isZh ? '云端同步' : 'Sync',
+      label: t('settingsTabSync'),
       icon: (
         <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
@@ -145,7 +159,7 @@ export const SettingsModal: React.FC = () => {
     },
     {
       id: 'maintenance',
-      label: isZh ? '数据与维护' : 'Data & Tools',
+      label: t('settingsTabMaintenance'),
       icon: (
         <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <ellipse cx="12" cy="5" rx="9" ry="3" />
@@ -156,7 +170,7 @@ export const SettingsModal: React.FC = () => {
     },
     {
       id: 'native',
-      label: isZh ? '原生模式' : 'Native Anki',
+      label: t('settingsTabNative'),
       icon: (
         <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
@@ -165,7 +179,7 @@ export const SettingsModal: React.FC = () => {
     },
     {
       id: 'about',
-      label: isZh ? '关于' : 'About',
+      label: t('settingsTabAbout'),
       icon: (
         <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
@@ -183,7 +197,7 @@ export const SettingsModal: React.FC = () => {
       className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[5px] flex items-center justify-center p-6 select-none modal-contain-scroll"
       role="dialog"
       aria-modal="true"
-      aria-label={isZh ? '系统偏好设置' : 'Preferences'}
+      aria-label={t('navSettings')}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -193,11 +207,11 @@ export const SettingsModal: React.FC = () => {
         <button
           type="button"
           onClick={() => setAppState({ settingsOpen: false })}
-          className={`absolute top-4 right-4 z-20 w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+          className={`absolute top-4 end-4 z-20 w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
             isDark ? 'text-[#8E8E93] hover:text-white hover:bg-white/10' : 'text-[#8E8E93] hover:text-black hover:bg-black/5'
           }`}
-          title={isZh ? '关闭 (Esc)' : 'Close (Esc)'}
-          aria-label={isZh ? '关闭' : 'Close'}
+          title={`${t('close')} (Esc)`}
+          aria-label={t('close')}
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -205,13 +219,13 @@ export const SettingsModal: React.FC = () => {
           </svg>
         </button>
 
-        {/* Left Settings Sidebar (Apple System Settings 2-Column Architecture) */}
-        <div className={`w-[210px] shrink-0 border-r p-3.5 flex flex-col ${sidebarBg}`}>
+        {/* Left Settings Sidebar */}
+        <div className={`w-[210px] shrink-0 border-e p-3.5 flex flex-col ${sidebarBg}`}>
           <div className="space-y-4">
             {/* Header */}
             <div className="px-3 pt-2">
               <h2 className="text-[16px] font-bold tracking-tight">
-                {isZh ? '系统设置' : 'Preferences'}
+                {t('navSettings')}
               </h2>
             </div>
 
@@ -224,7 +238,7 @@ export const SettingsModal: React.FC = () => {
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     style={active ? { backgroundColor: currentScale.brand } : undefined}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors cursor-pointer text-left ${
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors cursor-pointer text-start ${
                       active
                         ? 'text-white shadow-xs font-semibold'
                         : isDark
@@ -248,18 +262,16 @@ export const SettingsModal: React.FC = () => {
             <div className="space-y-5">
               <div>
                 <h3 className="text-[17px] font-bold tracking-tight">
-                  {isZh ? '外观与显示' : 'Appearance & Display'}
+                  {t('settingsTabAppearance')}
                 </h3>
                 <p className={`text-[12px] ${subText} mt-0.5`}>
-                  {isZh
-                    ? '基于现代 SaaS 感知色彩科学（LCH 低饱和护眼调校），全局实时联动'
-                    : 'Calibrated low-saturation SaaS color tokens across light & dark modes'}
+                  {t('settingsAppearanceSub')}
                 </p>
               </div>
 
               {/* Theme Mode Card */}
               <div className={`rounded-xl border p-4 space-y-3 ${cardSurface}`}>
-                <div className="text-[13px] font-semibold">{isZh ? '外观模式' : 'Theme Mode'}</div>
+                <div className="text-[13px] font-semibold">{t('settingsThemeModeTitle')}</div>
                 <div className="grid grid-cols-3 gap-2.5">
                   {themeOptions.map((opt) => {
                     const active = theme === opt.id;
@@ -268,7 +280,7 @@ export const SettingsModal: React.FC = () => {
                         key={opt.id}
                         onClick={() => {
                           appActions.setTheme(opt.id);
-                          showToast(isZh ? `已切换为「${opt.label}」模式` : `Theme: ${opt.label}`);
+                          showToast(t('savedThemeToast', { name: opt.label }));
                         }}
                         style={
                           active
@@ -279,7 +291,7 @@ export const SettingsModal: React.FC = () => {
                               }
                             : undefined
                         }
-                        className={`py-2.5 px-3 rounded-xl border text-left cursor-pointer transition-all ${
+                        className={`py-2.5 px-3 rounded-xl border text-start cursor-pointer transition-all ${
                           active
                             ? 'shadow-xs ring-1 ring-[var(--brand)]'
                             : isDark
@@ -298,30 +310,30 @@ export const SettingsModal: React.FC = () => {
               {/* Theme Color Card */}
               <div className={`rounded-xl border p-4 space-y-3.5 ${cardSurface}`}>
                 <div className="text-[13px] font-semibold">
-                  {isZh ? '主题色' : 'Theme Color'}
+                  {t('settingsThemeColorTitle')}
                 </div>
 
                 <div
                   role="radiogroup"
-                  aria-label={isZh ? '主题色' : 'Theme Color'}
+                  aria-label={t('settingsThemeColorTitle')}
                   className="grid grid-cols-4 gap-2.5"
                 >
                   {ACCENT_COLOR_LIST.map((a) => {
                     const active = accentColor === a.id;
                     const modeScale = isDark ? a.dark : a.light;
+                    const shortLabel = t(`accentShort_${a.id}` as any);
+                    const fullLabel = t(`accentName_${a.id}` as any);
                     return (
                       <button
                         key={a.id}
                         type="button"
                         role="radio"
                         aria-checked={active}
-                        aria-label={isZh ? a.nameZh : a.nameEn}
-                        title={isZh ? `${a.nameZh} · ${a.descZh}` : `${a.nameEn} · ${a.descEn}`}
+                        aria-label={fullLabel}
+                        title={fullLabel}
                         onClick={() => {
                           appActions.setAccentColor(a.id);
-                          showToast(
-                            isZh ? `已切换强调色：${a.shortNameZh}` : `Accent: ${a.shortNameEn}`
-                          );
+                          showToast(t('savedAccentToast', { name: shortLabel }));
                         }}
                         style={
                           active
@@ -331,7 +343,7 @@ export const SettingsModal: React.FC = () => {
                               }
                             : undefined
                         }
-                        className={`px-2.5 py-2 rounded-xl border flex items-center gap-2 cursor-pointer transition-all text-left relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
+                        className={`px-2.5 py-2 rounded-xl border flex items-center gap-2 cursor-pointer transition-all text-start relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
                           active
                             ? 'ring-1 ring-[var(--brand)] shadow-xs'
                             : isDark
@@ -364,11 +376,11 @@ export const SettingsModal: React.FC = () => {
                               active ? 'font-semibold text-[var(--brand-text)]' : 'font-medium'
                             }`}
                           >
-                            {isZh ? a.shortNameZh : a.shortNameEn}
+                            {shortLabel}
                           </span>
                           {a.isOfficial && (
                             <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-[var(--brand-softStrong)] text-[var(--brand-text)] border border-[var(--brand-border)] leading-none shrink-0">
-                              {isZh ? '官方' : 'Brand'}
+                              {t('officialBrandBadge')}
                             </span>
                           )}
                         </div>
@@ -378,35 +390,70 @@ export const SettingsModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Language & Profile Card */}
+              {/* Language & Profile Card — Flat Tiled Grid of All Languages (No Dropdown) */}
               <div className={`rounded-xl border p-4 space-y-4 ${cardSurface}`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-[13px] font-semibold">{t('languageLabel')}</div>
-                    <div className={`text-[11px] ${subText} mt-0.5`}>
-                      {isZh ? '界面显示语言' : 'Interface language'}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[13px] font-semibold">{t('languageLabel')}</div>
+                      <div className={`text-[11px] ${subText} mt-0.5`}>
+                        {t('languageAutoFollowSub')} · {currentLangMeta.nativeName}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {languageOptions.map((langOpt) => {
+
+                  {/* Direct Tiled Grid of All Languages */}
+                  <div
+                    role="radiogroup"
+                    aria-label={t('languageLabel')}
+                    className="grid grid-cols-3 sm:grid-cols-4 gap-2"
+                  >
+                    {tiledLanguageOptions.map((langOpt) => {
                       const active = languagePref === langOpt.id;
                       return (
                         <button
                           key={langOpt.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
                           onClick={() => {
                             appActions.setLanguage(langOpt.id);
-                            showToast(langOpt.id === 'en' ? 'Language: English' : '界面语言已更新');
+                            const meta =
+                              langOpt.id === 'auto' ? null : getLanguageMeta(langOpt.id);
+                            showToast(
+                              meta
+                                ? `${meta.nativeName} (${meta.englishName})`
+                                : t('langAuto')
+                            );
                           }}
-                          style={active ? { backgroundColor: currentScale.brand, borderColor: currentScale.brand } : undefined}
-                          className={`px-3 py-1.5 rounded-xl border text-[12px] font-medium cursor-pointer transition-colors ${
+                          style={
                             active
-                              ? 'text-white'
+                              ? {
+                                  backgroundColor: currentScale.brandSoft,
+                                  borderColor: currentScale.brand,
+                                  color: currentScale.brandText,
+                                }
+                              : undefined
+                          }
+                          className={`px-2.5 py-2 rounded-xl border text-start cursor-pointer transition-all ${
+                            active
+                              ? 'ring-1 ring-[var(--brand)] shadow-2xs font-semibold'
                               : isDark
-                              ? 'border-[#343444] hover:border-[var(--brand-border)]'
+                              ? 'border-[#303240] hover:border-[var(--brand-border)] bg-black/15'
                               : 'bg-white border-[#E5E5EA] hover:border-[var(--brand-border)]'
                           }`}
                         >
-                          {langOpt.label}
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[12px] truncate leading-snug">
+                              {langOpt.nativeName}
+                            </span>
+                            {active && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand)] shrink-0" />
+                            )}
+                          </div>
+                          <div className="text-[10px] text-[#8E8E93] truncate mt-0.5">
+                            {langOpt.subLabel}
+                          </div>
                         </button>
                       );
                     })}
@@ -415,9 +462,11 @@ export const SettingsModal: React.FC = () => {
 
                 <div className="pt-3 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-[13px] font-semibold">{isZh ? '问候昵称' : 'Nickname'}</div>
+                    <div className="text-[13px] font-semibold">{t('nicknameLabel')}</div>
                     <div className={`text-[11px] ${subText} mt-0.5`}>
-                      {isZh ? `当前账户: ${dashboard.userName || '学习者'}` : 'Greeting display name'}
+                      {t('activeProfileNameSub', {
+                        name: dashboard.userName || t('defaultUser'),
+                      })}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -428,7 +477,7 @@ export const SettingsModal: React.FC = () => {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           appActions.updatePreferences({ customNickname: nicknameDraft });
-                          showToast(isZh ? '个人昵称已保存' : 'Nickname saved');
+                          showToast(t('nicknameSavedToast'));
                         }
                       }}
                       placeholder={t('nicknamePlaceholder')}
@@ -439,7 +488,7 @@ export const SettingsModal: React.FC = () => {
                     <button
                       onClick={() => {
                         appActions.updatePreferences({ customNickname: nicknameDraft });
-                        showToast(isZh ? '个人昵称已保存' : 'Nickname saved');
+                        showToast(t('nicknameSavedToast'));
                       }}
                       className="btn-primary !h-8 !px-3 !text-[12px]"
                     >
@@ -456,10 +505,10 @@ export const SettingsModal: React.FC = () => {
             <div className="space-y-5">
               <div>
                 <h3 className="text-[17px] font-bold tracking-tight">
-                  {isZh ? '快捷键' : 'Keyboard Shortcuts'}
+                  {t('settingsTabShortcuts')}
                 </h3>
                 <p className={`text-[12px] ${subText} mt-0.5`}>
-                  {isZh ? '界面按键提示配置与全键盘操作速查' : 'Shortcut display preference and cheatsheet'}
+                  {t('settingsShortcutsSub')}
                 </p>
               </div>
 
@@ -467,12 +516,10 @@ export const SettingsModal: React.FC = () => {
               <div className={`rounded-xl border p-4 flex items-center justify-between gap-4 ${cardSurface}`}>
                 <div className="space-y-1">
                   <div className="text-[13px] font-semibold">
-                    {isZh ? '在界面按钮上显示按键提示角标' : 'Show keyboard shortcut badges'}
+                    {t('settingsShowShortcutBadgesTitle')}
                   </div>
                   <div className={`text-[11px] ${subText} leading-relaxed`}>
-                    {isZh
-                      ? '开启后在搜索框、操作按钮上显示按键角标；关闭后界面更清爽纯净，适合鼠标用户。关闭后所有按键依然始终生效。'
-                      : 'Display hotkey hints on buttons and search inputs. When disabled, the UI remains minimal and clean for mouse users.'}
+                    {t('settingsShowShortcutBadgesSub')}
                   </div>
                 </div>
 
@@ -485,11 +532,9 @@ export const SettingsModal: React.FC = () => {
                     const next = !showShortcutHints;
                     appActions.updatePreferences({ showShortcutHints: next });
                     showToast(
-                      isZh
-                        ? next
-                          ? '已开启按钮快捷键角标'
-                          : '已开启清爽模式（隐藏按钮角标）'
-                        : `Shortcut hints ${next ? 'enabled' : 'disabled'}`
+                      next
+                        ? t('shortcutHintsEnabledToast')
+                        : t('shortcutHintsDisabledToast')
                     );
                   }}
                   style={showShortcutHints ? { backgroundColor: currentScale.brand } : undefined}
@@ -512,29 +557,29 @@ export const SettingsModal: React.FC = () => {
               {/* Cheatsheet Grid */}
               <div className={`rounded-xl border p-4 space-y-4 ${cardSurface}`}>
                 <div className="text-[13px] font-semibold">
-                  {isZh ? '常用快捷键速查' : 'Key Shortcuts Cheatsheet'}
+                  {t('settingsCheatsheetTitle')}
                 </div>
 
                 <div className="space-y-3">
                   <div>
                     <div className="text-[11px] font-medium text-[var(--brand-text)] mb-1.5">
-                      {isZh ? '全局导航' : 'Global'}
+                      {t('settingsGroupGlobal')}
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[12px]">
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{isZh ? '全局检索' : 'Global Search'}</span>
+                        <span className={subText}>{t('cmdPaletteAriaLabel')}</span>
                         <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">Cmd + K</kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{isZh ? '快速制卡' : 'Quick Add'}</span>
+                        <span className={subText}>{t('quickAddBtn')}</span>
                         <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">N</kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{isZh ? '云端同步' : 'Sync AnkiWeb'}</span>
+                        <span className={subText}>{t('syncNowAction')}</span>
                         <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">Y</kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{isZh ? '原生模式切换' : 'Toggle Native UI'}</span>
+                        <span className={subText}>{t('nativeSwitch')}</span>
                         <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">{shortcutHint}</kbd>
                       </div>
                     </div>
@@ -542,31 +587,31 @@ export const SettingsModal: React.FC = () => {
 
                   <div>
                     <div className="text-[11px] font-medium text-[var(--brand-text)] mb-1.5">
-                      {isZh ? '卡片学习' : 'Review'}
+                      {t('navStudy')}
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[12px]">
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{isZh ? '显示答案 / 记得' : 'Show Answer / Good'}</span>
+                        <span className={subText}>{t('showAnswerBtn')} / {t('rateGood')}</span>
                         <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">Space / Enter</kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{isZh ? '遗忘 (Again)' : 'Again'}</span>
+                        <span className={subText}>{t('rateAgain')}</span>
                         <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">1</kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{isZh ? '展开四档评分' : '4-Level Ratings'}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">{isZh ? '按住 Option' : 'Hold Option'}</kbd>
+                        <span className={subText}>{t('rateHard')} / {t('rateEasy')}</span>
+                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">2 / 3 / 4</kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{isZh ? '撤销上一张复习' : 'Undo Review'}</span>
+                        <span className={subText}>{t('undoBtnShort')}</span>
                         <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">Cmd + Z</kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{isZh ? '发音与朗读' : 'Replay Audio'}</span>
+                        <span className={subText}>{t('pronounceBtn')}</span>
                         <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">R</kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{isZh ? '卡片行内编辑' : 'Inline Edit'}</span>
+                        <span className={subText}>{t('editCardTitle')}</span>
                         <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">E</kbd>
                       </div>
                     </div>
@@ -592,12 +637,10 @@ export const SettingsModal: React.FC = () => {
               <div className="space-y-5">
                 <div>
                   <h3 className="text-[17px] font-bold tracking-tight">
-                    {isZh ? '云端同步' : 'AnkiWeb Sync'}
+                    {t('syncCloudTitle')}
                   </h3>
                   <p className={`text-[12px] ${subText} mt-0.5`}>
-                    {isZh
-                      ? '按需与 AnkiWeb 官方云端双向同步本地学习进度与卡片'
-                      : 'Sync local study progress and cards with AnkiWeb on demand'}
+                    {t('settingsSyncTabSub')}
                   </p>
                 </div>
 
@@ -624,19 +667,17 @@ export const SettingsModal: React.FC = () => {
                     className="btn-primary !h-10 !px-5 !text-[13px] shrink-0"
                   >
                     <span aria-hidden="true" className={syncing ? 'motion-safe:animate-spin' : ''}>⟳</span>
-                    <span>{syncing ? t('syncing') : isZh ? '立即同步' : 'Sync Now'}</span>
+                    <span>{syncing ? t('syncing') : t('syncNowAction')}</span>
                   </button>
                 </div>
 
                 {/* Snapshot Sync Notice */}
                 <div className={`rounded-xl border p-4 space-y-1.5 text-[12px] ${cardSurface}`}>
                   <div className="font-semibold text-[var(--brand-text)]">
-                    {isZh ? '按需双向快照同步' : 'On-Demand Snapshot Sync'}
+                    {t('settingsOnDemandSyncTitle')}
                   </div>
                   <p className={`${subText} leading-relaxed`}>
-                    {isZh
-                      ? '启动时自动检测同步，并支持随时点击或按 Y 键触发双向对齐。所有本地练习与编辑都会实时写入 SQLite 数据库，但跨设备进度需再次同步后生效。'
-                      : 'Checks on launch and syncs two-way on demand or via shortcut Y. Local edits save immediately to SQLite; sync again to align across devices.'}
+                    {t('settingsOnDemandSyncBody')}
                   </p>
                 </div>
               </div>
@@ -648,12 +689,10 @@ export const SettingsModal: React.FC = () => {
             <div className="space-y-5">
               <div>
                 <h3 className="text-[17px] font-bold tracking-tight">
-                  {isZh ? '数据导入/导出与系统维护' : 'Import / Export & Maintenance'}
+                  {t('settingsMaintTitle')}
                 </h3>
                 <p className={`text-[12px] ${subText} mt-0.5`}>
-                  {isZh
-                    ? '管理 .apkg / .colpkg 牌组包导入导出，以及数据库校验、空白卡片与冗余媒体清理'
-                    : 'Import or export .apkg packages, verify SQLite integrity, and clean empty cards or unused media'}
+                  {t('settingsMaintSub')}
                 </p>
               </div>
 
@@ -662,12 +701,10 @@ export const SettingsModal: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-[13px] font-semibold">
-                      {isZh ? '牌组包导入与集合导出' : 'Import & Export Packages'}
+                      {t('settingsImportExportCardTitle')}
                     </div>
                     <div className={`text-[11px] ${subText} mt-0.5`}>
-                      {isZh
-                        ? '直接调用 Anki 原生文件引擎，完整支持 .apkg、.colpkg 及 CSV/TXT 词表'
-                        : 'Full compatibility with .apkg decks, .colpkg backups, and text/CSV files'}
+                      {t('settingsImportExportCardSub')}
                     </div>
                   </div>
                 </div>
@@ -676,7 +713,7 @@ export const SettingsModal: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => appActions.triggerNativeImport()}
-                    className={`p-3.5 rounded-xl border text-left flex items-center justify-between cursor-pointer transition-all ${
+                    className={`p-3.5 rounded-xl border text-start flex items-center justify-between cursor-pointer transition-all ${
                       isDark
                         ? 'bg-[#161720] border-[#2E303E] hover:border-[var(--brand)]'
                         : 'bg-white border-[#E5E5EA] hover:border-[var(--brand)]'
@@ -684,10 +721,10 @@ export const SettingsModal: React.FC = () => {
                   >
                     <div>
                       <div className="text-[13px] font-bold text-[var(--brand-text)]">
-                        {isZh ? '导入卡片包 (.apkg)' : 'Import Package (.apkg)'}
+                        {t('settingsImportApkgTitle')}
                       </div>
                       <div className={`text-[11px] ${subText} mt-0.5`}>
-                        {isZh ? '从本地导入第三方牌组或备份' : 'Import deck package or text file'}
+                        {t('settingsImportApkgSub')}
                       </div>
                     </div>
                     <span className="text-[16px] text-[var(--brand-text)]">↓</span>
@@ -696,7 +733,7 @@ export const SettingsModal: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => appActions.triggerNativeExport()}
-                    className={`p-3.5 rounded-xl border text-left flex items-center justify-between cursor-pointer transition-all ${
+                    className={`p-3.5 rounded-xl border text-start flex items-center justify-between cursor-pointer transition-all ${
                       isDark
                         ? 'bg-[#161720] border-[#2E303E] hover:border-[var(--brand)]'
                         : 'bg-white border-[#E5E5EA] hover:border-[var(--brand)]'
@@ -704,10 +741,10 @@ export const SettingsModal: React.FC = () => {
                   >
                     <div>
                       <div className="text-[13px] font-bold">
-                        {isZh ? '导出牌组 / 集合备份' : 'Export Deck / Backup'}
+                        {t('settingsExportApkgTitle')}
                       </div>
                       <div className={`text-[11px] ${subText} mt-0.5`}>
-                        {isZh ? '打包分享牌组或导出含进度备份' : 'Export .apkg deck or .colpkg backup'}
+                        {t('settingsExportApkgSub')}
                       </div>
                     </div>
                     <span className="text-[16px] text-[#8E8E93]">↑</span>
@@ -718,7 +755,7 @@ export const SettingsModal: React.FC = () => {
               {/* Section 2: System Maintenance & Diagnostics */}
               <div className={`rounded-xl border p-4 space-y-3.5 ${cardSurface}`}>
                 <div className="text-[13px] font-semibold">
-                  {isZh ? '系统维护与健康诊断' : 'System Maintenance & Diagnostics'}
+                  {t('settingsDiagnosticsCardTitle')}
                 </div>
 
                 {/* Tool A: Check Database */}
@@ -730,12 +767,10 @@ export const SettingsModal: React.FC = () => {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-[13px] font-semibold">
-                        {isZh ? '1. 检查并优化数据库 (Check Database)' : '1. Check & Optimize Database'}
+                        1. {t('settingsCheckDbTitle')}
                       </div>
                       <div className={`text-[11px] ${subText} mt-0.5`}>
-                        {isZh
-                          ? '执行 SQLite 完整性校验与索引重构 (ANALYZE)，确保学习记录安全无损'
-                          : 'Verify SQLite integrity and rebuild query statistics'}
+                        {t('settingsCheckDbSub')}
                       </div>
                     </div>
                     <button
@@ -749,13 +784,7 @@ export const SettingsModal: React.FC = () => {
                       }}
                       className="btn-secondary !h-8 !px-3.5 !text-[12px] shrink-0"
                     >
-                      {runningTool === 'check_db'
-                        ? isZh
-                          ? '检查中...'
-                          : 'Checking...'
-                        : isZh
-                        ? '立即检查'
-                        : 'Check DB'}
+                      {runningTool === 'check_db' ? t('processingText') : t('settingsCheckDbBtn')}
                     </button>
                   </div>
 
@@ -777,12 +806,10 @@ export const SettingsModal: React.FC = () => {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-[13px] font-semibold">
-                        {isZh ? '2. 清理空白与失效卡片 (Empty Cards)' : '2. Scan & Clean Empty Cards'}
+                        2. {t('settingsEmptyCardsTitle')}
                       </div>
                       <div className={`text-[11px] ${subText} mt-0.5`}>
-                        {isZh
-                          ? '扫描正面为空或删减 Cloze 挖空序号后遗留的空白子卡片'
-                          : 'Detect and clean blank cards or orphaned Cloze sibling cards'}
+                        {t('settingsEmptyCardsSub')}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -798,9 +825,7 @@ export const SettingsModal: React.FC = () => {
                           }}
                           className="h-8 px-3 rounded-xl bg-[var(--status-danger)] text-white text-[11px] font-semibold cursor-pointer"
                         >
-                          {isZh
-                            ? `清理 ${emptyReport.emptyCount} 张空卡`
-                            : `Clean ${emptyReport.emptyCount}`}
+                          {t('batchDelete')} ({emptyReport.emptyCount})
                         </button>
                       )}
                       <button
@@ -815,12 +840,8 @@ export const SettingsModal: React.FC = () => {
                         className="btn-secondary !h-8 !px-3.5 !text-[12px]"
                       >
                         {runningTool === 'check_empty_cards'
-                          ? isZh
-                            ? '扫描中...'
-                            : 'Scanning...'
-                          : isZh
-                          ? '扫描空卡'
-                          : 'Scan Empty'}
+                          ? t('processingText')
+                          : t('settingsScanEmptyBtn')}
                       </button>
                     </div>
                   </div>
@@ -850,12 +871,10 @@ export const SettingsModal: React.FC = () => {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-[13px] font-semibold">
-                        {isZh ? '3. 媒体文件检查与冗余清理 (Check Media)' : '3. Check Media & Unused Files'}
+                        3. {t('settingsCheckMediaTitle')}
                       </div>
                       <div className={`text-[11px] ${subText} mt-0.5`}>
-                        {isZh
-                          ? '比对 collection.media 目录与卡片引用，定位未使用的孤立图片/音频或缺失文件'
-                          : 'Compare collection.media against note fields for unused or missing files'}
+                        {t('settingsCheckMediaSub')}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -871,9 +890,7 @@ export const SettingsModal: React.FC = () => {
                           }}
                           className="h-8 px-3 rounded-xl bg-[var(--status-danger)] text-white text-[11px] font-semibold cursor-pointer"
                         >
-                          {isZh
-                            ? `清理 ${mediaReport.unusedCount} 个冗余文件`
-                            : `Clean ${mediaReport.unusedCount} Unused`}
+                          {t('batchDelete')} ({mediaReport.unusedCount})
                         </button>
                       )}
                       <button
@@ -888,12 +905,8 @@ export const SettingsModal: React.FC = () => {
                         className="btn-secondary !h-8 !px-3.5 !text-[12px]"
                       >
                         {runningTool === 'check_media'
-                          ? isZh
-                            ? '扫描中...'
-                            : 'Scanning...'
-                          : isZh
-                          ? '检查媒体'
-                          : 'Check Media'}
+                          ? t('processingText')
+                          : t('settingsCheckMediaBtn')}
                       </button>
                     </div>
                   </div>
@@ -912,7 +925,6 @@ export const SettingsModal: React.FC = () => {
                       </div>
                       {Array.isArray(mediaReport.unusedFiles) && mediaReport.unusedFiles.length > 0 && (
                         <div className={`${subText} truncate`}>
-                          {isZh ? '未引用示例：' : 'Unused sample: '}
                           {mediaReport.unusedFiles.slice(0, 5).join(', ')}
                         </div>
                       )}
@@ -928,19 +940,19 @@ export const SettingsModal: React.FC = () => {
             <div className="space-y-5">
               <div>
                 <h3 className="text-[17px] font-bold tracking-tight text-[var(--status-danger)]">
-                  {isZh ? '原生模式' : 'Native Interface'}
+                  {t('settingsTabNative')}
                 </h3>
                 <p className={`text-[12px] ${subText} mt-0.5`}>
-                  {isZh ? '临时切换至 Anki 原生界面' : 'Temporarily switch to native Anki UI'}
+                  {t('settingsNativeSub')}
                 </p>
               </div>
 
               {/* Switch Action Card */}
               <div className={`rounded-xl border p-5 flex items-center justify-between ${cardSurface}`}>
                 <div>
-                  <div className="text-[14px] font-bold">{isZh ? '切回 Anki 原生界面' : 'Switch to Native UI'}</div>
+                  <div className="text-[14px] font-bold">{t('settingsSwitchNativeCardTitle')}</div>
                   <div className={`text-[12px] ${subText} mt-0.5`}>
-                    {isZh ? '随时可以一键返回 Anki Studio' : 'All progress is preserved, return anytime'}
+                    {t('settingsSwitchNativeCardSub')}
                   </div>
                 </div>
                 <button
@@ -950,7 +962,7 @@ export const SettingsModal: React.FC = () => {
                   }}
                   className="h-10 px-4 rounded-xl border border-[var(--status-danger)]/40 text-[var(--status-danger)] hover:bg-[var(--status-danger-soft)] text-[12px] font-semibold cursor-pointer transition-colors"
                 >
-                  {isZh ? '立即切换回原生' : 'Switch to Native'}
+                  {t('switchToNative')}
                 </button>
               </div>
 
@@ -961,12 +973,10 @@ export const SettingsModal: React.FC = () => {
                     <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
                     <path d="M9 18h6M10 22h4" />
                   </svg>
-                  <span>{isZh ? '如何随时返回 Anki Studio？' : 'How to return anytime:'}</span>
+                  <span>{t('settingsHowToReturnTitle')}</span>
                 </div>
                 <p className={`${subText} leading-relaxed`}>
-                  {isZh
-                    ? `切回原生后，随时点击顶部工具栏的「进入 Anki Studio」胶囊按钮，或按下快捷键 ${shortcutHint}，即可秒级重返现代界面。`
-                    : `In native UI, click the top toolbar "Anki Studio" button or press ${shortcutHint} to return instantly.`}
+                  {t('settingsHowToReturnBody', { key: shortcutHint })}
                 </p>
               </div>
             </div>
@@ -977,10 +987,10 @@ export const SettingsModal: React.FC = () => {
             <div className="space-y-5">
               <div>
                 <h3 className="text-[17px] font-bold tracking-tight">
-                  {isZh ? '关于 Anki Studio' : 'About Anki Studio'}
+                  {t('settingsTabAbout')} · Anki Studio
                 </h3>
                 <p className={`text-[12px] ${subText} mt-0.5`}>
-                  {isZh ? '系统版本与设计理念' : 'Version info and philosophy'}
+                  {t('settingsAboutSub')}
                 </p>
               </div>
 
@@ -1000,12 +1010,10 @@ export const SettingsModal: React.FC = () => {
               {/* Philosophy Card */}
               <div className={`rounded-xl border p-4 space-y-2 text-[12px] ${cardSurface}`}>
                 <div className="font-semibold text-[var(--brand-text)]">
-                  {isZh ? '简约而不简单' : 'Simple Yet Powerful'}
+                  {t('settingsPhilosophyTitle')}
                 </div>
                 <p className={`${subText} leading-relaxed`}>
-                  {isZh
-                    ? '去除冗杂的界面噪音，将快捷操作与核心功能收拢于无形。专为专注记忆与高效心流打造，兼顾鼠标的顺畅直觉与键盘的极速响应。'
-                    : 'Designed for deep focus and effortless flow. Eliminates interface clutter while keeping complete memory mastery at your fingertips.'}
+                  {t('settingsPhilosophyBody')}
                 </p>
               </div>
             </div>

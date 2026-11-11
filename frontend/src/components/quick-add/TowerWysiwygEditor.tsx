@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { translate } from '../../i18n/translations';
+import { useAppStore } from '../../stores/useAppStore';
 import { resolveMediaInHtml } from '../../utils/mediaUrl';
 
 export interface TowerWysiwygEditorProps {
@@ -79,6 +81,10 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
   onKeyDownShortcut,
   showCloze = true,
 }) => {
+  const { resolvedLang } = useAppStore();
+  const t = (key: any, params?: Record<string, string | number>) =>
+    translate(resolvedLang, key, params);
+
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -163,7 +169,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
     for (let c = 0; c < cols; c++) {
       tableHtml += `<th style="border:1px solid ${
         isDark ? '#343646' : '#E5E5EA'
-      }; padding:6px 10px; background:${isDark ? '#21222E' : '#F5F5F7'}; text-align:left; font-size:13px;">表头 ${
+      }; padding:6px 10px; background:${isDark ? '#21222E' : '#F5F5F7'}; text-align:start; font-size:13px;">#${
         c + 1
       }</th>`;
     }
@@ -173,7 +179,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
       for (let c = 0; c < cols; c++) {
         tableHtml += `<td style="border:1px solid ${
           isDark ? '#343646' : '#E5E5EA'
-        }; padding:6px 10px; font-size:13px;">单元格</td>`;
+        }; padding:6px 10px; font-size:13px;">...</td>`;
       }
       tableHtml += '</tr>';
     }
@@ -197,7 +203,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
       return;
     }
 
-    const selectedText = range.toString().trim() || '挖空文字';
+    const selectedText = range.toString().trim() || '...';
 
     const existingPills = editorRef.current.querySelectorAll('.anki-cloze-pill');
     let maxIdx = 0;
@@ -250,7 +256,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
     if (!editorRef.current) return;
     editorRef.current.focus();
     const selection = window.getSelection();
-    const selected = selection?.toString() || '高亮文字';
+    const selected = selection?.toString() || '...';
     const markHtml = `<mark style="background:${
       isDark ? 'rgba(224, 147, 62, 0.28)' : '#FDF3E7'
     }; padding:1px 4px; border-radius:4px; color:inherit;">${selected}</mark>`;
@@ -341,7 +347,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
           )}
         </div>
         <span className="text-[11px] text-[#8E8E93] font-mono">
-          {charCount} 字
+          {charCount} {t('charsCountUnit')}
         </span>
       </div>
 
@@ -366,7 +372,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setHeadingOpen((prev) => !prev)}
-                title="标题格式"
+                title={t('slashInsertBtn')}
                 className={iconBtnClass}
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -379,7 +385,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
               {headingOpen && (
                 <div
-                  className={`absolute left-0 top-8 z-50 w-32 rounded-lg border shadow-xl p-1 backdrop-blur-xl ${
+                  className={`absolute start-0 top-8 z-50 w-32 rounded-lg border shadow-xl p-1 backdrop-blur-xl ${
                     isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
                   }`}
                 >
@@ -387,33 +393,33 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setHeading('<p>')}
-                    className="w-full text-left px-2.5 py-1.5 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1.5 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
                   >
-                    普通正文
+                    P
                   </button>
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setHeading('<h1>')}
-                    className="w-full text-left px-2.5 py-1.5 text-[15px] font-bold rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1.5 text-[15px] font-bold rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
                   >
-                    大标题 H1
+                    H1
                   </button>
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setHeading('<h2>')}
-                    className="w-full text-left px-2.5 py-1.5 text-[13px] font-bold rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1.5 text-[13px] font-bold rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
                   >
-                    中标题 H2
+                    H2
                   </button>
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setHeading('<h3>')}
-                    className="w-full text-left px-2.5 py-1.5 text-[12px] font-semibold rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1.5 text-[12px] font-semibold rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
                   >
-                    小标题 H3
+                    H3
                   </button>
                 </div>
               )}
@@ -425,7 +431,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setEmojiOpen((prev) => !prev)}
-                title="表情符号"
+                title="Emoji"
                 className={iconBtnClass}
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -438,7 +444,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
               {emojiOpen && (
                 <div
-                  className={`absolute left-0 top-8 z-50 p-2 rounded-xl border shadow-xl grid grid-cols-4 gap-1.5 w-44 backdrop-blur-xl ${
+                  className={`absolute start-0 top-8 z-50 p-2 rounded-xl border shadow-xl grid grid-cols-4 gap-1.5 w-44 backdrop-blur-xl ${
                     isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
                   }`}
                 >
@@ -464,7 +470,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => execCmd('bold')}
-              title="加粗 (Cmd+B)"
+              title="Bold (Cmd+B)"
               className={`${iconBtnClass} font-bold text-[13px]`}
             >
               B
@@ -475,7 +481,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => execCmd('italic')}
-              title="斜体 (Cmd+I)"
+              title="Italic (Cmd+I)"
               className={`${iconBtnClass} font-serif italic text-[13px]`}
             >
               I
@@ -488,7 +494,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => execCmd('insertOrderedList')}
-              title="有序编号列表"
+              title="1. List"
               className={iconBtnClass}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -506,7 +512,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => execCmd('insertUnorderedList')}
-              title="项目符号列表"
+              title="• List"
               className={iconBtnClass}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -524,7 +530,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => execCmd('formatBlock', '<blockquote>')}
-              title="引用块"
+              title="Quote"
               className={iconBtnClass}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -538,7 +544,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => fileInputRef.current?.click()}
-              title="插入图片 (支持直接 Cmd+V 粘贴)"
+              title={t('ioUploadImageBtn')}
               className={iconBtnClass}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -553,7 +559,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => execCmd('formatBlock', '<pre>')}
-              title="代码块"
+              title="Code"
               className={iconBtnClass}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -568,7 +574,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setTableOpen((prev) => !prev)}
-                title="插入表格"
+                title="Table"
                 className={iconBtnClass}
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -582,7 +588,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
               {tableOpen && (
                 <div
-                  className={`absolute left-0 top-8 z-50 p-1.5 rounded-lg border shadow-xl w-32 backdrop-blur-xl ${
+                  className={`absolute start-0 top-8 z-50 p-1.5 rounded-lg border shadow-xl w-32 backdrop-blur-xl ${
                     isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
                   }`}
                 >
@@ -590,25 +596,25 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => insertTable(2, 2)}
-                    className="w-full text-left px-2.5 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
                   >
-                    2 × 2 表格
+                    2 × 2
                   </button>
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => insertTable(2, 3)}
-                    className="w-full text-left px-2.5 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
                   >
-                    2 × 3 表格
+                    2 × 3
                   </button>
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => insertTable(3, 3)}
-                    className="w-full text-left px-2.5 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
                   >
-                    3 × 3 表格
+                    3 × 3
                   </button>
                 </div>
               )}
@@ -619,7 +625,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => execCmd('insertHorizontalRule')}
-              title="插入分割线"
+              title="HR"
               className={iconBtnClass}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -633,7 +639,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setAlignOpen((prev) => !prev)}
-                title="文本对齐"
+                title="Align"
                 className={iconBtnClass}
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -645,7 +651,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
               {alignOpen && (
                 <div
-                  className={`absolute left-0 top-8 z-50 p-1 rounded-lg border shadow-xl w-24 backdrop-blur-xl ${
+                  className={`absolute start-0 top-8 z-50 p-1 rounded-lg border shadow-xl w-24 backdrop-blur-xl ${
                     isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
                   }`}
                 >
@@ -656,9 +662,9 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                       execCmd('justifyLeft');
                       setAlignOpen(false);
                     }}
-                    className="w-full text-left px-2 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
                   >
-                    左对齐
+                    ⇤
                   </button>
                   <button
                     type="button"
@@ -667,9 +673,9 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                       execCmd('justifyCenter');
                       setAlignOpen(false);
                     }}
-                    className="w-full text-left px-2 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
                   >
-                    居中对齐
+                    ⇔
                   </button>
                   <button
                     type="button"
@@ -678,9 +684,9 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                       execCmd('justifyRight');
                       setAlignOpen(false);
                     }}
-                    className="w-full text-left px-2 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
                   >
-                    右对齐
+                    ⇥
                   </button>
                 </div>
               )}
@@ -691,7 +697,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => execCmd('outdent')}
-              title="减少缩进"
+              title="Outdent"
               className={iconBtnClass}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -705,7 +711,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => execCmd('indent')}
-              title="增加缩进"
+              title="Indent"
               className={iconBtnClass}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -724,7 +730,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={insertClozeBadge}
-                title="Anki 挖空 (Cmd+Shift+C)"
+                title={t('clozeShortcutBtn', { key: 'Cmd+Shift+C' })}
                 className="h-7 px-2 rounded-lg text-[11px] font-mono font-bold bg-[var(--brand-soft)] hover:bg-[var(--brand-soft-strong)] text-[var(--brand-text)] flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0"
               >
                 <span>[ ... ]</span>
@@ -737,7 +743,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={insertMath}
-              title="LaTeX 科学公式 \( ... \)"
+              title="LaTeX \( ... \)"
               className="h-7 px-2 rounded-lg text-[12px] font-serif italic text-[var(--status-info)] hover:bg-[var(--status-info-soft)] cursor-pointer transition-colors shrink-0"
             >
               f(x)
@@ -748,7 +754,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={insertMark}
-              title="重点高亮标记"
+              title="Mark"
               className="h-7 px-2 rounded-lg text-[11px] font-semibold text-[var(--status-warning)] hover:bg-[var(--status-warning-soft)] cursor-pointer transition-colors shrink-0"
             >
               Mark
@@ -756,12 +762,12 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
           </div>
 
           {/* Right Corner: Quick Shortcut Help (?) */}
-          <div className="relative ml-auto shrink-0 pl-1">
+          <div className="relative ms-auto shrink-0 ps-1">
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => setHelpOpen((prev) => !prev)}
-              title="编辑器功能与快捷键"
+              title="?"
               className="w-5 h-5 rounded-full border text-[11px] font-bold flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white border-black/15 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
             >
               ?
@@ -769,32 +775,29 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
             {helpOpen && (
               <div
-                className={`absolute right-0 top-7 z-50 p-3 rounded-xl border shadow-xl w-64 text-[11px] space-y-1.5 backdrop-blur-xl ${
+                className={`absolute end-0 top-7 z-50 p-3 rounded-xl border shadow-xl w-64 text-[11px] space-y-1.5 backdrop-blur-xl ${
                   isDark ? 'bg-[#1F202A] border-[#343646] text-[#D8D8E0]' : 'bg-white border-[#E5E5EA] text-[#3A3A3C]'
                 }`}
               >
                 <div className="font-bold text-[12px] pb-1 border-b border-black/10 dark:border-white/10 text-[var(--brand-text)]">
-                  Tower 实时富文本编辑器
+                  WYSIWYG
                 </div>
                 <div className="flex justify-between">
-                  <span>加粗 / 斜体</span>
+                  <span>B / I</span>
                   <span className="font-mono text-[#8E8E93]">Cmd+B / Cmd+I</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Anki 挖空</span>
+                  <span>Cloze</span>
                   <span className="font-mono text-[var(--brand-text)]">Cmd+Shift+C</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>保存卡片</span>
+                  <span>{t('saveNickname')}</span>
                   <span className="font-mono text-[#8E8E93]">Cmd+Enter</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>粘贴图片 / 截图</span>
+                  <span>Image</span>
                   <span className="font-mono text-[#8E8E93]">Cmd+V</span>
                 </div>
-                <p className="text-[10px] text-[#8E8E93] pt-1">
-                  所见即所得：编辑与预览一体化，直接编辑最终渲染外观。
-                </p>
               </div>
             )}
           </div>
@@ -809,8 +812,8 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
             onPaste={handlePaste}
             onKeyDown={handleKeyDown}
             style={{ minHeight: `${minHeight}px` }}
-            data-placeholder={placeholder || '在此输入内容...'}
-            className="outline-none leading-relaxed text-[15px] select-text break-words empty:before:content-[attr(data-placeholder)] empty:before:text-[#8E8E93]/60 empty:before:pointer-events-none [&_blockquote]:border-l-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:pl-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:my-2 [&_h1]:text-[20px] [&_h1]:font-bold [&_h1]:my-2 [&_h2]:text-[17px] [&_h2]:font-bold [&_h2]:my-1.5 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:my-1 [&_img]:max-h-60 [&_img]:rounded-xl [&_img]:my-2 [&_img]:shadow-xs [&_hr]:border-t [&_hr]:border-black/10 dark:[&_hr]:border-white/10 [&_hr]:my-3"
+            data-placeholder={placeholder || t('editorDefaultPlaceholder')}
+            className="outline-none leading-relaxed text-[15px] select-text break-words empty:before:content-[attr(data-placeholder)] empty:before:text-[#8E8E93]/60 empty:before:pointer-events-none [&_blockquote]:border-s-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:ps-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:my-2 [&_h1]:text-[20px] [&_h1]:font-bold [&_h1]:my-2 [&_h2]:text-[17px] [&_h2]:font-bold [&_h2]:my-1.5 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:my-1 [&_img]:max-h-60 [&_img]:rounded-xl [&_img]:my-2 [&_img]:shadow-xs [&_hr]:border-t [&_hr]:border-black/10 dark:[&_hr]:border-white/10 [&_hr]:my-3"
           />
         </div>
       </div>

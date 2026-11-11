@@ -318,7 +318,7 @@ export interface EnvInfo {
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'oled';
   accentColor: 'indigo' | 'emerald' | 'cyan' | 'rose' | 'amber' | 'teal' | 'violet' | 'slate';
-  language: 'auto' | 'zh-CN' | 'en';
+  language: string;
   customNickname: string;
   collapsedDeckIds: string[];
   debugMode?: boolean;
@@ -339,7 +339,7 @@ export interface DashboardData {
   dateDisplay: string;
   synced: boolean;
   syncedAt?: number;
-  language?: 'zh-CN' | 'en';
+  language?: string;
   envInfo?: EnvInfo;
   preferences?: UserPreferences;
   vacation?: VacationState;
