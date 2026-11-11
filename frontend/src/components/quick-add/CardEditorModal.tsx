@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { callAnki, isAnkiNativeEnv } from '../../bridge/pycmd';
-import { formatShortcut, translate } from '../../i18n/translations';
+import { translate } from '../../i18n/translations';
 import { appActions, LibraryCardItem, ReviewCardItem, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
 import { renderMathAndRichHtml } from '../../utils/mathRenderer';
 import { extractMediaBaseUrlFromHtml, resolveMediaInHtml } from '../../utils/mediaUrl';
@@ -50,7 +50,6 @@ export const CardEditorModal: React.FC = () => {
 
   const isZh = resolvedLang === 'zh-CN';
   const isDark = theme === 'dark' || theme === 'oled';
-  const platform = envInfo.platform;
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
@@ -73,13 +72,6 @@ export const CardEditorModal: React.FC = () => {
   const [backFieldName, setBackFieldName] = useState<string>('背面');
   const [additionalFields, setAdditionalFields] = useState<Record<string, string>>({});
   const [showMoreFields, setShowMoreFields] = useState(false);
-
-  // Sticky / Pin Fields State (for Continuous Creation)
-  const [pinnedFront, setPinnedFront] = useState(false);
-  const [pinnedBack, setPinnedBack] = useState(false);
-  const [pinnedTags, setPinnedTags] = useState(true);
-  const [pinnedExtraKeys, setPinnedExtraKeys] = useState<Record<string, boolean>>({});
-  const [continuousAddedCount, setContinuousAddedCount] = useState(0);
 
   // Real-time Duplicate Detection State
   const [backendDupCount, setBackendDupCount] = useState(0);
@@ -208,11 +200,6 @@ export const CardEditorModal: React.FC = () => {
       setBack('');
       setAdditionalFields({});
       setTags([]);
-      setPinnedFront(false);
-      setPinnedBack(false);
-      setPinnedTags(true);
-      setPinnedExtraKeys({});
-      setContinuousAddedCount(0);
       setOriginalSnapshot({
         front: '',
         back: '',
@@ -407,15 +394,9 @@ export const CardEditorModal: React.FC = () => {
 
   // Global Keyboard shortcut listener for modal
   const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'Enter' && !isEditMode) {
-      e.preventDefault();
-      handleSubmit(true);
-      return;
-    }
-
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
-      handleSubmit(false);
+      handleSubmit();
       return;
     }
 
@@ -435,8 +416,8 @@ export const CardEditorModal: React.FC = () => {
     }
   };
 
-  // Save / Submit (supports keepOpen = true for Continuous Card Creation)
-  const handleSubmit = async (keepOpen = false) => {
+  // Save / Submit
+  const handleSubmit = async () => {
     if (!front.trim() || submitting) return;
     setSubmitting(true);
     applyFormatting('cloze');
@@ -486,28 +467,7 @@ export const CardEditorModal: React.FC = () => {
           fields: Object.keys(extraClean).length > 0 ? extraClean : undefined,
         });
 
-        if (keepOpen) {
-          setContinuousAddedCount((prev) => prev + 1);
-          const nextFront = pinnedFront ? front : '';
-          const nextBack = pinnedBack ? back : '';
-          const nextTags = pinnedTags ? [...tags] : [];
-          const nextExtra: Record<string, string> = {};
-          for (const [k, v] of Object.entries(additionalFields)) {
-            nextExtra[k] = pinnedExtraKeys[k] ? v : '';
-          }
-          setFront(nextFront);
-          setBack(nextBack);
-          setTags(nextTags);
-          setAdditionalFields(nextExtra);
-          setOriginalSnapshot({
-            front: nextFront,
-            back: nextBack,
-            tags: nextTags,
-            deckId: selectedDeckId,
-          });
-        } else {
-          setAppState({ quickAddOpen: false });
-        }
+        setAppState({ quickAddOpen: false });
       }
     } finally {
       setSubmitting(false);
@@ -765,12 +725,6 @@ export const CardEditorModal: React.FC = () => {
                 </div>
               )}
             </div>
-
-            {continuousAddedCount > 0 && !isEditMode && (
-              <span className="px-2 py-0.5 rounded-full bg-[var(--status-success-soft)] text-[var(--status-success)] text-[10px] font-semibold shrink-0">
-                {isZh ? `已连建 ${continuousAddedCount} 张` : `Added ${continuousAddedCount}`}
-              </span>
-            )}
           </div>
 
           {/* Right Action & Close Buttons */}
@@ -837,105 +791,63 @@ export const CardEditorModal: React.FC = () => {
             </div>
           )}
 
-          {/* Front WYSIWYG Box (Tower Editor) + Pin Toggle */}
-          <div className="relative">
-            {!isEditMode && (
-              <button
-                type="button"
-                onClick={() => setPinnedFront((prev) => !prev)}
-                title={
-                  isZh
-                    ? '固定正面字段：使用「保存并继续 +1」连续制卡时保留此字段内容不清空'
-                    : 'Pin field: keep Front text when using Save & Add Another'
-                }
-                className={`absolute right-14 top-0.5 z-10 h-5 px-2 rounded-md text-[10px] font-medium flex items-center gap-1 cursor-pointer transition-colors ${
-                  pinnedFront
-                    ? 'bg-[var(--brand)] text-white'
-                    : 'text-[#8E8E93] hover:text-current bg-black/5 dark:bg-white/5'
-                }`}
-              >
-                <span>📌</span>
-                <span>{pinnedFront ? (isZh ? '已固定' : 'Pinned') : (isZh ? '固定' : 'Pin')}</span>
-              </button>
-            )}
-            <TowerWysiwygEditor
-              label={`${frontFieldName} (${isZh ? '正面 / 问题' : 'Front'})`}
-              badge={isZh ? '必填' : 'Required'}
-              value={front}
-              onChange={(val) => setFront(val)}
-              placeholder={
-                isZh
-                  ? '输入词条、概念、题目，支持直接 Cmd+V 粘贴截图，或选取文字按 Cmd+Shift+C 挖空...'
-                  : 'Enter question, term, or select text and press Cmd+Shift+C to cloze...'
-              }
-              minHeight={130}
-              isDark={isDark}
-              accentColor={brandHex}
-              mediaBaseUrl={effectiveMediaBaseUrl}
-              onPasteImage={appActions.pasteImageFromClipboard}
-              onKeyDownShortcut={handleEditorKeyDown}
-              showCloze={true}
-            />
-          </div>
+          {/* Front WYSIWYG Box (Tower Editor) */}
+          <TowerWysiwygEditor
+            label={`${frontFieldName} (${isZh ? '正面 / 问题' : 'Front'})`}
+            badge={isZh ? '必填' : 'Required'}
+            value={front}
+            onChange={(val) => setFront(val)}
+            placeholder={
+              isZh
+                ? '输入词条、概念、题目，支持直接 Cmd+V 粘贴截图，或选取文字按 Cmd+Shift+C 挖空...'
+                : 'Enter question, term, or select text and press Cmd+Shift+C to cloze...'
+            }
+            minHeight={130}
+            isDark={isDark}
+            accentColor={brandHex}
+            mediaBaseUrl={effectiveMediaBaseUrl}
+            onPasteImage={appActions.pasteImageFromClipboard}
+            onKeyDownShortcut={handleEditorKeyDown}
+            showCloze={true}
+          />
 
-          {/* Back WYSIWYG Box (Tower Editor) + Pin Toggle */}
-          <div className="relative">
-            {!isEditMode && (
-              <button
-                type="button"
-                onClick={() => setPinnedBack((prev) => !prev)}
-                title={
-                  isZh
-                    ? '固定背面字段：使用「保存并继续 +1」连续制卡时保留此字段内容不清空'
-                    : 'Pin field: keep Back text when using Save & Add Another'
-                }
-                className={`absolute right-14 top-0.5 z-10 h-5 px-2 rounded-md text-[10px] font-medium flex items-center gap-1 cursor-pointer transition-colors ${
-                  pinnedBack
-                    ? 'bg-[var(--brand)] text-white'
-                    : 'text-[#8E8E93] hover:text-current bg-black/5 dark:bg-white/5'
-                }`}
-              >
-                <span>📌</span>
-                <span>{pinnedBack ? (isZh ? '已固定' : 'Pinned') : (isZh ? '固定' : 'Pin')}</span>
-              </button>
-            )}
-            <TowerWysiwygEditor
-              label={`${backFieldName} (${
-                selectedPreset === 'type_answer'
-                  ? isZh
-                    ? '标准默写答案'
-                    : 'Expected Type Answer'
-                  : isZh
-                  ? '背面 / 释义解答'
-                  : 'Back'
-              })`}
-              badge={
-                selectedPreset === 'reversed'
-                  ? isZh
-                    ? '双向卡反面'
-                    : 'Reversed Side'
-                  : selectedPreset === 'type_answer'
-                  ? isZh
-                    ? '默写比对基准'
-                    : 'Diff Target'
-                  : undefined
-              }
-              value={back}
-              onChange={(val) => setBack(val)}
-              placeholder={
-                isZh
-                  ? '输入详细释义、解析、例句，支持插入表格、项目列表、代码块或直接按 Cmd+V 粘贴截图...'
-                  : 'Enter explanation, examples, or paste screenshots with Cmd+V...'
-              }
-              minHeight={150}
-              isDark={isDark}
-              accentColor={brandHex}
-              mediaBaseUrl={effectiveMediaBaseUrl}
-              onPasteImage={appActions.pasteImageFromClipboard}
-              onKeyDownShortcut={handleEditorKeyDown}
-              showCloze={true}
-            />
-          </div>
+          {/* Back WYSIWYG Box (Tower Editor) */}
+          <TowerWysiwygEditor
+            label={`${backFieldName} (${
+              selectedPreset === 'type_answer'
+                ? isZh
+                  ? '标准默写答案'
+                  : 'Expected Type Answer'
+                : isZh
+                ? '背面 / 释义解答'
+                : 'Back'
+            })`}
+            badge={
+              selectedPreset === 'reversed'
+                ? isZh
+                  ? '双向卡反面'
+                  : 'Reversed Side'
+                : selectedPreset === 'type_answer'
+                ? isZh
+                  ? '默写比对基准'
+                  : 'Diff Target'
+                : undefined
+            }
+            value={back}
+            onChange={(val) => setBack(val)}
+            placeholder={
+              isZh
+                ? '输入详细释义、解析、例句，支持插入表格、项目列表、代码块或直接按 Cmd+V 粘贴截图...'
+                : 'Enter explanation, examples, or paste screenshots with Cmd+V...'
+            }
+            minHeight={150}
+            isDark={isDark}
+            accentColor={brandHex}
+            mediaBaseUrl={effectiveMediaBaseUrl}
+            onPasteImage={appActions.pasteImageFromClipboard}
+            onKeyDownShortcut={handleEditorKeyDown}
+            showCloze={true}
+          />
 
           {/* Additional Fields (if note has custom fields) */}
           {Object.keys(additionalFields).length > 0 && (
@@ -957,24 +869,7 @@ export const CardEditorModal: React.FC = () => {
                 <div className="mt-3 space-y-3 pl-2 border-l-2 border-[var(--brand-border)]">
                   {Object.entries(additionalFields).map(([fKey, fVal]) => (
                     <div key={fKey} className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[11px] text-[#8E8E93] font-medium">{fKey}</label>
-                        {!isEditMode && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setPinnedExtraKeys((prev) => ({ ...prev, [fKey]: !prev[fKey] }))
-                            }
-                            className={`px-1.5 py-0.5 rounded text-[10px] cursor-pointer ${
-                              pinnedExtraKeys[fKey]
-                                ? 'bg-[var(--brand)] text-white'
-                                : 'text-[#8E8E93] hover:text-current'
-                            }`}
-                          >
-                            📌 {pinnedExtraKeys[fKey] ? (isZh ? '已固定' : 'Pinned') : (isZh ? '固定' : 'Pin')}
-                          </button>
-                        )}
-                      </div>
+                      <label className="block text-[11px] text-[#8E8E93] font-medium">{fKey}</label>
                       <input
                         type="text"
                         value={fVal}
@@ -995,24 +890,9 @@ export const CardEditorModal: React.FC = () => {
 
           {/* Tags Section */}
           <div className="space-y-2 pt-1">
-            <div className="flex items-center justify-between">
-              <label className="text-[12px] font-semibold text-[#8E8E93]">
-                {isZh ? '标签' : 'Tags'}
-              </label>
-              {!isEditMode && (
-                <button
-                  type="button"
-                  onClick={() => setPinnedTags((prev) => !prev)}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-medium cursor-pointer transition-colors ${
-                    pinnedTags
-                      ? 'bg-[var(--brand-soft)] text-[var(--brand-text)]'
-                      : 'text-[#8E8E93] hover:text-current'
-                  }`}
-                >
-                  📌 {pinnedTags ? (isZh ? '连建时保留标签' : 'Keep Tags Pinned') : (isZh ? '固定标签' : 'Pin Tags')}
-                </button>
-              )}
-            </div>
+            <label className="block text-[12px] font-semibold text-[#8E8E93]">
+              {isZh ? '标签' : 'Tags'}
+            </label>
 
             {/* Active Tags Pills */}
             <div className="flex flex-wrap items-center gap-1.5">
@@ -1154,21 +1034,9 @@ export const CardEditorModal: React.FC = () => {
               {isZh ? '取消' : 'Cancel'}
             </button>
 
-            {!isEditMode && (
-              <button
-                type="button"
-                onClick={() => handleSubmit(true)}
-                disabled={!front.trim() || submitting}
-                title={formatShortcut('Cmd+Shift+Enter', platform)}
-                className="btn-secondary !h-9 !px-3.5 !text-[12px] font-semibold text-[var(--brand-text)] border-[var(--brand-border)]"
-              >
-                <span>{isZh ? '保存并继续 +1' : 'Save & Add Another'}</span>
-              </button>
-            )}
-
             <button
               type="button"
-              onClick={() => handleSubmit(false)}
+              onClick={() => handleSubmit()}
               disabled={!front.trim() || submitting}
               style={{ backgroundColor: brandHex }}
               className="btn-primary !h-9 !px-5"

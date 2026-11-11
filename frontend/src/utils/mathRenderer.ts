@@ -217,6 +217,45 @@ export function renderMathAndRichHtml(
 }
 
 /**
+ * Formats rich card HTML for library preview surfaces by resolving media/math/cloze
+ * and normalizing multi-block HTML boundaries so multi-paragraph cards clamp cleanly
+ * without overflowing or vertically slicing glyphs inside `-webkit-line-clamp`.
+ */
+export function formatCardPreviewHtml(
+  rawHtml: string | undefined | null,
+  options: { singleLine?: boolean; maskClozeAsQuestion?: boolean } = {}
+): string {
+  const rendered = renderMathAndRichHtml(rawHtml, options.maskClozeAsQuestion ?? false);
+  if (!rendered) return '';
+
+  // Keep rich media, Image Occlusion wrappers, and tables intact in card boxes
+  if (!options.singleLine && /<(?:img|table|svg|canvas|video|audio)\b|anki-io-wrap/i.test(rendered)) {
+    return rendered;
+  }
+
+  let normalized = rendered
+    .replace(/<(p|div|li|blockquote|h[1-6])\b[^>]*>(?:\s|&nbsp;|<br\s*\/?>)*<\/\1>/gi, '<br/>')
+    .replace(/<\/?(?:ul|ol)\b[^>]*>/gi, '<br/>')
+    .replace(/<li\b[^>]*>/gi, '<br/>• ')
+    .replace(/(<\/(?:p|div|li|blockquote|pre|section|article|h[1-6])>)/gi, '$1<br/>')
+    .replace(/([^\s>])(<(?:p|div|blockquote|pre|section|article|h[1-6])\b[^>]*>)/gi, '$1<br/>$2')
+    .replace(/<hr\b[^>]*>/gi, '<br/>')
+    .replace(
+      /<br\/>\s*((?:<\/(?:p|div|li|blockquote|pre|section|article|h[1-6])>\s*)+)<br\/>/gi,
+      '$1<br/>'
+    )
+    .replace(/(?:<br\s*\/?>\s*){2,}/gi, '<br/>')
+    .replace(/^(?:\s|<br\s*\/?>)+/gi, '')
+    .replace(/(?:\s|<br\s*\/?>)+$/gi, '');
+
+  if (options.singleLine) {
+    normalized = normalized.replace(/<br\s*\/?>/gi, ' ').replace(/\s{2,}/g, ' ').trim();
+  }
+
+  return normalized;
+}
+
+/**
  * Deterministic low-saturation SaaS palette color assignment based on deck ID or deck name hash (#6).
  */
 const SAAS_DECK_PALETTE = [

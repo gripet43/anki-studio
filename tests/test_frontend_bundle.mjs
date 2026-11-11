@@ -334,14 +334,17 @@ assert(
   'Item #21: Image Occlusion Studio and Import/Export + System Maintenance Tools must be wired across backend and frontend'
 );
 
-// Item #22: Card Creation Power Suite (Note Types, Duplicate Warning, Sticky Pin, Save & Add Another), Library Multi-Sort & Find/Replace, and Reviewer Type-in-the-Answer
+// Item #22: Card Creation Power Suite (Note Types, Duplicate Warning), Library Multi-Sort & Find/Replace, and Reviewer Type-in-the-Answer
 assert(
   editSrc.includes('get_note_types') &&
     editSrc.includes('check_duplicate_note') &&
     editSrc.includes('createReverseCard') &&
     editorSrc.includes('localDuplicateInfo') &&
-    editorSrc.includes('pinnedFront') &&
-    editorSrc.includes('continuousAddedCount') &&
+    !editorSrc.includes('pinnedFront') &&
+    !editorSrc.includes('pinnedBack') &&
+    !editorSrc.includes('pinnedTags') &&
+    !editorSrc.includes('continuousAddedCount') &&
+    !editorSrc.includes('保存并继续 +1') &&
     searchSrc.includes('findReplace') &&
     searchSrc.includes('removeTag') &&
     librarySrc.includes('sortDropdownOpen') &&
@@ -502,11 +505,63 @@ assert(
   'Item #28: Sync completion lifecycle must coordinate anki:sync-finished, handle NO_CHANGES via last_sync_checked_map + sessionVerifiedSyncTs, and preserve syncJustFinished across silent refreshes'
 );
 
+// Item #29: Library Card UI Optimization (subgrid, container queries, multi-block clamp separation, footer & accessibility fixes)
+const item29MathRendererSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/mathRenderer.ts'),
+  'utf-8'
+);
+const item29IndexCssSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/index.css'),
+  'utf-8'
+);
+assert(
+  item29MathRendererSrc.includes('export function formatCardPreviewHtml') &&
+    item29IndexCssSrc.includes('.library-card-grid') &&
+    item29IndexCssSrc.includes('container: library-card-band / inline-size') &&
+    item29IndexCssSrc.includes('@supports (grid-template-rows: subgrid)') &&
+    item29IndexCssSrc.includes('.library-card-snippet-body') &&
+    item29IndexCssSrc.includes('text-wrap: balance') &&
+    item29IndexCssSrc.includes('@container library-card-band (max-width: 222px)') &&
+    item29IndexCssSrc.includes('@container library-card-band (max-width: 185px)') &&
+    librarySrc.includes('formatCardPreviewHtml') &&
+    librarySrc.includes('library-card-grid') &&
+    librarySrc.includes('library-card-snippet-body') &&
+    librarySrc.includes('library-card-footer-meta') &&
+    librarySrc.includes('aria-pressed={isSelected}') &&
+    librarySrc.includes('table-fixed') &&
+    librarySrc.includes('library-table-preview') &&
+    !librarySrc.includes('p-2.5 rounded-xl text-[12px] leading-relaxed line-clamp-2'),
+  'Item #29: LibraryView cards must use subgrid alignment, container queries, decoupled multi-block snippet clamping, non-overlapping footer, and accessible targets'
+);
+
+// Item #30: Hook 顺序守卫 —— 任何顶层提前 return 之后都不允许再出现 Hook 调用
+// 触发过 React #310 "Rendered more hooks than during the previous render"：
+// ReviewerView 的 `if (isSessionComplete || !currentCard)` 早退位于 expectedTypeTarget /
+// typeAnswerDiff 两个 useMemo 之前，导致「无卡片 / 已完成」与「有卡片」两条路径 Hook 数量不一致。
+const reviewerHookNames = ['useState(', 'useEffect(', 'useMemo(', 'useRef(', 'useCallback('];
+const reviewerLastHookIdx = Math.max(
+  ...reviewerHookNames.map((name) => reviewerSrc.lastIndexOf(name))
+);
+const reviewerSessionEarlyReturnIdx = reviewerSrc.lastIndexOf(
+  'if (isSessionComplete || !currentCard) {'
+);
+assert(
+  reviewerSessionEarlyReturnIdx > reviewerLastHookIdx &&
+    reviewerSrc.indexOf('const expectedTypeTarget = useMemo(') <
+      reviewerSessionEarlyReturnIdx &&
+    reviewerSrc.indexOf('const typeAnswerDiff = useMemo(') < reviewerSessionEarlyReturnIdx,
+  'Item #30: ReviewerView 的会话完成态提前 return 必须位于所有 Hook（含 expectedTypeTarget / typeAnswerDiff）之后，否则 React 抛 #310'
+);
+
 const jsBundle = fs.readFileSync(WEB_JS, 'utf-8');
 const cssBundle = fs.readFileSync(WEB_CSS, 'utf-8');
 assert(
-  jsBundle.length > 100000 && cssBundle.length > 10000 && fs.existsSync(ANKIADDON_FILE),
-  'Compiled production bundle and anki_modern_os.ankiaddon must exist'
+  jsBundle.length > 100000 &&
+    cssBundle.length > 10000 &&
+    cssBundle.includes('library-card-snippet-body') &&
+    cssBundle.includes('library-card-footer-meta') &&
+    fs.existsSync(ANKIADDON_FILE),
+  'Compiled production bundle and anki_modern_os.ankiaddon must exist with Library card CSS rules'
 );
 
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

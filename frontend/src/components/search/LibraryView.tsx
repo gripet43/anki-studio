@@ -13,7 +13,7 @@ import {
   showToast,
   useAppStore,
 } from '../../stores/useAppStore';
-import { getDeckColorByHash, renderMathAndRichHtml } from '../../utils/mathRenderer';
+import { formatCardPreviewHtml, getDeckColorByHash } from '../../utils/mathRenderer';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
 
 export const LibraryView: React.FC = () => {
@@ -1278,7 +1278,7 @@ export const LibraryView: React.FC = () => {
           </div>
         ) : libraryViewMode === 'gallery' ? (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4.5">
+            <div className="library-card-grid">
               {visibleCards.map((card) => {
                 const isSelected = selectedCardIds.includes(card.id);
                 const isSuspended = card.suspended || card.status === 'suspended';
@@ -1286,30 +1286,35 @@ export const LibraryView: React.FC = () => {
                 const cardFlagNum = ((card.flags || 0) & 7) as CardFlagColor;
                 const cardFlagSpec = cardFlagNum !== 0 ? ANKI_FLAG_PALETTE[cardFlagNum] : null;
                 const topBarColor = getDeckColorByHash(card.deckId || card.deckName);
+                const frontPreviewHtml = formatCardPreviewHtml(card.frontHtml || card.front);
+                const backPreviewHtml = formatCardPreviewHtml(card.backHtml || card.back);
+                const hasBackPreview = backPreviewHtml.trim().length > 0;
+                const anySelected = selectedCardIds.length > 0;
                 return (
                   <article
                     key={card.id}
                     onClick={(e) => {
-                      if (selectedCardIds.length > 0 || e.metaKey || e.ctrlKey) {
+                      if (window.getSelection()?.toString().trim()) return;
+                      if (anySelected || e.metaKey || e.ctrlKey) {
                         appActions.toggleCardSelection(card.id);
                       } else {
                         appActions.openCardEditor(card);
                       }
                     }}
                     onDoubleClick={() => appActions.openCardEditor(card)}
-                    className={`group relative rounded-2xl p-4.5 flex flex-col justify-between transition-all duration-200 cursor-pointer select-none border ${
+                    className={`library-card group relative rounded-2xl p-4 transition-[background-color,border-color,box-shadow,transform] duration-200 cursor-pointer select-none border ${
                       isSelected
                         ? 'bg-[var(--brand-surface)] border-[var(--brand)] ring-2 ring-[var(--brand)]/35 shadow-md'
                         : isDark
-                        ? 'bg-[#1A1B21] border-[#2A2C36] hover:border-[var(--brand-border)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:-translate-y-0.5'
-                        : 'bg-white border-[#EAECEF] hover:border-[var(--brand-border)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] hover:-translate-y-0.5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]'
+                        ? 'bg-[#1A1B21] border-[#2A2C36] hover:border-[var(--brand-border)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)] motion-safe:hover:-translate-y-0.5'
+                        : 'bg-white border-[#EAECEF] hover:border-[var(--brand-border)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] motion-safe:hover:-translate-y-0.5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]'
                     }`}
                   >
-                    <header className="flex items-center justify-between gap-1.5 mb-3">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                    <header className="library-card-header">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
                         {/* Deck Pill with Deck Color Indicator */}
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-medium max-w-[115px] truncate ${
+                          className={`library-card-deck inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-medium min-w-0 shrink ${
                             isDark ? 'bg-white/5 text-[#A1A1A6]' : 'bg-[#F2F2F7] text-[#636366]'
                           }`}
                           title={card.fullDeckName || card.deckName}
@@ -1354,16 +1359,19 @@ export const LibraryView: React.FC = () => {
                         ) : null}
                       </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0 min-w-0">
                         {/* Tags */}
                         {card.tags.length > 0 && (
-                          <div className="flex items-center gap-1 shrink-0">
-                            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-[var(--brand-soft)] text-[var(--brand-text)]">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <span
+                              className="library-card-tag-pill inline-block px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-[var(--brand-soft)] text-[var(--brand-text)] truncate"
+                              title={`#${card.tags[0]}`}
+                            >
                               #{card.tags[0]}
                             </span>
                             {card.tags.length > 1 && (
                               <span
-                                className="text-[10px] text-[#8E8E93] font-medium cursor-default"
+                                className="text-[10px] text-[#8E8E93] font-medium cursor-default shrink-0"
                                 title={card.tags.map((tg) => `#${tg}`).join(' ')}
                               >
                                 +{card.tags.length - 1}
@@ -1372,53 +1380,89 @@ export const LibraryView: React.FC = () => {
                           </div>
                         )}
 
-                        {/* Top-Right Selection Checkbox */}
+                        {/* Top-Right Selection Checkbox (>= 24x24px accessible hit target) */}
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             appActions.toggleCardSelection(card.id);
                           }}
-                          aria-label={isSelected ? 'Deselect card' : 'Select card'}
-                          className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer ${
+                          aria-pressed={isSelected}
+                          aria-label={
                             isSelected
-                              ? 'bg-[var(--brand)] text-white shadow-2xs'
-                              : 'border border-[#C7C7CC] dark:border-[#48484A] hover:border-[var(--brand)] opacity-0 group-hover:opacity-100 bg-white/80 dark:bg-[#20202A]/80'
+                              ? isZh
+                                ? `取消选择：${card.front}`
+                                : `Deselect card: ${card.front}`
+                              : isZh
+                              ? `选择卡片：${card.front}`
+                              : `Select card: ${card.front}`
+                          }
+                          className={`-my-1 -mr-1 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-opacity cursor-pointer focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 ${
+                            isSelected || anySelected
+                              ? 'opacity-100'
+                              : 'opacity-40 group-hover:opacity-100'
                           }`}
                         >
-                          {isSelected && (
-                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
+                          <span
+                            className={`w-4.5 h-4.5 rounded-[5px] flex items-center justify-center transition-colors ${
+                              isSelected
+                                ? 'bg-[var(--brand)] text-white shadow-2xs'
+                                : 'border border-[#C7C7CC] dark:border-[#48484A] group-hover:border-[var(--brand)]/60 bg-white/90 dark:bg-[#20202A]/90'
+                            }`}
+                          >
+                            {isSelected && (
+                              <svg
+                                className="w-3 h-3"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </span>
                         </button>
                       </div>
                     </header>
 
                     {/* Content Section */}
-                    <div className="flex-1 min-h-[92px] flex flex-col justify-start">
+                    <div className="library-card-body">
                       <h3
-                        className="text-[14.5px] font-semibold tracking-tight text-[#1D1D1F] dark:text-white leading-snug line-clamp-2 select-text cursor-text"
+                        className="library-card-title text-[#1D1D1F] dark:text-white select-text cursor-text"
                         dangerouslySetInnerHTML={{
-                          __html: renderMathAndRichHtml(card.frontHtml || card.front),
+                          __html: frontPreviewHtml,
                         }}
                       />
                       <div
-                        className={`mt-2.5 p-2.5 rounded-xl text-[12px] leading-relaxed line-clamp-2 select-text cursor-text border transition-colors ${
+                        className={`library-card-snippet transition-colors ${
                           isDark
-                            ? 'bg-[#14151B]/70 border-[#252732] text-[#A1A1A6]'
-                            : 'bg-[#F8F8FA] border-[#ECECEE] text-[#636366]'
+                            ? 'bg-[#14151B]/75 border-[#252732] text-[#A1A1A6]'
+                            : 'bg-[#F7F8FA] border-[#ECEEF2] text-[#5C5F66]'
                         }`}
-                        dangerouslySetInnerHTML={{
-                          __html: renderMathAndRichHtml(card.backHtml || card.back),
-                        }}
-                      />
+                      >
+                        {hasBackPreview ? (
+                          <div
+                            className="library-card-snippet-body select-text cursor-text"
+                            dangerouslySetInnerHTML={{
+                              __html: backPreviewHtml,
+                            }}
+                          />
+                        ) : (
+                          <p className="library-card-snippet-body opacity-50 italic select-none">
+                            {isZh ? '（无背面内容）' : '(No back content)'}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     {/* Footer Section */}
-                    <footer className="mt-3.5 pt-2.5 border-t border-black/[0.04] dark:border-white/[0.05] flex items-center justify-between text-[11px]">
-                      <div className="flex items-center gap-1.5 text-[#8E8E93] text-[11px] truncate min-w-0 pr-2">
-                        <span className="flex items-center gap-1 shrink-0">
+                    <footer className="library-card-footer border-black/[0.05] dark:border-white/[0.06] text-[11px]">
+                      <div className="library-card-footer-meta text-[#8E8E93] text-[11px]">
+                        <span className="library-card-due" title={card.dueText}>
                           <span
                             className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                               isSuspended
@@ -1434,9 +1478,8 @@ export const LibraryView: React.FC = () => {
                           />
                           <span className="truncate">{card.dueText}</span>
                         </span>
-                        <span>·</span>
                         <span
-                          className={`px-1.5 py-0.5 rounded-md font-semibold text-[10px] shrink-0 ${
+                          className={`px-1.5 py-0.5 rounded-md font-semibold text-[10px] shrink-0 whitespace-nowrap ${
                             card.mastery >= 80
                               ? 'bg-[var(--status-success-soft)] text-[var(--status-success)]'
                               : card.mastery >= 50
@@ -1456,10 +1499,20 @@ export const LibraryView: React.FC = () => {
                           e.stopPropagation();
                           appActions.openCardEditor(card);
                         }}
-                        className="h-6.5 px-2.5 rounded-lg text-[11px] font-medium flex items-center gap-1 cursor-pointer transition-all bg-[var(--brand-soft)] text-[var(--brand-text)] hover:bg-[var(--brand)] hover:text-white shrink-0 shadow-2xs"
+                        aria-label={isZh ? `编辑卡片：${card.front}` : `Edit card: ${card.front}`}
+                        className="library-card-edit-btn min-h-6.5 h-6.5 px-2.5 rounded-lg text-[11px] font-medium inline-flex items-center gap-1 cursor-pointer transition-colors bg-[var(--brand-soft)] text-[var(--brand-text)] hover:bg-[var(--brand)] hover:text-white shrink-0 shadow-2xs focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                         title={isZh ? '编辑卡片' : 'Edit card'}
                       >
-                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg
+                          className="w-3 h-3 shrink-0"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
                           <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
                           <path d="m15 5 4 4" />
                         </svg>
@@ -1488,14 +1541,14 @@ export const LibraryView: React.FC = () => {
         ) : (
           <>
             <div className={`rounded-2xl border overflow-hidden shadow-xs ${cardSurface}`}>
-              <table className="w-full text-left border-collapse text-[13px]">
+              <table className="w-full table-fixed text-left border-collapse text-[13px]">
                 <thead>
                   <tr
                     className={`border-b text-[11px] ${subText} ${
                       isDark ? 'border-[#2A2C36] bg-white/[0.02]' : 'border-[#EFEFF4] bg-[#FAFAFC]'
                     }`}
                   >
-                    <th className="py-3 px-4 w-10">{isZh ? '选择' : 'Sel'}</th>
+                    <th className="py-3 px-4 w-12">{isZh ? '选择' : 'Sel'}</th>
                     <th
                       onClick={() =>
                         appActions.searchLibraryDebounced({
@@ -1508,15 +1561,15 @@ export const LibraryView: React.FC = () => {
                       {librarySortBy === 'front_asc' ? '↑' : ''}
                     </th>
                     <th className="py-3 px-4">{isZh ? '背面释义' : 'Back'}</th>
-                    <th className="py-3 px-4">{isZh ? '所属牌组' : 'Deck'}</th>
-                    <th className="py-3 px-4">{isZh ? '旗标与标签' : 'Flag & Tags'}</th>
+                    <th className="py-3 px-4 w-28">{isZh ? '所属牌组' : 'Deck'}</th>
+                    <th className="py-3 px-4 w-36">{isZh ? '旗标与标签' : 'Flag & Tags'}</th>
                     <th
                       onClick={() =>
                         appActions.searchLibraryDebounced({
                           sortBy: librarySortBy === 'stability_asc' ? 'default' : 'stability_asc',
                         })
                       }
-                      className="py-3 px-4 cursor-pointer hover:text-[var(--brand-text)] select-none"
+                      className="py-3 px-4 w-20 cursor-pointer hover:text-[var(--brand-text)] select-none"
                     >
                       {t('masteryLabel')}{' '}
                       {librarySortBy === 'stability_asc' ? '↑' : ''}
@@ -1532,7 +1585,7 @@ export const LibraryView: React.FC = () => {
                               : 'due_asc',
                         })
                       }
-                      className="py-3 px-4 cursor-pointer hover:text-[var(--brand-text)] select-none"
+                      className="py-3 px-4 w-28 cursor-pointer hover:text-[var(--brand-text)] select-none"
                     >
                       {isZh ? '到期状态' : 'Due'}{' '}
                       {librarySortBy === 'due_asc'
@@ -1568,29 +1621,48 @@ export const LibraryView: React.FC = () => {
                         } ${isSelected ? 'bg-[var(--brand-soft)]' : ''}`}
                       >
                         <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => appActions.toggleCardSelection(card.id)}
-                            className="rounded cursor-pointer w-4 h-4"
+                          <label className="inline-flex items-center justify-center min-w-6 min-h-6 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => appActions.toggleCardSelection(card.id)}
+                              aria-label={
+                                isSelected
+                                  ? isZh
+                                    ? `取消选择：${card.front}`
+                                    : `Deselect card: ${card.front}`
+                                  : isZh
+                                  ? `选择卡片：${card.front}`
+                                  : `Select card: ${card.front}`
+                              }
+                              className="rounded cursor-pointer w-4 h-4"
+                            />
+                          </label>
+                        </td>
+                        <td className="py-3 px-4 font-semibold">
+                          <div
+                            className="library-table-preview select-text cursor-text"
+                            dangerouslySetInnerHTML={{
+                              __html: formatCardPreviewHtml(card.frontHtml || card.front, {
+                                singleLine: true,
+                              }),
+                            }}
                           />
                         </td>
-                        <td
-                          className="py-3 px-4 font-semibold max-w-[220px] truncate select-text cursor-text"
-                          dangerouslySetInnerHTML={{
-                            __html: renderMathAndRichHtml(card.frontHtml || card.front),
-                          }}
-                        />
-                        <td
-                          className={`py-3 px-4 ${subText} truncate max-w-[260px] select-text cursor-text`}
-                          dangerouslySetInnerHTML={{
-                            __html: renderMathAndRichHtml(card.backHtml || card.back),
-                          }}
-                        />
+                        <td className={`py-3 px-4 ${subText}`}>
+                          <div
+                            className="library-table-preview select-text cursor-text"
+                            dangerouslySetInnerHTML={{
+                              __html: formatCardPreviewHtml(card.backHtml || card.back, {
+                                singleLine: true,
+                              }),
+                            }}
+                          />
+                        </td>
                         <td className="py-3 px-4 text-[12px]">
-                          <span className="inline-flex items-center gap-1.5">
+                          <span className="flex items-center gap-1.5 min-w-0 max-w-full" title={card.fullDeckName || card.deckName}>
                             <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: topBarColor }} />
-                            <span className="truncate max-w-[120px]">{card.deckName}</span>
+                            <span className="truncate">{card.deckName}</span>
                           </span>
                         </td>
                         <td className="py-3 px-4 text-[11px] text-[var(--brand-text)]">
@@ -1668,7 +1740,8 @@ export const LibraryView: React.FC = () => {
                               e.stopPropagation();
                               appActions.openCardEditor(card);
                             }}
-                            className="h-6 px-2 rounded-lg text-[11px] font-medium text-[var(--brand-text)] hover:bg-[var(--brand-soft)] transition-colors cursor-pointer"
+                            aria-label={isZh ? `编辑卡片：${card.front}` : `Edit card: ${card.front}`}
+                            className="min-h-6 h-6 px-2 rounded-lg text-[11px] font-medium text-[var(--brand-text)] hover:bg-[var(--brand-soft)] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                           >
                             {isZh ? '编辑' : 'Edit'}
                           </button>

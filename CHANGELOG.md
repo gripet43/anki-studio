@@ -15,6 +15,20 @@
 
 ## [Unreleased]
 
+- **[WorkBuddy]** 修复复习界面渲染崩溃（React `#310 Rendered more hooks than during the previous render`，[ReviewerView.tsx](file:///Users/gripet/Library/Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/reviewer/ReviewerView.tsx)）：
+  - **根因**：`// Milestone 3` 的 `expectedTypeTarget` 与 `typeAnswerDiff` 两个 `useMemo` 写在 `if (isSessionComplete || !currentCard)` 早退**之后**。进入复习模式时 `reviewQueue` 先为空（渲染完成态，Hook 数量少 2 个），队列异步到达后同一实例再次渲染便多出 2 个 Hook → React 直接抛 #310，整屏被渲染异常兜底页接管。
+  - **修复**：将两个 `useMemo` 上移至早退之前（均在内部保留 `!currentCard` / `!expected` 空值守卫），使两条渲染路径的 Hook 数量恒定；`orderedFieldKeys`、`activeFlagNum` 等纯计算仍留在早退之后。
+  - **回归守卫**：`tests/test_frontend_bundle.mjs` 新增 `Item #30`，以字符串位置比对断言「ReviewerView 中最后一个 Hook 必须早于会话完成态 return」，并用 `git show HEAD` 的旧版源码验证该断言确实能捕获此缺陷（旧版 18973 > 11919，判定失败）。
+  - 验证：`node tests/test_frontend_bundle.mjs` 全绿、Python 单测 36 项全绿、`npm run build` 重新产出 `web/assets`。
+
+- **[Antigravity]** 精简制卡弹窗（[CardEditorModal.tsx](file:///Users/gripet/Library/Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/quick-add/CardEditorModal.tsx)）冗余连建交互：移除各字段的 `📌 固定` 开关、标签栏的 `📌 连建时保留标签` 开关、顶栏 `已连建 N 张` 徽章以及底部 `保存并继续 +1` 按钮（含对应 `Cmd+Shift+Enter` 分支与 `keepOpen`/pin 状态），更新 [`test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs) `Item #22` 校验规则。
+
+- **[Antigravity]** 优化卡片库（[LibraryView.tsx](file:///Users/gripet/Library/Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/search/LibraryView.tsx)、[index.css](file:///Users/gripet/Library/Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/index.css)、[mathRenderer.ts](file:///Users/gripet/Library/Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/utils/mathRenderer.ts)）卡片与表格预览 UI：
+  - 新增 `formatCardPreviewHtml`，在保留数学公式、完形填空标签、图片与原生 Image Occlusion（`.anki-io-wrap`）的同时，将多段落/列表块边界规整为单行内流，彻底消除卡片背面预览框文字溢出与底部半字截断；
+  - 将背面预览外框（`.library-card-snippet`）与多行截断容器（`.library-card-snippet-body`，`line-clamp: 3` + 块级子元素内联化）解耦，标题应用 `text-wrap: balance`；
+  - 为 `.library-card-grid` 与 `.library-card` 引入自适应列宽（`repeat(auto-fill, minmax(min(100%, 254px), 1fr))`）、`subgrid` 行高对齐（`header` / `body` / `footer`）及 CSS 容器查询（`@container library-card-band`），修复底部“到期天数 + 熟练度”与“编辑”按钮重叠加盖问题；
+  - 完善无障碍交互：复选框点击热区扩容至 `28x28px` 并补充 `:focus-visible` 聚焦指示与 `aria-pressed`，为每张卡片的“选择 / 编辑”按钮提供带卡片标题的区分性 `aria-label`；表格视图同步启用 `table-fixed` 与单行预览截断。
+
 - **[WorkBuddy + Antigravity] `config.json` 脱敏防泄露与 `answer_card` 计时器修复及协同状态全量恢复**：
   - **历史清理与脱敏打包**（WorkBuddy）：从 15 个提交的 Git 历史中剥离含真实昵称/减负/休假记录的 `config.json`，新增纯净模板 [`config.default.json`](config.default.json)，将 `config.json` 加入 [`.gitignore`](.gitignore)，并调整 [`scripts/build_ankiaddon.py`](scripts/build_ankiaddon.py) 优先读取 `config.default.json` 结合 `PRIVATE_CONFIG_KEYS`（保留 `last_sync_checked_map`）打包。
   - **答题计时器修复**（WorkBuddy）：在 [`bridge/review_service.py`](bridge/review_service.py) `answer_card` 调用 `col.sched.build_answer` 前先执行 `card.start_timer()`，修复 Anki 26 因 `card.timer_started is None` 抛出 `TypeError` 导致答题静默失败且不写 `revlog` 的问题。
