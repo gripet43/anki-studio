@@ -161,10 +161,19 @@ export interface DeckItem {
   learnCount: number;
   reviewCount: number;
   mastery: number;
+  masteryBreakdown?: MasteryBreakdown;
   icon: 'book' | 'code' | 'heart' | 'folder' | 'layers' | 'sparkles';
   accent: 'indigo' | 'blue' | 'emerald' | 'amber' | 'rose' | 'purple';
   childrenCount: number;
   options?: DeckOptionsData;
+}
+
+/** 熟记度构成：四个互斥阶段的占比，取值 0–1，四段之和为 1。 */
+export interface MasteryBreakdown {
+  mature: number;
+  review: number;
+  learning: number;
+  new: number;
 }
 
 export interface HeatmapCell {

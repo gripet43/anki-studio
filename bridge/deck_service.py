@@ -626,34 +626,48 @@ class DeckService:
         icons = ["book", "code", "heart", "folder", "layers", "sparkles"]
         accents = ["indigo", "blue", "emerald", "amber", "rose", "purple"]
 
-        # Pre-aggregate per-deck card count and weighted mastery in a single SQL query
-        direct_stats: Dict[int, Tuple[int, float]] = {}
+        # 一次聚合：卡片总数、加权熟记度，以及四个阶段的实际张数。
+        # 阶段互斥且完备（ivl >= 21 优先），供前端画构成条；加权值仍用于 mastery 百分比。
+        direct_stats: Dict[int, Tuple[int, float, int, int, int, int]] = {}
         if hasattr(col, "db") and hasattr(col.db, "all"):
             try:
                 rows = col.db.all(
                     "SELECT did, count(*), "
-                    "coalesce(sum(case when ivl >= 21 then 1.0 when type = 2 then 0.6 when type in (1,3) then 0.3 else 0.0 end), 0) "
+                    "coalesce(sum(case when ivl >= 21 then 1.0 when type = 2 then 0.6 when type in (1,3) then 0.3 else 0.0 end), 0), "
+                    "coalesce(sum(case when ivl >= 21 then 1 else 0 end), 0), "
+                    "coalesce(sum(case when ivl < 21 and type = 2 then 1 else 0 end), 0), "
+                    "coalesce(sum(case when ivl < 21 and type in (1,3) then 1 else 0 end), 0), "
+                    "coalesce(sum(case when ivl < 21 and type not in (1,2,3) then 1 else 0 end), 0) "
                     "FROM cards GROUP BY did"
                 )
                 for r in rows:
                     if r[0] is not None:
-                        direct_stats[int(r[0])] = (int(r[1] or 0), float(r[2] or 0.0))
+                        direct_stats[int(r[0])] = (
+                            int(r[1] or 0), float(r[2] or 0.0),
+                            int(r[3] or 0), int(r[4] or 0),
+                            int(r[5] or 0), int(r[6] or 0),
+                        )
             except Exception:
                 pass
 
-        # Cache subtree (total_cards, weighted_mastered) bottom-up across the deck tree
-        subtree_stats: Dict[int, Tuple[int, float]] = {}
+        # 自底向上缓存 (总数, 加权值, 已熟记, 复习中, 学习中, 新卡)
+        subtree_stats: Dict[int, Tuple[int, float, int, int, int, int]] = {}
+        _EMPTY_STATS: Tuple[int, float, int, int, int, int] = (0, 0.0, 0, 0, 0, 0)
 
-        def compute_subtree_stats(node) -> Tuple[int, float]:
+        def compute_subtree_stats(node) -> Tuple[int, float, int, int, int, int]:
             did = int(getattr(node, "deck_id", 0) or 0)
-            own_cnt, own_wt = direct_stats.get(did, (0, 0.0))
+            own = list(direct_stats.get(did, _EMPTY_STATS))
             for child in getattr(node, "children", []):
-                c_cnt, c_wt = compute_subtree_stats(child)
-                own_cnt += c_cnt
-                own_wt += c_wt
+                child_stats = compute_subtree_stats(child)
+                for i in range(6):
+                    own[i] += child_stats[i]
+            result = (
+                int(own[0]), float(own[1]),
+                int(own[2]), int(own[3]), int(own[4]), int(own[5]),
+            )
             if did:
-                subtree_stats[did] = (own_cnt, own_wt)
-            return own_cnt, own_wt
+                subtree_stats[did] = result
+            return result
 
         compute_subtree_stats(tree)
 
@@ -669,24 +683,44 @@ class DeckService:
                 due_review = learn_count + review_count
 
                 if did in subtree_stats:
-                    total_cards, weighted_mastered = subtree_stats[did]
+                    (
+                        total_cards, weighted_mastered,
+                        n_mature, n_review, n_learning, n_new,
+                    ) = subtree_stats[did]
                 else:
                     dids = [did] + [int(cid) for _, cid in col.decks.children(did)]
                     placeholders = ",".join("?" for _ in dids)
                     stats_row = col.db.first(
                         f"SELECT count(*), "
-                        f"coalesce(sum(case when ivl >= 21 then 1.0 when type = 2 then 0.6 when type in (1,3) then 0.3 else 0.0 end), 0) "
+                        f"coalesce(sum(case when ivl >= 21 then 1.0 when type = 2 then 0.6 when type in (1,3) then 0.3 else 0.0 end), 0), "
+                        f"coalesce(sum(case when ivl >= 21 then 1 else 0 end), 0), "
+                        f"coalesce(sum(case when ivl < 21 and type = 2 then 1 else 0 end), 0), "
+                        f"coalesce(sum(case when ivl < 21 and type in (1,3) then 1 else 0 end), 0), "
+                        f"coalesce(sum(case when ivl < 21 and type not in (1,2,3) then 1 else 0 end), 0) "
                         f"FROM cards WHERE did IN ({placeholders})",
                         *dids,
                     )
                     total_cards = int(stats_row[0] or 0) if stats_row else 0
                     weighted_mastered = float(stats_row[1] or 0.0) if stats_row else 0.0
+                    n_mature = int(stats_row[2] or 0) if stats_row else 0
+                    n_review = int(stats_row[3] or 0) if stats_row else 0
+                    n_learning = int(stats_row[4] or 0) if stats_row else 0
+                    n_new = int(stats_row[5] or 0) if stats_row else 0
 
                 mastery = (
                     min(100, max(0, round((weighted_mastered / total_cards) * 100)))
                     if total_cards > 0
                     else 0
                 )
+                # 返回 0–1 的比例而非百分比，避免四舍五入后四段之和不等于 100。
+                mastery_breakdown = {
+                    "mature": round(n_mature / total_cards, 4),
+                    "review": round(n_review / total_cards, 4),
+                    "learning": round(n_learning / total_cards, 4),
+                    "new": round(n_new / total_cards, 4),
+                } if total_cards > 0 else {
+                    "mature": 0.0, "review": 0.0, "learning": 0.0, "new": 0.0,
+                }
 
                 color_idx = len(decks_out) % len(accents)
                 deck_options = self._serialize_deck_options(col, did, full_name)
@@ -703,6 +737,7 @@ class DeckService:
                     "learnCount": learn_count,
                     "reviewCount": review_count,
                     "mastery": mastery,
+                    "masteryBreakdown": mastery_breakdown,
                     "icon": icons[color_idx],
                     "accent": accents[color_idx],
                     "childrenCount": len(getattr(child, "children", [])),

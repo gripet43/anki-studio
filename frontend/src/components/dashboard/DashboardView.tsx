@@ -42,6 +42,7 @@ export const DashboardView: React.FC = () => {
   } | null>(null);
 
   const [hoveredRhythmIdx, setHoveredRhythmIdx] = useState<number | null>(null);
+  const [masteryHintId, setMasteryHintId] = useState<string | null>(null);
   const [peekNormalDashboard, setPeekNormalDashboard] = useState<boolean>(false);
 
   const accentScale = getAccentScale(accentColor, theme);
@@ -994,20 +995,32 @@ export const DashboardView: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {displayedDecks.map((deck) => {
                   const iconNode = deckIconMap[deck.accent] || deckIconMap.indigo;
+                  const breakdown = deck.masteryBreakdown ?? {
+                    mature: deck.mastery / 100,
+                    review: 0,
+                    learning: 0,
+                    new: 0,
+                  };
+                  const stageLabels = t('masteryStageLabels').split('|');
+                  const masteryStages = [
+                    { label: stageLabels[0] || '', value: breakdown.mature, color: brandHex },
+                    { label: stageLabels[1] || '', value: breakdown.review, color: '#85B7EB' },
+                    { label: stageLabels[2] || '', value: breakdown.learning + breakdown.new, color: '#B5D4F4' },
+                  ];
                   return (
                     <div
                       key={deck.id}
                       onClick={() => appActions.startReview(deck.id)}
-                      className={`group relative flex min-h-[120px] cursor-pointer flex-col overflow-hidden rounded-2xl border shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-0.5 hover:border-[var(--brand-border)] hover:shadow-md ${cardSurface} ${
+                      className={`group relative flex min-h-[120px] cursor-pointer flex-col rounded-2xl border shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-0.5 hover:border-[var(--brand-border)] hover:shadow-md ${cardSurface} ${masteryHintId === deck.id ? 'z-30' : ''} ${
                         syncJustFinished ? 'animate-sync-reveal delay-stagger-2' : ''
                       }`}
                     >
-                      <div className="flex flex-1 flex-col p-5 pb-1">
-                        <div className="flex items-center gap-3">
+                      <div className="flex flex-1 flex-col p-5">
+                        <div className="flex items-start gap-3">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand-text)] transition-colors">
                             {iconNode}
                           </div>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <div className="truncate text-[14px] font-semibold">{deck.name}</div>
                             <div className={`mt-0.5 truncate text-[11px] ${subText}`}>
                               {deck.totalCards.toLocaleString()} {t('cardsUnit')}
@@ -1016,27 +1029,51 @@ export const DashboardView: React.FC = () => {
                                 : ''}
                             </div>
                           </div>
+                          <div className="shrink-0 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <span className={`text-[11px] ${subText}`}>{t('masteryLabel')}</span>
+                              <span className={`text-[13px] font-semibold ${isDark ? 'text-[#D8D8E0]' : 'text-[#1D1D1F]'}`}>
+                                {deck.mastery}%
+                              </span>
+                              <button
+                                type="button"
+                                title={t('masteryHintTrigger')}
+                                aria-label={t('masteryHintTrigger')}
+                                aria-expanded={masteryHintId === deck.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMasteryHintId(masteryHintId === deck.id ? null : deck.id);
+                                }}
+                                className={`flex h-[14px] w-[14px] items-center justify-center rounded-full border text-[10px] leading-none transition-colors cursor-pointer ${
+                                  isDark
+                                    ? 'border-[#343644] text-[#9A9AA5] hover:text-[var(--brand-text)]'
+                                    : 'border-[#E0E0E6] text-[#8A8A8E] hover:text-[var(--brand-text)]'
+                                }`}
+                              >?</button>
+                            </div>
+                            <div
+                              className={`mt-1.5 ml-auto flex h-1 w-16 overflow-hidden rounded-full ${isDark ? 'bg-[#2A2C36]' : 'bg-[#ECECF2]'}`}
+                              role="group"
+                              aria-label={`${deck.name} ${t('masteryLabel')} ${deck.mastery}%`}
+                            >
+                              <span className="h-full transition-all duration-500" style={{ width: `${breakdown.mature * 100}%`, backgroundColor: brandHex }} />
+                              <span className="h-full transition-all duration-500" style={{ width: `${breakdown.review * 100}%`, backgroundColor: '#85B7EB' }} />
+                              <span className="h-full transition-all duration-500" style={{ width: `${breakdown.learning * 100}%`, backgroundColor: '#B5D4F4' }} />
+                              <span className="h-full transition-all duration-500" style={{ width: `${breakdown.new * 100}%`, backgroundColor: isDark ? '#3A3D48' : '#D6D6DE' }} />
+                            </div>
+                          </div>
                         </div>
 
-                        {/* 数据行：静态显示统计与熟练度，悬停时整行让位给两个动作按钮 */}
-                        <div className="relative mt-auto h-6">
-                          <div className="flex items-center justify-between text-[11px] transition-opacity duration-150 group-hover:opacity-0">
-                            <span className={`flex items-center gap-2.5 truncate ${subText}`}>
-                              <span className="flex items-center gap-1 whitespace-nowrap">
-                                <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand)]" aria-hidden="true" />
-                                {t('dueReviewPill', { n: deck.dueReview })}
-                              </span>
-                              <span className="flex items-center gap-1 whitespace-nowrap">
-                                <span className="h-1.5 w-1.5 rounded-full bg-[var(--status-warning)]" aria-hidden="true" />
-                                {deck.dueNew > 0 ? t('dueNewPill', { n: deck.dueNew }) : t('noNewCards')}
-                              </span>
+                        <div className={`relative mt-auto h-7 border-t pt-2 ${isDark ? 'border-[#2A2C36]' : 'border-[#ECECF2]'}`}>
+                          <div className="flex items-center gap-2 truncate text-[11px] transition-opacity duration-150 group-hover:opacity-0">
+                            <span className="font-semibold" style={{ color: brandHex }}>
+                              {t('dueReviewPill', { n: deck.dueReview })}
                             </span>
-                            <span className={`font-semibold shrink-0 ms-2 ${isDark ? 'text-[#D8D8E0]' : 'text-[#1D1D1F]'}`}>
-                              {deck.mastery}%
+                            <span className={`truncate ${subText}`}>
+                              {deck.dueNew > 0 ? t('dueNewPill', { n: deck.dueNew }) : t('noNewCards')}
                             </span>
                           </div>
 
-                          {/* 悬停浮层：从下方轻推上来，静态时不占位、不拦截点击 */}
                           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex translate-y-1 items-center justify-end gap-1 opacity-0 transition-[opacity,transform] duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100">
                             <button
                               type="button"
@@ -1077,20 +1114,27 @@ export const DashboardView: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* 熟练度进度条贴卡片底边，由外层 overflow-hidden 自然切成圆角底边 */}
-                      <div
-                        role="progressbar"
-                        aria-valuenow={deck.mastery}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-label={`${deck.name} ${t('masteryLabel')}`}
-                        className={`h-1 w-full ${isDark ? 'bg-[#2A2C36]' : 'bg-[#ECECF2]'}`}
-                      >
+                      {masteryHintId === deck.id && (
                         <div
-                          className="h-full transition-all duration-500"
-                          style={{ width: `${deck.mastery}%`, backgroundColor: brandHex }}
-                        />
-                      </div>
+                          className={`absolute right-3 top-12 z-40 w-56 rounded-xl border p-3 text-left shadow-lg ${cardSurface}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="text-[12px] font-semibold">{t('masteryHintTitle', { n: deck.mastery })}</div>
+                          <p className={`mt-1 text-[11px] leading-relaxed ${subText}`}>{t('masteryHintBody')}</p>
+                          <div className="mt-2.5 space-y-1.5">
+                            {masteryStages.map((stage, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: stage.color }} />
+                                <span className={`flex-1 truncate text-[11px] ${subText}`}>{stage.label}</span>
+                                <span className="text-[11px] font-medium">{Math.round(stage.value * 100)}%</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className={`mt-2.5 border-t pt-2 text-[10px] leading-relaxed ${subText} ${isDark ? 'border-[#343644]' : 'border-[#ECECF2]'}`}>
+                            {t('masteryHintFootnote')}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
