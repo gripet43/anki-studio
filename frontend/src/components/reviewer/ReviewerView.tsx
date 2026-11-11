@@ -347,6 +347,99 @@ export const ReviewerView: React.FC = () => {
     ? 'bg-[#121318]/95 border-white/[0.07] text-white'
     : 'bg-white/95 border-[#E5E5EA] text-[#1D1D1F] shadow-[-12px_0_36px_rgba(0,0,0,0.06)]';
 
+  // Milestone 3: Extract expected target answer and compute character-level LCS diff
+  // 必须放在会话完成态的提前 return 之前：否则「无卡片 / 已完成」与「有卡片」两条渲染路径的 Hook 数量不一致，
+  // React 会抛 #310 "Rendered more hooks than during the previous render"。
+  const expectedTypeTarget = useMemo(() => {
+    if (!currentCard) return '';
+    // For Cloze cards, extract the first {{cN::answer}} token
+    const rawFront = currentCard.front || currentCard.frontHtml || '';
+    const clozeMatch = rawFront.match(/\{\{c\d+::([^:}]+)(?:::[^}]*)?\}\}/i);
+    if (clozeMatch && clozeMatch[1]) {
+      return clozeMatch[1].replace(/<[^>]*>/g, '').trim();
+    }
+    // Otherwise use the stripped plain text of the first non-empty line of meaning/back
+    const rawBack = (currentCard.meaning || currentCard.backHtml || '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/div>|<\/p>/gi, '\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .trim();
+    const firstLine =
+      rawBack
+        .split('\n')
+        .map((l) => l.trim())
+        .find(Boolean) || rawBack;
+    return firstLine.slice(0, 120);
+  }, [currentCard]);
+
+  const typeAnswerDiff = useMemo(() => {
+    const typed = typeAnswerInput.trim();
+    const expected = expectedTypeTarget.trim();
+    if (!expected) {
+      return {
+        accuracy: 100,
+        isExact: true,
+        typedTokens: [] as Array<{ char: string; status: 'match' | 'wrong' }>,
+        expectedTokens: [] as Array<{ char: string; status: 'match' | 'missing' }>,
+      };
+    }
+
+    const a = Array.from(typed);
+    const b = Array.from(expected);
+    const m = a.length;
+    const n = b.length;
+
+    // LCS DP table (case-insensitive comparison for Latin letters)
+    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    const eq = (c1: string, c2: string) => c1.toLowerCase() === c2.toLowerCase();
+
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (eq(a[i - 1], b[j - 1])) {
+          dp[i][j] = dp[i - 1][j - 1] + 1;
+        } else {
+          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+        }
+      }
+    }
+
+    const matchedA = new Array(m).fill(false);
+    const matchedB = new Array(n).fill(false);
+    let i = m;
+    let j = n;
+    while (i > 0 && j > 0) {
+      if (eq(a[i - 1], b[j - 1])) {
+        matchedA[i - 1] = true;
+        matchedB[j - 1] = true;
+        i--;
+        j--;
+      } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+        i--;
+      } else {
+        j--;
+      }
+    }
+
+    const lcsLen = dp[m][n];
+    const maxLen = Math.max(m, n, 1);
+    const accuracy = m === 0 ? 0 : Math.round((lcsLen / maxLen) * 100);
+    const isExact = m > 0 && typed.toLowerCase() === expected.toLowerCase();
+
+    return {
+      accuracy: isExact ? 100 : accuracy,
+      isExact,
+      typedTokens: a.map((ch, idx) => ({
+        char: ch,
+        status: (matchedA[idx] ? 'match' : 'wrong') as 'match' | 'wrong',
+      })),
+      expectedTokens: b.map((ch, idx) => ({
+        char: ch,
+        status: (matchedB[idx] ? 'match' : 'missing') as 'match' | 'missing',
+      })),
+    };
+  }, [typeAnswerInput, expectedTypeTarget]);
+
   // ============== SESSION COMPLETE CELEBRATION SCREEN (Light & Dark Adapted) ==============
   if (isSessionComplete || !currentCard) {
     return (
@@ -502,97 +595,6 @@ export const ReviewerView: React.FC = () => {
 
   const activeFlagNum = ((currentCard.flags || 0) & 7) as CardFlagColor;
   const activeFlagSpec = activeFlagNum !== 0 ? ANKI_FLAG_PALETTE[activeFlagNum] : null;
-
-  // Milestone 3: Extract expected target answer and compute character-level LCS diff
-  const expectedTypeTarget = useMemo(() => {
-    if (!currentCard) return '';
-    // For Cloze cards, extract the first {{cN::answer}} token
-    const rawFront = currentCard.front || currentCard.frontHtml || '';
-    const clozeMatch = rawFront.match(/\{\{c\d+::([^:}]+)(?:::[^}]*)?\}\}/i);
-    if (clozeMatch && clozeMatch[1]) {
-      return clozeMatch[1].replace(/<[^>]*>/g, '').trim();
-    }
-    // Otherwise use the stripped plain text of the first non-empty line of meaning/back
-    const rawBack = (currentCard.meaning || currentCard.backHtml || '')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/div>|<\/p>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .trim();
-    const firstLine =
-      rawBack
-        .split('\n')
-        .map((l) => l.trim())
-        .find(Boolean) || rawBack;
-    return firstLine.slice(0, 120);
-  }, [currentCard]);
-
-  const typeAnswerDiff = useMemo(() => {
-    const typed = typeAnswerInput.trim();
-    const expected = expectedTypeTarget.trim();
-    if (!expected) {
-      return {
-        accuracy: 100,
-        isExact: true,
-        typedTokens: [] as Array<{ char: string; status: 'match' | 'wrong' }>,
-        expectedTokens: [] as Array<{ char: string; status: 'match' | 'missing' }>,
-      };
-    }
-
-    const a = Array.from(typed);
-    const b = Array.from(expected);
-    const m = a.length;
-    const n = b.length;
-
-    // LCS DP table (case-insensitive comparison for Latin letters)
-    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
-    const eq = (c1: string, c2: string) => c1.toLowerCase() === c2.toLowerCase();
-
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        if (eq(a[i - 1], b[j - 1])) {
-          dp[i][j] = dp[i - 1][j - 1] + 1;
-        } else {
-          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-        }
-      }
-    }
-
-    const matchedA = new Array(m).fill(false);
-    const matchedB = new Array(n).fill(false);
-    let i = m;
-    let j = n;
-    while (i > 0 && j > 0) {
-      if (eq(a[i - 1], b[j - 1])) {
-        matchedA[i - 1] = true;
-        matchedB[j - 1] = true;
-        i--;
-        j--;
-      } else if (dp[i - 1][j] >= dp[i][j - 1]) {
-        i--;
-      } else {
-        j--;
-      }
-    }
-
-    const lcsLen = dp[m][n];
-    const maxLen = Math.max(m, n, 1);
-    const accuracy = m === 0 ? 0 : Math.round((lcsLen / maxLen) * 100);
-    const isExact = m > 0 && typed.toLowerCase() === expected.toLowerCase();
-
-    return {
-      accuracy: isExact ? 100 : accuracy,
-      isExact,
-      typedTokens: a.map((ch, idx) => ({
-        char: ch,
-        status: (matchedA[idx] ? 'match' : 'wrong') as 'match' | 'wrong',
-      })),
-      expectedTokens: b.map((ch, idx) => ({
-        char: ch,
-        status: (matchedB[idx] ? 'match' : 'missing') as 'match' | 'missing',
-      })),
-    };
-  }, [typeAnswerInput, expectedTypeTarget]);
 
   return (
     <div className={`fixed inset-0 z-30 flex flex-col select-none overflow-hidden transition-colors ${screenBg}`}>
