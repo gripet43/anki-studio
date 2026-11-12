@@ -16,6 +16,7 @@ import './specs/deckPalette.spec';
 import './specs/mediaUrl.spec';
 import './specs/translations.spec';
 import './specs/render.spec';
+import './specs/mathRenderer.spec';
 
 import { report } from './harness';
 

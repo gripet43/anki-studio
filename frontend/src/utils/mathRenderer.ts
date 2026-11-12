@@ -97,9 +97,28 @@ const MDX_INDEX_MARKER_RE = /`\d+`/g;
 const EMBEDDED_SCRIPT_RE = /<script\b[^>]*>[\s\S]*?<\/script\s*>/gi;
 const EMBEDDED_STYLE_TAG_RE = /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi;
 
+/**
+ * 数学表达式来自卡包字段，里面可能带 HTML 实体（PCSI 这类法语卡组用
+ * `[$]&nbsp;sin(...)[/$]` 手写公式占位）。如果先转义 `&` 再处理，`&nbsp;`
+ * 会变成字面量 `&amp;nbsp;` 直接显示在公式里。所以先解码实体，再统一转义。
+ */
+function decodeMathEntities(raw: string): string {
+  return raw
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) =>
+      String.fromCodePoint(Number.parseInt(hex, 16))
+    )
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number.parseInt(dec, 10)));
+}
+
 function formatLatexExpression(expr: string, isDisplayMode: boolean): string {
   // Bug #13 Fix: Escape raw `<` and `>` first so `a < b` or `x > 0` is never parsed as an HTML tag
-  let s = expr
+  let s = decodeMathEntities(expr)
     .trim()
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -107,6 +126,12 @@ function formatLatexExpression(expr: string, isDisplayMode: boolean): string {
 
   // Remove \left and \right sizing commands
   s = s.replace(/\\left\b/g, '').replace(/\\right\b/g, '');
+
+  // LaTeX 函数名是正体（\sin(x) 里的 sin 不该跟着变量一起斜体）
+  s = s.replace(
+    /\\(sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|log|ln|lg|exp|lim|max|min|det|gcd)\b/g,
+    '<span class="not-italic">$1</span>'
+  );
 
   // \text{...} or \mathrm{...}
   s = s.replace(

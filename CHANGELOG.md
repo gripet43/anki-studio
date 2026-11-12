@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+## [v1.4.11] - 2026-11-13
+
+- **[DeepSeek] 修复数学公式里的 HTML 实体字面量（`&nbsp;`），并让 LaTeX 函数名按规范正体渲染**（改 [`frontend/src/utils/mathRenderer.ts`](frontend/src/utils/mathRenderer.ts)；新增 [`tests/frontend/specs/mathRenderer.spec.ts`](tests/frontend/specs/mathRenderer.spec.ts) 5 项断言）：
+  - **现象**：PCSI 法语数学卡组的公式显示成字面量 `&nbsp;sin(π/2 - t )`（字段原文是 `[$]&nbsp;sin(\frac{\pi}{2} - t )[/$]`），且 `sin` / `cos` 跟着变量一起斜体。
+  - **根因**：`formatLatexExpression` 先对公式做 HTML 转义（`&` → `&amp;`），再塞进 `dangerouslySetInnerHTML`；字段里的 `&nbsp;` 因此变成 `&amp;nbsp;` 被原样显示。
+  - **修法**：新增 `decodeMathEntities()`，先把 `&nbsp;` / `&amp;` / `&lt;` / `&gt;` / `&quot;` / 数字实体解码，再统一转义；同时把 `\sin`、`\cos`、`\log`、`\lim` 等 LaTeX 函数名渲染成 `not-italic` 正体。
+  - **覆盖范围**：复习、Cmd+K、编辑器、卡片库摘要共用同一个 `renderMathAndRichHtml`，一处修复全部生效。
+  - **验证**：前端单元套件用该字段原文断言「不再含 `&nbsp;` 字面量、`π` 与分数结构正确、`\sin` 正体」；前端 63 项、Python 103 项、`tsc --noEmit`、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.10 → 1.4.11。
+
 ## [v1.4.10] - 2026-11-13
 
 - **[DeepSeek] 卡面正面 / 背面样式彻底分离：搜索预览与编辑器一并修复（通用问题，不是单卡包）**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`frontend/src/components/search/CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`docs/DESIGN_AND_DEV_GUIDELINES.md`](docs/DESIGN_AND_DEV_GUIDELINES.md)；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 1 项并强化既有断言）：

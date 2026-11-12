@@ -261,7 +261,7 @@ cd frontend && npm run build
 # 2. 前端字符串审计：护栏 / IPC 协议 / CSS 规范 / i18n（ALL CHECKS PASSED）
 node tests/test_frontend_bundle.mjs
 
-# 3. 前端单元套件：纯逻辑 + 叶子组件渲染（58 项，见 tests/frontend/README.md）
+# 3. 前端单元套件：纯逻辑 + 叶子组件渲染（63 项，见 tests/frontend/README.md）
 node tests/frontend/run.mjs
 
 # 4. Python 单测：桥接层、卡片安全、发布不变量、兼容性自检与通用修复（当前 103 项）
