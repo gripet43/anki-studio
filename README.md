@@ -49,9 +49,10 @@ npm run build    # 打包生产静态资源到 web/ 目录
 ```bash
 node tests/test_frontend_bundle.mjs                   # 前端字符串审计：护栏 / IPC / 样式 / i18n
 node tests/frontend/run.mjs                           # 前端单元套件：纯逻辑 + 叶子组件渲染（63 项）
-python3 -m unittest discover -s tests -p "test_*.py"  # Python 侧单元测试（103 项，含兼容性自检、三处通用修复）
+python3 -m unittest discover -s tests -p "test_*.py"  # Python 侧单元测试（105 项，含兼容性自检、通用修复与 CSS 解析回归）
 
 cd tests/scenarios && ./gate.sh                       # 隔离场景冒烟：11 个场景 / 692 项检查（不动真实数据）
+python3 tests/apkg/run.py                             # 真实 .apkg 显示兼容性：17 个排名卡组（需本地卡组，约 16 秒）
 ```
 
 前三组都必须全绿再提交；改完还要跑一次 `npm run build`，确保 `web/assets` 与源码同步。

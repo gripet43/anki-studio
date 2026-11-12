@@ -4,6 +4,7 @@
 #   ./gate.sh              隔离自检 → 补缺失场景 → 冒烟回归
 #   ./gate.sh --rebuild    强制重建全部场景
 #   ./gate.sh --with-project  额外跑项目自身的 Bundle 审计与单测
+#   ./gate.sh --with-apkg     额外跑真实 .apkg 显示兼容性（需本地卡组）
 #
 # 任何一步失败即中止。这个脚本不会启动 GUI，可以放心放进日常流程。
 
@@ -12,10 +13,12 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 REBUILD=0
 WITH_PROJECT=0
+WITH_APKG=0
 for arg in "$@"; do
   case "$arg" in
     --rebuild) REBUILD=1 ;;
     --with-project) WITH_PROJECT=1 ;;
+    --with-apkg) WITH_APKG=1 ;;
     *) printf '未知参数：%s\n' "$arg" >&2; exit 2 ;;
   esac
 done
@@ -42,8 +45,15 @@ echo
 echo "── 4/5 冒烟回归"
 python3 smoke.py --quiet
 
+PROJECT_ROOT="$(cd .. && cd .. && pwd)"
+
+if [ "$WITH_APKG" -eq 1 ]; then
+  echo
+  echo "── 真实 .apkg 显示兼容性"
+  ( cd "$PROJECT_ROOT" && python3 tests/apkg/run.py )
+fi
+
 if [ "$WITH_PROJECT" -eq 1 ]; then
-  PROJECT_ROOT="$(cd .. && cd .. && pwd)"
   echo
   echo "── 5/5 项目门禁"
   ( cd "$PROJECT_ROOT" && node tests/test_frontend_bundle.mjs | tail -1 )

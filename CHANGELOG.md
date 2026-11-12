@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+## [v1.4.12] - 2026-11-13
+
+- **[DeepSeek] 新增真实 .apkg 卡组显示兼容性测试（17 个 AnkiWeb 排名卡组）+ 修复 @charset 导致的模板 CSS 作用域失效**（新增 [`tests/apkg/`](tests/apkg/README.md)（`run.py` / `render_check.mjs` / `decks.json` / `known_issues.json`）；改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`tests/scenarios/gate.sh`](tests/scenarios/gate.sh)、[`tests/test_general_fixes.py`](tests/test_general_fixes.py)、[`README.md`](README.md)、[`docs/DESIGN_AND_DEV_GUIDELINES.md`](docs/DESIGN_AND_DEV_GUIDELINES.md)）：
+  - **测试框架**：每个 `.apkg` 导入临时隔离 collection（不碰真实数据），按卡型抽样走 `ReviewService` / `SearchService` 真实序列化管线，再由 Node 端用界面同一个 `renderMathAndRichHtml` 渲染抽样 HTML。断言覆盖空卡面、`<script>` / `[sound:]` / 模板占位符残留、图片相对路径、公式实体、正反两面 `display:none` 语义、搜索接口正/背面样式下发等。17 个卡组约 16 秒；卡组文件不随仓库分发（默认 `~/Downloads`，可用 `--dir` / `ANKI_STUDIO_APKG_DIR`），缺失时 SKIP 不失败；`gate.sh --with-apkg` 可并入场景门禁。
+  - **修复真实 bug**：`scope_card_css` 遇到以分号结束的 at-rule（`@charset` / `@namespace`）时，会把后面的第一个选择器粘成 at-rule 前缀，导致该规则既不作用域化、也不参与「背面揭开隐藏」。JLPT10k 的模板 CSS 首行正是 `@charset "UTF-8";`。新增状态机区分「选择器区 / 声明区」，并补 2 项 Python 回归。
+  - **断言口径修正**：公式里的 `&gt;` / `&nbsp;` 属于前端可解码实体，不再误报；`display:none` 只认声明区，不误报 `[style*='display: none']` 这类选择器。
+  - **已知限制（可追踪）**：mhchem `\ce{}`、`\overline` / `\underset` / 嵌套 `\sqrt` 尚未支持（自研迷你 LaTeX 渲染器），记录在 `known_issues.json`，命中降级为 `[WARN]` 并打印原因。彻底解决需改用 KaTeX（含 mhchem 扩展）。
+  - **验证**：17 个真实卡组 0 失败（2 个已知限制 WARN）；Python 105 项、`tsc --noEmit`、前端单元 63 项、Bundle 审计、隔离场景冒烟 692/692、打包全部通过。版本 1.4.11 → 1.4.12。
+
 ## [v1.4.11] - 2026-11-13
 
 - **[DeepSeek] 修复数学公式里的 HTML 实体字面量（`&nbsp;`），并让 LaTeX 函数名按规范正体渲染**（改 [`frontend/src/utils/mathRenderer.ts`](frontend/src/utils/mathRenderer.ts)；新增 [`tests/frontend/specs/mathRenderer.spec.ts`](tests/frontend/specs/mathRenderer.spec.ts) 5 项断言）：

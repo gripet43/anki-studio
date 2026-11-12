@@ -543,3 +543,29 @@ class TestSearchShipsFrontAndBackStyles(unittest.TestCase):
         self.assertNotIn(".anki-native-card-front", back_sink["1"])
         self.assertIn("display:none", front_sink["1"].replace(" ", ""))
         self.assertNotIn("display:none", back_sink["1"].replace(" ", ""))
+
+
+class TestScopeCardCssAtStatements(unittest.TestCase):
+    """模板 CSS 以 @charset / @namespace 开头时，后面的选择器不能被当成 at-rule。
+
+    真实反例：eggrolls-JLPT10k 的模板 CSS 第一行是 ``@charset "UTF-8";``，
+    紧跟的 ``.\\!hidden{display:none!important}`` 曾因此既没作用域化、也没被
+    「背面揭开隐藏」逻辑处理。
+    """
+
+    CHARSET_CSS = '@charset "UTF-8";\n.\\!hidden{display:none!important}\n.x{color:red}'
+
+    def test_back_css_scopes_and_reveals_after_charset(self):
+        from anki_modern_os.bridge.media_utils import build_card_css
+
+        back = build_card_css(self.CHARSET_CSS, "", reveal_hidden=True)
+        self.assertIn(".anki-native-card .x", back, "选择器必须正常作用域化")
+        self.assertNotIn("display:none", back.replace(" ", ""), "背面必须揭开隐藏")
+        self.assertIn('@charset "UTF-8";', back, "@charset 语句本身应保留")
+
+    def test_front_css_scopes_and_keeps_hidden_after_charset(self):
+        from anki_modern_os.bridge.media_utils import build_card_css
+
+        front = build_card_css(self.CHARSET_CSS, "", reveal_hidden=False)
+        self.assertIn(".anki-native-card .\\!hidden", front, "隐藏类规则必须正常作用域化")
+        self.assertIn("display:none", front.replace(" ", ""), "正面必须保留隐藏")

@@ -1,0 +1,14 @@
+{
+  "_comment": "已知显示限制：run.py 命中这些检查时降级为 warning 并打印原因，不阻塞门禁。修好之后请删除对应条目，让检查重新变严。",
+  "Raagaceptions_12STD": {
+    "checks": {
+      "frontend:unsupported-latex": "迷你 LaTeX 渲染器尚未支持 mhchem \\ce{} 化学式；目前会显示裸源码，计划改用 KaTeX 后移除"
+    }
+  },
+  "Maths_sup_dfinitions": {
+    "checks": {
+      "frontend:unsupported-latex": "尚未支持 \\overline / \\underset 等高级命令",
+      "frontend:unrendered-latex": "嵌套 \\sqrt{...\\overline{...}} 目前无法解析"
+    }
+  }
+}

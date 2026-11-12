@@ -766,6 +766,18 @@ def scope_card_css(
             buf = []
             i += 1
             continue
+        if ch == ";":
+            # @charset / @namespace 这类以分号结束的 at 语句必须单独输出并断开：
+            # 若留在缓冲区里，它会和下一条选择器粘成 "prelude"，被当成 at-rule
+            # 原样跳过——JLPT10k 的模板 CSS 开头就是 @charset "UTF-8";，导致紧跟的
+            # .\!hidden{display:none!important} 既没作用域化、也没被揭开隐藏。
+            buf.append(ch)
+            prelude = "".join(buf).strip()
+            if prelude.startswith("@"):
+                out.append(prelude)
+                buf = []
+            i += 1
+            continue
         buf.append(ch)
         i += 1
 

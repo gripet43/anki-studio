@@ -1,0 +1,77 @@
+{
+  "description": "AnkiWeb 排名靠前的真实卡组清单。run.py 默认只测这里列出的卡组（--all 可测目录下全部）。卡组文件不随仓库分发，默认从 ~/Downloads 读取，也可用 --dir 或 ANKI_STUDIO_APKG_DIR 指定。",
+  "decks": [
+    {
+      "match": "Great_Works_of_Art_expanded",
+      "note": "Great Works of Art — 艺术史图片卡组（多模板、海量媒体）"
+    },
+    {
+      "match": "Classical_Music_Themes",
+      "note": "Classical Music Themes — 音乐主题卡组（音频为主）"
+    },
+    {
+      "match": "Raagaceptions_12STD_CBSE",
+      "note": "12th Std CBSE PCM — 印度理工科卡组"
+    },
+    {
+      "match": "Anatomy_and_Physiology_demo",
+      "note": "Anatomy and Physiology — 医学解剖卡组"
+    },
+    {
+      "match": "Ultimate_Geography_v53",
+      "note": "Ultimate Geography — 地理图片卡组"
+    },
+    {
+      "match": "Robbins_Basic_Pathology",
+      "note": "Robbins Basic Pathology — 病理学卡组"
+    },
+    {
+      "match": "Jura_Zivilrecht",
+      "note": "Jura Zivilrecht — 德国法学卡组"
+    },
+    {
+      "match": "Anki.apkg",
+      "note": "Anki 官方示例卡组（浏览器重复下载副本）"
+    },
+    {
+      "match": "Maths_sup_dfinitions",
+      "note": "Maths sup définitions — 法语数学定义/定理卡组（LaTeX）"
+    },
+    {
+      "match": "GCSE_AQA_Combined_Science",
+      "note": "GCSE AQA Combined Science Physics — 英国初中科学"
+    },
+    {
+      "match": "HSK1-6_full_audio",
+      "note": "HSK1-6 — 中文词汇（越南语释义 + 音频/图片）"
+    },
+    {
+      "match": "egg_rollsJLPT",
+      "note": "JLPT10k — 日语词汇（36 字段、脚本注入标签）"
+    },
+    {
+      "match": "N1N2N3N4N5",
+      "note": "蓝宝书 N1-N5 — 日语语法（167 字段、26 模板）"
+    },
+    {
+      "match": "GRE.apkg",
+      "note": "GRE 红宝书 — 英语词汇"
+    },
+    {
+      "match": "blank",
+      "note": "成语大全 — 中文成语卡组"
+    },
+    {
+      "match": "Chinese_Grammar_Wiki",
+      "note": "Chinese Grammar Wiki — 中文语法卡组"
+    },
+    {
+      "match": "167000",
+      "note": "考研英语例句 — 大字段词库卡组"
+    },
+    {
+      "match": "120.apkg",
+      "note": "高中 120 文言文实词 — Cloze 卡组"
+    }
+  ]
+}

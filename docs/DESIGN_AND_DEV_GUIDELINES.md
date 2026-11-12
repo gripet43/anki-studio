@@ -264,13 +264,16 @@ node tests/test_frontend_bundle.mjs
 # 3. 前端单元套件：纯逻辑 + 叶子组件渲染（63 项，见 tests/frontend/README.md）
 node tests/frontend/run.mjs
 
-# 4. Python 单测：桥接层、卡片安全、发布不变量、兼容性自检与通用修复（当前 103 项）
+# 4. Python 单测：桥接层、卡片安全、发布不变量、兼容性自检与通用修复（当前 105 项）
 python3 -m unittest discover -s tests -p "test_*.py"
 
 # 5. （改到业务逻辑时）隔离场景冒烟：11 个场景 / 692 项检查，不动真实数据
 cd tests/scenarios && ./gate.sh
 
-# 6. 产出最终可发布的 Anki Addon 标准归档
+# 6. （可选，本地有卡组时）真实 .apkg 显示兼容性：17 个 AnkiWeb 卡组 / 约 16 秒
+python3 tests/apkg/run.py
+
+# 7. 产出最终可发布的 Anki Addon 标准归档
 python3 scripts/build_ankiaddon.py
 ```
 
