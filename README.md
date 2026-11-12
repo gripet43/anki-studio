@@ -62,7 +62,7 @@ cd tests/scenarios && ./gate.sh                       # 隔离场景冒烟：11 
 ```bash
 python3 scripts/build_ankiaddon.py
 ```
-打包完成后会在根目录生成 `anki_modern_os.ankiaddon` 安装包。
+打包完成后会在根目录生成 `anki_modern_os.ankiaddon` 安装包，并打印其 SHA-256；随后自动复制一份到 `~/Downloads/anki_modern_os.ankiaddon`（覆盖旧包），方便直接上传 AnkiWeb 或装到另一台机器。加 `--no-downloads` 可关闭复制。
 
 脚本只按白名单收运行时文件（`__init__.py`、`manifest.json`、`config.json`、`config.md`、
 `bridge/`、`web/`），并保证：顶层不带包裹目录、不含 `__pycache__`、不打包 `meta.json`、

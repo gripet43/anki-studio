@@ -11,10 +11,16 @@ Anki Studio — Standard .ankiaddon Packaging Script (Part 3 Task 6)
    - `bridge/*.py`
    - `web/**`
 3. Strictly excludes `node_modules/`, `frontend/`, `tests/`, `scripts/`, `__pycache__/`, `.git/`, `.DS_Store`, `meta.json`.
+4. Prints the archive SHA-256 and copies it to `~/Downloads/` so the freshly built
+   `.ankiaddon` is immediately available for AnkiWeb upload / installing on another
+   machine (disable with `--no-downloads`). This is a convenience step only: a
+   missing Downloads folder or a failed copy logs a warning and never fails the build.
 """
 
+import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -177,7 +183,37 @@ def create_ankiaddon_package() -> Path:
     return OUTPUT_ARCHIVE
 
 
-if __name__ == "__main__":
+def print_archive_digest(archive: Path) -> str:
+    """打印产物 SHA-256，便于上传 AnkiWeb 后核对线上包与本地包是否同一份。"""
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    print(f"[build_ankiaddon] {archive.name}: {archive.stat().st_size:,} bytes, sha256 {digest}")
+    return digest
+
+
+def copy_to_downloads(archive: Path) -> None:
+    """把产物复制到 ``~/Downloads/``，覆盖旧的同名包。
+
+    只是构建便利，不是发布步骤：Downloads 不可写时只警告，绝不让打包失败。
+    """
+    target_dir = Path.home() / "Downloads"
+    target = target_dir / archive.name
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(archive, target)
+    except Exception as exc:  # noqa: BLE001 - convenience step must never break a release
+        print(f"[build_ankiaddon] WARN: could not copy to {target_dir}: {exc}")
+        return
+    print(f"[build_ankiaddon] Copied -> {target}")
+
+
+def main() -> None:
     if "--skip-build" not in sys.argv:
         run_frontend_build()
-    create_ankiaddon_package()
+    archive = create_ankiaddon_package()
+    print_archive_digest(archive)
+    if "--no-downloads" not in sys.argv:
+        copy_to_downloads(archive)
+
+
+if __name__ == "__main__":
+    main()

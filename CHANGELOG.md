@@ -15,6 +15,8 @@
 
 ## [Unreleased]
 
+- **[DeepSeek] 构建脚本打包后自动复制到 `~/Downloads`**（改 [`scripts/build_ankiaddon.py`](scripts/build_ankiaddon.py)、[`README.md`](README.md)）：`python3 scripts/build_ankiaddon.py` 打包完成后会打印产物 SHA-256，并把 `.ankiaddon` 复制到 `~/Downloads/anki_modern_os.ankiaddon`（覆盖旧包），省去手工拷贝；`--no-downloads` 可关闭该行为，Downloads 不可写时只警告、不影响打包。发布说明已同步进 README。
+
 ## [v1.4.8] - 2026-11-13
 
 - **[DeepSeek] 复习队列改用 Anki 原生 v3 调度器顺序（「同一张卡多出例句」的真凶）+ 沙盒开关文案改为「兼容模式」**（改 [`bridge/review_service.py`](bridge/review_service.py)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、16 个 i18n 字典；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 7 项队列断言）：
