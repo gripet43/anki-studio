@@ -15,6 +15,20 @@
 
 ## [Unreleased]
 
+## [v1.4.4] - 2026-11-12
+
+- **[WorkBuddy] 日语卡包显示“乱码”：`browser=True` 是降级渲染，正面直接给出一串 uuid**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`tests/test_bridge.py`](tests/test_bridge.py)）：
+  - **现象**：用户装上 `egg_rollsJLPT_N1N5__v35NO_ENGLISH.apkg`（`eggrolls-JLPT10k-v3.5` 卡型，36 字段，日-中 / 中-日 两个模板）后说“日语好像会显示乱码”。实际不是编码问题，是**正面位置显示了一串裸 uuid**——`469b5ba2-a0bb-11ef-9eca-75d1f1bae144`，背面开头也是同一串，后面的假名汉字部分反倒是对的。
+  - **根因一（真正的坑）：`card.render_output(browser=True)` 不是“关掉钩子的同一个渲染”**。v1.4.1 的注释里写着“拿 UVBasic-English 997 张卡比对过，`browser` 取 True/False 输出完全一致”——**这句话是错的**。`browser=True` 走的是浏览器列表那条**降级**路径，`question_text` 会直接退化成“第一个字段的原样文本”，`{{FrontSide}}` 也跟着塌成那一个字段。UVBasic-English 恰好把主词放在第一位，所以退化不可见；换到这个卡包就现原形。同一个模板实测：`browser=True` 正面 **36 字符**，`browser=False` 正面 **18,778 字符**（完整正文）。柯林斯卡两种模式都是 4,126 字符，这也是它一直“看起来没问题”的原因。
+  - **根因二：插件一直把 `fields[0]` 当正面**。Anki 的正面是模板算出来的，跟字段顺序无关。这个卡包把 `NoteID` 排在第一位（第二位才是 `VocabKanji`，也就是真正的主词），于是插件亲手把 uuid 摆到了正面。
+  - **修法**：`render_native_card_html` 拆成 `render_native_card_sides`，返回 `NativeRender(question, answer, question_audio, answer_audio, css)` 这个 NamedTuple，正反两面都取模板结果；旧函数保留为只取背面的薄包装，调用方不用改签名。渲染一律 `card.render_output()`，**不带任何参数**——Anki 自己的复习界面就是 `card.question()` → `render_output(reload, browser=False).question_and_style()`，这里必须对齐。
+  - **正面取哪个字段交给模板判断**：新增 `pick_display_field(fields, rendered_front)`，按字段顺序找第一个“内容真的出现在模板正面里”的字段。注意传入的必须是**净化之后**的正面——原始渲染结果里那段脚本还带着 `{{text:NoteID}}` 替换出来的 uuid，不先净化的话第一个字段会“看起来出现过”，等于白判。
+  - **正面只换字段、不换排版**（有意为之）：第一版试过把整段 `native.question` 连同作用域样式塞进正面，出图立刻暴露两个问题——卡包自己的顶栏（`eggrolls-JLPT10k-v3.5::1-N5 … 反馈`）跑到 Studio 的正面区域里，以及背面里的 `{{FrontSide}}` 与正面重复一遍。所以正面仍然只换那一个字段，整张卡的完整排版交给背面呈现。
+  - **顺带清掉 `[anki:play:a:0]` 占位符**：Anki 把 `{{VocabAudio}}` 这类音频字段渲染成重播按钮占位符，等着它自己的复习界面换成按钮。插件不复刻那个按钮（音频走 `audioFiles` 自己的播放条），留着就是页面上肉眼可见的一串方括号标记——而这个卡包的每张卡都带语音，等于每张卡都在露。新增 `MEDIA_PLACEHOLDER_RE` 在净化阶段一并删掉。
+  - **回归验证**：柯林斯卡包 `sides.answer` 与修复前 `html` 逐字节相等（`True`），样式表在把 `file:///…/c.media/` 归一化之后也完全相同，正面字段解析回 `英语单词`。真机出图对比见 `~/Downloads/anki-studio-jlpt-uuid-check.png`（不入库）：修复前正面是等宽红字 uuid、背面从 uuid 起头；修复后正面是 `高校`，背面假名注音 `こうこう ⓪`、`高中`、`「高等学校」の略`、例句 `妹は高校に通っています` 的 `<ruby>` 振假名与 `妹妹在上高中` 全部正常，无方框字、无占位符。
+  - **性能实测**：`render_native_card_sides` 在真实卡包上 **1.02 ms/卡**（100 张 102 ms），18 KB 正文的净化 0.60 ms/卡，仍在可忽略区间。这个卡型的 CSS 有 9,157 字符（Tailwind 式 reset、`@charset "UTF-8"`、三个指向 `_SourceHanSerif{CN,TW,JP}-Medium.otf` 的 `@font-face`、`:lang(ja)`/`:lang(zh-Hans)`/`:lang(zh-Hant)` 分语言字族），走的是 v1.4.2 那套作用域管线，未做特殊处理；v1.4.3 的「按 `notetypeId` 去重」也仍然安全——用户自己的 8 个卡型（公文/申论）只在 `/* */` 注释里提到 `{{Subdeck}}`。
+  - **测试**：`test_28` 的第 6 条断言从“必须带 `browser=True`”改成“必须**不带任何参数**”（桩也改成记录 `(args, kwargs)`，断言 `[((), {})]`）。新增 **`test_31_front_falls_back_to_template_when_first_field_is_not_front`**：锁住「`pick_display_field` 会跳过 uuid / 第一个字段本身就是正面时不动它 / 都不匹配时回落第一个字段 / 空字段表返回空串 / 必须先净化再比对 / 两侧渲染与音频与作用域 CSS / 端到端 `start_review` 取模板正面而非 `fields[0]`」七件事。46 → 47 条。
+
 ## [v1.4.3] - 2026-11-12
 
 - **[WorkBuddy] Cmd+K 右侧预览也只显示纯文本：模板 CSS 跟着搜索结果一起下发**（改 [`bridge/search_service.py`](bridge/search_service.py)、[`bridge/media_utils.py`](bridge/media_utils.py)、[`frontend/src/components/search/CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/index.css`](frontend/src/index.css)、[`tests/test_bridge.py`](tests/test_bridge.py)）：

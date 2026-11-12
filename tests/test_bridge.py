@@ -1898,8 +1898,8 @@ class BridgeRouterAuditTest(unittest.TestCase):
         card = self.mock_col.get_card(201)
         rendered_calls = []
 
-        def fake_render_output(browser=False):
-            rendered_calls.append(browser)
+        def fake_render_output(*args, **kwargs):
+            rendered_calls.append((args, kwargs))
             return StubRenderOutput()
 
         card.render_output = fake_render_output
@@ -1918,8 +1918,9 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertIn("When we <b>perceive</b> something", card_data["backHtml"])
         # 5. 原生渲染剥掉的 [sound:] 要从 answer_av_tags 补回音频列表
         self.assertIn("perceive.mp3", card_data["audioFiles"])
-        # 6. 批量序列化时用 browser=True，避免误触发别的插件的 card_did_render 钩子
-        self.assertEqual(rendered_calls, [True])
+        # 6. 必须走完整渲染：browser=True 是浏览器列表用的降级路径，正面会退化成
+        #    “第一个字段原样文本”，{@code {{FrontSide}}} 也跟着塌成那一个字段
+        self.assertEqual(rendered_calls, [((), {})])
 
         # 没有模板引擎可用时（老版本 Anki / 单元测试桩）必须安静降级，不能抛异常
         from anki_modern_os.bridge.media_utils import render_native_card_html
@@ -2055,6 +2056,92 @@ class BridgeRouterAuditTest(unittest.TestCase):
             del self.mock_col.get_card(cid).render_output
         clean = self._call("search_cards", {"query": "", "limit": 10})["data"]
         self.assertEqual(clean["cardStyles"], {})
+
+    def test_31_front_falls_back_to_template_when_first_field_is_not_front(self):
+        """第一个字段未必是正面：蛋卷 JLPT 卡包把 NoteID 排在第一位。
+
+        回归护栏：用户导入 ``eggrolls-JLPT10k`` 后整张卡显示一串 uuid。根因有两处，
+        都指同一个假设——“正面 = fields[0]、渲染结果跟 browser 标志无关”：
+
+        1. ``render_output(browser=True)`` 是给浏览器列表用的降级路径，``question_text``
+           会直接退化成第一个字段的原样文本，``{{FrontSide}}`` 跟着一起塌。
+        2. 正面一直盲取 ``fields[0]``，那个字段是 ``NoteID`` 时就是一串 uuid。
+
+        这里锁住三件事：完整渲染（不带 browser 参数）、按模板正文反查显示字段、
+        正面在必要时改用模板渲染。
+        """
+        from anki_modern_os.bridge.media_utils import (
+            pick_display_field,
+            render_native_card_sides,
+            sanitize_rendered_card_html,
+        )
+
+        uuid = "469b5ba2-a0bb-11ef-9eca-75d1f1bae144"
+        fields = {"NoteID": uuid, "VocabKanji": "高校", "VocabDefSC": "高中"}
+
+        # 1. 按模板正面反查显示字段：跳过 uuid，挑到 VocabKanji
+        self.assertEqual(pick_display_field(fields, "<h1>高校</h1>"), "VocabKanji")
+        # 2. 第一个字段本来就是正面内容时不动（绝大多数卡包走这条）
+        self.assertEqual(
+            pick_display_field({"单词": "perceive", "释义": "察觉"}, "<div>perceive</div>"),
+            "单词",
+        )
+        # 3. 没有任何字段出现在正面里 → 老实退回第一个字段，不猜
+        self.assertEqual(pick_display_field(fields, "<div>其他内容</div>"), "NoteID")
+        self.assertEqual(pick_display_field({}, "<div>x</div>"), "")
+        # 4. 传入的必须是净化后的正文：原始渲染结果里那段脚本还带着 uuid，
+        #    不先洗掉就会误判成“NoteID 出现在正面里”
+        raw = f"<script>var n='{uuid}'</script><main>高校</main>"
+        self.assertNotIn(uuid, sanitize_rendered_card_html(raw))
+        self.assertEqual(
+            pick_display_field(fields, sanitize_rendered_card_html(raw)), "VocabKanji"
+        )
+
+        # 5. 完整渲染：render_output 不能带 browser 参数，且要同时拿到正反两面
+        class StubAV:
+            filename = "koukou.mp3"
+
+        class StubOutput:
+            question_text = '<main><h1>高校</h1><div class="VocabAudio">[anki:play:a:0]</div></main>'
+            answer_text = '<main><h1>高校</h1><p>高中</p><div class="VocabAudio">[anki:play:a:0]</div></main>'
+            question_av_tags = [StubAV()]
+            answer_av_tags = [StubAV()]
+            css = ".card{color:#333}"
+
+        called = []
+
+        class StubCard:
+            def render_output(self, *args, **kwargs):
+                called.append((args, kwargs))
+                return StubOutput()
+
+        sides = render_native_card_sides(StubCard(), self.temp_media)
+        self.assertEqual(called, [((), {})])  # 不允许再传 browser=True
+        self.assertIn("高校", sides.question)
+        self.assertIn("高中", sides.answer)
+        self.assertEqual(sides.question_audio, ["koukou.mp3"])
+        self.assertEqual(sides.answer_audio, ["koukou.mp3"])
+        self.assertIn(".anki-native-card .card", sides.css)
+        # [anki:play:a:0] 是给 Anki 自己的重播按钮用的占位符，我们不复刻那个按钮
+        for side in (sides.question, sides.answer):
+            self.assertNotIn("[anki:play", side)
+
+        # 6. 整条链路：字段全对不上时，正面改用“模板里真正出现的那个字段”，不再吐 uuid
+        card = self.mock_col.get_card(201)
+
+        class FrontOnly:
+            question_text = "<main><h1>平均 O(n log n)</h1></main>"
+            answer_text = ""
+            question_av_tags = []
+            answer_av_tags = []
+            css = ".card{color:#333}"
+
+        card.render_output = lambda *a, **k: FrontOnly()
+        data = self._call("start_review", {"deckId": "1"})["data"]["cards"][0]
+        # fields[0] 是“快速排序”，模板正面里没有它 → 换成模板里出现过的那个字段
+        self.assertEqual(data["front"], "平均 O(n log n)")
+        self.assertIn("平均 O(n log n)", data["frontHtml"])
+        self.assertNotIn("快速排序", data["frontHtml"])
 
 
 if __name__ == "__main__":

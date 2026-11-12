@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import urllib.parse
 import urllib.request
+from typing import Dict, List, NamedTuple
 
 IMG_TAG_RE = re.compile(r"<img\b[^>]*>", flags=re.I)
 IMG_SRC_ATTR_RE = re.compile(
@@ -233,6 +234,12 @@ INLINE_HANDLER_RE = re.compile(
     r"""\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", flags=re.I
 )
 ANY_TAG_RE = re.compile(r"<[^>]+>")
+# Anki 把 {{字段}} 里的音频渲染成 `[anki:play:a:0]` 这种「重播按钮」占位符，等着它自己的
+# 复习界面把它换成按钮。我们不复刻那个按钮（音频走 audioFiles 自己的播放条），留着就是
+# 页面上肉眼可见的一串 `[anki:play:a:0]`，所以直接删掉。
+MEDIA_PLACEHOLDER_RE = re.compile(r"\[anki:(?:play|tts):[^\]]*\]", flags=re.I)
+SOUND_TAG_RE = re.compile(r"\[sound:([^\]]+)\]")
+CLOZE_RE = re.compile(r"\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}")
 
 
 def sanitize_rendered_card_html(raw_html: str) -> str:
@@ -249,8 +256,9 @@ def sanitize_rendered_card_html(raw_html: str) -> str:
        ``<div class=hint style="display:none">内容</div>``，原本靠上面那段脚本点开。
        脚本不跑就没有展开入口，所以直接把内容露出来，标签丢掉。
 
-    顺带清掉 ``onclick`` 之类内联事件属性，免得用户一点就抛 ReferenceError。
-    最后交给 :func:`normalize_rendered_whitespace` 压平模板缩进。
+    顺带清掉 ``onclick`` 之类内联事件属性，免得用户一点就抛 ReferenceError，以及
+    ``[anki:play:a:0]`` 这类重播按钮占位符。最后交给
+    :func:`normalize_rendered_whitespace` 压平模板缩进。
     """
     if not raw_html:
         return ""
@@ -258,6 +266,7 @@ def sanitize_rendered_card_html(raw_html: str) -> str:
     text = SCRIPT_BLOCK_RE.sub("", raw_html)
     text = STYLE_BLOCK_RE.sub("", text)
     text = HINT_ANCHOR_RE.sub("", text)
+    text = MEDIA_PLACEHOLDER_RE.sub("", text)
 
     def _fix_tag(tag_match):
         tag = tag_match.group(0)
@@ -475,54 +484,120 @@ def _split_css_imports(css_text: str) -> tuple[list[str], str]:
     return names, CSS_IMPORT_RE.sub("", css_text)
 
 
-def render_native_card_html(
-    card, media_dir: str = ""
-) -> tuple[str, list[str], str]:
-    """用 Anki 自己的模板引擎渲染答案面，返回 ``(html, audio_files, css)``。
+class NativeRender(NamedTuple):
+    """一张卡走完 Anki 模板引擎之后的三样东西，外加它自己的作用域样式表。"""
+
+    question: str
+    answer: str
+    question_audio: List[str]
+    answer_audio: List[str]
+    css: str
+
+
+def render_native_card_sides(card, media_dir: str = "") -> NativeRender:
+    """用 Anki 自己的模板引擎渲染正反两面，返回 :class:`NativeRender`。
 
     为什么非走原生渲染不可：插件早期把 ``fields[1]`` 当背面正文，只要卡包不是
     “两个字段”的形态，多出来的释义、例句、词源……在背诵界面上就整段消失
     （编辑界面全都在，所以肉眼很难立刻归因）。模板引擎会把 ``{{字段}}``、
     ``{{#字段}}`` 条件段、``{{FrontSide}}``、``{{hint:}}`` 全部算完，那才是用户
-    心里“这张卡的背面”。
+    心里“这张卡的正面/背面”。
 
-    ``browser=True`` 的理由：它只影响 ``card_did_render`` 钩子是否触发（那个钩子
-    是给真正的复习界面用的，逐个序列化整条队列时会误伤别的插件），渲染结果本身
-    不变——拿 ``UVBasic-English`` 卡包 997 张卡逐个比对过，``browser`` 取 True/False
-    输出完全一致。
+    为什么**不能**传 ``browser=True``：那条路是给浏览器列表用的降级渲染，
+    ``question_text`` 会直接退化成“第一个字段的原样文本”，跟模板毫无关系。
+    ``UVBasic-English`` 这种把单词放在第一位的卡包恰好蒙对了，所以当初拿它比对了
+    997 张卡也没看出问题；换上 ``eggrolls-JLPT10k``（第一个字段是 ``NoteID``）就
+    现原形——整张卡的正面、以及背面里的 ``{{FrontSide}}``，全都变成一串裸 uuid，
+    用户看到的就是“乱码”。实测同一个模板：``browser=True`` 给 36 字符，
+    ``browser=False`` 给 18,778 字符的完整正文。复习界面走的是
+    ``card.question()/answer()``，也就是 ``browser=False``，这里必须对齐。
 
-    第三个返回值是**作用域化之后的模板 CSS**（见 :func:`build_card_css`），调用方
+    最后一个字段是**作用域化之后的模板 CSS**（见 :func:`build_card_css`），调用方
     负责把它包成 ``<style>`` 并配上 ``.anki-native-card`` 容器。这不是可选项：
     v1.4.1 一开始只搬了 HTML 没搬 CSS，结果用户的卡包背面变成一坨无样式的纯文本
     （`.section` 的色条、`.extension` 的灰块、词性小标签全没了），而编辑器的预览
     里样式是好的——因为那里有自己的排版。模板 HTML 和模板 CSS 必须成对出现。
     """
+    empty = NativeRender("", "", [], [], "")
     if card is None:
-        return "", [], ""
+        return empty
     try:
-        output = card.render_output(browser=True)
+        output = card.render_output()
     except Exception:
-        return "", [], ""
+        return empty
 
     # 下面整段都在跟“第三方模板渲染结果”打交道，字段缺失、类型不对、样式表解析炸掉
     # 都只该让这张卡退回没有样式的纯正文，绝不能连累整页卡片的序列化。
     try:
-        raw_answer = getattr(output, "answer_text", "") or ""
-        answer = (
-            sanitize_rendered_card_html(raw_answer) if isinstance(raw_answer, str) else ""
+        question = sanitize_rendered_card_html(
+            _as_text(getattr(output, "question_text", ""))
         )
-
-        audio: list[str] = []
-        for tag in getattr(output, "answer_av_tags", None) or []:
-            name = str(getattr(tag, "filename", "") or "").strip()
-            if name and name not in audio:
-                audio.append(name)
-
-        raw_css = getattr(output, "css", "") or ""
-        page_css = build_card_css(raw_css, media_dir) if isinstance(raw_css, str) else ""
+        answer = sanitize_rendered_card_html(
+            _as_text(getattr(output, "answer_text", ""))
+        )
+        question_audio = _av_filenames(getattr(output, "question_av_tags", None))
+        answer_audio = _av_filenames(getattr(output, "answer_av_tags", None))
+        raw_css = _as_text(getattr(output, "css", ""))
+        page_css = build_card_css(raw_css, media_dir) if raw_css else ""
     except Exception:
-        return "", [], ""
-    return answer, audio, page_css
+        return empty
+    return NativeRender(question, answer, question_audio, answer_audio, page_css)
+
+
+def _as_text(value) -> str:
+    """模板渲染结果里的字段偶尔不是字符串（桩对象、None），统一兜成空串。"""
+    return value if isinstance(value, str) else ""
+
+
+def _av_filenames(tags) -> List[str]:
+    names: List[str] = []
+    for tag in tags or []:
+        name = str(getattr(tag, "filename", "") or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def render_native_card_html(
+    card, media_dir: str = ""
+) -> tuple[str, list[str], str]:
+    """只要背面：``(html, audio_files, css)``，见 :func:`render_native_card_sides`。"""
+    sides = render_native_card_sides(card, media_dir)
+    return sides.answer, sides.answer_audio, sides.css
+
+
+def pick_display_field(fields: Dict[str, str], rendered_front: str) -> str:
+    """挑出“正面真正显示的那个字段”。
+
+    Anki 的正面是模板算出来的，跟字段顺序没关系；插件却一直拿 ``fields[0]`` 当正面。
+    对绝大多数卡包没问题（第一个字段就是主词），碰上 ``eggrolls-JLPT10k`` 这种把
+    ``NoteID`` 排在第一位的卡包，正面就直接是一串 uuid。
+
+    判定办法：按字段顺序找第一个“内容真的出现在模板正面里”的字段。传入的
+    ``rendered_front`` 必须是**净化之后**的正文——原始渲染结果里那段脚本还带着
+    ``{{text:NoteID}}`` 替换出来的 uuid，会让第一个字段“看起来出现过”。
+    """
+    if not fields:
+        return ""
+    first_key = next(iter(fields))
+    probe_front = plain_text_of(rendered_front)
+    if not probe_front:
+        return first_key
+    for name, value in fields.items():
+        probe = plain_text_of(value)
+        if probe and probe in probe_front:
+            return name
+    return first_key
+
+
+def plain_text_of(raw_html: str) -> str:
+    """HTML → 纯文本（去标签、去音频标记、解实体、压空白），用来做文本比对。"""
+    if not raw_html or not isinstance(raw_html, str):
+        return ""
+    text = SOUND_TAG_RE.sub(" ", raw_html)
+    text = CLOZE_RE.sub(lambda m: m.group(2) or "", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", html.unescape(text)).strip()
 
 
 def wrap_card_with_styles(html_text: str, css_text: str) -> str:

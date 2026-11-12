@@ -18,8 +18,10 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .media_utils import (
+    NativeRender,
     get_media_dir,
-    render_native_card_html,
+    pick_display_field,
+    render_native_card_sides,
     render_native_image_occlusion,
     resolve_media_img_src_for_webview,
     wrap_card_with_styles,
@@ -513,16 +515,31 @@ class ReviewService:
             # 拓展字段（释义 / 例句 / 词源 / 柯林斯…）在背诵界面整段消失。
             # Cloze 与原生遮挡卡例外：它们的 frontAnswerHtml 已经负责补全/揭底，
             # 再叠一份完整答案会让同一句话在翻转时出现两次。
-            native_back, native_back_audio, native_back_css = (
-                ("", [], "")
+            native = (
+                NativeRender("", "", [], [], [])
                 if (io_front or is_cloze)
-                else render_native_card_html(card, media_dir)
+                else render_native_card_sides(card, media_dir)
+            )
+            native_back, native_back_audio, native_back_css = (
+                native.answer,
+                native.answer_audio,
+                native.css,
             )
             if io_front:
                 front_raw, back_raw = io_front, io_back
             else:
-                front_raw = fields_dict.get(field_keys[0], "") if field_keys else ""
-                back_raw = native_back or (
+                # 正面取“模板真正显示的那个字段”——第一个字段未必是它。
+                # eggrolls-JLPT10k 把 NoteID 排在第一位，按 fields[0] 直出就是一串 uuid。
+                # 注意这里只换字段、不换排版：整段模板正面（连同卡包自己的标签栏、
+                # 反馈链接）搬过来会和 Studio 的正面设计打架，也会和背面里的
+                # {{FrontSide}} 重复。正文交出整张卡，交给背面去呈现就够了。
+                front_key = (
+                    pick_display_field(fields_dict, native.question)
+                    if native.question
+                    else (field_keys[0] if field_keys else "")
+                )
+                front_raw = fields_dict.get(front_key, "") if front_key else ""
+                back_raw = native.answer or (
                     fields_dict.get(field_keys[1], "") if len(field_keys) > 1 else ""
                 )
 
