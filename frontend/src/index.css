@@ -65,6 +65,13 @@
     --space-md: 16px;
     --space-lg: 24px;
     --space-xl: 32px;
+
+    /* Dashboard surface hierarchy — keep the home page quiet and cohesive. */
+    --dashboard-shadow-card: 0 1px 2px rgba(20, 24, 32, 0.035);
+    --dashboard-shadow-raised: 0 12px 30px rgba(20, 24, 32, 0.10);
+    --dashboard-focus-ring: 0 0 0 3px rgba(var(--brand-rgb), 0.18);
+    --dashboard-track: #ECECF2;
+    --dashboard-track-new: #D6D6DE;
   }
 
   .dark {
@@ -73,8 +80,12 @@
     --bg-subtle: #20222A;
     --border-subtle: #2A2C36;
     --text-primary: #F2F3F7;
-    --text-secondary: #A6A8B3;
-    --text-muted: #7E808C;
+    --text-secondary: #B8BAC6;
+    --text-muted: #A4A6B4;
+    --dashboard-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.16);
+    --dashboard-shadow-raised: 0 14px 34px rgba(0, 0, 0, 0.34);
+    --dashboard-track: #2A2C36;
+    --dashboard-track-new: #3A3D48;
   }
 
   .oled {
@@ -83,8 +94,12 @@
     --bg-subtle: #17181E;
     --border-subtle: #22232B;
     --text-primary: #F4F4F6;
-    --text-secondary: #A0A2AD;
-    --text-muted: #757782;
+    --text-secondary: #B4B6C2;
+    --text-muted: #9E9FAD;
+    --dashboard-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.24);
+    --dashboard-shadow-raised: 0 12px 28px rgba(0, 0, 0, 0.52);
+    --dashboard-track: #22232B;
+    --dashboard-track-new: #343640;
   }
 }
 
@@ -271,12 +286,125 @@ progress {
 }
 
 /* ============================================================================
+   Dashboard — quiet surface hierarchy and content-aware layout
+   ============================================================================ */
+
+.dashboard-shell {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+}
+
+.dashboard-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  margin-block: -4px;
+  padding-block: 4px;
+  background-color: var(--bg-canvas);
+  background: color-mix(in srgb, var(--bg-canvas) 88%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+  backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.dashboard-surface {
+  background-color: var(--bg-card);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  box-shadow: var(--dashboard-shadow-card);
+}
+
+.dashboard-subtext {
+  color: var(--text-secondary);
+}
+
+.dashboard-hero {
+  background-image: linear-gradient(
+    108deg,
+    color-mix(in srgb, var(--brand-soft) 34%, var(--bg-card)),
+    var(--bg-card) 46%
+  );
+}
+
+.dashboard-divider {
+  border-color: var(--border-subtle);
+  border-color: color-mix(in srgb, var(--border-subtle) 72%, transparent);
+}
+
+.dashboard-tooltip {
+  background-color: var(--bg-card);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  box-shadow: var(--dashboard-shadow-raised);
+}
+
+.dashboard-stat-pill {
+  min-height: 30px;
+  border: 1px solid transparent;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    border-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    opacity var(--dur-fast) var(--ease-std);
+}
+
+.dashboard-stat-pill:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  box-shadow: var(--dashboard-focus-ring);
+}
+
+.dashboard-deck-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+
+.dashboard-analytics-grid {
+  align-items: stretch;
+}
+
+.dashboard-heatmap-viewport {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 35%, transparent) transparent;
+}
+
+.dashboard-heatmap-content {
+  min-width: 360px;
+}
+
+@media (max-width: 640px) {
+  .dashboard-header {
+    margin-inline: -2px;
+    padding-inline: 2px;
+  }
+
+  .dashboard-heatmap-content {
+    min-width: 332px;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .dashboard-header {
+    background: var(--bg-canvas);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ============================================================================
    Dashboard Deck Card — size-aware container & per-deck accent actions
    ============================================================================ */
 
 /* 卡片自身作为尺寸容器，让 footer 能按卡片实际宽度（而非视口）自适应 */
 .deck-card {
   container-type: inline-size;
+  box-shadow: var(--dashboard-shadow-card);
+}
+
+.deck-card:hover,
+.deck-card:focus-within {
+  box-shadow: var(--dashboard-shadow-raised);
 }
 
 /* 学习按钮继承每张卡片的 --deck-brand / --deck-brand-hover，与图标和进度条同色 */

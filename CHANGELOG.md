@@ -15,6 +15,25 @@
 
 ## [Unreleased]
 
+- **[Gemini] Windows 验版报告第二轮（2026-11-12）3 项新问题修复（深色模式次级文字与图表对比度提升、快捷键清单平台动态适配与二元/四键模式对齐、`get_dashboard` 首屏轻量聚合与统计按需异步加载）**：
+  - **问题 1（深色模式下次级文字与图表数值对比度偏低）**（[`frontend/src/index.css`](frontend/src/index.css)、[`frontend/src/utils/themeTokens.ts`](frontend/src/utils/themeTokens.ts)、[`frontend/src/components/stats/StatsView.tsx`](frontend/src/components/stats/StatsView.tsx)、[`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)）：
+    - 在 `index.css` 中提亮 `.dark`（`--text-secondary: #B8BAC6`、`--text-muted: #A4A6B4`）与 `.oled`（`--text-secondary: #B4B6C2`、`--text-muted: #9E9FAD`）全局变量；在 `themeTokens.ts` 中提亮深色模式 `indigo`（`#86C2F8 -> #98CCFD`）、`emerald`（`#72D5A1 -> #7EE0AE`）、`cyan`（`#7EC1F8 -> #92CAFA`）的 `brandText` 与 `brandMutedBar`。
+    - 在 `StatsView.tsx`、`Sidebar.tsx`、`SettingsModal.tsx` 中将深色次级文字由 `#8E8E93` 提升至 `#A6A8B6` / `#A8AAB8`（在 `#1A1B21` 底色上对比度达 ~6.8:1）；将「12 周历史记忆留存率」柱顶百分比升级为 `text-[10px] font-bold tabular-nums` 且非当周采用高对比度亮白灰 `dark:text-[#D8DAE8]`（当周高亮为 `text-[var(--brand-text)]`），将「真实留存率」26px 大字由深色主填充色 `brandHex` 改为高对比度 `text-[var(--brand-text)]`，并将三张图表底部坐标轴统一接入 `${subText}`，解决 Windows 96 DPI 显示器深色模式下蓝灰字发暗难读的问题。
+  - **问题 2（快捷键清单在 Windows 上仍写 `Cmd` 且复习评分键位说明与二元/四键模式不一致）**（[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)）：
+    - 在 `SettingsModal.tsx` 中将原本写死的 `<kbd>Cmd + K</kbd>` 与 `<kbd>Cmd + Z</kbd>` 统一改为 `{formatShortcut('Cmd + K', envInfo.platform)}` 与 `{formatShortcut('Cmd + Z', envInfo.platform)}`（Windows/Linux 自动显示 `Ctrl + K` / `Ctrl + Z`）。
+    - 将「开始学习」分组快捷键与复习器实际的二元主模式 + `Opt/Alt` 四键 FSRS 模式对齐：「显示答案 / 良好」标注 `Space / Enter / 2`、「重来」标注 `1`、「困难 / 良好 / 简单」标注 `{formatShortcut('Opt + 1~4', envInfo.platform)}`（Windows 显示 `Alt + 1~4`），并在 `ReviewerView.tsx` 中支持 `optionKeyHeld || e.altKey` 同步触发四键评分。
+  - **问题 3（`get_dashboard` 大集合耗时优化与消除 `13b9a59` SQL 聚合回退）**（[`bridge/deck_service.py`](bridge/deck_service.py)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)）：
+    - **消除 `_build_decks_list` SQL 回退并合并超期扫描**：将 `cards GROUP BY did` 简化为仅计算总数、3 个互斥整数段（`ivl >= 21`、`ivl < 21 and type = 2`、`ivl < 21 and type in (1,3)`）与超期卡数（`queue = 2 and due < ?`），在 Python 端直接推导 `n_new` 与 `weighted_mastered = n_mature * 1.0 + n_review * 0.6 + n_learning * 0.3`，既消除 5 段 `CASE` 重复求值与浮点累加开销，又省去 `get_dashboard` 中原本独立的第二次 `cards` 全表超期扫描。
+    - **消除 `_build_heatmap_and_streak` 二次全表扫描**：将连胜历史查询限制为 `WHERE id < start_365_sec * 1000 AND type < 4 AND ease > 0`，直接复用 Query 1 已聚合出的近 365 天活跃日集合 `day_map`，利用 `revlog.id` 主键索引跳过近一年全部复习记录的二次扫描。
+    - **首屏 `get_dashboard` 与重型 `get_statistics` 解耦**：`get_dashboard` 默认仅拉取首页所需的牌组、今日进度、365 天热力图与 7 天周节奏（支持 `includeStats=True` 显式内联）；`useAppStore.ts` 在首屏渲染就绪后及切换至「统计分析」视图时异步调用 `refreshStatistics()`（`get_statistics`），在 20,000 卡 / 120,000 条 `revlog` 基准下将 `get_dashboard` SQL 耗时从 `172 ms` 降至 `~13 ms`（提速超 **12×**）。
+  - **验证**：新增 [`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs) `Item #36` 门禁，`tsc --noEmit`、前端构建、Bundle 审计与 38 项 Python 单测 100% 通过。
+
+- **[Claude Code] 首页 Quiet Study Studio 视觉收敛**（[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/components/dashboard/SyncStatusPill.tsx`](frontend/src/components/dashboard/SyncStatusPill.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - 将首页卡片、同步胶囊、提示层统一到 semantic surface/elevation token，减少 Light/Dark/OLED 下分散的硬编码背景、边框和阴影。
+  - 顶部改为轻量 sticky toolbar；Hero 保留既有学习/同步/休假业务分支和 CTA，仅降低统计 pill 动效噪音、统一进度轨道与连胜层级。
+  - 牌组网格改为 `auto-fit + minmax(260px, 1fr)`，热力图增加可控横向视口，分析卡片统一间距与分隔线；保留牌组 accent、熟记度 tooltip、Windows 响应式和 RTL 逻辑定位。
+  - 新增 Bundle Item #36 守卫 semantic dashboard class、构建产物 CSS 和共享 tooltip 样式。
+
 - **[Qoder] 牌组卡片二次精修：熟记度改悬停提示 + 移除与进度条重复的中部分隔线**（[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)）：
   - **删除问号按钮，改悬停自动展示**：移除熟记度右侧的 `?` 圆形按钮，将百分比 + 「熟记度」标签整体改为可悬停/可聚焦触发区（`tabIndex=0`、`cursor-help`、`aria-label` 复用 `masteryHintTrigger`、`aria-describedby` 指向弹窗）。鼠标移入即展开说明弹窗，悬停时百分比染上牌组色（`group-hover/mastery:text-[var(--deck-brand)]`）作为交互提示。
   - **防闪烁宽限期**：新增 `hintCloseTimer` ref + `openMasteryHint`/`scheduleCloseMasteryHint`，离开触发区或弹窗后延迟 160ms 收起，进入任一则取消收起——保证从触发区移向弹窗时不闪烁；弹窗补 `role="tooltip"` 与 `id`，并绑定 `onMouseEnter/Leave` 维持悬停；组件卸载清理定时器。键盘聚焦展开、失焦收起，兼顾无障碍。

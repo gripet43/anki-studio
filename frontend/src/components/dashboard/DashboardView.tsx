@@ -81,14 +81,9 @@ export const DashboardView: React.FC = () => {
   const brandHex = accentScale.brand;
   const isDark = theme === 'dark' || theme === 'oled';
 
-  const cardSurface =
-    theme === 'oled'
-      ? 'bg-[#111216] border-[#22232B] text-[#F4F4F6]'
-      : theme === 'dark'
-      ? 'bg-[#1A1B21] border-[#2A2C36] text-[#F2F3F7]'
-      : 'bg-white border-[#EAECEF] text-[#1D1D1F]';
-
-  const subText = 'text-[#636366] dark:text-[#8E8E93]';
+  // Dashboard surfaces are semantic so theme tokens stay in one place.
+  const cardSurface = 'dashboard-surface';
+  const subText = 'dashboard-subtext';
 
   const completed = dashboard.todayStats.completed;
   const totalPending = dashboard.todayStats.totalPending;
@@ -205,9 +200,7 @@ export const DashboardView: React.FC = () => {
       case 4:
         return { backgroundColor: accentScale.heatmap[3] };
       default:
-        return {
-          backgroundColor: isDark ? (theme === 'oled' ? '#191920' : '#252630') : '#ECECEF',
-        };
+        return { backgroundColor: 'var(--heatmap-0)' };
     }
   };
 
@@ -245,22 +238,22 @@ export const DashboardView: React.FC = () => {
   }, [dashboard.vacation?.startDate, dashboard.vacation?.endDate, resolvedLang]);
 
   return (
-    <div className="flex-1 h-screen overflow-y-auto px-5 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-6">
+    <div className="dashboard-shell flex-1 h-screen overflow-y-auto px-5 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-6">
       {/* Top Header Row — Synced Status Capsule & Cmd+K Search */}
       <header
         onMouseDown={startWindowDrag}
         onDoubleClick={handleWindowDoubleClick}
-        className="flex flex-wrap items-center justify-between gap-3 select-none cursor-default"
+        className="dashboard-header flex flex-wrap items-center justify-between gap-3 select-none cursor-default"
       >
         <div className="min-w-[180px]">
-          <h1 className="text-[20px] sm:text-[22px] font-bold tracking-tight whitespace-nowrap">
+          <h1 className="text-[20px] sm:text-[22px] font-bold tracking-tight max-w-full text-balance">
             {dashboard.greeting}
             {displayName}
           </h1>
           {isSyncPending ? (
             <div className="flex items-center gap-2 mt-1">
               <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-ping shrink-0" />
-              <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight whitespace-nowrap">
+              <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight">
                 {syncing ? t('syncingAnkiWebAria') : t('loadingLocalCollection')}
               </span>
             </div>
@@ -269,12 +262,12 @@ export const DashboardView: React.FC = () => {
               <svg className="w-3.5 h-3.5 text-[var(--status-success)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" className="animate-draw-check" />
               </svg>
-              <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight whitespace-nowrap">
+              <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight">
                 {t('syncCompleted')}
               </span>
             </div>
           ) : (
-            <p className={`text-[13px] ${subText} mt-0.5 font-medium whitespace-nowrap`}>
+            <p className={`text-[13px] ${subText} mt-0.5 font-medium`}>
               {dashboard.dateDisplay}
             </p>
           )}
@@ -306,11 +299,7 @@ export const DashboardView: React.FC = () => {
             </span>
             {showShortcutHints && (
               <kbd
-                className={`px-1.5 py-0.5 text-[10px] rounded border shrink-0 ${
-                  isDark
-                    ? 'bg-[#262630] border-[#3A3A44] text-[#98989F]'
-                    : 'bg-[#F4F4F6] border-[#E5E5EA] text-[#8E8E93]'
-                }`}
+                className="px-1.5 py-0.5 text-[10px] rounded border shrink-0 bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-muted)]"
               >
                 {formatShortcut('Cmd K', platform)}
               </kbd>
@@ -393,7 +382,7 @@ export const DashboardView: React.FC = () => {
                 strokeWidth="1.8"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="text-[#8E8E93] opacity-55"
+                className="text-[var(--text-secondary)] opacity-55"
               />
               <path
                 d="M44 112C68 92 98 92 124 108C146 95 172 95 196 112"
@@ -407,7 +396,7 @@ export const DashboardView: React.FC = () => {
                 stroke="currentColor"
                 strokeWidth="1.6"
                 strokeLinecap="round"
-                className="text-[#8E8E93] opacity-30"
+                className="text-[var(--text-secondary)] opacity-30"
               />
               <rect
                 x="74"
@@ -514,7 +503,7 @@ export const DashboardView: React.FC = () => {
             <button
               type="button"
               onClick={() => setPeekNormalDashboard(true)}
-              className="btn-ghost !h-9 !px-3 !text-[12px] text-[#8E8E93] hover:text-current"
+              className="btn-ghost !h-9 !px-3 !text-[12px] text-[var(--text-secondary)] hover:text-current"
             >
               {t('navDashboard')}
             </button>
@@ -537,7 +526,7 @@ export const DashboardView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => appActions.openVacationModal('status')}
-                  className="text-[11px] font-medium text-[#8E8E93] hover:text-current cursor-pointer px-2 py-1"
+                  className="text-[11px] font-medium text-[var(--text-secondary)] hover:text-current cursor-pointer px-2 py-1"
                 >
                   {t('vacationModalTitle')}
                 </button>
@@ -554,7 +543,7 @@ export const DashboardView: React.FC = () => {
 
           {/* Dynamic Today's Study Progress Board / Active Vacation Protection Hero */}
           <section
-            className={`relative rounded-2xl border p-5 sm:p-6 shadow-[0_2px_10px_rgba(0,0,0,0.02)] flex flex-col lg:flex-row lg:items-center justify-between gap-5 lg:gap-8 transition-all duration-500 ${cardSurface} ${
+            className={`dashboard-hero relative rounded-2xl border p-5 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5 lg:gap-8 transition-all duration-500 ${cardSurface} ${
               isSyncPending
                 ? 'border-[var(--brand-border)] shadow-md ring-1 ring-[var(--brand)]/20'
                 : isVacationActive
@@ -586,7 +575,7 @@ export const DashboardView: React.FC = () => {
                     cx="56"
                     cy="56"
                     r={radius}
-                    stroke={isDark ? '#2A2C36' : '#ECECF2'}
+                    stroke="var(--dashboard-track)"
                     strokeWidth="9"
                     fill="none"
                   />
@@ -758,7 +747,7 @@ export const DashboardView: React.FC = () => {
                             });
                           }}
                           title={t('dueReviewPill', { n: dashboard.todayStats.dueReview })}
-                          className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer min-h-[30px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                          className="dashboard-stat-pill px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)] hover:opacity-85 cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                         >
                           <span className="w-2 h-2 rounded-full bg-[var(--brand)]" aria-hidden="true" />
                           <span>{t('dueReviewPill', { n: dashboard.todayStats.dueReview })}</span>
@@ -777,7 +766,7 @@ export const DashboardView: React.FC = () => {
                             });
                           }}
                           title={t('dueNewPill', { n: dashboard.todayStats.dueNew })}
-                          className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--status-warning-soft)] text-[var(--status-warning)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer min-h-[30px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                          className="dashboard-stat-pill px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--status-warning-soft)] text-[var(--status-warning)] hover:opacity-85 cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                         >
                           <span className="w-2 h-2 rounded-full bg-[var(--status-warning)]" aria-hidden="true" />
                           <span>{t('dueNewPill', { n: dashboard.todayStats.dueNew })}</span>
@@ -796,7 +785,7 @@ export const DashboardView: React.FC = () => {
                             });
                           }}
                           title={t('completedPill', { n: completed })}
-                          className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--status-success-soft)] text-[var(--status-success)] hover:opacity-85 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer min-h-[30px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                          className="dashboard-stat-pill px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--status-success-soft)] text-[var(--status-success)] hover:opacity-85 cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                         >
                           <span className="w-2 h-2 rounded-full bg-[var(--status-success)]" aria-hidden="true" />
                           <span>{t('completedPill', { n: completed })}</span>
@@ -806,7 +795,7 @@ export const DashboardView: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => appActions.openIcuModal('rescue')}
-                            className="px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)] hover:opacity-90 transition-opacity cursor-pointer"
+                            className="dashboard-stat-pill px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)] hover:opacity-90 cursor-pointer"
                           >
                             <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M3 17l6-6 4 4 8-8" />
@@ -825,9 +814,7 @@ export const DashboardView: React.FC = () => {
                       <button
                         type="button"
                         disabled
-                        className={`h-10 px-5 rounded-xl border font-medium text-[13px] flex items-center gap-2 cursor-wait whitespace-nowrap ${
-                          isDark ? 'bg-white/5 border-white/10 text-[#8E8E93]' : 'bg-black/5 border-black/10 text-[#8E8E93]'
-                        }`}
+                        className="h-10 px-5 rounded-xl border font-medium text-[13px] flex items-center gap-2 cursor-wait whitespace-nowrap bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
                       >
                         <span className="w-3.5 h-3.5 rounded-full border-2 border-[var(--status-warning)]/30 border-t-[var(--status-warning)] animate-spin" />
                         <span>{t('syncing')}</span>
@@ -848,7 +835,7 @@ export const DashboardView: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => appActions.startLowEnergySession(decks[0]?.id)}
-                          className="btn-secondary !h-10 !px-3.5 text-[#8E8E93] hover:text-current flex items-center gap-1.5 whitespace-nowrap"
+                          className="btn-secondary !h-10 !px-3.5 text-[var(--text-secondary)] hover:text-current flex items-center gap-1.5 whitespace-nowrap"
                           title={t('lowEnergySub')}
                         >
                           <svg
@@ -868,7 +855,7 @@ export const DashboardView: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => appActions.openCustomStudyModal('mistakes')}
-                          className="btn-secondary !h-10 !px-3.5 text-[#8E8E93] hover:text-current flex items-center gap-1.5 whitespace-nowrap"
+                          className="btn-secondary !h-10 !px-3.5 text-[var(--text-secondary)] hover:text-current flex items-center gap-1.5 whitespace-nowrap"
                           title={t('customStudyModalTitle')}
                         >
                           <svg
@@ -918,9 +905,7 @@ export const DashboardView: React.FC = () => {
 
             {/* Right: Clean, un-crammed Streak Details Card (stacks cleanly below on < lg windows) */}
             <div
-              className={`relative shrink-0 pt-4 lg:pt-0 lg:ps-8 border-t lg:border-t-0 lg:border-s ${
-                isDark ? 'border-[#2A2C36]' : 'border-[#F0F0F5]'
-              } flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center text-start lg:text-end min-w-[140px] ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}
+              className={`relative shrink-0 pt-4 lg:pt-0 lg:ps-8 border-t lg:border-t-0 lg:border-s dashboard-divider flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center text-start lg:text-end min-w-[140px] ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}
             >
               <div className="relative z-10 flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center w-full gap-3 lg:gap-0">
                 <div className="flex items-center lg:justify-end gap-1.5 whitespace-nowrap">
@@ -929,9 +914,7 @@ export const DashboardView: React.FC = () => {
                     <button
                       type="button"
                       aria-label={t('streakRulesTooltipTitle')}
-                      className={`h-3.5 w-3.5 flex items-center justify-center rounded-full transition-colors cursor-help ${
-                        isDark ? 'text-[#63636B] hover:text-[#A1A1AA]' : 'text-[#B4B4BA] hover:text-[#6E6E73]'
-                      }`}
+                      className="h-3.5 w-3.5 flex items-center justify-center rounded-full transition-colors cursor-help text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
                     >
                       <svg
                         viewBox="0 0 16 16"
@@ -948,11 +931,7 @@ export const DashboardView: React.FC = () => {
                     </button>
                     <span
                       role="tooltip"
-                      className={`pointer-events-none absolute end-0 top-full z-50 mt-2 w-[248px] rounded-xl border px-3 py-2.5 text-start whitespace-normal text-[11px] leading-[1.6] shadow-lg opacity-0 translate-y-1 transition-[opacity,transform] duration-150 group-hover/streak:opacity-100 group-hover/streak:translate-y-0 group-focus-within/streak:opacity-100 group-focus-within/streak:translate-y-0 ${
-                        isDark
-                          ? 'bg-[#202127] border-white/10 text-white/85 shadow-[0_10px_30px_rgba(0,0,0,0.55)]'
-                          : 'bg-white border-[#E7E7EC] text-[#3A3A3C] shadow-[0_10px_30px_rgba(0,0,0,0.12)]'
-                      }`}
+                      className="dashboard-tooltip pointer-events-none absolute end-0 top-full z-50 mt-2 w-[248px] rounded-xl border px-3 py-2.5 text-start whitespace-normal text-[11px] leading-[1.6] opacity-0 translate-y-1 transition-[opacity,transform] duration-150 group-hover/streak:opacity-100 group-hover/streak:translate-y-0 group-focus-within/streak:opacity-100 group-focus-within/streak:translate-y-0"
                     >
                       <span className="block font-semibold mb-1">
                         {t('streakRulesTooltipTitle')}
@@ -972,7 +951,7 @@ export const DashboardView: React.FC = () => {
                   ) : (
                     <div className="lg:mt-1 flex items-baseline justify-end gap-1.5 whitespace-nowrap">
                       {/* 火苗图标已去掉，改用火焰色数字承载「连胜」语义（#FF8A00 与背景火焰同色系） */}
-                      <span className="text-[26px] sm:text-[28px] font-bold leading-none tabular-nums text-[#FF8A00]">
+                      <span className="text-[26px] sm:text-[28px] font-bold leading-none tabular-nums text-[var(--status-warning)]">
                         {animatedStreakDays}
                       </span>
                       <span className={`text-[13px] ${subText}`}>{t('daysUnit')}</span>
@@ -1028,7 +1007,7 @@ export const DashboardView: React.FC = () => {
             </div>
 
             {isSyncPending ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="dashboard-deck-grid grid gap-4">
                 {Array.from({ length: 2 }).map((_, idx) => (
                   <div
                     key={idx}
@@ -1059,7 +1038,7 @@ export const DashboardView: React.FC = () => {
                 <p className={`text-[12px] ${subText}`}>{t('noDecksSub')}</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="dashboard-deck-grid grid gap-4">
                 {displayedDecks.map((deck) => {
                   const iconNode = deckIconMap[deck.accent] || deckIconMap.indigo;
                   const deckScale = getAccentScale(deckAccentToTheme[deck.accent] || 'indigo', theme);
@@ -1069,8 +1048,8 @@ export const DashboardView: React.FC = () => {
                     learning: 0,
                     new: 0,
                   };
-                  const trackColor = isDark ? '#2A2C36' : '#ECECF2';
-                  const newColor = isDark ? '#3A3D48' : '#D6D6DE';
+                  const trackColor = 'var(--dashboard-track)';
+                  const newColor = 'var(--dashboard-track-new)';
                   const stageLabels = t('masteryStageLabels').split('|');
                   const masteryStages = [
                     { label: stageLabels[0] || '', value: breakdown.mature, color: deckScale.brand },
@@ -1087,7 +1066,7 @@ export const DashboardView: React.FC = () => {
                         '--deck-brand-hover': deckScale.brandHover,
                         '--deck-border': deckScale.brandBorder,
                       } as React.CSSProperties}
-                      className={`deck-card group relative flex cursor-pointer flex-col rounded-2xl border p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-[transform,border-color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:border-[var(--deck-border)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] focus-within:border-[var(--deck-border)] ${cardSurface} ${hintOpen ? 'z-30' : ''} ${
+                      className={`deck-card group relative flex cursor-pointer flex-col rounded-2xl border p-5 transition-[transform,border-color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:border-[var(--deck-border)] focus-within:border-[var(--deck-border)] ${cardSurface} ${hintOpen ? 'z-30' : ''} ${
                         syncJustFinished ? 'animate-sync-reveal delay-stagger-2' : ''
                       }`}
                     >
@@ -1200,7 +1179,7 @@ export const DashboardView: React.FC = () => {
                         <div
                           id={`mastery-hint-${deck.id}`}
                           role="tooltip"
-                          className={`absolute right-4 top-[58px] z-40 w-56 rounded-xl border p-3 text-left shadow-lg animate-in fade-in duration-150 ${cardSurface}`}
+                          className={`dashboard-tooltip absolute end-4 top-[58px] z-40 w-56 rounded-xl border p-3 text-start animate-in fade-in duration-150 ${cardSurface}`}
                           onClick={(e) => e.stopPropagation()}
                           onMouseEnter={() => openMasteryHint(deck.id)}
                           onMouseLeave={scheduleCloseMasteryHint}
@@ -1216,7 +1195,7 @@ export const DashboardView: React.FC = () => {
                               </div>
                             ))}
                           </div>
-                          <div className={`mt-2.5 border-t pt-2 text-[10px] leading-relaxed ${subText} ${isDark ? 'border-[#343644]' : 'border-[#ECECF2]'}`}>
+                          <div className={`dashboard-divider mt-2.5 border-t pt-2 text-[10px] leading-relaxed ${subText}`}>
                             {t('masteryHintFootnote')}
                           </div>
                         </div>
@@ -1229,10 +1208,10 @@ export const DashboardView: React.FC = () => {
           </section>
 
           {/* Bottom Analytics Row: Activity Heatmap & Weekly Rhythm */}
-          <section className="grid grid-cols-12 gap-4 pb-4">
+          <section className="dashboard-analytics-grid grid grid-cols-12 gap-4 pb-4">
             {/* Left: Heatmap */}
             <div
-              className={`col-span-12 xl:col-span-7 rounded-2xl border p-5 flex flex-col justify-between relative ${cardSurface} ${
+              className={`col-span-12 xl:col-span-7 rounded-2xl border p-5 sm:p-6 flex flex-col justify-between relative ${cardSurface} ${
                 syncJustFinished ? 'animate-sync-reveal delay-stagger-3' : ''
               }`}
             >
@@ -1249,24 +1228,24 @@ export const DashboardView: React.FC = () => {
                       ))}
                     </div>
                   </div>
-                  <div className="my-2">
-                    <div className="grid grid-cols-26 gap-1.5">
-                      {Array.from({ length: 26 }).map((_, colIdx) => (
-                        <div key={colIdx} className="flex flex-col gap-1.5">
-                          {Array.from({ length: 7 }).map((__, rowIdx) => (
-                            <div
-                              key={rowIdx}
-                              className="w-2.5 h-2.5 rounded-[3px] animate-skeleton-shimmer opacity-40"
-                            />
-                          ))}
-                        </div>
-                      ))}
+                  <div className="dashboard-heatmap-viewport my-2">
+                    <div className="dashboard-heatmap-content">
+                      <div className="grid grid-cols-26 gap-1.5">
+                        {Array.from({ length: 26 }).map((_, colIdx) => (
+                          <div key={colIdx} className="flex flex-col gap-1.5">
+                            {Array.from({ length: 7 }).map((__, rowIdx) => (
+                              <div
+                                key={rowIdx}
+                                className="w-2.5 h-2.5 rounded-[3px] animate-skeleton-shimmer opacity-40"
+                              />
+                            ))}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   <div
-                    className={`pt-3.5 border-t ${
-                      isDark ? 'border-[#2A2C36]' : 'border-[#F2F2F7]'
-                    } flex items-center gap-8`}
+                    className="dashboard-divider pt-3.5 border-t flex items-center gap-8"
                   >
                     <div className="w-20 h-7 rounded animate-skeleton-shimmer" />
                     <div className="w-20 h-7 rounded animate-skeleton-shimmer" />
@@ -1305,13 +1284,9 @@ export const DashboardView: React.FC = () => {
                         style={{
                           left: `${Math.min(82, Math.max(8, (hoveredHeatmapCell.colIdx / 25) * 100))}%`,
                         }}
-                        className={`absolute -top-13 -translate-x-1/2 z-50 pointer-events-none px-3 py-1.5 rounded-xl border shadow-xl backdrop-blur-md whitespace-nowrap transition-all duration-75 ${
-                          isDark
-                            ? 'bg-[#1E1F28]/95 border-[#3A3C4C] text-white'
-                            : 'bg-[#1D1D1F]/95 border-[#3A3A44] text-white'
-                        }`}
+                        className="dashboard-tooltip absolute -top-13 -translate-x-1/2 z-50 pointer-events-none px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all duration-75"
                       >
-                        <div className="text-[10px] text-[#AEAEB8]">
+                        <div className="text-[10px] text-[var(--text-secondary)]">
                           {formatFullDateWithWeekday(hoveredHeatmapCell.date, resolvedLang)}
                         </div>
                         <div className="text-[11px] font-semibold mt-0.5 flex items-center gap-1.5">
@@ -1335,66 +1310,68 @@ export const DashboardView: React.FC = () => {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-26 gap-1.5">
-                      {Array.from({ length: 26 }).map((_, colIdx) => (
-                        <div key={colIdx} className="flex flex-col gap-1.5">
-                          {Array.from({ length: 7 }).map((__, rowIdx) => {
-                            const cell = recent182Cells[colIdx * 7 + rowIdx] || {
-                              date: '',
-                              count: 0,
-                              accuracy: 0,
-                              level: 0,
-                            };
-                            const isFrozen = Boolean(cell.isStreakFrozen);
-                            const isHovered =
-                              hoveredHeatmapCell?.colIdx === colIdx &&
-                              hoveredHeatmapCell?.rowIdx === rowIdx;
-                            return (
-                              <div
-                                key={rowIdx}
-                                onMouseEnter={() =>
-                                  setHoveredHeatmapCell({
-                                    date: cell.date,
-                                    count: cell.count,
-                                    accuracy: cell.accuracy ?? (cell.count > 0 ? dashboard.heatmap.retentionRate : 0),
-                                    isFrozen,
-                                    colIdx,
-                                    rowIdx,
-                                  })
-                                }
-                                style={isFrozen ? undefined : heatmapLevelStyle(cell.level)}
-                                className={`w-2.5 h-2.5 rounded-[3px] transition-all duration-200 ${
-                                  isHovered ? 'scale-125 ring-2 ring-[var(--brand)]' : ''
-                                } ${
-                                  isFrozen
-                                    ? 'bg-cyan-400/40 ring-1 ring-cyan-400'
-                                    : ''
-                                }`}
-                              />
-                            );
-                          })}
+                    <div className="dashboard-heatmap-viewport">
+                      <div className="dashboard-heatmap-content">
+                        <div className="grid grid-cols-26 gap-1.5">
+                          {Array.from({ length: 26 }).map((_, colIdx) => (
+                            <div key={colIdx} className="flex flex-col gap-1.5">
+                              {Array.from({ length: 7 }).map((__, rowIdx) => {
+                                const cell = recent182Cells[colIdx * 7 + rowIdx] || {
+                                  date: '',
+                                  count: 0,
+                                  accuracy: 0,
+                                  level: 0,
+                                };
+                                const isFrozen = Boolean(cell.isStreakFrozen);
+                                const isHovered =
+                                  hoveredHeatmapCell?.colIdx === colIdx &&
+                                  hoveredHeatmapCell?.rowIdx === rowIdx;
+                                return (
+                                  <div
+                                    key={rowIdx}
+                                    onMouseEnter={() =>
+                                      setHoveredHeatmapCell({
+                                        date: cell.date,
+                                        count: cell.count,
+                                        accuracy: cell.accuracy ?? (cell.count > 0 ? dashboard.heatmap.retentionRate : 0),
+                                        isFrozen,
+                                        colIdx,
+                                        rowIdx,
+                                      })
+                                    }
+                                    style={isFrozen ? undefined : heatmapLevelStyle(cell.level)}
+                                    className={`w-2.5 h-2.5 rounded-[3px] transition-all duration-200 ${
+                                      isHovered ? 'scale-125 ring-2 ring-[var(--brand)]' : ''
+                                    } ${
+                                      isFrozen
+                                        ? 'bg-cyan-400/40 ring-1 ring-cyan-400'
+                                        : ''
+                                    }`}
+                                  />
+                                );
+                              })}
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
 
-                    <div className={`mt-2.5 flex items-center justify-between text-[10px] ${subText} px-0.5`}>
-                      {dynamicMonthLabels.map((m, idx) => (
-                        <span
-                          key={`${m}-${idx}`}
-                          className={
-                            idx === dynamicMonthLabels.length - 1 ? 'font-semibold text-[var(--brand-text)]' : ''
-                          }
-                        >
-                          {m}
-                        </span>
-                      ))}
+                        <div className={`mt-2.5 flex items-center justify-between text-[10px] ${subText} px-0.5`}>
+                          {dynamicMonthLabels.map((m, idx) => (
+                            <span
+                              key={`${m}-${idx}`}
+                              className={
+                                idx === dynamicMonthLabels.length - 1 ? 'font-semibold text-[var(--brand-text)]' : ''
+                              }
+                            >
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
                   <div
-                    className={`pt-3.5 border-t ${
-                      isDark ? 'border-[#2A2C36]' : 'border-[#F2F2F7]'
-                    } flex items-center gap-6 sm:gap-8 flex-wrap`}
+                    className="dashboard-divider pt-3.5 border-t flex items-center gap-6 sm:gap-8 flex-wrap"
                   >
                     <div>
                       <div className="text-[15px] font-bold whitespace-nowrap">
@@ -1424,7 +1401,7 @@ export const DashboardView: React.FC = () => {
 
             {/* Right: Weekly Rhythm Bar Chart */}
             <div
-              className={`col-span-12 xl:col-span-5 rounded-2xl border p-5 flex flex-col justify-between relative ${cardSurface} ${
+              className={`col-span-12 xl:col-span-5 rounded-2xl border p-5 sm:p-6 flex flex-col justify-between relative ${cardSurface} ${
                 syncJustFinished ? 'animate-sync-reveal delay-stagger-3' : ''
               }`}
             >
@@ -1444,9 +1421,7 @@ export const DashboardView: React.FC = () => {
                     ))}
                   </div>
                   <div
-                    className={`pt-3.5 border-t ${
-                      isDark ? 'border-[#2A2C36]' : 'border-[#F2F2F7]'
-                    }`}
+                    className="dashboard-divider pt-3.5 border-t"
                   >
                     <div className="w-48 h-3 rounded animate-skeleton-shimmer" />
                   </div>
@@ -1482,11 +1457,7 @@ export const DashboardView: React.FC = () => {
                         >
                           {isHovered && (
                             <div
-                              className={`absolute -top-7 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-2.5 py-1 rounded-lg border shadow-lg text-[11px] font-semibold whitespace-nowrap ${
-                                isDark
-                                  ? 'bg-[#1E1F28]/95 border-[#3A3C4C] text-white'
-                                  : 'bg-[#1D1D1F]/95 border-[#3A3A44] text-white'
-                              }`}
+                              className="dashboard-tooltip absolute -top-7 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-2.5 py-1 rounded-lg border text-[11px] font-semibold whitespace-nowrap"
                             >
                               {tooltipText}
                             </div>
@@ -1516,11 +1487,7 @@ export const DashboardView: React.FC = () => {
                     })}
                   </div>
 
-                  <div
-                    className={`pt-3.5 border-t ${
-                      isDark ? 'border-[#2A2C36]' : 'border-[#F2F2F7]'
-                    } text-[11px] ${subText}`}
-                  >
+                  <div className={`dashboard-divider pt-3.5 border-t text-[11px] ${subText}`}>
                     {t('weeklyRhythmFooter', {
                       sec: dashboard.weeklyRhythm.avgSecondsPerCard,
                       min: dashboard.weeklyRhythm.longestSessionMinutes,

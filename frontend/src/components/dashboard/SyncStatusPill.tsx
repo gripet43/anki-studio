@@ -13,7 +13,6 @@ export const SyncStatusPill: React.FC = () => {
     isInitialSyncing,
     syncJustFinished,
     lastSyncedTimestamp,
-    theme,
     resolvedLang,
     showShortcutHints,
   } = useAppStore();
@@ -110,19 +109,8 @@ export const SyncStatusPill: React.FC = () => {
     appActions.syncCollection();
   };
 
-  const pillSurface =
-    theme === 'oled'
-      ? 'bg-[#121216]/90 border-[#262632] hover:border-[#383848] text-white shadow-xs'
-      : theme === 'dark'
-      ? 'bg-[#1C1C24]/80 border-white/[0.08] hover:border-white/[0.16] text-[#F4F4F6] shadow-xs'
-      : 'bg-white/85 border-black/[0.08] hover:border-black/[0.16] text-[#1D1D1F] shadow-xs';
-
-  const popoverSurface =
-    theme === 'oled'
-      ? 'bg-[#121216]/98 border-[#262632] text-white shadow-[0_16px_36px_rgba(0,0,0,0.7)]'
-      : theme === 'dark'
-      ? 'bg-[#1E1E26]/95 border-[#2F2F3D] text-[#F4F4F6] shadow-[0_16px_36px_rgba(0,0,0,0.45)]'
-      : 'bg-white/95 border-[#E5E5EA] text-[#1D1D1F] shadow-[0_16px_36px_rgba(0,0,0,0.14)]';
+  const pillSurface = 'dashboard-surface hover:border-[var(--brand-border)]';
+  const popoverSurface = 'dashboard-tooltip';
 
   const effectiveNow = Math.max(nowTick, lastSyncedTimestamp || 0);
   const relativeTimeStr = formatRelativeTimeString(lastSyncedTimestamp, resolvedLang, effectiveNow);
@@ -198,7 +186,7 @@ export const SyncStatusPill: React.FC = () => {
         </div>
 
         {/* Hairline Divider */}
-        <div aria-hidden="true" className="w-px h-3.5 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5 shrink-0" />
+        <div aria-hidden="true" className="w-px h-3.5 bg-[var(--border-subtle)] mx-0.5 shrink-0" />
 
         {/* Action Trigger Icon + Optional Shortcut Hint */}
         <div className="flex items-center gap-1.5 px-1 py-0.5 rounded-full">
@@ -246,7 +234,7 @@ export const SyncStatusPill: React.FC = () => {
           className={`absolute end-0 top-11 z-50 w-[280px] max-w-[calc(100vw-2rem)] rounded-2xl border p-3.5 backdrop-blur-xl animate-flyout-enter sync-pill-forced-border ${popoverSurface}`}
         >
           {/* Header */}
-          <div className="flex items-center gap-2 pb-2.5 border-b border-black/[0.06] dark:border-white/[0.08]">
+          <div className="flex items-center gap-2 pb-2.5 border-b border-[var(--border-subtle)]">
             <svg
               aria-hidden="true"
               className="w-4 h-4 text-[var(--brand-text)] shrink-0"
@@ -271,7 +259,7 @@ export const SyncStatusPill: React.FC = () => {
               {hasSynced ? (
                 <time
                   dateTime={isoTimestamp}
-                  className="font-mono text-[#1D1D1F] dark:text-[#E5E5EA] tabular-nums"
+                  className="font-mono text-[var(--text-primary)] tabular-nums"
                 >
                   {relativeTimeStr}
                 </time>
@@ -294,7 +282,7 @@ export const SyncStatusPill: React.FC = () => {
           </div>
 
           {/* Sync Guidance Footnote (此时间代表上次同步云端时间。如有新的修改，请点击按钮完成同步。) */}
-          <div className="pt-2.5 text-[10.5px] leading-relaxed text-[var(--text-secondary)] border-t border-black/[0.04] dark:border-white/[0.04]">
+          <div className="pt-2.5 text-[10.5px] leading-relaxed text-[var(--text-secondary)] border-t border-[var(--border-subtle)]">
             {hasSynced
               ? t('syncSnapshotFootnote')
               : t('syncNoRecordFootnote')}

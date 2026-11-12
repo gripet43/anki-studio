@@ -774,4 +774,29 @@ for (const cls of usedAnimateClasses) {
   );
 }
 
+// Item #36: Dashboard visual hierarchy — semantic surfaces, content-aware grids, and reduced visual noise
+const dashboardCssSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/index.css'),
+  'utf-8'
+);
+assert(
+  dashboardSrc.includes('dashboard-shell') &&
+    dashboardSrc.includes('dashboard-header') &&
+    dashboardSrc.includes('dashboard-surface') &&
+    dashboardSrc.includes('dashboard-hero') &&
+    dashboardSrc.includes('dashboard-stat-pill') &&
+    dashboardSrc.includes('dashboard-deck-grid') &&
+    dashboardSrc.includes('dashboard-heatmap-viewport') &&
+    dashboardSrc.includes('dashboard-tooltip') &&
+    dashboardCssSrc.includes('--dashboard-shadow-card') &&
+    dashboardCssSrc.includes('.dashboard-surface') &&
+    dashboardCssSrc.includes('.dashboard-deck-grid') &&
+    dashboardCssSrc.includes('.dashboard-heatmap-viewport') &&
+    cssBundle.includes('dashboard-surface') &&
+    cssBundle.includes('dashboard-deck-grid') &&
+    cssBundle.includes('dashboard-heatmap-viewport') &&
+    syncPillSrc.includes('dashboard-tooltip'),
+  'Item #36: Dashboard must use semantic surface tokens, content-aware deck/heatmap layout, and shared tooltip styling'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');
