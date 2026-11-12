@@ -7,25 +7,41 @@
 
 ## 1. Title（限 80 字符）
 
-表单对 Title 的说明是「A one-line description, less than 80 characters」——它出现在插件目录的列表页，用于让人判断「这是干什么的」，所以**功能描述优先于语言清单**。
+表单对 Title 的说明是「A one-line description, less than 80 characters」，它出现在插件目录的列表页。
 
-**推荐（56 字符）**
+这里要的不是「说明功能」，而是**让任何语言的用户在扫列表时第一眼认出自己的文字**：`Anki Studio` 之后依次排开各语言里「工作室」这个词本身。读者看到母语的那个词，会自动得出「这插件我看得懂」的结论——比写 `16 languages` 强，因为数字需要经过一次推理，而母语词是零成本的。
+
+**推荐（72 字符，7 种语言）**
 
 ```
-Anki Studio — immersive desktop workspace · 16 languages
+Anki Studio · 工作室 · スタジオ · 스튜디오 · Estudio · Atelier · Werkstatt · Студия
 ```
 
-**为什么没有逐一列出 16 种语言**：16 个语言名连分隔符实测占 **119 字符**，直接超限；只列其中 6–8 种（下面 B 方案，63–73 字符）虽然塞得下，但会暗示其余语言不支持，中韩等用户看到自己语言缺席反而扣分。写 "16 languages" 既准确又不占篇幅。
+| 词 | 语言 | 顺带覆盖 |
+|---|---|---|
+| 工作室 | 中文（简繁同形） | zh-CN / zh-TW |
+| スタジオ | 日本語 | |
+| 스튜디오 | 한국어 | |
+| Estudio | Español | 葡语 Estúdio 只差一个重音符，读者照样认得出 |
+| Atelier | Français | |
+| Werkstatt | Deutsch | 荷兰语 Werkplaats 同源，可类推 |
+| Студия | Русский | 乌克兰语、保加利亚语同形或近似 |
+
+**为什么停在 7 个**：以 ` · ` 分隔实测，第 8 个词（Estúdio 或 Stüdyo）会把标题推到 **82 / 81 字符**，硬超限。7 是这套写法的上限，剩下的 8 字符放不下任何有意义的词。
+
+**刻意没列的两种语言**：`it` 和 `pl` 的「工作室」就是 **Studio**——与标题里已有的英文原词一字不差。列上去只占字符、不产生任何新信息，这两国读者其实已经看懂了。
+
+**代价**：标题从此不再说明「插件干什么用」。这是有意的取舍——功能归 Tags 和 Description 承担，而 Description 首句 `Anki Studio turns Anki's main window into a desktop-grade workspace` 正是列表页正文的第一行，扫到标题的人往下拉一行就能补上功能信息。
 
 <details>
-<summary>其他备选（均已实测不超限）</summary>
+<summary>其他备选（字符数均实测）</summary>
 
-| 方案 | 字符 | 内容 |
-|---|---|---|
-| B · 列 6 种 | 63 | `Anki Studio · 中文 · English · 日本語 · Deutsch · Español · Français` |
-| B′ · 列 8 种 | 73 | `Anki Studio · 中文 · English · 日本語 · Deutsch · Español · Français · Русский` |
-| C · 中英折中 | 35 | `Anki Studio｜沉浸式桌面工作区 · 16 languages` |
-| D · 极简 | 47 | `Anki Studio · modern desktop workspace for Anki` |
+| 方案 | 字符 | 内容 | 取舍 |
+|---|---|---|---|
+| 窄分隔 9 种 | 76 | `Anki Studio·工作室·スタジオ·스튜디오·Estudio·Atelier·Werkstatt·Студия·Stüdyo·Werkplaats` | 多塞土语、荷语，但无空格全挤在一起，扫读变慢 |
+| 窄分隔 8 种 | 65 | `Anki Studio·工作室·スタジオ·스튜디오·Estudio·Atelier·Werkstatt·Студия·Stüdyo` | 同上，且省下的空间没处用 |
+| 7 种 +「桌面工作区」 | 71 | `Anki Studio · 工作室 · スタジオ · 스튜디오 · Estudio · Atelier · Werkstatt · 桌面工作区` | 补回一点功能暗示，但要挤掉一个语言位 |
+| 功能描述优先 | 56 | `Anki Studio — immersive desktop workspace · 16 languages` | 语言信号变成需要推理的数字 |
 
 </details>
 
@@ -56,6 +72,10 @@ https://github.com/gripet43/anki-studio/issues
 表单说明：**Markdown 和 basic HTML tags 都支持**。以下整段复制即可。
 
 图片走 GitHub raw 直链，仓库公开后自动可用；GIF 是 5 张真实界面截图（首页 / 卡片库 / 复习 / 统计 / 深色）做成交叉淡入，900×563、13 帧、约 1.3 MB。
+
+正文共 16 段语言文案，顺序与 §1 标题呼应：英文打头（不设标题）、其余 15 段用 `## 语言名` 分隔。
+
+> **一处待验证**：已确认 AnkiWeb 一定渲染的是粗体、斜体、链接、图片、无序列表、`---` 分隔线（对着 Review Heatmap 的线上页面核过）。至于 `##` 二级标题这个语法，官方文档只写了「supports Markdown」，没有明确保证。万一上传后看到的是字面的 `## 简体中文`，把 15 处 `## ` 前缀批量换成 `**…**` 即可，分隔效果由已有的 `---` 承担，观感几乎不受影响。
 
 ```markdown
 Anki Studio turns Anki's main window into a desktop-grade workspace, while staying fully compatible with AnkiWeb sync.

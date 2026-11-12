@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+- **[WorkBuddy] 改写 AnkiWeb Title 策略：从「功能描述优先」改为「各语言母语词串联」，并补 Description 的渲染风险兜底**（改 [`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)）：
+  - **原方案被用户判为理解偏差**：上一版推荐 `Anki Studio — immersive desktop workspace · 16 languages`，逻辑是"功能优先、语言数量次要"。用户指出真实意图是——标题里直接排开各语言中「工作室」这个词，让任何语言的读者扫一眼就认出自己的母语词，从而**零成本**得出"这个插件我看得懂"。`16 languages` 是数字，需要读者额外推理一步才转化为信任，效果弱于母语词本身。
+  - **现推荐（72 字符，未超 80 上限）**：`Anki Studio · 工作室 · スタジオ · 스튜디오 · Estudio · Atelier · Werkstatt · Студия`。排序按覆盖面：中文（简繁同形）→ 日 → 韩 → 西（葡语 `Estúdio` 仅差一个重音符，可覆盖）→ 法 → 德（荷语 `Werkplaats` 同源可类推）→ 俄（乌克兰语、保加利亚语近似）。
+  - **7 个是硬上限**：以 ` · ` 分隔逐个实测，第 8 个词（`Estúdio` 或 `Stüdyo`）会把标题顶到 **82 / 81 字符**，无解。余下 8 字符放不下任何有意义的词。
+  - **刻意剔除 `it` 与 `pl`**：这两国语言里「工作室」就是 **Studio**，与标题中已有的英文原词一字不差，列上去只消耗字符、不产生任何新信息——这两国读者本来就已经看懂了。
+  - **代价已明示**：标题不再说明功能。这是有意的取舍，功能由 Tags 与 Description 首句承担，而该首句正是列表页正文第一行，往下拉一行即可补上。
+  - **备选表整体重测**：旧表里「窄分隔 9 种 = 73」实测应为 **76**，「7 种 + 功能尾巴 = 88」是占位数字且未给出可用写法。现四条备选全部按真实字符串重新测量（窄分隔 9 种 76 / 窄分隔 8 种 65 / 7 种+「桌面工作区」71 / 功能描述优先 56）。
+  - **新发现的一处渲染风险，已写进 §5**：对着 Review Heatmap 的线上页面核过，AnkiWeb 一定渲染的是粗体、斜体、链接、图片、无序列表与 `---`；而 `##` 二级标题官网只说「supports Markdown」，没有明文保证。正文 15 处 `## 语言名` 若不被解析会显示成字面井号，故预先写明兜底：批量换成 `**…**`，分隔效果由已有 `---` 承担。这是**待上传后目视确认**的项，不阻塞发布。
+
 ## [v1.4.0] - 2026-11-12
 
 - **[WorkBuddy] 上架 AnkiWeb 前的发布整改：manifest 版本语义修正、同步安全性清理、换档案重挂载、许可证与文档补全**（改 [`manifest.json`](manifest.json)、[`scripts/build_ankiaddon.py`](scripts/build_ankiaddon.py)、[`__init__.py`](__init__.py)、[`bridge/vacation_service.py`](bridge/vacation_service.py)、[`config.md`](config.md)、[`README.md`](README.md)，新增 [`LICENSE`](LICENSE)、[`tests/test_release_safety.py`](tests/test_release_safety.py)）：
