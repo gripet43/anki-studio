@@ -299,7 +299,12 @@ class DeckService:
 
             heatmap_data = self._build_heatmap_and_streak(col, cutoff, lang)
             weekly_rhythm = self._build_weekly_rhythm(col, cutoff, avg_sec_per_card, lang)
-            advanced_stats = self.get_statistics({"language": lang})
+            include_stats = bool(data.get("includeStats", False))
+            advanced_stats = (
+                self.get_statistics({"language": lang})
+                if include_stats
+                else self._empty_advanced_stats(lang)
+            )
 
             # Vacation & Backlog state resolution
             vacation_cfg = cfg.get("vacation_state", {})
@@ -317,20 +322,21 @@ class DeckService:
                 except Exception:
                     vacation_remaining_days = int(vacation_cfg.get("days", 0))
 
-            overdue_count = 0
-            try:
-                today_sched = getattr(col.sched, "today", None)
-                if today_sched is not None and hasattr(col, "db"):
-                    ov_row = col.db.first(
-                        "SELECT count(*) FROM cards WHERE queue = 2 AND due < ?",
-                        int(today_sched),
-                    )
-                    overdue_count = int(ov_row[0] or 0) if ov_row else 0
-                else:
-                    overdue_cids = col.find_cards("is:due is:review prop:due<0") if hasattr(col, "find_cards") else []
-                    overdue_count = len(overdue_cids)
-            except Exception:
-                overdue_count = total_due_review
+            overdue_count = getattr(self, "_last_overdue_count", None)
+            if overdue_count is None:
+                try:
+                    today_sched = getattr(col.sched, "today", None)
+                    if today_sched is not None and hasattr(col, "db"):
+                        ov_row = col.db.first(
+                            "SELECT count(*) FROM cards WHERE queue = 2 AND due < ?",
+                            int(today_sched),
+                        )
+                        overdue_count = int(ov_row[0] or 0) if ov_row else 0
+                    else:
+                        overdue_cids = col.find_cards("is:due is:review prop:due<0") if hasattr(col, "find_cards") else []
+                        overdue_count = len(overdue_cids)
+                except Exception:
+                    overdue_count = total_due_review
 
             has_avalanche = overdue_count >= 30 or (total_due_review + total_due_new) >= 60
 
@@ -626,29 +632,49 @@ class DeckService:
         icons = ["book", "code", "heart", "folder", "layers", "sparkles"]
         accents = ["indigo", "blue", "emerald", "amber", "rose", "purple"]
 
-        # 一次聚合：卡片总数、加权熟记度，以及四个阶段的实际张数。
-        # 阶段互斥且完备（ivl >= 21 优先），供前端画构成条；加权值仍用于 mastery 百分比。
+        # 一次整数聚合：卡片总数、三段互斥整数计数（ivl>=21 / ivl<21&type=2 / ivl<21&type in (1,3)）及超期卡数。
+        # 新卡数与加权熟记度在 Python 端由 3 个整数直接算得，避免 SQL 重复求值 5 条 CASE 与浮点累加，同时省去单独的超期扫描。
         direct_stats: Dict[int, Tuple[int, float, int, int, int, int]] = {}
+        self._last_overdue_count = None
+        today_sched = getattr(col.sched, "today", None)
         if hasattr(col, "db") and hasattr(col.db, "all"):
             try:
-                rows = col.db.all(
-                    "SELECT did, count(*), "
-                    "coalesce(sum(case when ivl >= 21 then 1.0 when type = 2 then 0.6 when type in (1,3) then 0.3 else 0.0 end), 0), "
-                    "coalesce(sum(case when ivl >= 21 then 1 else 0 end), 0), "
-                    "coalesce(sum(case when ivl < 21 and type = 2 then 1 else 0 end), 0), "
-                    "coalesce(sum(case when ivl < 21 and type in (1,3) then 1 else 0 end), 0), "
-                    "coalesce(sum(case when ivl < 21 and type not in (1,2,3) then 1 else 0 end), 0) "
-                    "FROM cards GROUP BY did"
-                )
+                if today_sched is not None:
+                    rows = col.db.all(
+                        "SELECT did, count(*), "
+                        "coalesce(sum(case when ivl >= 21 then 1 else 0 end), 0), "
+                        "coalesce(sum(case when ivl < 21 and type = 2 then 1 else 0 end), 0), "
+                        "coalesce(sum(case when ivl < 21 and type in (1,3) then 1 else 0 end), 0), "
+                        "coalesce(sum(case when queue = 2 and due < ? then 1 else 0 end), 0) "
+                        "FROM cards GROUP BY did",
+                        int(today_sched),
+                    )
+                    overdue_sum = 0
+                else:
+                    rows = col.db.all(
+                        "SELECT did, count(*), "
+                        "coalesce(sum(case when ivl >= 21 then 1 else 0 end), 0), "
+                        "coalesce(sum(case when ivl < 21 and type = 2 then 1 else 0 end), 0), "
+                        "coalesce(sum(case when ivl < 21 and type in (1,3) then 1 else 0 end), 0), "
+                        "0 "
+                        "FROM cards GROUP BY did"
+                    )
+                    overdue_sum = None
                 for r in rows:
                     if r[0] is not None:
-                        direct_stats[int(r[0])] = (
-                            int(r[1] or 0), float(r[2] or 0.0),
-                            int(r[3] or 0), int(r[4] or 0),
-                            int(r[5] or 0), int(r[6] or 0),
-                        )
+                        tot = int(r[1] or 0)
+                        n_mat = int(r[2] or 0)
+                        n_rev = int(r[3] or 0)
+                        n_lrn = int(r[4] or 0)
+                        n_nw = max(0, tot - n_mat - n_rev - n_lrn)
+                        w_mast = n_mat * 1.0 + n_rev * 0.6 + n_lrn * 0.3
+                        direct_stats[int(r[0])] = (tot, w_mast, n_mat, n_rev, n_lrn, n_nw)
+                        if overdue_sum is not None:
+                            overdue_sum += int(r[5] or 0)
+                if overdue_sum is not None:
+                    self._last_overdue_count = overdue_sum
             except Exception:
-                pass
+                self._last_overdue_count = None
 
         # 自底向上缓存 (总数, 加权值, 已熟记, 复习中, 学习中, 新卡)
         subtree_stats: Dict[int, Tuple[int, float, int, int, int, int]] = {}
@@ -692,20 +718,18 @@ class DeckService:
                     placeholders = ",".join("?" for _ in dids)
                     stats_row = col.db.first(
                         f"SELECT count(*), "
-                        f"coalesce(sum(case when ivl >= 21 then 1.0 when type = 2 then 0.6 when type in (1,3) then 0.3 else 0.0 end), 0), "
                         f"coalesce(sum(case when ivl >= 21 then 1 else 0 end), 0), "
                         f"coalesce(sum(case when ivl < 21 and type = 2 then 1 else 0 end), 0), "
-                        f"coalesce(sum(case when ivl < 21 and type in (1,3) then 1 else 0 end), 0), "
-                        f"coalesce(sum(case when ivl < 21 and type not in (1,2,3) then 1 else 0 end), 0) "
+                        f"coalesce(sum(case when ivl < 21 and type in (1,3) then 1 else 0 end), 0) "
                         f"FROM cards WHERE did IN ({placeholders})",
                         *dids,
                     )
                     total_cards = int(stats_row[0] or 0) if stats_row else 0
-                    weighted_mastered = float(stats_row[1] or 0.0) if stats_row else 0.0
-                    n_mature = int(stats_row[2] or 0) if stats_row else 0
-                    n_review = int(stats_row[3] or 0) if stats_row else 0
-                    n_learning = int(stats_row[4] or 0) if stats_row else 0
-                    n_new = int(stats_row[5] or 0) if stats_row else 0
+                    n_mature = int(stats_row[1] or 0) if stats_row else 0
+                    n_review = int(stats_row[2] or 0) if stats_row else 0
+                    n_learning = int(stats_row[3] or 0) if stats_row else 0
+                    n_new = max(0, total_cards - n_mature - n_review - n_learning)
+                    weighted_mastered = n_mature * 1.0 + n_review * 0.6 + n_learning * 0.3
 
                 mastery = (
                     min(100, max(0, round((weighted_mastered / total_cards) * 100)))
@@ -1052,12 +1076,20 @@ class DeckService:
                 "isStreakFrozen": is_frozen,
             })
 
-        all_days_rows = col.db.all(
-            "SELECT DISTINCT CAST((id / 1000 - ?) / 86400 AS INT) as d FROM revlog WHERE type < 4 AND ease > 0 ORDER BY d ASC",
+        recent_day_offsets = {
+            d_idx - 364
+            for d_idx, info in day_map.items()
+            if info.get("count", 0) > 0
+        }
+        older_days_rows = col.db.all(
+            "SELECT DISTINCT CAST((id / 1000 - ?) / 86400 AS INT) as d "
+            "FROM revlog WHERE id < ? AND type < 4 AND ease > 0",
             today_start_sec,
+            start_365_sec * 1000,
         )
-        day_offsets = sorted({int(r[0]) for r in all_days_rows if r[0] is not None})
-        day_set = set(day_offsets)
+        older_day_offsets = {int(r[0]) for r in older_days_rows if r[0] is not None}
+        day_set = recent_day_offsets | older_day_offsets
+        day_offsets = sorted(day_set)
 
         def is_day_active(d_off: int) -> bool:
             if d_off in day_set:

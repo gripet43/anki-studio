@@ -28,7 +28,7 @@ export const StatsView: React.FC = () => {
       ? 'bg-[#1A1B21] border-[#2A2C36] text-white'
       : 'bg-white border-[#EAECEF] text-[#1D1D1F]';
 
-  const subText = 'text-[#636366] dark:text-[#8E8E93]';
+  const subText = 'text-[#5C5E66] dark:text-[#A8AAB8]';
 
   const {
     maturityBreakdown,
@@ -198,7 +198,7 @@ export const StatsView: React.FC = () => {
           </div>
 
           {/* Decoupled X-Axis Timeline Row */}
-          <div className="pt-2 px-1 flex items-center justify-between text-[10px] text-[#8E8E93] border-t border-black/[0.04] dark:border-white/[0.06] mt-2">
+          <div className={`pt-2 px-1 flex items-center justify-between text-[10px] ${subText} border-t border-black/[0.04] dark:border-white/[0.06] mt-2`}>
             <span className="font-semibold text-[var(--brand-text)]">{t('todayLabel')}</span>
             <span>+5d</span>
             <span>+10d</span>
@@ -363,7 +363,13 @@ export const StatsView: React.FC = () => {
                   title={`${pt.period}: ${pt.retentionRate}% (${pt.reviews})`}
                   className="flex-1 min-w-0 h-full flex flex-col items-center justify-end group cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 rounded-sm"
                 >
-                  <span className="text-[9px] font-semibold text-[var(--brand-text)] whitespace-nowrap mb-1 opacity-90 group-hover:opacity-100">
+                  <span
+                    className={`text-[10px] font-bold tabular-nums whitespace-nowrap mb-1 ${
+                      isLatest
+                        ? 'text-[var(--brand-text)]'
+                        : 'text-[#3A3C46] dark:text-[#D8DAE8] group-hover:text-[var(--brand-text)]'
+                    }`}
+                  >
                     {pt.reviews > 0 ? `${pt.retentionRate}%` : '--'}
                   </span>
                   <div
@@ -372,7 +378,7 @@ export const StatsView: React.FC = () => {
                       backgroundColor: isLatest ? brandHex : accentScale.heatmap[2],
                     }}
                     className={`w-full max-w-[24px] rounded-t-md transition-all group-hover:brightness-110 ${
-                      isLatest ? 'shadow-xs' : 'opacity-85 group-hover:opacity-100'
+                      isLatest ? 'shadow-xs' : 'opacity-90 group-hover:opacity-100'
                     }`}
                   />
                 </div>
@@ -381,7 +387,7 @@ export const StatsView: React.FC = () => {
           </div>
 
           {/* Decoupled Timeline Axis */}
-          <div className="pt-2 px-2 flex items-center justify-between text-[10px] text-[#8E8E93] border-t border-black/[0.04] dark:border-white/[0.06] mt-2">
+          <div className={`pt-2 px-2 flex items-center justify-between text-[10px] ${subText} border-t border-black/[0.04] dark:border-white/[0.06] mt-2`}>
             <span>-12w</span>
             <span>-9w</span>
             <span>-6w</span>
@@ -429,7 +435,7 @@ export const StatsView: React.FC = () => {
           </div>
 
           {/* Decoupled Hourly Axis Labels */}
-          <div className="pt-2 px-2 flex items-center justify-between text-[10px] text-[#8E8E93] border-t border-black/[0.04] dark:border-white/[0.06] mt-2">
+          <div className={`pt-2 px-2 flex items-center justify-between text-[10px] ${subText} border-t border-black/[0.04] dark:border-white/[0.06] mt-2`}>
             <span>00:00</span>
             <span>04:00</span>
             <span>08:00</span>
@@ -526,7 +532,7 @@ export const StatsView: React.FC = () => {
                 className="rounded-xl border border-black/[0.05] dark:border-white/[0.08] px-4 py-3"
               >
                 <div className={`text-[11px] ${subText}`}>{block.title}</div>
-                <div className="text-[26px] leading-tight font-bold font-mono" style={{ color: brandHex }}>
+                <div className="text-[26px] leading-tight font-bold font-mono text-[var(--brand-text)]">
                   {formatRate(block.data.overall.rate, block.data.overall.total)}
                 </div>
                 <div className={`text-[10px] ${subText} mt-0.5`}>

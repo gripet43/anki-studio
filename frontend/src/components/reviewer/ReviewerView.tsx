@@ -246,7 +246,7 @@ export const ReviewerView: React.FC = () => {
         return;
       }
 
-      if (optionKeyHeld) {
+      if (optionKeyHeld || e.altKey) {
         if (e.key === '1') {
           e.preventDefault();
           appActions.answerCurrentCard(1);

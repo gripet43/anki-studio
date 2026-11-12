@@ -52,7 +52,7 @@ export const Sidebar: React.FC = () => {
       ? 'bg-[#121317] border-[#252730] text-[#F2F3F7]'
       : 'bg-[#FFFFFF] border-[#E8E9EE] text-[#1D1D1F]';
 
-  const mutedText = 'text-[#8E8E93]';
+  const mutedText = 'text-[#636366] dark:text-[#A6A8B6]';
   const navActiveBg = 'bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold';
   const navHoverBg = isDark ? 'hover:bg-white/5 text-[#EBEBF5]' : 'hover:bg-[#F4F4F6] text-[#3A3A3C]';
 

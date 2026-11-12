@@ -417,13 +417,18 @@ export const appActions = {
             : 0)
         : (sessionVerifiedSyncTs > 0 ? sessionVerifiedSyncTs : (state.lastSyncedTimestamp || 0));
 
+      const incomingStats = dash?.advancedStats;
+      const hasPopulatedStats = Boolean(
+        incomingStats && incomingStats.maturityBreakdown && incomingStats.maturityBreakdown.total > 0
+      );
+
       setAppState({
         isLoading: false,
         isInitialSyncing: false,
         syncJustFinished: silent ? state.syncJustFinished : false,
         decks: realDecks,
         activeDeckId: state.activeDeckId || realDecks[0]?.id || null,
-        advancedStats: dash?.advancedStats || EMPTY_ADVANCED_STATS,
+        advancedStats: hasPopulatedStats ? incomingStats! : state.advancedStats,
         theme: prefs?.theme || state.theme,
         accentColor: prefs?.accentColor || state.accentColor,
         languagePref: (prefs?.language as LanguageOption) || state.languagePref,
@@ -485,10 +490,33 @@ export const appActions = {
       if (safetyWarning) {
         showToast(tState('autoSaved'));
       }
+
+      // Fetch comprehensive statistics asynchronously after first-screen Dashboard paint
+      appActions.refreshStatistics(effectiveLang);
     } catch {
       coldStartInProgress = false;
       setAppState({ isLoading: false, isInitialSyncing: false, syncJustFinished: false });
     }
+  },
+
+  async refreshStatistics(langOverride?: string) {
+    if (!isAnkiNativeEnv()) return;
+    try {
+      const stats = await callAnki<AdvancedStatsData>('get_statistics', {
+        language:
+          langOverride ||
+          (state.languagePref === 'auto' ? state.resolvedLang : state.languagePref),
+      });
+      if (stats && stats.maturityBreakdown) {
+        setAppState((prev) => ({
+          advancedStats: stats,
+          dashboard: {
+            ...prev.dashboard,
+            advancedStats: stats,
+          },
+        }));
+      }
+    } catch {}
   },
 
   async refreshDashboard(silent = true) {
@@ -1356,6 +1384,9 @@ export const appActions = {
       inlineEditing: false,
       inspectorOpen: false,
     });
+    if (tab === 'stats' && isAnkiNativeEnv()) {
+      appActions.refreshStatistics();
+    }
   },
 
   unlockAndOpenDesignSystem() {

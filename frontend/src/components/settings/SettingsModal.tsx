@@ -96,7 +96,7 @@ export const SettingsModal: React.FC = () => {
       ? 'bg-[#13141A] border-[#252732]'
       : 'bg-[#F5F5F7] border-[#E8E8ED]';
 
-  const subText = 'text-[#8E8E93]';
+  const subText = 'text-[#636366] dark:text-[#A6A8B6]';
   const shortcutHint = formatShortcut('Ctrl + Opt + M', envInfo.platform);
   const currentScale = getAccentScale(accentColor, theme);
 
@@ -572,7 +572,9 @@ export const SettingsModal: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2 text-[12px]">
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
                         <span className={subText}>{t('cmdPaletteAriaLabel')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">Cmd + K</kbd>
+                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">
+                          {formatShortcut('Cmd + K', envInfo.platform)}
+                        </kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
                         <span className={subText}>{t('quickAddBtn')}</span>
@@ -596,19 +598,23 @@ export const SettingsModal: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2 text-[12px]">
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
                         <span className={subText}>{t('showAnswerBtn')} / {t('rateGood')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">Space / Enter</kbd>
+                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">Space / Enter / 2</kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
                         <span className={subText}>{t('rateAgain')}</span>
                         <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">1</kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('rateHard')} / {t('rateEasy')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">2 / 3 / 4</kbd>
+                        <span className={subText}>{t('rateHard')} / {t('rateGood')} / {t('rateEasy')}</span>
+                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">
+                          {formatShortcut('Opt + 1~4', envInfo.platform)}
+                        </kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
                         <span className={subText}>{t('undoBtnShort')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">Cmd + Z</kbd>
+                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">
+                          {formatShortcut('Cmd + Z', envInfo.platform)}
+                        </kbd>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
                         <span className={subText}>{t('pronounceBtn')}</span>
