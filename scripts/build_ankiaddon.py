@@ -17,6 +17,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import zipfile
 from pathlib import Path
 
@@ -71,9 +72,48 @@ def run_frontend_build() -> None:
     )
 
 
+def build_manifest_payload() -> dict:
+    """Load manifest.json and stamp the fields that must be fresh per build.
+
+    两个曾经真实踩过的坑，在这里堵死：
+
+    1. ``mod`` 忘记刷新 —— AnkiWeb 靠 ``mod`` 判断「有没有新版本」，停在旧值
+       等于推不动更新。所以打包时无条件覆盖成当前时间戳，源码里的值只作占位。
+    2. ``min_point_version`` 写小 —— Anki 的兼容判断是
+       ``if int_version() < min_point_version: 不兼容``，而 ``int_version()``
+       是 YYMMDD 形式的整数（Anki 26.9.4 → 260904）。历史上这里写过 ``26``，
+       等价于宣称「兼容一切版本包括 2.1.x」，老版本用户装上必崩。低于 200000
+       的一律视为笔误直接拒绝打包。
+    """
+    manifest_path = ADDON_ROOT / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    min_ver = manifest.get("min_point_version") or 0
+    if not isinstance(min_ver, int) or min_ver < 200000:
+        raise ValueError(
+            f"manifest.json 的 min_point_version={min_ver!r} 不合法。"
+            "该字段要与 aqt.addons 的 int_version() 同口径（YYMMDD 整数，"
+            "例如 Anki 26.9.4 -> 260904），不是 '26' 这种大版本号。"
+        )
+    if not str(manifest.get("human_version") or "").strip():
+        raise ValueError(
+            "manifest.json 缺少 human_version。Anki 读的是这个字段，"
+            "它没写的话插件列表里不显示版本号（'version' 字段 Anki 并不读）。"
+        )
+
+    manifest["mod"] = int(time.time())
+    return manifest
+
+
 def create_ankiaddon_package() -> Path:
     if OUTPUT_ARCHIVE.exists():
         OUTPUT_ARCHIVE.unlink()
+
+    manifest = build_manifest_payload()
+    print(
+        f"[build_ankiaddon] manifest: v{manifest.get('human_version')} "
+        f"mod={manifest['mod']} min_point_version={manifest['min_point_version']}"
+    )
 
     included_files = []
 
@@ -83,7 +123,12 @@ def create_ankiaddon_package() -> Path:
             filepath = ADDON_ROOT / filename
             if not filepath.exists():
                 raise FileNotFoundError(f"Required top-level file missing: {filepath}")
-            if filename == "config.json":
+            if filename == "manifest.json":
+                zf.writestr(
+                    filename,
+                    json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                )
+            elif filename == "config.json":
                 # config.json doubles as the add-on's default/schema template.
                 # Ship a sanitized copy so private study data never leaks.
                 # 源码仓库里的 config.json 已不入库（含真实昵称/回执/休假记录），

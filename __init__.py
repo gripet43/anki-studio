@@ -103,6 +103,11 @@ class AnkiModernHost:
 
         # 2. Register profile loaded hook to mount Modern UI
         gui_hooks.main_window_did_init.append(self._on_main_window_init)
+        # `main_window_did_init` 每次启动只触发一次；换用户档案（File → Switch Profile）
+        # 会卸载并重新打开合集、重建主窗口的中央控件，之前挂上去的 webview 会随之被销毁。
+        # 没有这个钩子的话，用户切一次档案就永久掉回原生界面，且再也切不回来。
+        if hasattr(gui_hooks, "profile_did_open"):
+            gui_hooks.profile_did_open.append(self._on_profile_did_open)
 
         # 3. Register two-way lifecycle & ecosystem hooks
         if hasattr(gui_hooks, "sync_will_start"):
@@ -476,6 +481,21 @@ class AnkiModernHost:
         if cfg.get("auto_launch_modern_ui", True):
             self.show_modern_ui()
 
+    def _on_profile_did_open(self) -> None:
+        """换用户档案后把现代界面重新挂回去。
+
+        档案切换会卸载旧合集并重建主窗口的中央控件，挂在旧父控件下的 webview
+        已被 Qt 销毁。只在用户本来就处于现代界面时才重挂：切回原生是用户的显式
+        选择，不该因为换了档案就被覆盖。启动时这个钩子会早于 main_window_did_init
+        触发，那一次 is_modern_visible 还是 False，因此天然不会重复挂载。
+        """
+        if not self.is_modern_visible:
+            return
+        try:
+            self.show_modern_ui()
+        except Exception as e:
+            print(f"[Anki Studio] re-mount after profile switch failed: {e}")
+
     @staticmethod
     def _apply_cocoa_immersive_titlebar(win_id: int, immersive: bool = True) -> bool:
         """
@@ -583,15 +603,31 @@ class AnkiModernHost:
         from aqt.qt import Qt, QUrl
         from aqt.webview import AnkiWebView
 
-        if self.webview is not None:
-            return self.webview
-
         # Mount directly to mw on macOS for full-height titlebar immersion, or centralWidget on other platforms
         target_parent = mw if (mw and sys.platform.startswith("darwin")) else (
             mw.centralWidget()
             if mw and hasattr(mw, "centralWidget") and mw.centralWidget()
             else mw
         )
+
+        if self.webview is not None:
+            # 换用户档案（File → Switch Profile）时 Anki 会重建主窗口的中央控件，
+            # 挂在旧父控件下的 webview 会被 Qt 一并销毁。此后 self.webview 只是个
+            # 悬空的 Python 壳，碰任何方法都会抛 RuntimeError("wrapped C/C++ object
+            # ... has been deleted")。所以每次进来先探活，再对齐父控件。
+            try:
+                current_parent = self.webview.parent()
+            except RuntimeError:
+                self.webview = None
+            else:
+                if target_parent is not None and current_parent is not target_parent:
+                    try:
+                        self.webview.setParent(target_parent)
+                    except RuntimeError:
+                        self.webview = None
+                if self.webview is not None:
+                    return self.webview
+
         self.webview = AnkiWebView(parent=target_parent)
         self.webview.setObjectName("ankiModernOSWebView")
         try:

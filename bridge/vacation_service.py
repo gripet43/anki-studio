@@ -450,11 +450,14 @@ class VacationService:
                 if cids:
                     restored_card_count = self._restore_card_schedule(col, snapshot)
                     if not restored_card_count:
+                        # 只走官方 API。这里原本有一条
+                        # `col.db.execute("UPDATE cards SET due = ...")` 的兜底，
+                        # 已删除：裸写 cards.due 不会把 usn 置为 -1、也不更新 mod，
+                        # Anki 会认为该行「已同步」，多设备用户会静默丢失这次改期。
+                        # 该兜底只在没有 sched.set_due_date 的旧版 Anki 上才会走到，
+                        # 而插件已声明 min_point_version，那类版本本就不受支持。
                         if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
                             col.sched.set_due_date(cids, "0")
-                        elif hasattr(col, "db"):
-                            sched_today = getattr(col.sched, "today", 0) if hasattr(col, "sched") else 0
-                            col.db.execute("UPDATE cards SET due = ? WHERE id IN (" + ",".join(str(c) for c in cids) + ")", sched_today)
                         restored_card_count = len(cids)
                 _save_col_if_legacy(col)
             except Exception as e:
@@ -561,17 +564,13 @@ class VacationService:
 
             if mode == "amortize":
                 range_expr = f"1-{days}" if days > 1 else "1"
+                # 原本此处还有一条裸 SQL 兜底（逐张 UPDATE cards SET due），已删除：
+                # 它不维护 usn/mod，会让改期结果无法同步到其他设备。详见本函数上方说明。
                 if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
                     col.sched.set_due_date(list(cids), range_expr)
-                elif hasattr(col, "db"):
-                    for i, cid in enumerate(cids):
-                        target_day = (i % days) + 1
-                        col.db.execute("UPDATE cards SET due = ? WHERE id = ?", target_day, cid)
             else:
                 if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
                     col.sched.set_due_date(list(cids), str(days))
-                elif hasattr(col, "db"):
-                    col.db.execute("UPDATE cards SET due = due + ? WHERE id IN (" + ",".join(str(c) for c in cids) + ")", days)
 
             _save_col_if_legacy(col)
 
@@ -783,11 +782,9 @@ class VacationService:
                     }
                 restored_count = restored
             else:
+                # 裸 SQL 兜底已删除，理由同 _cancel_vacation：不维护 usn/mod 会破坏同步。
                 if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
                     col.sched.set_due_date(list(cids), "0")
-                elif hasattr(col, "db"):
-                    sched_today = getattr(col.sched, "today", 0) if hasattr(col, "sched") else 0
-                    col.db.execute("UPDATE cards SET due = ? WHERE id IN (" + ",".join(str(c) for c in cids) + ")", sched_today)
                 restored_count = len(cids)
             end_undo_group(col, undo_target)
             physical_ok, physical_note = quick_integrity_check(col)
@@ -910,10 +907,9 @@ class VacationService:
 
             cids_list = list(due_cids)
             snapshot = self._snapshot_card_schedule(col, cids_list)
+            # 裸 SQL 兜底已删除，理由同 _cancel_vacation：不维护 usn/mod 会破坏同步。
             if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
                 col.sched.set_due_date(cids_list, str(days))
-            elif hasattr(col, "db"):
-                col.db.execute("UPDATE cards SET due = due + ? WHERE id IN (" + ",".join(str(c) for c in cids_list) + ")", days)
 
             mw = self.mw
             if mw is not None and hasattr(mw, "reset"):

@@ -15,6 +15,20 @@
 
 ## [Unreleased]
 
+## [v1.4.0] - 2026-11-12
+
+- **[WorkBuddy] 上架 AnkiWeb 前的发布整改：manifest 版本语义修正、同步安全性清理、换档案重挂载、许可证与文档补全**（改 [`manifest.json`](manifest.json)、[`scripts/build_ankiaddon.py`](scripts/build_ankiaddon.py)、[`__init__.py`](__init__.py)、[`bridge/vacation_service.py`](bridge/vacation_service.py)、[`config.md`](config.md)、[`README.md`](README.md)，新增 [`LICENSE`](LICENSE)、[`tests/test_release_safety.py`](tests/test_release_safety.py)）：
+  - **1. `min_point_version` 从 `26` 改成 `260904`（最危险的一条）**：反汇编本机 Anki 26.9.4 的 `aqt/addons.pyc` 确认，兼容判断就是 `if int_version() < min_point_version: 不兼容`，而 `int_version()` 返回 `YYMMDD` 整数（26.9.4 → `260904`）。原先写的 `26` 让 `260904 < 26` 恒为假，**等于宣称兼容包括 2.1.x 在内的所有版本**——那类用户装上一个依赖 Qt6 与 AnkiWebView 深度接管主窗口的插件必然崩溃，且会直接反映成差评。现按「只在实测通过的版本上声明」定为 `260904`，后续可在旧版实测通过后再下探。
+  - **2. 补齐 `human_version`**：Anki 实际读取的 manifest 字段是 `mod / conflicts / min_point_version / max_point_version / branch_index / human_version`，`version` 它并不读。之前缺 `human_version`，插件列表里不显示版本号。现补成 `1.4.0`。
+  - **3. `homepage` 从占位 `https://ankiweb.net` 换成仓库地址**：原值会被当作「支持/主页」链接展示，用户点进去回到首页。现指向 `https://github.com/gripet43/anki-studio`——**该仓库目前是私有的，发布前必须转为 public**，否则链接 404。
+  - **4. 打包脚本自动盖 `mod` 并对版本字段做校验**：AnkiWeb 靠 `mod` 判断有无新版本，停在旧值等于推不动更新。现在每次打包无条件把 `mod` 刷成当前时间戳；同时拒绝 `min_point_version < 200000`（拦「写成大版本号」这类笔误）与空 `human_version`。两条守卫均做过变异测试确认会真的报错。
+  - **5. 删除 5 处同步不安全的裸 SQL 写库**（`bridge/vacation_service.py`）：这些 `UPDATE cards SET due = ...` 绕过 `col.update_card` / `col.sched.set_due_date`，**不会把 `usn` 置为 -1、也不更新 `mod`**，Anki 会认为该行「已同步」，多设备用户会静默丢失这次改期。它们原本是 `set_due_date` 不存在时的兜底分支，在声明了 `min_point_version` 之后已是不可能走到的死代码，故直接移除并在原位留下说明。`deck_service.py` 中的 `ANALYZE` 保留——它只刷新 sqlite 统计信息，不触碰行数据。
+  - **6. 换用户档案后重新挂载界面**（`__init__.py`）：原先只订阅 `main_window_did_init`（每次启动触发一次），而档案切换会重建主窗口中央控件、销毁挂在旧父控件下的 webview，导致界面「消失」且再也切不回来。现新增 `profile_did_open` 钩子重挂，并给 `_ensure_webview` 加上**探活 + 重设父控件**：先 `parent()` 探一次，若抛 `RuntimeError`（C++ 侧已销毁）就把缓存置空重建；父控件变了则 `setParent` 对齐。重挂载只在用户本来就处于现代界面时发生，不覆盖「切回原生」的显式选择。
+  - **7. 补 `LICENSE`（MIT）**、重写 `config.md`、修正 `README.md` 的过期表述：`config.md` 原先只列 4 套强调色（实际 8 套）、3 种语言（实际 16 种）、漏了 4 个键，而它就是用户在 Anki「配置」界面看到的说明；README 里的「4 款强调色」「Anki 24+」一并订正，并补了兼容性表与许可段落。
+  - **8. 新增 `tests/test_release_safety.py`（5 条）**：锁住上述硬事实——`min_point_version` 必须是 `int_version()` 口径、`human_version` 非空、`homepage` 不得是占位值、`bridge/` 内不得出现绕过官方 API 的写库语句（`ANALYZE` 豁免）、`profile_did_open` 与 `main_window_did_init` 两个钩子都在。裸 SQL 守卫做过变异测试（注入一条 `UPDATE cards SET due = 0` 后精确报出 `safety.py:233`）。
+  - **未做（有意为之）**：`setWebExports` 未接入。当前前端用 `file://` 加载，在 r4 的 Windows 与 macOS 上均已验证可用；改成 `/_addons/<id>/` 的 HTTP 加载属于行为变更，无法在无 GUI 环境验证，风险大于当期收益。已记录为后续项：一旦未来 Qt 收紧本地文件互访策略，这条会是白屏的根因。
+  - **打包结构复验**：`scripts/build_ankiaddon.py` 产出的包顶层无包裹目录、不含 `__pycache__` / `*.pyc` / `meta.json`、随包 `config.json` 已剥离昵称与学习记录，共 30 个运行时文件，符合 AnkiWeb 的接收条件。
+
 - **[WorkBuddy] 修掉 r4 Windows 验版判失败的 A8：文案里写死的快捷键改为按平台注入**（改 [`frontend/src/i18n/translations.ts`](frontend/src/i18n/translations.ts)、[`frontend/src/i18n/locales/`](frontend/src/i18n/locales/)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx`](frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
   - **报告结论**：[`tests/reports/windows-20261112-r4.md`](tests/reports/windows-20261112-r4.md) 里 15 项界面检查 13 项通过，**A8「快捷键与界面提示一致」判失败**，唯一原因是制卡编辑器正面输入框的 placeholder 在 Windows 上仍写 `Cmd+Shift+C`。B3（同步中脉冲、已同步云朵跟随主题色）是沙盒没有 AnkiWeb 凭据导致无法目视，代码层已确认实现，不属缺陷。
   - **同一缺陷的第二处**：排查时发现 `ioEmptyCanvasTitle`（图片遮挡空画布标题）也是写死 `Cmd+V` 的，Windows 上会提示「直接按 Cmd+V 粘贴剪贴板图片」。r4 报告只点到编辑器一处，此处一并修掉。
