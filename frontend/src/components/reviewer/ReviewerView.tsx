@@ -756,7 +756,7 @@ export const ReviewerView: React.FC = () => {
                     currentCard.notetypeId &&
                     appActions.toggleNoteTypeSandbox(currentCard.notetypeId)
                   }
-                  title={`${t('nativeSwitch')} (${currentCard.noteTypeName || 'Basic'})`}
+                  title={`${t('compatMode')} (${currentCard.noteTypeName || 'Basic'})`}
                   className={`h-8 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
                     sandboxNoteTypeIds.includes(currentCard.notetypeId)
                       ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)]'
@@ -773,7 +773,7 @@ export const ReviewerView: React.FC = () => {
                     <rect x="3" y="3" width="18" height="18" rx="3" />
                     <path d="M9 3v18" />
                   </svg>
-                  <span>{t('nativeSwitch')}</span>
+                  <span>{t('compatMode')}</span>
                 </button>
               )}
 

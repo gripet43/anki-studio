@@ -285,6 +285,7 @@ export const dict: TranslationTable = {
   more: "Più",
   moreFieldsBtn: "Altri campi ({n}: lettura, origine, suggerimenti)",
   myDecksTitle: "I miei mazzi",
+  compatMode: "Modalità compatibile",
   nativeSwitch: "UI Nativa",
   navDashboard: "Panoramica",
   navDecks: "Mazzi",

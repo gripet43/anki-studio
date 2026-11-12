@@ -285,6 +285,7 @@ export const dict: TranslationTable = {
   more: "Çok",
   moreFieldsBtn: "Diğer Alanlar ({n}: Okunuş, Köken, İpuçları)",
   myDecksTitle: "Destelerim",
+  compatMode: "Uyum modu",
   nativeSwitch: "Klasik Arayüz",
   navDashboard: "Bugünün Özeti",
   navDecks: "Desteler",

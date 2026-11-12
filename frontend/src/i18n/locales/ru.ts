@@ -285,6 +285,7 @@ export const dict: TranslationTable = {
   more: "Больше",
   moreFieldsBtn: "Дополнительные поля ({n}: чтение, этимология, подсказки)",
   myDecksTitle: "Мои колоды",
+  compatMode: "Режим совместимости",
   nativeSwitch: "Классич. UI",
   navDashboard: "Обзор дня",
   navDecks: "Колоды",

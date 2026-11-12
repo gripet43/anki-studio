@@ -285,6 +285,7 @@ export const dict: TranslationTable = {
   more: "أكثر",
   moreFieldsBtn: "حقول إضافية ({n}: النطق، الأصل، تلميحات)",
   myDecksTitle: "رزمي",
+  compatMode: "وضع التوافق",
   nativeSwitch: "الواجهة الأصلية",
   navDashboard: "ملخص اليوم",
   navDecks: "الرزم",

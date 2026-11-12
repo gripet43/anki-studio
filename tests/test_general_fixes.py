@@ -334,3 +334,107 @@ class TestSearchServiceExposesReplaceFrontOnFlip(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FakeQueuedEntry:
+    def __init__(self, cid):
+        self.card = type("Card", (), {"id": cid})()
+
+
+class FakeQueuedCards:
+    def __init__(self, cids):
+        self.cards = [FakeQueuedEntry(cid) for cid in cids]
+
+
+class FakeNativeSched:
+    def __init__(self, cids):
+        self._cids = list(cids)
+
+    def get_queued_cards(self, fetch_limit: int = 1):
+        return FakeQueuedCards(self._cids[: max(1, fetch_limit)])
+
+
+class FakeDecksForQueue:
+    def __init__(self):
+        self.selected = None
+
+    def select(self, did):
+        self.selected = did
+
+    def get(self, did, default=False):
+        return {"id": did, "name": "Deck %s" % did}
+
+
+class FakeColForQueue:
+    def __init__(self, native_cids=None, fallback_cids=None, native_supported=True):
+        self.decks = FakeDecksForQueue()
+        self._fallback = list(fallback_cids or [])
+        self.find_cards_calls = 0
+        sched = type("Sched", (), {"today": 100})()
+        if native_supported:
+            sched.get_queued_cards = FakeNativeSched(native_cids or []).get_queued_cards
+        self.sched = sched
+
+    def find_cards(self, query):
+        self.find_cards_calls += 1
+        return list(self._fallback)
+
+
+class TestNativeSchedulerQueue(unittest.TestCase):
+    """复习队列必须跟随 Anki 原生 v3 调度器顺序（同一笔记多张卡时尤其重要）。"""
+
+    def _service(self, col):
+        from anki_modern_os.bridge.review_service import ReviewService
+
+        svc = ReviewService(
+            col_getter=lambda: col, mw_getter=lambda: None, lang_getter=lambda: "zh-CN"
+        )
+        svc._serialize_review_card = lambda col, cid, lang, preview: {"id": str(cid)}
+        return svc
+
+    def test_native_queue_returns_none_when_scheduler_api_missing(self):
+        col = FakeColForQueue(native_supported=False)
+        self.assertIsNone(self._service(col)._native_queued_cids(col, "1", 10))
+
+    def test_no_deck_id_keeps_legacy_all_decks_semantics(self):
+        col = FakeColForQueue(native_cids=[30], fallback_cids=["10"])
+        svc = self._service(col)
+        self.assertIsNone(
+            svc._native_queued_cids(col, None, 10),
+            "无 deckId 的旧调用语义是整库，不能套用当前选中牌组的原生队列",
+        )
+
+    def test_native_queue_respects_empty_queue(self):
+        col = FakeColForQueue(native_cids=[], fallback_cids=["9"])
+        svc = self._service(col)
+        # 支持 API 且队列为空 → 必须返回 []（尊重每日配额），而不是 None 回落。
+        self.assertEqual(svc._native_queued_cids(col, "1", 10), [])
+
+    def test_native_queue_keeps_scheduler_order(self):
+        col = FakeColForQueue(native_cids=[30, 10, 20], fallback_cids=["10", "20", "30"])
+        svc = self._service(col)
+        self.assertEqual(svc._native_queued_cids(col, "1", 10), [30, 10, 20])
+
+    def test_review_queue_follows_native_order(self):
+        # find_cards 的旧顺序是 [10, 20, 30]；原生顺序是 [30, 10, 20]。
+        col = FakeColForQueue(native_cids=[30, 10, 20], fallback_cids=["10", "20", "30"])
+        svc = self._service(col)
+        result = svc.get_review_queue({"deckId": "1", "language": "zh-CN", "limit": 10})
+        self.assertEqual([c["id"] for c in result["cards"]], ["30", "10", "20"])
+        self.assertEqual(result["totalDue"], 3)
+        self.assertEqual(col.find_cards_calls, 0, "有原生队列时不应再走 find_cards")
+
+    def test_exhausted_native_queue_does_not_fall_back(self):
+        col = FakeColForQueue(native_cids=[], fallback_cids=["10", "20"])
+        svc = self._service(col)
+        result = svc.get_review_queue({"deckId": "1", "language": "zh-CN", "limit": 10})
+        self.assertEqual(result["cards"], [])
+        self.assertEqual(result["totalDue"], 0)
+        self.assertEqual(col.find_cards_calls, 0, "配额用尽时不得回落成无限新卡")
+
+    def test_falls_back_to_find_cards_when_api_unavailable(self):
+        col = FakeColForQueue(fallback_cids=["10", "20"], native_supported=False)
+        svc = self._service(col)
+        result = svc.get_review_queue({"deckId": "1", "language": "zh-CN", "limit": 10})
+        self.assertEqual([c["id"] for c in result["cards"]], ["10", "20"])
+        self.assertEqual(col.find_cards_calls, 2, "旧路径应分别查 due/learn 与 new")

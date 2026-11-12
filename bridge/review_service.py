@@ -102,6 +102,23 @@ class ReviewService:
                 "cards": [c for c in cards_out if c is not None],
             }
 
+        # Anki 原生 v3 调度器才是「下一张卡是哪张」的唯一真实源：它决定 gather /
+        # sort order、每日新卡与复习上限、相邻卡埋没与筛选牌组顺序。过去这里用
+        # find_cards() 自己拼队列，顺序是 card id 升序——同一个「蓝宝书」牌组下，
+        # Studio 会先打开 Card 01（文法卡，正面 3 条例句），而原生先打开 Card 02
+        #（例文卡，正面 1 条例句）。用户看到的就是「同一张卡，我们的正面多出例句」。
+        native_cids = self._native_queued_cids(col, deck_id, limit)
+        if native_cids is not None and (native_cids or not include_preview):
+            native_cards = [
+                self._serialize_review_card(col, cid, lang, False) for cid in native_cids
+            ]
+            return {
+                "deckId": str(deck_id) if deck_id else "all",
+                "totalDue": len(native_cids),
+                "isPreviewOnly": False,
+                "cards": [c for c in native_cards if c is not None],
+            }
+
         deck_clause = ""
         if deck_id and str(deck_id).isdigit():
             deck_obj = col.decks.get(int(deck_id), default=False)
@@ -134,6 +151,45 @@ class ReviewService:
             "isPreviewOnly": is_preview_only,
             "cards": [c for c in cards_out if c is not None],
         }
+
+    def _native_queued_cids(
+        self, col, deck_id, limit: int
+    ) -> Optional[List[int]]:
+        """取 Anki 原生 v3 调度器的真实队列顺序。
+
+        - 返回 ``None``：当前 Anki／测试桩没有 ``get_queued_cards``（或调用抛错），
+          调用方应回落到旧的 ``find_cards`` 逻辑。
+        - 返回 ``[]``：调度器可用且队列确实为空（例如今日新卡配额已用完）。
+          **必须尊重它，不能回落**，否则会重新无视每日上限。
+        """
+        # 只有显式指定了数字 deckId 才走原生队列：Anki 的 get_queued_cards()
+        # 永远针对「当前选中牌组」，而不带 deckId 的旧调用语义是「整个集合」。
+        # 两者混用会让无 deckId 的调用悄悄丢掉其他牌组的卡，故直接回落旧逻辑。
+        if not deck_id or not str(deck_id).isdigit():
+            return None
+        try:
+            try:
+                col.decks.select(int(deck_id))
+            except Exception:
+                pass
+            sched = getattr(col, "sched", None)
+            get_queued_cards = getattr(sched, "get_queued_cards", None)
+            if not callable(get_queued_cards):
+                return None
+            queued = get_queued_cards(fetch_limit=max(1, int(limit)))
+            entries = getattr(queued, "cards", None)
+            if entries is None:
+                return None
+            cids: List[int] = []
+            for entry in list(entries):
+                card = getattr(entry, "card", None)
+                cid = getattr(card, "id", None) if card is not None else None
+                if cid is None:
+                    continue
+                cids.append(int(cid))
+            return cids
+        except Exception:
+            return None
 
     def _collect_custom_study_cids(self, col, data: Dict[str, Any]) -> Tuple[List[int], bool]:
         """

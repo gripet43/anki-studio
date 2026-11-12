@@ -285,6 +285,7 @@ export const dict: TranslationTable = {
   more: "Nhiều",
   moreFieldsBtn: "Thêm trường mở rộng ({n}: Phát âm / Từ nguyên / Gợi ý)",
   myDecksTitle: "Bộ thẻ của tôi",
+  compatMode: "Chế độ tương thích",
   nativeSwitch: "Giao diện gốc",
   navDashboard: "Tổng quan hôm nay",
   navDecks: "Bộ thẻ",

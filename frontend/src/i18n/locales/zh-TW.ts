@@ -285,6 +285,7 @@ export const dict: TranslationTable = {
   more: "多",
   moreFieldsBtn: "更多擴充欄位 ({n} 個，如讀音 / 詞源 / 額外提示)",
   myDecksTitle: "我的牌組",
+  compatMode: "相容模式",
   nativeSwitch: "原生切換",
   navDashboard: "今日概覽",
   navDecks: "牌組管理",

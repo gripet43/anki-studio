@@ -285,6 +285,7 @@ export const dict: TranslationTable = {
   more: "많음",
   moreFieldsBtn: "추가 필드 ({n}개: 발음 / 어원 / 힌트)",
   myDecksTitle: "내 덱",
+  compatMode: "호환 모드",
   nativeSwitch: "기본 UI",
   navDashboard: "오늘의 개요",
   navDecks: "덱 관리",

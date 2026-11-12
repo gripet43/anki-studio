@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.8] - 2026-11-13
+
+- **[DeepSeek] 复习队列改用 Anki 原生 v3 调度器顺序（「同一张卡多出例句」的真凶）+ 沙盒开关文案改为「兼容模式」**（改 [`bridge/review_service.py`](bridge/review_service.py)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、16 个 i18n 字典；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 7 项队列断言）：
+  - **1. 队列顺序与原生逐张一致**：用户反馈「同一个笔记，原生正面只有 1 条例句，Studio 却有 3 条」。用真实 collection 副本复现后确认**不是渲染错误**——Studio 对每张卡的 `frontHtml` 与原生 `card.render_output().question_text` 逐字一致；真凶是 `get_review_queue()` 用 `find_cards()` 自拼队列（card id 升序），而 Anki v3 调度器按 gather / sort order 给出的顺序不同。同一「蓝宝书」牌组下，Studio 先打开 Card 01（文法卡，正面 3 条例句），原生先打开 Card 02（例文卡，正面 1 条例句），用户看到的就是「同一张卡多了例句」。
+    现改为：显式数字 `deckId` 时先调 `col.sched.get_queued_cards(fetch_limit)` 取 Anki 真实队列（含每日新卡/复习上限、兄弟卡埋没、筛选牌组顺序），再逐张序列化；`get_queued_cards` 不可用（旧 Anki / 测试桩）时回落旧逻辑；队列为空时**尊重每日配额**，不再回落成无限新卡；无 `deckId` 的旧调用保持整库语义。
+  - **2. 沙盒开关文案**：复习界面右上角「原生切换」改为「兼容模式」，新增 i18n 键 `compatMode` 并同步 16 种语言；设置页快捷键说明里的「原生切换」语义不变。
+  - **验证**：用真实 `测试账号` collection 副本对比，5 个牌组（ROOT / 文法 / 例文 / N1 叶子）首 8 张卡与 `get_queued_cards()` **逐张 MATCH**；Python 97 项、`tsc --noEmit`、前端单元 58 项、Bundle 审计、隔离场景冒烟 692/692、`npm run build` 与 `.ankiaddon` 打包全部通过。版本 1.4.7 → 1.4.8。
+
 ## [v1.4.7] - 2026-11-13
 
 - **[Gemini] 根治背诵界面（`ReviewerView`）丢失模板样式的根因 + 落地 Track B 原生沙盒兼容模式（Anki 本地 HTTP 媒体服务 + `SandboxCardFrame`）并完成 8 大 `.apkg` 双轨全量实测**（[`frontend/src/utils/mathRenderer.ts`](frontend/src/utils/mathRenderer.ts)、[`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`bridge/router.py`](bridge/router.py)、[`frontend/src/components/reviewer/SandboxCardFrame.tsx`](frontend/src/components/reviewer/SandboxCardFrame.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`scripts/build_ankiaddon.py`](scripts/build_ankiaddon.py)、[`tests/test_bridge.py`](tests/test_bridge.py)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
