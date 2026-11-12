@@ -477,7 +477,7 @@ def _apply_jlpt_script_transforms(raw_html: str) -> str:
     return text
 
 
-def sanitize_rendered_card_html(raw_html: str) -> str:
+def sanitize_rendered_card_html(raw_html: str, reveal_hints: bool = True) -> str:
     """把 Anki 模板渲出的 HTML 清理成能安全塞进 React innerHTML 的形态。
 
     三类必须清掉的东西，都是模板写给 Anki 桌面复习界面用的：
@@ -489,7 +489,9 @@ def sanitize_rendered_card_html(raw_html: str) -> str:
        :func:`extract_model_css_text` 单独抽取、作用域化后注入，跟正文分两路走。
     3. ``{{hint:字段}}`` 脚手架：``<a class=hint>标签</a>`` 加一个
        ``<div class=hint style="display:none">内容</div>``，原本靠上面那段脚本点开。
-       脚本不跑就没有展开入口，所以直接把内容露出来，标签丢掉。
+       ``reveal_hints=True``（默认，供**背面**使用）直接把内容露出来、丢掉标签，
+       否则内容永远不可达；``reveal_hints=False``（**正面**）保留 ``display:none``，
+       让正面和原生一样只显示入口提示，不提前剧透答案。
 
     顺带清掉 ``onclick`` 之类内联事件属性，免得用户一点就抛 ReferenceError，以及
     ``[anki:play:a:0]`` 这类重播按钮占位符。最后交给
@@ -509,7 +511,7 @@ def sanitize_rendered_card_html(raw_html: str) -> str:
 
     def _fix_tag(tag_match):
         tag = tag_match.group(0)
-        if HINT_ELEMENT_RE.search(tag) and DISPLAY_NONE_RE.search(tag):
+        if reveal_hints and HINT_ELEMENT_RE.search(tag) and DISPLAY_NONE_RE.search(tag):
             tag = STYLE_ATTR_RE.sub("", tag, count=1)
         return INLINE_HANDLER_RE.sub("", tag)
 
@@ -775,6 +777,7 @@ def build_card_css(
     media_dir: str,
     scope: str = f".{CARD_ROOT_CLASS}",
     http_base_url: str = "",
+    reveal_hidden: bool = True,
 ) -> str:
     """模板 CSS → 可直接注入的、带作用域的样式表。
 
@@ -799,7 +802,7 @@ def build_card_css(
     merged = "\n".join(p for p in parts if p and p.strip())
     if not merged.strip():
         return ""
-    return scope_card_css(merged, scope)
+    return scope_card_css(merged, scope, reveal_hidden=reveal_hidden)
 
 
 @lru_cache(maxsize=32)
@@ -831,13 +834,20 @@ def _split_css_imports(css_text: str) -> tuple[list[str], str]:
 
 
 class NativeRender(NamedTuple):
-    """一张卡走完 Anki 模板引擎之后的三样东西，外加它自己的作用域样式表。"""
+    """一张卡走完 Anki 模板引擎之后的三样东西，外加它自己的作用域样式表。
+
+    ``css`` 是**背面**用的样式表：会删掉模板里的 ``display:none``，把靠点击展开的
+    段落（柯林斯详解、扩展例句）露出来，否则 WebView 不执行模板脚本就永远看不到。
+    ``question_css`` 是**正面**用的同一份样式表，但保留 ``display:none``——原生正面
+    本来就把这些段落藏着，露出来就会「正面多出一大段内容」。
+    """
 
     question: str
     answer: str
     question_audio: List[str]
     answer_audio: List[str]
     css: str
+    question_css: str = ""
 
 
 def should_replace_front_on_flip(
@@ -913,11 +923,12 @@ def render_native_card_sides(
             return empty
 
     try:
+        # 正面保留 {{hint::…}} 的 display:none（不剧透），背面才揭开提示内容。
         question = sanitize_rendered_card_html(
-            _as_text(getattr(output, "question_text", ""))
+            _as_text(getattr(output, "question_text", "")), reveal_hints=False
         )
         raw_answer_sanitized = sanitize_rendered_card_html(
-            _as_text(getattr(output, "answer_text", ""))
+            _as_text(getattr(output, "answer_text", "")), reveal_hints=True
         )
         answer = (
             strip_front_side_from_answer(raw_answer_sanitized, question)
@@ -927,10 +938,14 @@ def render_native_card_sides(
         question_audio = _av_filenames(getattr(output, "question_av_tags", None))
         answer_audio = _av_filenames(getattr(output, "answer_av_tags", None))
         raw_css = _as_text(getattr(output, "css", ""))
+        # 同一份模板 CSS 出两份作用域化结果：背面揭开隐藏段落，正面保留隐藏。
         page_css = build_card_css(raw_css, media_dir) if raw_css else ""
+        question_css = (
+            build_card_css(raw_css, media_dir, reveal_hidden=False) if raw_css else ""
+        )
     except Exception:
         return empty
-    return NativeRender(question, answer, question_audio, answer_audio, page_css)
+    return NativeRender(question, answer, question_audio, answer_audio, page_css, question_css)
 
 
 def _as_text(value) -> str:

@@ -598,6 +598,9 @@ class ReviewService:
                 native.answer_audio,
                 native.css,
             )
+            # 正面用「保留 display:none」的样式表：柯林斯这类词库模板把详解、扩展例句
+            # 和 {{hint}} 内容默认藏起来，原生正面只显示入口；背面才需要揭开它们。
+            native_front_css = native.question_css or native_back_css
             if io_front:
                 front_raw, back_raw = io_front, io_back
             else:
@@ -658,8 +661,8 @@ class ReviewService:
                 strip_furigana_reading=False,
             )
             if use_native_question_html and native_back_css:
-                front_rich_q = wrap_card_with_styles(front_rich_q, native_back_css)
-                front_rich_a = wrap_card_with_styles(front_rich_a, native_back_css)
+                front_rich_q = wrap_card_with_styles(front_rich_q, native_front_css)
+                front_rich_a = wrap_card_with_styles(front_rich_a, native_front_css)
 
             replace_front_on_flip = resolve_replace_front_on_flip(
                 card,

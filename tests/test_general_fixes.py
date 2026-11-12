@@ -438,3 +438,66 @@ class TestNativeSchedulerQueue(unittest.TestCase):
         result = svc.get_review_queue({"deckId": "1", "language": "zh-CN", "limit": 10})
         self.assertEqual([c["id"] for c in result["cards"]], ["10", "20"])
         self.assertEqual(col.find_cards_calls, 2, "旧路径应分别查 due/learn 与 new")
+
+
+class TestFrontSideHiddenContent(unittest.TestCase):
+    """词库卡（柯林斯等）正面不能把模板默认隐藏的内容摊开。
+
+    真凶：`scope_card_css(reveal_hidden=True)` 会删掉模板里的 `display:none`，那是给
+    **背面**揭底用的；正面若也用同一份样式表，`{{hint::…}}` 与 `#ext_collins` 这类
+    「点击才展开」的内容会直接在正面全部显示（用户看到的「正面多出一大段例句/详解」）。
+    """
+
+    CSS_WITH_HIDDEN = (
+        ".card { color: #333; }"
+        "#ext_collins { display:none; }"
+        ".extension { display:block; }"
+    )
+    HINT_HTML = (
+        '<a class=hint href="#">提示</a>'
+        '<div id="hintabc" class=hint style="display: none">隐藏的提示内容</div>'
+    )
+
+    def test_hints_stay_hidden_on_front(self):
+        from anki_modern_os.bridge.media_utils import sanitize_rendered_card_html
+
+        front = sanitize_rendered_card_html(self.HINT_HTML, reveal_hints=False)
+        self.assertIn("隐藏的提示内容", front)
+        self.assertIn("display: none", front, "正面必须保留 hint 的 display:none")
+        self.assertNotIn("<a class=hint", front, "无脚本环境下入口链接没有意义，应移除")
+
+    def test_hints_are_revealed_on_answer(self):
+        from anki_modern_os.bridge.media_utils import sanitize_rendered_card_html
+
+        answer = sanitize_rendered_card_html(self.HINT_HTML, reveal_hints=True)
+        self.assertIn("隐藏的提示内容", answer)
+        self.assertNotIn("display: none", answer, "背面必须揭开 hint 内容，否则永远不可达")
+
+    def test_front_css_keeps_display_none(self):
+        from anki_modern_os.bridge.media_utils import build_card_css
+
+        front_css = build_card_css(self.CSS_WITH_HIDDEN, "", reveal_hidden=False)
+        self.assertIn("#ext_collins", front_css)
+        self.assertIn("display:none", front_css.replace(" ", ""))
+
+    def test_back_css_reveals_hidden_sections(self):
+        from anki_modern_os.bridge.media_utils import build_card_css
+
+        back_css = build_card_css(self.CSS_WITH_HIDDEN, "", reveal_hidden=True)
+        self.assertNotIn("display:none", back_css.replace(" ", ""))
+
+    def test_render_native_card_sides_emits_both_css_variants(self):
+        from anki_modern_os.bridge.media_utils import render_native_card_sides
+
+        class FakeOutput:
+            question_text = '<div id="ext_collins" class="extension">详解</div>' + self.HINT_HTML
+            answer_text = '<div id="ext_collins" class="extension">详解</div>' + self.HINT_HTML
+            css = self.CSS_WITH_HIDDEN
+            question_av_tags = []
+            answer_av_tags = []
+
+        render = render_native_card_sides(None, "", raw_output=FakeOutput())
+        self.assertIn("display:none", render.question_css.replace(" ", ""))
+        self.assertNotIn("display:none", render.css.replace(" ", ""))
+        self.assertIn("display: none", render.question, "正面 hint 内容必须保持隐藏")
+        self.assertNotIn("display: none", render.answer, "背面 hint 内容必须揭开")

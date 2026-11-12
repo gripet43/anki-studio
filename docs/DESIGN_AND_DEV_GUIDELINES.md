@@ -260,7 +260,7 @@ node tests/test_frontend_bundle.mjs
 # 3. 前端单元套件：纯逻辑 + 叶子组件渲染（58 项，见 tests/frontend/README.md）
 node tests/frontend/run.mjs
 
-# 4. Python 单测：桥接层、卡片安全、发布不变量、兼容性自检与通用修复（当前 97 项）
+# 4. Python 单测：桥接层、卡片安全、发布不变量、兼容性自检与通用修复（当前 102 项）
 python3 -m unittest discover -s tests -p "test_*.py"
 
 # 5. （改到业务逻辑时）隔离场景冒烟：11 个场景 / 692 项检查，不动真实数据

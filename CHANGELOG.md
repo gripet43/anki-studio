@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.9] - 2026-11-13
+
+- **[DeepSeek] 词库卡（柯林斯等）正面不再摊开模板默认隐藏的内容**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 5 项断言）：
+  - **现象**：`UVBasic-English`（考研英语真题生词 / 柯林斯）复习「`perceive`」这类卡时，原生正面只显示 单词 + 音标 + 真题原句 + 提示入口 + 柯林斯标题栏，Studio 却把 `{{hint::vocab简明}}` 的内容和 `#ext_collins`（柯林斯详解）整段摊在正面。
+  - **根因**：模板用 CSS `#ext_collins{display:none}` 与 `{{hint}}` 的 inline `display:none` 把内容藏起来、靠点击/脚本展开。`scope_card_css(reveal_hidden=True)` 会删掉 `display:none`——那是给**背面**揭底用的策略；正面复用了同一份样式表，于是隐藏内容全部可见。
+  - **修法**：`build_card_css` 新增 `reveal_hidden` 参数；`NativeRender` 新增 `question_css`；`render_native_card_sides` 同时产出「背面用（揭开隐藏）」与「正面用（保留隐藏）」两份作用域样式表；`sanitize_rendered_card_html` 新增 `reveal_hints` 控制 `{{hint}}` 是否保留 `display:none`。复习服务正面改用 `question_css`，背面逻辑不变。
+  - **验证**：真实 collection 副本上该卡正面 CSS 含 `.anki-native-card #ext_collins{display:none}`、hint 保留 inline `display:none`，背面已揭开；Python 102 项、`tsc --noEmit`、前端单元 58 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.8 → 1.4.9。
+
 - **[DeepSeek] 构建脚本打包后自动复制到 `~/Downloads`**（改 [`scripts/build_ankiaddon.py`](scripts/build_ankiaddon.py)、[`README.md`](README.md)）：`python3 scripts/build_ankiaddon.py` 打包完成后会打印产物 SHA-256，并把 `.ankiaddon` 复制到 `~/Downloads/anki_modern_os.ankiaddon`（覆盖旧包），省去手工拷贝；`--no-downloads` 可关闭该行为，Downloads 不可写时只警告、不影响打包。发布说明已同步进 README。
 
 ## [v1.4.8] - 2026-11-13
