@@ -1939,7 +1939,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         回归护栏：v1.4.1 只搬了正文没搬样式，用户的卡包背面丢了 `.section` 色条、
         `.extension` 灰块、词性小标签。注入时还要处理三件事：
         1. 卡包 css 字段常是遗留 HTML 大杂烩（自带 `</style>`），必须先抽出纯 CSS；
-        2. 选择器必须收进 `#anki-native-card`，否则 `.card` / `.section` 会污染全站；
+        2. 选择器必须收进 `.anki-native-card`，否则 `.card` / `.section` 会污染全站；
         3. `@import` 的柯林斯样式表要就地展开，`url()` 要改写成 `file:///`。
         """
         from anki_modern_os.bridge.media_utils import (
@@ -1972,24 +1972,24 @@ class BridgeRouterAuditTest(unittest.TestCase):
 
         css = build_card_css(soup, self.temp_media)
         # 2. 每条选择器都收进容器；body 前缀被替换成容器本身
-        self.assertIn("#anki-native-card .card", css)
-        self.assertIn("#anki-native-card .section", css)
-        self.assertIn("#anki-native-card .x", css)
+        self.assertIn(".anki-native-card .card", css)
+        self.assertIn(".anki-native-card .section", css)
+        self.assertIn(".anki-native-card .x", css)
         self.assertNotIn("body .x", css)
         # 3. @import 就地展开、url() 改成 file:///
-        self.assertIn("#anki-native-card .word_header_word", css)
+        self.assertIn(".anki-native-card .word_header_word", css)
         self.assertIn("url('file://", css)
         # 4. 靠脚本点开的折叠块直接展开，否则内容永远看不到
         self.assertNotIn("display:none", css.replace(" ", ""))
         self.assertNotIn("#ext_collins", css)
         # 5. @media 里的规则同样要作用域化
         self.assertIn("@media (max-width:600px)", css)
-        self.assertIn("#anki-native-card .extension", css)
+        self.assertIn(".anki-native-card .extension", css)
 
         # 6. 正文包进容器；缺 CSS 时不加壳（老卡包 / 渲染失败）
         wrapped = wrap_card_with_styles("<div>x</div>", css)
         self.assertTrue(wrapped.startswith("<style>"))
-        self.assertIn('<div id="anki-native-card"><div class="card">', wrapped)
+        self.assertIn('<div class="anki-native-card"><div class="card">', wrapped)
         self.assertEqual(wrap_card_with_styles("<div>x</div>", ""), "<div>x</div>")
         self.assertEqual(build_card_css("", self.temp_media), "")
 
@@ -2006,10 +2006,55 @@ class BridgeRouterAuditTest(unittest.TestCase):
         html, audio, page_css = render_native_card_html(card, self.temp_media)
         self.assertIn("vt.察觉", html)
         self.assertEqual(audio, [])
-        self.assertIn("#anki-native-card .card", page_css)
+        self.assertIn(".anki-native-card .card", page_css)
         self.assertNotIn("display:none", page_css.replace(" ", ""))
         self.assertNotIn("<style", page_css)
         self.assertNotIn("</style", page_css)
+
+    def test_30_search_payload_carries_scoped_css_per_notetype(self):
+        """Cmd+K 右侧预览要靠 ``cardStyles`` 才能还原卡包样式。
+
+        回归护栏：列表只发 HTML 不发 CSS 时，弹窗右栏会把柯林斯的色条、词性小标签、
+        真题块统统摊成一段灰扑扑的纯文本（编辑器里样式却是好的，所以很容易漏）。
+        样式必须跟着搜索结果走，但**按卡型去重**——200 条结果各带一份会把响应撑爆，
+        而且同一副牌里卡型通常只有一两种。
+        """
+        class StubRenderOutput:
+            answer_text = '<div class="extension">vt.察觉</div>'
+            answer_av_tags = []
+            css = (
+                "</style><style>.card{color:#333}"
+                "#ext_collins{display:none}</style>"
+            )
+
+        for cid in (201, 202):
+            card = self.mock_col.get_card(cid)
+            card.render_output = lambda browser=False: StubRenderOutput()
+
+        res = self._call("search_cards", {"query": "", "limit": 10})["data"]
+
+        # 1. 两张卡同属一个卡型 → 只带一份样式表
+        self.assertIn("cardStyles", res)
+        self.assertEqual(len(res["cardStyles"]), 1)
+        model_id = next(iter(res["cardStyles"]))
+        css = res["cardStyles"][model_id]
+        self.assertIn(".anki-native-card .card", css)
+        self.assertNotIn("display:none", css.replace(" ", ""))
+
+        # 2. 卡片要能指回自己的卡型，否则前端挑不到样式表
+        for item in res["cards"]:
+            self.assertEqual(item["notetypeId"], model_id)
+
+        # 3. 列表本身的 HTML 保持干净：样式统一在 cardStyles 里，不塞进正文
+        first = next(i for i in res["cards"] if i["id"] == "201")
+        self.assertIn("vt.察觉", first["backHtml"])
+        self.assertNotIn("<style", first["backHtml"])
+
+        # 4. 没有模板引擎可用时不能凭空造样式
+        for cid in (201, 202):
+            del self.mock_col.get_card(cid).render_output
+        clean = self._call("search_cards", {"query": "", "limit": 10})["data"]
+        self.assertEqual(clean["cardStyles"], {})
 
 
 if __name__ == "__main__":

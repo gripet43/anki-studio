@@ -28,6 +28,21 @@ SOUND_TAG_RE = re.compile(r"\[sound:([^\]]+)\]")
 CLOZE_RE = re.compile(r"\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}")
 
 
+def _notetype_id(note) -> str:
+    """稳妥地取卡型 id。
+
+    真 Anki 的 Note 一定有 ``mid``；单元测试的桩只实现了 ``note_type()``，
+    这里兜一层，免得为了一个展示用的 id 把整张卡的序列化搞崩。
+    """
+    mid = getattr(note, "mid", None)
+    if mid is None:
+        try:
+            mid = (note.note_type() or {}).get("id")
+        except Exception:
+            mid = None
+    return str(mid or 0)
+
+
 class SearchService:
     """Service powering Raycast-style Cmd+K search and the multi-dimensional Card Library."""
 
@@ -106,6 +121,9 @@ class SearchService:
         media_dir = get_media_dir(col)
 
         cards_out: List[Dict[str, Any]] = []
+        # 每个卡型只留一份作用域化模板 CSS（Cmd+K 右侧预览要拿它还原卡包样式）。
+        # 按卡带会把 200 条的搜索响应撑到几百 KB，而同一副牌里卡型通常只有一两种。
+        card_styles: Dict[str, str] = {}
         matched_index = 0
         has_more = False
         is_completed_query = (status == "completed")
@@ -118,7 +136,7 @@ class SearchService:
         all_matched_items: List[Dict[str, Any]] = []
 
         for cid in cids:
-            item = self._serialize_library_card(col, cid, media_dir, lang)
+            item = self._serialize_library_card(col, cid, media_dir, lang, card_styles)
             if item is None:
                 continue
             if is_completed_query:
@@ -205,6 +223,7 @@ class SearchService:
             "limit": limit,
             "hasMore": has_more or (offset + len(cards_out) < total_filtered),
             "cards": cards_out,
+            "cardStyles": card_styles,
             "allTags": all_tags[:150],
         }
 
@@ -671,7 +690,12 @@ class SearchService:
         }
 
     def _serialize_library_card(
-        self, col, cid: int, media_dir: str = "", lang: str = "zh-CN"
+        self,
+        col,
+        cid: int,
+        media_dir: str = "",
+        lang: str = "zh-CN",
+        style_sink: Optional[Dict[str, str]] = None,
     ) -> Optional[Dict[str, Any]]:
         try:
             card = col.get_card(int(cid))
@@ -680,6 +704,7 @@ class SearchService:
 
             fields_dict = dict(note.items())
             flds = list(fields_dict.values())
+            model_id = _notetype_id(note)
             empty_title = "未命名" if lang == "zh-CN" else "Untitled"
 
             # Anki 原生 Image Occlusion 的第一个字段是 Occlusion（SVG 覆盖层），
@@ -693,10 +718,13 @@ class SearchService:
             else:
                 front_raw = flds[0] if flds else empty_title
                 # 与复习界面同源：背面走 Anki 模板引擎，取 flds[1] 会丢掉拓展字段。
-                # 列表里不注入模板 CSS——几十张卡各带一份 <style> 既浪费也会互相串味。
-                native_back, native_audio, _native_css = render_native_card_html(
+                # 列表本身不塞 <style>——几十张卡各带一份既浪费也会互相串味；
+                # 样式统一收进 cardStyles，由真正需要还原卡包外观的地方（Cmd+K 预览）注入。
+                native_back, native_audio, native_css = render_native_card_html(
                     card, media_dir
                 )
+                if native_css and style_sink is not None:
+                    style_sink.setdefault(model_id, native_css)
                 back_raw = native_back or (flds[1] if len(flds) > 1 else "")
                 front_clean = self._strip_html_for_summary(front_raw) or empty_title
                 back_clean = self._strip_html_for_summary(back_raw)
@@ -727,6 +755,7 @@ class SearchService:
             return {
                 "id": str(card.id),
                 "noteId": str(note.id),
+                "notetypeId": model_id,
                 "deckId": str(deck["id"]),
                 "deckName": deck["name"].split("::")[-1],
                 "fullDeckName": deck["name"],

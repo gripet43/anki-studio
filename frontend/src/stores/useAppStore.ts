@@ -144,6 +144,8 @@ export interface AppState {
   cmdKQuery: string;
   cmdKSelectedIndex: number;
   cmdKResults: LibraryCardItem[];
+  /** notetypeId → 作用域化模板 CSS，右侧预览靠它还原卡包原生样式。 */
+  cmdKCardStyles: Record<string, string>;
   cmdKSearching: boolean;
 
   // Card Library & Faceted Filters + Backend Pagination
@@ -243,6 +245,7 @@ const initialState: AppState = {
   cmdKQuery: '',
   cmdKSelectedIndex: 0,
   cmdKResults: [],
+  cmdKCardStyles: {},
   cmdKSearching: false,
 
   libraryCards: [],
@@ -704,6 +707,7 @@ export const appActions = {
           total: number;
           filteredCount: number;
           cards: LibraryCardItem[];
+          cardStyles?: Record<string, string>;
         }>('search_cards', {
           query: query.trim(),
           status: 'all',
@@ -716,7 +720,11 @@ export const appActions = {
           includeFacets: false,
         });
         if (res && Array.isArray(res.cards)) {
-          setAppState({ cmdKResults: res.cards, cmdKSearching: false });
+          setAppState({
+            cmdKResults: res.cards,
+            cmdKCardStyles: res.cardStyles || {},
+            cmdKSearching: false,
+          });
         } else {
           setAppState({ cmdKSearching: false });
         }

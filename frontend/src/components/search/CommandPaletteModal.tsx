@@ -6,6 +6,12 @@ import { copyTextToClipboard } from '../../utils/clipboard';
 import { getDeckColorByHash, renderMathAndRichHtml } from '../../utils/mathRenderer';
 import { getAccentScale } from '../../utils/themeTokens';
 
+/**
+ * 卡包模板 CSS 的作用域根类，必须和 bridge/media_utils.py 的 CARD_ROOT_CLASS 一致。
+ * 改任一侧都要同步另一侧，否则注入的样式一条选择器都命中不了。
+ */
+const NATIVE_CARD_ROOT = 'anki-native-card';
+
 function extractCopyableText(htmlContent?: string, fallbackPlain?: string): string {
   const raw = (htmlContent || '').trim();
   if (!raw) return (fallbackPlain || '').trim();
@@ -33,6 +39,7 @@ export const CommandPaletteModal: React.FC = () => {
     cmdKQuery,
     cmdKSelectedIndex,
     cmdKResults,
+    cmdKCardStyles,
     cmdKSearching,
     libraryCards,
     libraryTotalCount,
@@ -58,6 +65,32 @@ export const CommandPaletteModal: React.FC = () => {
   const hasQuery = cmdKQuery.trim().length > 0;
   const displayedResults = hasQuery ? cmdKResults : [];
   const activeCard = displayedResults[cmdKSelectedIndex] || displayedResults[0] || null;
+
+  // 卡包自带的作用域模板 CSS（后端按卡型去重后随搜索结果一起给）。
+  // 没有它，右侧预览就只是把卡包 HTML 原样摊开——柯林斯的色条、词性小标签、
+  // 真题块全都变成一段灰扑扑的纯文本，和 Anki 里的样子对不上。
+  const activeCardCss = activeCard?.notetypeId
+    ? cmdKCardStyles[String(activeCard.notetypeId)] || ''
+    : '';
+
+  /**
+   * 有模板样式就按卡包原样渲染：外层挂作用域根、正文落进 `.card`。
+   * 模板 CSS 一律以 `.card` 打底，少这一层就只剩插件的排版，等于没注入样式。
+   *
+   * `fallbackClass` 只在没有模板样式时生效——有样式时必须让卡包自己决定字号、字重
+   * 和颜色，否则插件的 15px/加粗会漏进去，把卡包排版撑得和 Anki 里不一样。
+   */
+  const renderCardBody = (rawHtml: string | undefined, fallbackClass: string) => {
+    const inner = renderMathAndRichHtml(rawHtml);
+    if (!activeCardCss) {
+      return <div className={fallbackClass} dangerouslySetInnerHTML={{ __html: inner }} />;
+    }
+    return (
+      <div className={NATIVE_CARD_ROOT}>
+        <div className="card" dangerouslySetInnerHTML={{ __html: inner }} />
+      </div>
+    );
+  };
 
   // Dynamic filter pills bound to actual existing tags and decks
   const quickSearchPills = useMemo<Array<{ label: string; query: string; icon: React.ReactNode }>>(() => {
@@ -503,6 +536,10 @@ export const CommandPaletteModal: React.FC = () => {
             <div className="col-span-7 p-4 flex flex-col justify-between overflow-y-auto select-text">
               {activeCard ? (
                 <>
+                  {/* 卡包模板样式（已按 .anki-native-card 作用域化，不会污染插件界面） */}
+                  {activeCardCss ? (
+                    <style dangerouslySetInnerHTML={{ __html: activeCardCss }} />
+                  ) : null}
                   <div className="space-y-3">
                     {/* Header: Deck Badge & Single Copy Button */}
                     <div className="flex items-center justify-between">
@@ -547,12 +584,12 @@ export const CommandPaletteModal: React.FC = () => {
                               'opacity-0 pointer-events-none group-hover/front:opacity-100 group-hover/front:pointer-events-auto group-focus-within/front:opacity-100 group-focus-within/front:pointer-events-auto',
                           })}
                         </div>
-                        <div
-                          className="text-[15px] font-semibold leading-relaxed break-words select-text cursor-text text-[#1D1D1F] dark:text-[#F4F4F6]"
-                          dangerouslySetInnerHTML={{
-                            __html: renderMathAndRichHtml(activeCard.frontHtml || activeCard.front),
-                          }}
-                        />
+                        <div className="select-text cursor-text">
+                          {renderCardBody(
+                            activeCard.frontHtml || activeCard.front,
+                            'text-[15px] font-semibold leading-relaxed break-words text-[#1D1D1F] dark:text-[#F4F4F6]'
+                          )}
+                        </div>
                       </div>
 
                       {/* Subtle Divider */}
@@ -573,12 +610,12 @@ export const CommandPaletteModal: React.FC = () => {
                               'opacity-0 pointer-events-none group-hover/back:opacity-100 group-hover/back:pointer-events-auto group-focus-within/back:opacity-100 group-focus-within/back:pointer-events-auto',
                           })}
                         </div>
-                        <div
-                          className="text-[13px] font-normal leading-relaxed break-words text-[#3A3A3C] dark:text-[#D1D1D6] select-text cursor-text"
-                          dangerouslySetInnerHTML={{
-                            __html: renderMathAndRichHtml(activeCard.backHtml || activeCard.back),
-                          }}
-                        />
+                        <div className="select-text cursor-text">
+                          {renderCardBody(
+                            activeCard.backHtml || activeCard.back,
+                            'text-[13px] font-normal leading-relaxed break-words text-[#3A3A3C] dark:text-[#D1D1D6]'
+                          )}
+                        </div>
                       </div>
                     </div>
 

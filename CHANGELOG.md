@@ -15,6 +15,17 @@
 
 ## [Unreleased]
 
+## [v1.4.3] - 2026-11-12
+
+- **[WorkBuddy] Cmd+K 右侧预览也只显示纯文本：模板 CSS 跟着搜索结果一起下发**（改 [`bridge/search_service.py`](bridge/search_service.py)、[`bridge/media_utils.py`](bridge/media_utils.py)、[`frontend/src/components/search/CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/index.css`](frontend/src/index.css)、[`tests/test_bridge.py`](tests/test_bridge.py)）：
+  - **现象**：1.4.2 修好了背诵界面，但快速搜索（Cmd+K）右栏的卡片预览还是“认字不认样”——柯林斯的色条、词性小标签、真题块全摊成一段同字号文字。根因和 1.4.2 同源：`search_service` 当时只搬了正文，样式表被有意丢掉（“列表页一屏几十张卡各带一份 `<style>` 既浪费也会互相串味”），而右栏恰好是唯一需要样式的消费者。
+  - **样式改为按卡型去重下发**：`_serialize_library_card` 新增 `style_sink` 参数，渲染时把 `build_card_css` 的结果 `setdefault` 进一个字典；`search_cards` 最终把这份字典当 `cardStyles` 返回，每张卡另带 `notetypeId` 指回自己。200 条结果里同卡型只占一个键，实测整包只多一份 7 KB 样式表，而不是 200 份。
+  - **作用域从 `id` 换成 `class`**：原来用 `#anki-native-card`，一个页面只能存在一张卡；换成 `.anki-native-card` 之后，同一份样式表可以服务多个渲染点（右栏换卡不必重建样式表）。`wrap_card_html` 与 `wrap_card_with_styles` 拆开：前者只套壳，后者才带 `<style>`，复习界面继续用后者（一张卡一份，省一次请求），搜索侧用前者 + 顶层注入一次。
+  - **`render_native_card_html` 加了兜底**：整段“取模板渲染结果”的代码都进了 try/except。第三方卡包的 `css` 字段可能是任意脏数据，以前解析炸掉会把**整张卡**从序列化结果里静默丢掉（`_serialize_library_card` 返回 None），现在最差只是这张卡没有样式。顺手加了 `isinstance` 检查，非字符串一律降级。
+  - **补掉深色模式的对比度隐患**：卡包模板 CSS 几乎都按 Anki 浅色主题硬编码 `color:#000` / `background:#fff`，极少认 `nightMode`。`.anki-native-card` 现在固定垫一张白纸（`background:#fff; color:#1d1d1f; border-radius:12px`），浅色主题下看不出变化，深色主题下不会出现“深字压深底”。这是**有意与插件主题解耦**：卡面按 Anki 里的样子渲染，外壳跟随插件主题。
+  - **验证方式**：把 `Anki.apkg` 解包还原成临时集合（含 60 个媒体文件），对真实 997 张卡跑 `render_native_card_html` 拿到 7,205 字符作用域样式，再在无头 Chrome 里按右栏结构 1:1 复现浅色/深色两套图比对——修复前是纯文本流水，修复后 `perceive` 标题、`vt.察觉`、Vocabulary.com 绿条、Collins 深蓝条与 ★★★★★、带编号的义项块全部还原，深色主题下也没有不可读区域。
+  - **新增 `test_30_search_payload_carries_scoped_css_per_notetype`**：锁住「样式按卡型去重 / 卡片带 notetypeId / 列表正文不夹带 `<style>` / 无模板引擎时不凭空造样式」四件事。
+
 ## [v1.4.2] - 2026-11-12
 
 - **[WorkBuddy] 回到模板样式：正文搬了、样式没搬，卡包背面变成一坨无样式纯文本**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`tests/test_bridge.py`](tests/test_bridge.py)）：

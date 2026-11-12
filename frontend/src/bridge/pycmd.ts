@@ -466,6 +466,8 @@ export interface LibraryFacetCounts {
 export interface LibraryCardItem {
   id: string;
   noteId: string;
+  /** 卡型 id：用来在 cardStyles 里挑对应的模板样式表（旧后端可能缺省）。 */
+  notetypeId?: string;
   deckId: string;
   deckName: string;
   fullDeckName?: string;

@@ -295,7 +295,7 @@ CSS_TAG_RE = re.compile(r"</?[a-zA-Z][^>]*>")
 CSS_ROOT_SELECTOR_RE = re.compile(r"^(?:html|body|:root)\b", flags=re.I)
 CSS_DISPLAY_NONE_RE = re.compile(r"display\s*:\s*none\s*(?:!\s*important\s*)?;?", flags=re.I)
 CSS_AT_SCOPED = ("@media", "@supports", "@container", "@layer", "@document")
-CARD_ROOT_ID = "anki-native-card"
+CARD_ROOT_CLASS = "anki-native-card"
 
 
 def extract_model_css_text(raw_css: str) -> str:
@@ -380,7 +380,7 @@ def _scope_selector_list(selectors: str, scope: str) -> str:
 
 
 def scope_card_css(
-    css_text: str, scope: str = f"#{CARD_ROOT_ID}", reveal_hidden: bool = True
+    css_text: str, scope: str = f".{CARD_ROOT_CLASS}", reveal_hidden: bool = True
 ) -> str:
     """把模板 CSS 的每条选择器都收进 ``scope`` 之下，避免污染整个插件界面。
 
@@ -443,7 +443,7 @@ def scope_card_css(
 
 
 @lru_cache(maxsize=32)
-def build_card_css(raw_css: str, media_dir: str, scope: str = f"#{CARD_ROOT_ID}") -> str:
+def build_card_css(raw_css: str, media_dir: str, scope: str = f".{CARD_ROOT_CLASS}") -> str:
     """模板 CSS → 可直接注入的、带作用域的样式表。
 
     ``@import`` 的目标（如柯林斯词典的 ``_collins_c.css``）会被展开并排到最前面，
@@ -492,7 +492,7 @@ def render_native_card_html(
     输出完全一致。
 
     第三个返回值是**作用域化之后的模板 CSS**（见 :func:`build_card_css`），调用方
-    负责把它包成 ``<style>`` 并配上 ``#anki-native-card`` 容器。这不是可选项：
+    负责把它包成 ``<style>`` 并配上 ``.anki-native-card`` 容器。这不是可选项：
     v1.4.1 一开始只搬了 HTML 没搬 CSS，结果用户的卡包背面变成一坨无样式的纯文本
     （`.section` 的色条、`.extension` 的灰块、词性小标签全没了），而编辑器的预览
     里样式是好的——因为那里有自己的排版。模板 HTML 和模板 CSS 必须成对出现。
@@ -504,20 +504,29 @@ def render_native_card_html(
     except Exception:
         return "", [], ""
 
-    answer = sanitize_rendered_card_html(getattr(output, "answer_text", "") or "")
+    # 下面整段都在跟“第三方模板渲染结果”打交道，字段缺失、类型不对、样式表解析炸掉
+    # 都只该让这张卡退回没有样式的纯正文，绝不能连累整页卡片的序列化。
+    try:
+        raw_answer = getattr(output, "answer_text", "") or ""
+        answer = (
+            sanitize_rendered_card_html(raw_answer) if isinstance(raw_answer, str) else ""
+        )
 
-    audio: list[str] = []
-    for tag in getattr(output, "answer_av_tags", None) or []:
-        name = str(getattr(tag, "filename", "") or "").strip()
-        if name and name not in audio:
-            audio.append(name)
+        audio: list[str] = []
+        for tag in getattr(output, "answer_av_tags", None) or []:
+            name = str(getattr(tag, "filename", "") or "").strip()
+            if name and name not in audio:
+                audio.append(name)
 
-    page_css = build_card_css(getattr(output, "css", "") or "", media_dir)
+        raw_css = getattr(output, "css", "") or ""
+        page_css = build_card_css(raw_css, media_dir) if isinstance(raw_css, str) else ""
+    except Exception:
+        return "", [], ""
     return answer, audio, page_css
 
 
 def wrap_card_with_styles(html_text: str, css_text: str) -> str:
-    """把正文包进 ``#anki-native-card`` 容器并挂上作用域样式表。
+    """把正文包进 ``.anki-native-card`` 容器并挂上作用域样式表。
 
     里层那个 ``class="card"`` 不能省：模板 CSS 基本都以 ``.card{{color / font}}``
     打底，缺了它就只剩 Studio 深色主题的浅色文字，落到白底卡面上会看不清。
@@ -526,7 +535,11 @@ def wrap_card_with_styles(html_text: str, css_text: str) -> str:
         return html_text or ""
     if not css_text:
         return html_text
-    return (
-        f"<style>{css_text}</style>"
-        f'<div id="{CARD_ROOT_ID}"><div class="card">{html_text}</div></div>'
-    )
+    return f"<style>{css_text}</style>" + wrap_card_html(html_text)
+
+
+def wrap_card_html(html_text: str) -> str:
+    """只给正文套容器，不带样式表（样式由调用方在别处统一渲染一份）。"""
+    if not html_text:
+        return html_text or ""
+    return f'<div class="{CARD_ROOT_CLASS}"><div class="card">{html_text}</div></div>'

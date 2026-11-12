@@ -216,6 +216,18 @@ mark[data-empty="true"]::after {
   font-weight: 500;
 }
 
+/* 卡包模板渲染出来的正文（复习背面 / Cmd+K 预览）。
+   第三方卡包的模板 CSS 是按 Anki 浅色主题写的：`.card{color:#000;background:#fff}`
+   或 `body{background:#fff;color:#333}` 这类硬编码占多数，几乎不认 nightMode。
+   插件本体是浅/深双主题，深色模式下这些深色文字会直接糊在深背景上，所以这里统一
+   垫一张“白纸”兜底——与在 Anki 里看到的样子一致，两套主题下都读得清。 */
+.anki-native-card {
+  background: #ffffff;
+  color: #1d1d1f;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
 /* Overscroll containment for modals & drawers */
 .modal-contain-scroll {
   overscroll-behavior: contain;
