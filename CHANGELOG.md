@@ -15,6 +15,8 @@
 
 ## [Unreleased]
 
+## [v1.4.1] - 2026-11-12
+
 - **[WorkBuddy] 背诵界面背面只显示一行音标：背面正文改由 Anki 模板引擎渲染**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`tests/test_bridge.py`](tests/test_bridge.py)）：
   - **现象**：用户装上 `Anki.apkg`（997 张 `UVBasic-English` 卡，10 字段）后反馈「编辑时拓展字段都在，学习模式的背面却只有一个音标」。定位到 `_serialize_review_card` 里 `back_raw = fields_dict.get(field_keys[1])`——**把「第二个字段」当成了整张背面**。这个卡包的 `fields[1]` 恰好是 `英美音标`，于是 `中文释义 / vocab简明 / vocab扩展 / 真题原句 / 柯林斯星级 / 柯林斯解释` 六个字段全部被丢掉。只要卡包不是「两字段」形态，拓展字段就会这样整段消失，且编辑界面看不出异常，肉眼很难归因。`_extract_structured_fields` 里写死的 `词源 / 例句 / 提示 / 读音` 四个字段名同样不匹配这个卡包，等于第二重漏掉。
   - **修法**：新增 `media_utils.render_native_card_html(card)`，背面一律取 `card.render_output().answer_text`，`{{字段}}`、`{{#字段}}` 条件段、`{{FrontSide}}`、`{{hint:}}` 由 Anki 自己算完。复习队列与卡包库（`search_service._serialize_library_card`）同源改造，两处不再各写一套。取不到模板引擎时（老版本 / 单测桩）安静回落 `fields[1]`，行为与修复前一致。
