@@ -186,7 +186,7 @@ sequenceDiagram
 
 ### 2. 状态管理单一真实源（useSyncExternalStore）
 
-- **数据源唯一性**：全局状态集中收敛在 [`frontend/src/stores/useAppStore.ts`](file:///Users/gripet/Library/Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/stores/useAppStore.ts)。
+- **数据源唯一性**：全局状态集中收敛在 [`frontend/src/stores/useAppStore.ts`](../frontend/src/stores/useAppStore.ts)。
 - **外部与事件读取规范**：
   - 组件内部：使用 Hook `const { ... } = useAppStore()` 响应式监听；
   - 事件监听器、异步回调或外部函数：统一调用 `getAppState()` 读取最新即时快照，**严禁** 在外部调用组件 Hook。
@@ -212,7 +212,7 @@ sequenceDiagram
   // 前端
   await callAnki<DashboardData>('get_dashboard', { ... });
   ```
-- **路由分发**：Python 端由 [`bridge/router.py`](file:///Users/gripet/Library/Application%20Support/Anki2/addons21/anki_modern_os/bridge/router.py) 进行方法分发，所有公开 API 方法必须返回符合 JSON 规范的字典或基本类型，且显式捕获内部异常，严禁向前端抛出未格式化的 Python Traceback。
+- **路由分发**：Python 端由 [`bridge/router.py`](../bridge/router.py) 进行方法分发，所有公开 API 方法必须返回符合 JSON 规范的字典或基本类型，且显式捕获内部异常，严禁向前端抛出未格式化的 Python Traceback。
 
 ### 2. 三层防迷失安全网（Anti-Lost Safety Nets）
 
@@ -258,7 +258,7 @@ python3 scripts/build_ankiaddon.py
 为了终结 Anki 原生因现实生活突发事件（值班、出差、突击考试、大病）导致的“卡片雪崩与心理弃坑”，Anki Studio 架构内建了完整的认知减压与科学调度引擎：
 
 ### 1. 🌴 事前请假模式（Vacation Mode）
-- **核心服务**：[`bridge/vacation_service.py`](file:///Users/gripet/Library/Application%20Support/Anki2/addons21/anki_modern_os/bridge/vacation_service.py)
+- **核心服务**：[`bridge/vacation_service.py`](../bridge/vacation_service.py)
 - **三维保护机制**：
   1. **新卡投放冻结**：休假期间将所有活跃牌组配置中的每日新卡限额临时置为 0，防止积压持续扩大，休假结束后自动无损复原。
   2. **到期日平稳顺延**：调用底层 `col.sched.set_due_date` 将到期卡片后移 $N$ 天，仅平移日程，100% 保护已有记忆间隔（Interval）权重。
