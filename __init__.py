@@ -730,6 +730,22 @@ class AnkiModernHost:
         page = self.webview.page()
         if page is not None:
             page.open_links_externally = False
+            # Track B 沙盒 iframe 的图片/字体走本地媒体服务（http://127.0.0.1:<port>）。
+            # 本插件的 SPA 是用 file:// 加载的，而 QtWebEngine 默认禁止 file:// 页面
+            # 加载远程 URL——不打开这个开关，兼容模式下所有图片会静默变成破图
+            # （默认模式用 file:// 媒体，不受该限制影响）。
+            try:
+                from aqt.qt import QWebEngineSettings
+
+                page_settings = page.settings()
+                page_settings.setAttribute(
+                    QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True
+                )
+                page_settings.setAttribute(
+                    QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True
+                )
+            except Exception:
+                pass
             try:
                 from aqt.qt import QColor
                 cfg = self.get_config()

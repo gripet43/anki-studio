@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.13] - 2026-11-13
+
+- **[DeepSeek] 修复兼容模式图片全部破图：QtWebEngine 默认禁止 file:// 页面加载本地媒体服务**（改 [`__init__.py`](__init__.py)、[`tests/test_general_fixes.py`](tests/test_general_fixes.py)；README / DESIGN 计数同步）：
+  - **现象**：同一张图卡在默认模式正常显示，切到「兼容模式」后图片变成破图（Track B 沙盒 iframe 里所有媒体都加载失败）。
+  - **根因**：沙盒 iframe 为了隔离模板脚本使用 `sandbox="allow-scripts"`（opaque origin），媒体只能走 Anki 本地媒体服务 `http://127.0.0.1:<port>/...`；而插件 SPA 是用 `file://` 加载的，QtWebEngine 默认 `LocalContentCanAccessRemoteUrls = false`，会在引擎层直接拦截该请求。默认模式媒体是 `file://`，所以不受影响——正好对上「默认正常、兼容模式破图」。
+  - **修法**：创建 WebView 时显式开启 `LocalContentCanAccessRemoteUrls` 与 `LocalContentCanAccessFileUrls`。用 Anki 自带 PyQt6 + 真实媒体服务探针验证：开启前 sandbox / 普通 img 的 `naturalWidth=0`，开启后全部为 `611`（同时确认不会因 `Origin: null` 被媒体服务拒绝——实际 `<img>` 请求不带 Origin）。
+  - **验证**：Python 106 项（新增 1 项入口配置守卫）、`tsc --noEmit`、前端单元 63 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.12 → 1.4.13。
+
 ## [v1.4.12] - 2026-11-13
 
 - **[DeepSeek] 新增真实 .apkg 卡组显示兼容性测试（17 个 AnkiWeb 排名卡组）+ 修复 @charset 导致的模板 CSS 作用域失效**（新增 [`tests/apkg/`](tests/apkg/README.md)（`run.py` / `render_check.mjs` / `decks.json` / `known_issues.json`）；改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`tests/scenarios/gate.sh`](tests/scenarios/gate.sh)、[`tests/test_general_fixes.py`](tests/test_general_fixes.py)、[`README.md`](README.md)、[`docs/DESIGN_AND_DEV_GUIDELINES.md`](docs/DESIGN_AND_DEV_GUIDELINES.md)）：

@@ -569,3 +569,18 @@ class TestScopeCardCssAtStatements(unittest.TestCase):
         front = build_card_css(self.CHARSET_CSS, "", reveal_hidden=False)
         self.assertIn(".anki-native-card .\\!hidden", front, "隐藏类规则必须正常作用域化")
         self.assertIn("display:none", front.replace(" ", ""), "正面必须保留隐藏")
+
+
+class TestSandboxMediaSettings(unittest.TestCase):
+    """兼容模式图片依赖 WebView 能加载本地媒体服务的 http 资源。
+
+    回归背景：SPA 用 file:// 加载，QtWebEngine 默认 LocalContentCanAccessRemoteUrls
+    = False，沙盒 iframe 里的 http://127.0.0.1:<port> 图片会被引擎层拦截，
+    表现为「默认模式正常、兼容模式全是破图」。
+    """
+
+    def test_webview_enables_local_content_remote_urls(self):
+        source = (ADDON_ROOT / "__init__.py").read_text(encoding="utf-8")
+        self.assertIn("QWebEngineSettings", source)
+        self.assertIn("LocalContentCanAccessRemoteUrls", source)
+        self.assertIn("LocalContentCanAccessFileUrls", source)
