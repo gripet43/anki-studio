@@ -5,7 +5,8 @@ import {
   translate,
 } from '../../i18n/translations';
 import { appActions, setAppState, useAppStore } from '../../stores/useAppStore';
-import { AccentColor, getAccentScale } from '../../utils/themeTokens';
+import { buildDeckScales } from '../../utils/deckPalette';
+import { getAccentScale } from '../../utils/themeTokens';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
 import { StreakFlameBackdrop } from './StreakFlameBackdrop';
 import { SyncStatusPill } from './SyncStatusPill';
@@ -138,7 +139,9 @@ export const DashboardView: React.FC = () => {
     return seenMonths;
   }, [recent182Cells, resolvedLang]);
 
-  const deckIconMap: Record<string, React.ReactNode> = {
+  // 图标按后端下发的 `accent` 槽位取形状（book/code/heart/folder/sparkles/layers 六选一）。
+  // 注意：`accent` 现在**只**决定图标形状，不再决定颜色 —— 卡片配色一律由主题色派生。
+  const deckIconByAccent: Record<string, React.ReactNode> = {
     indigo: (
       <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -176,15 +179,9 @@ export const DashboardView: React.FC = () => {
     ),
   };
 
-  // 牌组自带 accent → 全局主题色阶映射，让每张卡片拥有独立而克制的色彩身份
-  const deckAccentToTheme: Record<string, AccentColor> = {
-    indigo: 'indigo',
-    blue: 'cyan',
-    emerald: 'emerald',
-    amber: 'amber',
-    rose: 'rose',
-    purple: 'violet',
-  };
+  // 牌组卡配色：以当前主题色为唯一色源，按列表次序叠一点色相偏移与浅底浓淡。
+  // 第 1 张即主题色本身，第 6 张开始回绕（详见 utils/deckPalette.ts）
+  const deckScales = useMemo(() => buildDeckScales(accentScale), [accentScale]);
 
   const heatmapLevelStyle = (level: number): React.CSSProperties => {
     switch (level) {
@@ -1047,9 +1044,9 @@ export const DashboardView: React.FC = () => {
               </div>
             ) : (
               <div className="dashboard-deck-grid grid gap-5">
-                {displayedDecks.map((deck) => {
-                  const iconNode = deckIconMap[deck.accent] || deckIconMap.indigo;
-                  const deckScale = getAccentScale(deckAccentToTheme[deck.accent] || 'indigo', theme);
+                {displayedDecks.map((deck, deckIndex) => {
+                  const iconNode = deckIconByAccent[deck.accent] || deckIconByAccent.indigo;
+                  const deckScale = deckScales[deckIndex % deckScales.length];
                   const breakdown = deck.masteryBreakdown ?? {
                     mature: deck.mastery / 100,
                     review: 0,

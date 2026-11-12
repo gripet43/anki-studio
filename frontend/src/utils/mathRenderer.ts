@@ -154,10 +154,12 @@ function formatLatexExpression(expr: string, isDisplayMode: boolean): string {
 
 export function renderMathAndRichHtml(
   rawHtml: string | undefined | null,
-  maskClozeAsQuestion = false
+  maskClozeAsQuestion = false,
+  activeClozeOrd?: number
 ): string {
   if (!rawHtml) return '';
   let html = String(rawHtml);
+  const targetOrdStr = activeClozeOrd !== undefined ? String(activeClozeOrd) : '1';
 
   // Format Image Occlusion rectangles (<span class="anki-io-rect" ...>{{c1::...}}</span>)
   if (html.includes('anki-io-rect')) {
@@ -170,11 +172,17 @@ export function renderMathAndRichHtml(
       const styleMatch = styleAttrRegex.exec(attrsStr || '');
       const posStyle = styleMatch ? styleMatch[2].trim().replace(/;$/, '') : 'position:absolute';
       if (maskClozeAsQuestion) {
-        if (cNum === '1') {
+        if (cNum === targetOrdStr) {
           return `<span class="anki-io-rect-resolved anki-io-target" data-io-rect="${cNum}" style="${posStyle};background:#F59E0B;border:2px solid #FFFFFF;box-shadow:0 4px 14px rgba(245,158,11,0.45);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#FFFFFF;font-size:11px;font-weight:800;line-height:1;user-select:none;z-index:3;">? #${cNum}</span>`;
         }
         if (ioMode === 'hide-all') {
           return `<span class="anki-io-rect-resolved anki-io-masked" data-io-rect="${cNum}" style="${posStyle};background:#334155;border:1.5px solid rgba(255,255,255,0.65);border-radius:6px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.78);font-size:10px;font-weight:700;line-height:1;user-select:none;z-index:2;">#${cNum}</span>`;
+        }
+        return `<span class="anki-io-rect-resolved anki-io-hidden" data-io-rect="${cNum}" style="${posStyle};opacity:0;pointer-events:none;"></span>`;
+      }
+      if (activeClozeOrd !== undefined && cNum !== targetOrdStr) {
+        if (ioMode === 'hide-all') {
+          return `<span class="anki-io-rect-resolved anki-io-masked" data-io-rect="${cNum}" style="${posStyle};background:rgba(51,65,85,0.55);border:1.5px solid rgba(255,255,255,0.5);border-radius:6px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.75);font-size:10px;font-weight:700;line-height:1;user-select:none;z-index:2;">#${cNum}</span>`;
         }
         return `<span class="anki-io-rect-resolved anki-io-hidden" data-io-rect="${cNum}" style="${posStyle};opacity:0;pointer-events:none;"></span>`;
       }
@@ -184,10 +192,17 @@ export function renderMathAndRichHtml(
 
   // Format raw {{c1::answer::hint}} Cloze syntax (e.g., in QuickAdd live preview or table view)
   if (CLOZE_PREVIEW_RE.test(html)) {
-    html = html.replace(CLOZE_PREVIEW_RE, (_, _cNum, cAns, cHint) => {
+    html = html.replace(CLOZE_PREVIEW_RE, (_, cNum: string, cAns: string, cHint?: string) => {
+      const isTargetOrd = activeClozeOrd === undefined || cNum === targetOrdStr;
       if (maskClozeAsQuestion) {
+        if (!isTargetOrd) {
+          return cAns;
+        }
         const label = cHint ? cHint : '...';
         return `<span class="px-2 py-0.5 rounded bg-[var(--brand-soft-strong)] text-[var(--brand-text)] font-semibold border border-[var(--brand-border)]">[${label}]</span>`;
+      }
+      if (!isTargetOrd) {
+        return cAns;
       }
       return `<span class="px-1.5 py-0.5 rounded bg-[var(--status-success-soft)] text-[var(--status-success)] font-semibold">${cAns}</span>`;
     });

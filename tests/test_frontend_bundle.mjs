@@ -879,4 +879,62 @@ assert(
   'Item #37: .dashboard-hero 底色必须是与火焰配套的橙色 radial-gradient，不要退回斜向品牌色淡染'
 );
 
+// Item #38: 新建/编辑卡片单按钮循环预览、图片遮挡工具栏整合与富文本编辑器深度修复（CardEditorModal.tsx + TowerWysiwygEditor.tsx + mathRenderer.ts）
+assert(
+  editorSrc.includes("const [editorMode, setEditorMode] = useState<'edit' | 'preview'>('edit')") &&
+    editorSrc.includes('previewFlipped') &&
+    editorSrc.includes('clozeOrdinals') &&
+    editorSrc.includes('previewReverseDir') &&
+    editorSrc.includes('ui-answer-reveal') &&
+    editorSrc.includes('ui-divider-reveal') &&
+    editorSrc.includes('onOpenImageOcclusion={() => setIoEditorOpen(true)}') &&
+    !editorSrc.includes('role="tablist"') &&
+    !editorSrc.includes('⌘P') &&
+    mathRendererSrc.includes('activeClozeOrd?: number') &&
+    wysiwygSrc.includes('isComposingRef') &&
+    wysiwygSrc.includes('exitInlinePill') &&
+    wysiwygSrc.includes('syncInlinePillsInPlace') &&
+    wysiwygSrc.includes('onOpenImageOcclusion') &&
+    wysiwygSrc.includes("t('editorHelpTitle')") &&
+    wysiwygSrc.includes("document.queryCommandState('bold')") &&
+    !wysiwygSrc.includes("findClosestElement(anchor, 'b, strong', editorRef.current)) ||") &&
+    !wysiwygSrc.includes("const selectedText = range.toString().trim() || '...';") &&
+    dashboardCssSrc.includes('.anki-cloze-body[data-empty="true"]::after'),
+  'Item #38: CardEditorModal 与 TowerWysiwygEditor 必须支持顶栏单按钮循环切换编辑/查看、移除左下角查看按钮、图片遮挡整合进工具栏、加粗/斜体即时状态翻转与多语言帮助说明'
+);
+
+// Item #39: 牌组卡配色必须由主题色派生（utils/deckPalette.ts）。
+// 历史上这里按列表位置轮流派发 indigo/blue/emerald/amber/rose/purple 六个色系，
+// 与用户选的主题色完全无关 —— 选「经典蓝」，第二张牌组仍是青的、第三张仍是绿的。
+const deckPalettePath = path.resolve(ADDON_ROOT, 'frontend/src/utils/deckPalette.ts');
+assert(fs.existsSync(deckPalettePath), 'Item #39: 找不到 frontend/src/utils/deckPalette.ts');
+const deckPaletteSrc = fs.readFileSync(deckPalettePath, 'utf-8');
+
+assert(
+  dashboardSrc.includes('buildDeckScales') && !dashboardSrc.includes('deckAccentToTheme'),
+  'Item #39: 首页牌组配色必须走 buildDeckScales(主题色阶)，不得再用 deckAccentToTheme 这类写死的 accent→色系映射'
+);
+assert(
+  /const deckScales = useMemo\(\(\) => buildDeckScales\(accentScale\)/.test(dashboardSrc),
+  'Item #39: deckScales 必须按 accentScale 记忆化，否则切换主题色时牌组颜色不会重算'
+);
+assert(
+  !/#[0-9a-fA-F]{3,6}\b/.test(deckPaletteSrc),
+  'Item #39: deckPalette 里不得出现写死的十六进制颜色，配色必须全部来自传入的主题色阶'
+);
+
+// 色相偏移量级是实测定下来的：经典蓝 h≈212°，+20° 已经发紫、−20° 已经发青，
+// 一旦超过 15° 就会退回「彩色牌组」，等于把这个 bug 换个写法又装回去。
+const deckHueOffsets = [...deckPaletteSrc.matchAll(/hue:\s*(-?\d+(?:\.\d+)?)/g)].map((m) =>
+  Math.abs(Number(m[1]))
+);
+assert(
+  deckHueOffsets.length >= 4,
+  'Item #39: deckPalette 的色相偏移表被改坏了（解析不到 4 个以上 hue 值）'
+);
+assert(
+  Math.max(...deckHueOffsets) <= 15,
+  `Item #39: 牌组色相偏移最大 ${Math.max(...deckHueOffsets)}°，超过 15° 就跑出主题色家族了`
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

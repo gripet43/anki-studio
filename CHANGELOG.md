@@ -15,6 +15,57 @@
 
 ## [Unreleased]
 
+- **[WorkBuddy] 首页牌组卡配色改为「由主题色派生」，不再按位置轮流派发六个写死的色系**（新增 [`frontend/src/utils/deckPalette.ts`](frontend/src/utils/deckPalette.ts)，改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - **问题**：后端 `_build_decks_list` 里 `color_idx = len(decks_out) % len(accents)`，把 indigo / blue / emerald / amber / rose / purple 六个色系按牌组顺序轮流发下去；前端再由 `deckAccentToTheme` 把这六个名字映射到主题库里的 indigo / cyan / emerald / amber / rose / violet。**卡片颜色因此与用户选定的主题色完全无关**——选了「经典蓝」，第二张牌组仍是青的、第三张仍是绿的、第四张是橙的，看起来像一套彩虹配色，而不是「我的主题」。
+  - **改法**：以 `getAccentScale(accentColor, theme)` 为唯一色源，按牌组在列表中的次序叠加两档很轻的偏移，派生出一整套 `AccentScale` 供卡片使用：
+    - **色相**：整族一起偏转，幅度封顶 ±13°。这个量级是实测定的——「经典蓝」h≈212°，+20° 就已经发紫、−20° 已经发青，再大就不再读作同一个主题色，等于把彩虹牌组换个写法装回去。
+    - **浅底深度**：只作用于浅色填充（图标底、`学习` 按钮底、进度条浅段）。这些颜色明度都在 95% 上下，**只转色相根本看不出差别**，必须靠「同色相的不同浓淡」分离；深色主题里这些填充是 `rgba()` 半透明，深度改为调 alpha（0.16 → 0.196 / 0.232）。
+    - **对比度补偿**：浅底变浓会把压在上面的 `brandText` 吃掉一截——只加深底色时，琥珀第 4 张、经典蓝与雾海蓝第 5 张掉到 3.7:1，低于小字号 4.5:1。让实色令牌（品牌色、文字色）按 0.8 系数跟着一起加深，8 套主题 × 明暗 × 5 档共 80 组全部回到 **4.5:1 以上（最低 4.66:1，中位 6.76:1）**，同时「越靠后越浓」的语义反而更统一。
+    - 第 1 张牌组偏移为 0，即完全等于主题色本身：绝大多数用户只有一两个牌组，主牌组始终穿品牌色，第二张起才逐渐分化；第 6 张起回绕。
+  - **配色边界**：`brand / brandHover / brandText / brandSoft / brandSoftStrong / brandSurface / brandBorder / brandMutedBar / heatmap[4]` 全部套用同一组偏移，所以一张卡内部的图标底、描边、进度条、悬停按钮永远自洽，不会出现「底是冷调、字是暖调」。
+  - **图标不再与颜色耦合**：`deck.accent` 现在**只**决定图标形状（book / code / heart / folder / sparkles / layers），不再决定颜色；变量随之更名为 `deckIconByAccent`，避免下一位助手误以为它还是配色开关。
+  - **守卫**：`test_frontend_bundle.mjs` 新增 Item #39（4 条断言）——模板里必须走 `buildDeckScales(accentScale)` 且 `deckScales` 要 memo（否则切主题色不重算）、`deckAccentToTheme` 不得复活、`deckPalette.ts` 内不得出现任何写死的十六进制颜色、色相偏移上限 15°（改回 ±28° 会立刻报「超过 15° 就跑出主题色家族了」）。两条变异测试已验证守卫会真的红。
+
+- **[Gemini] 制卡弹窗与富文本编辑器第二轮深度打磨：单按钮循环预览、图片遮挡整合进工具栏、加粗/斜体状态翻转 Bug 修复与全工具栏 16 国语言本地化**（[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/components/quick-add/TowerWysiwygEditor.tsx`](frontend/src/components/quick-add/TowerWysiwygEditor.tsx)、[`frontend/src/i18n/translations.ts`](frontend/src/i18n/translations.ts)、[`frontend/src/i18n/locales/`](frontend/src/i18n/locales/)）：
+  - **1. 顶栏「查看 ↔ 编辑」单按钮循环切换 + 移除左下角冗余查看按钮 + 图片遮挡整合进编辑器工具栏**：
+    - 移除 `CardEditorModal.tsx` 左下角底栏的「查看 (`⌘P`)」按钮，底栏左侧仅保留未保存修改状态提示；
+    - 将顶栏右上角原本拆开的「编辑 / 查看」双胶囊合并为**单个循环切换按钮**（编辑态显示「`👁 查看`」，点击进入预览后同一按钮切换为「`✎ 编辑`」，再点即回编辑态）；
+    - 将「图片遮挡 / 编辑遮挡框」按钮从弹窗顶栏移入正面 `TowerWysiwygEditor` 的工具栏功能区（与 `[ ... ] 挖空`、`f(x)`、`高亮` 同行排布）。
+  - **2. 根治「点击加粗/斜体输入文字后再点取消，按钮仍显示高亮、必须再输一个字才更新」的 Bug**：
+    - **根因 A（DOM 祖先或运算覆盖）**：原 `updateActiveFormats()` 使用 `Boolean(findClosestElement(anchor, 'b, strong')) || document.queryCommandState('bold')`。在 `<b>文字|</b>` 末尾点击 `B` 取消加粗时，`document.execCommand('bold')` 已将浏览器待输入加粗开关（`queryCommandState('bold')`）翻转为 `false`，但打下一个字前 `anchorNode` 仍停在 `<b>` 内，导致 `findClosestElement` 恒为 `true` 并掩盖了 `false`；现对 `bold`、`italic`、`orderedList`、`unorderedList` 直接采用 `Boolean(document.queryCommandState(...))` 作为唯一权威状态。
+    - **根因 B（`focusAndRestoreSelection` 重置 Range 抹除待输入状态）**：工具栏按钮已通过 `onMouseDown={e.preventDefault()}` 保持编辑器焦点，而原 `focusAndRestoreSelection()` 每次点击仍无条件执行 `sel.removeAllRanges(); sel.addRange(...)`，导致 Chromium 丢弃刚通过 `execCommand` 切换的待输入样式开关（Typing Style Override）；现仅在编辑器未聚焦时恢复选区，并新增 `document.addEventListener('selectionchange', ...)` 实时同步光标移动时的激活态。
+  - **3. 工具栏全部提示、下拉菜单与最右侧 `?` 帮助浮窗 100% 本地化（16 国语言 + 平台动态快捷键）**：
+    - 在 `translations.ts` 与 14 个 `locales/*.ts` 中补齐 29 个编辑器专属词条（`editorHelpTitle`、`editorToolBold`、`editorClozeBtnLabel`、`editorMarkBtnLabel` 等），彻底清除工具栏 `title`、标题/对齐下拉菜单以及最右侧 `?` 快捷键说明浮窗中的硬编码英文（`WYSIWYG`、`Bold`、`Cloze`、`Exit Cloze`、`Mark` 等），并通过 `formatShortcut(..., envInfo.platform)` 自动适配 macOS (`Cmd`) 与 Windows (`Ctrl`)。
+  - **4. 额外深挖并修复的 4 项编辑器体验细节**：
+    - **工具栏按钮统一设置 `tabIndex={-1}`**：消除在「正面」按 `Tab` 想跳到「背面」时焦点被迫在工具栏 16 个图标按钮上逐个停留的问题；
+    - **标题级别（`P / H1 / H2 / H3`）激活勾选、二次点击退回正文与行末回车自动回 `<p>`**；
+    - **空挖空/空高亮按 `Escape` 或切换预览时自动清理空壳**（`serializeFromWysiwyg` 过滤空 `{{c1::}}` 标签）；
+    - **编辑区内边距移至 `contentEditable` 自身**，消除四周 16px 内边距点击无法落焦的死区。
+
+- **[Gemini] 制卡富文本编辑器（`TowerWysiwygEditor.tsx`）全链路交互与输入法深度修复**（[`frontend/src/components/quick-add/TowerWysiwygEditor.tsx`](frontend/src/components/quick-add/TowerWysiwygEditor.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - **1. 消除点击「Cloze 挖空」与「Mark 高亮」出现真实 `...` 字符需手动删除的问题**：
+    - 移除原先 `selectedText || '...'` 向 DOM 写入真实三个点字符且将光标置于胶囊外的反直觉逻辑；
+    - 未选中文本直接点击 `Cloze`（或按 `Cmd+Shift+C`）时，插入带零宽锚点（`\u200B`）与 `data-empty="true"` 的空胶囊，并将光标**直接落入挖空内部**；通过 CSS `.anki-cloze-body[data-empty="true"]::after { content: '...' }` 渲染视觉虚影占位——无需按退格删除任何字符，直接打字即刻替换虚影。若已选中文本再点 `Cloze`，则自动包裹选中词并将光标落于胶囊外右侧。
+  - **2. 根治挖空内中文输入法（IME）首字重复两遍的 Bug**：
+    - **根因 A**：`.anki-cloze-pill` 原先使用 `display: inline-flex` 搭配子元素 `<span contenteditable="false">c1:</span>`，在 Chromium / QtWebEngine 的 `contentEditable` 中形成原子内联弹性盒边界，导致中文输入法 `compositionstart` / `compositionend` 锚定偏移错乱并将首字提交两次；现改为纯内联 `display: inline` + `box-decoration-break: clone` 并在空胶囊内维持 `\u200B` 文本节点锚点。
+    - **根因 B**：`onInput` 原先在拼音合成过程（`isComposing`）中每次按键都触发序列化与外部 `value` 同步，并在清理 `\u200B` 时重建节点打断输入法；现新增 `isComposingRef`（`onCompositionStart` / `onCompositionEnd`），合成期间严禁重置 DOM，且在合成结束后使用 `CharacterData.deleteData()` 原位剔除零宽锚点，100% 保持光标与输入法状态不断裂。
+  - **3. 补齐 5 种顺滑退出「挖空 / 高亮」模式的方式（解决一直按空格被困在挖空内的问题）**：
+    - 在每个 `.anki-cloze-pill` 与 `<mark>` 右侧始终维护外部文本节点锚点，并在挖空/高亮内支持：① **连按两次空格（Double-Space）**自动删去末尾多余空格并跳出到普通正文；② 按 **`Tab` / `Enter`** 立即跳出胶囊；③ 在胶囊末尾按 **`→`（右方向键）** 跨出胶囊；④ 再次点击工具栏 **`Cloze` / `Mark` 按钮（或 `Cmd+Shift+C`）** 切换跳出；⑤ 鼠标点击胶囊右侧空白区域自动落位至胶囊外。
+  - **4. 全面排查并修复编辑器其余 6 项体验缺陷**：
+    - **一键退格删除空挖空**：挖空为空时按 `Backspace` / `Delete` 直接整枚移除，不再卡在 `c1:` 前缀上；点击 `c1:` 前缀可循环切换序号（`c1 ↔ c2`）。
+    - **`f(x)` 数学公式即点即输**：未选中文本点击 `f(x)` 时不再塞入 `x^2 + y^2 = r^2` 假公式，而是插入 `\(  \)` 并将光标精准定位于括号正中间。
+    - **插入表格无废字 + `Tab` 跳格**：插入表格不再预填 `#1/#2/#3` 与满格 `...`，插入后光标直达首格，并支持 `Tab` / `Shift+Tab` 在单元格间顺畅跳转（末格按 `Tab` 自动跳出至表格下方段落）。
+    - **引用块（`Quote`）与代码块（`Code`）双向开关与回车退出**：再次点击工具栏按钮或块末空行按 `Enter` 即可退回普通段落 `<p>`。
+    - **工具栏实时高亮激活态与字数统计去噪**：光标处于粗体、斜体、列表、引用、代码、挖空、高亮时工具栏对应按钮实时高亮；字数统计自动剔除 `c1:` 前缀与零宽字符。
+
+- **[Gemini] 新建与编辑卡片新增实时交互式「卡片预览」工作台**（[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/utils/mathRenderer.ts`](frontend/src/utils/mathRenderer.ts)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - **1. 顶栏分段切换器 + 底栏快捷入口 + 键盘直达（`⌘P` / `Ctrl+P`）**：
+    - 在制卡/改卡弹窗顶栏右侧（图片遮挡按钮左侧）加入轻量二段式分段控件「**✎ 编辑 / 👁 预览**」（当笔记将生成多张子卡片时自动显示 `×N` 计数徽标），并在底栏左侧提供带 `⌘P` 提示的快捷切换按钮，无需挤压原有双塔富文本编辑区空间。
+  - **2. 1:1 复刻复习器（Reviewer）质感的沉浸式翻面预览舞台**：
+    - 切入预览态后直接呈现与真实学习界面一致的卡片画布、自适应字号阶梯（短词条 `28px–30px` 居中粗体、中等题干 `22px`、长段落/富媒体 `17px–18px` 左对齐）、问题面回忆提示条（`Space` 键或点击卡片任意位置翻转）以及答案面 `.ui-divider-reveal` + `.ui-answer-reveal` 揭晓动效，完整渲染 LaTeX 公式、表格、引用块、本地媒体图片、扩展字段（Additional Fields）与 `#标签`。
+  - **3. 多空填空题（`c1` / `c2` / `c3`…）、图片遮挡与正反双向卡（`1 · 正面 → 背面` / `2 · 背面 → 正面`）独立子卡预览**：
+    - 升级 `renderMathAndRichHtml(rawHtml, maskClozeAsQuestion, activeClozeOrd)` 支持按指定 `cN` 序号精准遮罩当前问题项（`[...]` 或琥珀色 `? #N`）并在答案面高亮为翠绿，同时将其余非当前序号（`cM, M ≠ N`）自然还原为明文或对应遮挡模式；当存在多个填空序号或选择了「正反双向卡」时，预览栏顶部自动浮现子卡切换胶囊。
+
 - **[WorkBuddy] 测试套件升级至第四轮（Windows r4）口径：补齐旗标数据、排序全键序校验、自定义学习 6 组语义断言与 Item #37**（[`tests/scenarios/builder.py`](tests/scenarios/builder.py)、[`tests/scenarios/scenarios.py`](tests/scenarios/scenarios.py)、[`tests/scenarios/build.py`](tests/scenarios/build.py)、[`tests/scenarios/smoke.py`](tests/scenarios/smoke.py)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)、[`tests/WINDOWS_HANDOFF.md`](tests/WINDOWS_HANDOFF.md)、[`tests/scenarios/README.md`](tests/scenarios/README.md)）：前三轮验证之后新增了排序控件重排、自定义学习三层弹窗、同步云图标、编辑器 Esc 作用域等改动，原有用例已无法覆盖。本轮场景检查项由 **472 → 692**（11 场景，5.1 s），前端产物审计新增第 37 组。
   - **1. 修复「旗标功能从未被真实数据覆盖」的测试空洞（根因级）**：`ScenarioSpec` 新增 `flag_mix: dict[int, float]` 字段，builder 按比例从洗牌后的卡池里切分并真正写入 `cards.flags` 低 3 位，同时把 `flag_dist` 记入场景元数据。此前**全项目没有任何一处写入过 `cards.flags`**——旗标筛选、旗标分面计数、旗标专项特训、7 色旗标选择器全都在「零旗标」的数据上空转，通过与否毫无意义。现 `mixed` 场景挂载 7 色旗标（约 38% 卡片带旗标，实测分布 `{0:267, 1:43, 2:34, 3:26, 4:22, 5:17, 6:13, 7:9}`），其余场景保持零旗标以继续守住「无旗标时不误报」的分支。
   - **2. 排序从「能返回结果」升级为「结果真的有序」**：新增 `run_library_sort_checks()`，覆盖 `search_service` 全部 7 个排序分支（`lapses_desc` / `ivl_asc` / `ivl_desc` / `due_asc` / `stability_asc` / `front_asc` / `newest`），用 `_sort_projection()` 复刻每一条后端排序语义后逐条断言：① `total` 不因排序改变（排序只换顺序、不缩结果集）；② 返回序列在投影上单调；③ 传入未知 `sortBy` 既不报错也不返回空集。
