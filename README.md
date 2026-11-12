@@ -2,6 +2,8 @@
 
 > 专为 Anki 打造的现代化、桌面级沉浸式记忆工作区。以 Apple 人机交互设计规范（HIG）为审美基准，界面支持 16 种语言，并沿用 Anki 原生同步链路（不介入其数据流），与 AnkiWeb 双向同步兼容。
 
+![Anki Studio 界面预览](docs/assets/anki-studio-preview.gif)
+
 ---
 
 ## 🌟 核心特性
@@ -45,8 +47,11 @@ npm run build    # 打包生产静态资源到 web/ 目录
 
 ### 2. 自动化测试与体检
 ```bash
-node tests/test_frontend_bundle.mjs
+node tests/test_frontend_bundle.mjs                   # 前端 bundle 与 i18n / 样式守卫
+python3 -m unittest discover -s tests -p "test_*.py"  # Python 侧单元测试
 ```
+
+两组都必须全绿再提交；改完还要跑一次 `npm run build`，确保 `web/assets` 与源码同步。
 
 ### 3. 打包发布
 ```bash
@@ -59,6 +64,19 @@ python3 scripts/build_ankiaddon.py
 随包的 `config.json` 会剥掉昵称与学习记录等私人数据。打包时还会自动把 `manifest.json`
 的 `mod` 刷新为当前时间戳（AnkiWeb 靠它判断版本更新），并校验 `min_point_version`
 与 `human_version` 是否合法。
+
+### 4. 预览图
+README 与 AnkiWeb 简介页共用同一张循环 GIF，由 `scripts/build_preview_gif.py` 生成。
+把若干张同尺寸、同构图的整窗截图传进去即可重建，宽度、每帧停留时长、是否淡入都可调：
+
+```bash
+python3 scripts/build_preview_gif.py \
+  --frames 01-dashboard.jpg 02-search.jpg 03-relief.jpg 04-vacation.jpg \
+  --out docs/assets/anki-studio-preview.gif --width 1200 --hold-ms 2800
+```
+
+GIF 只有 256 色，画质上有几个已经踩过并写在脚本 docstring 里的坑（JPEG 白噪声污染调色板、
+全局调色板反而放大会差、抖动与预模糊是负收益），改参数前建议先读一遍。
 
 ---
 

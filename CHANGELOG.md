@@ -15,6 +15,12 @@
 
 ## [Unreleased]
 
+- **[WorkBuddy] 仓库转 public 后的收尾：README 补预览图与缺失的测试命令，清掉「仓库还是私有」的过期说明**（改 [`README.md`](README.md)、[`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)、[`tests/WINDOWS_HANDOFF.md`](tests/WINDOWS_HANDOFF.md)）：
+  - **README 顶部加了预览 GIF**（复用 `docs/assets/anki-studio-preview.gif`，相对路径引用，GitHub 侧直接渲染），并为「预览图」新增第 4 小节，写明生成脚本与可调参数。
+  - **补上 README 漏写的门禁命令**：原来「自动化测试与体检」只列了 `node tests/test_frontend_bundle.mjs`，漏了 `python3 -m unittest discover -s tests`，照文档做的人会漏跑一半测试。现补齐并注明「两组全绿再提交，改完还要 `npm run build`」。
+  - **两处「仓库是私有的」已过期**：仓库已于 2026-11-12 转为 public（`github.com/gripet43/anki-studio` 与 raw 直链均匿名可访问，实测 200）。`docs/ANKIWEB_LISTING.md` §3 改为「已公开，上传前确认文件已推送到 main」；`tests/WINDOWS_HANDOFF.md` 的前置条件改为「可直接匿名 clone，推送才需要凭据」。
+  - 历史条目（v1.4.0 第 3 点）里「发布前必须转为 public」的表述保留不动——那是当时的记录，事实已在上一条完成。
+
 - **[WorkBuddy] 重做 AnkiWeb 预览 GIF：定位到「JPEG 白噪声污染调色板」这一真凶，并把生成过程脚本化**（改 [`docs/assets/anki-studio-preview.gif`](docs/assets/anki-studio-preview.gif)、新增 [`scripts/build_preview_gif.py`](scripts/build_preview_gif.py)、[`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)）：
   - **起因**：用户反馈旧版预览图「不是很好看」，并补了 4 张 2944×2086 的 macOS 整窗截图（今日概览 / 全局搜索 / 进度减负 / 休假模式，统一构图、纯白外底）。
   - **真凶是 JPEG 的白色噪声，不是缩放**：截图白底带 ±1 色度噪声，中位切分于是把调色板里的 4~6 个名额发给了几乎相同的白。量化后**纯白像素从 58% 掉到 0%**，整片底色被压到 252 一类「脏白」——观感就是整屏发灰、底色带噪点。修法：量化前把 `min(R,G,B) >= 250` 的像素统一拍成 255。修完 GIF 与源图逐点比对，平区域颜色差值为 **(0,0,0)**，全图平均色差 MAE 0.38–0.53。

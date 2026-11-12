@@ -23,8 +23,8 @@
 | Git | 任意较新版本 | `git --version` |
 | 仓库 | 已 clone 到本地 | `git -C <repo> rev-parse --short HEAD` |
 
-仓库是私有的，需要 GitHub 凭据。如果 clone 失败，先让人类配置 SSH key 或
-Git Credential Manager，不要尝试绕过认证。
+仓库已公开为 <https://github.com/gripet43/anki-studio>，可直接匿名 clone，无需凭据。
+若要往仓库推送补丁才需要 SSH key 或 Git Credential Manager，不要尝试绕过认证。
 
 下文所有命令都在 `tests\scenarios\` 目录下执行。
 

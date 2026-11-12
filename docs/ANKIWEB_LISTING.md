@@ -57,7 +57,7 @@ anki addon ui interface theme dashboard scheduler review srs productivity
 https://github.com/gripet43/anki-studio/issues
 ```
 
-仓库目前是私有的，**需先转为 public**，否则这个链接和描述里的图片都会 404。
+仓库已于 2026-11-12 转为 public，链接与描述里的图片直链均可匿名访问。**上传前先确认要引用的文件已经推送到 `main`**，否则 raw 直链仍是 404（本地改了没推 = 线上没有）。
 
 ## 4. Branches
 
