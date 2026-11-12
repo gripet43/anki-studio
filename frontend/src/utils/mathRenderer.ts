@@ -1,7 +1,8 @@
 // ============================================================================
-// Anki Studio — Pure Offline LaTeX / MathJax Formula & Rich HTML Renderer
+// Anki Studio — Pure Offline LaTeX / MathJax Formula, Furigana & Rich HTML Renderer
 // Converts \( ... \), \[ ... \], $$ ... $$, $ ... $, [latex]...[/latex],
-// [$]...[/$], and Cloze {{c1::...}} into clean, styled HTML without external CDNs.
+// [$]...[/$], Cloze {{c1::...}}, and Japanese Furigana 漢字[かな] into clean,
+// styled HTML without external CDNs.
 // Bug #13 Fix: Escapes `<` and `>` inside LaTeX expressions BEFORE injecting HTML
 // tags so inequalities like `\( a < b \)` never truncate DOM nodes!
 // ============================================================================
@@ -90,6 +91,11 @@ const GREEK_AND_SYMBOLS: Record<string, string> = {
 };
 
 const CLOZE_PREVIEW_RE = /\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}/g;
+const FURIGANA_BRACKET_RE =
+  / ?([0-9\u4e00-\u9fff\u3400-\u4dbf々〆ヵヶ\u3040-\u309f\u30a0-\u30ff]+)\[([\u3040-\u309f\u30a0-\u30ffー～〜・、，\s]+)\]/g;
+const MDX_INDEX_MARKER_RE = /`\d+`/g;
+const EMBEDDED_SCRIPT_RE = /<script\b[^>]*>[\s\S]*?<\/script\s*>/gi;
+const EMBEDDED_STYLE_TAG_RE = /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi;
 
 function formatLatexExpression(expr: string, isDisplayMode: boolean): string {
   // Bug #13 Fix: Escape raw `<` and `>` first so `a < b` or `x > 0` is never parsed as an HTML tag
@@ -160,6 +166,22 @@ export function renderMathAndRichHtml(
   if (!rawHtml) return '';
   let html = String(rawHtml);
   const targetOrdStr = activeClozeOrd !== undefined ? String(activeClozeOrd) : '1';
+
+  // Strip raw <script> blocks and MDX dictionary index markers (`1`爱`4`);
+  // keep scoped `.anki-native-card` <style> blocks intact while stripping unscoped inline field <style> blocks
+  html = html.replace(EMBEDDED_SCRIPT_RE, '');
+  html = html.replace(MDX_INDEX_MARKER_RE, '');
+  html = html.replace(EMBEDDED_STYLE_TAG_RE, (fullMatch, cssContent: string) => {
+    if (cssContent && cssContent.includes('.anki-native-card')) {
+      return fullMatch;
+    }
+    return '';
+  });
+
+  // Convert Japanese Furigana bracket syntax ` 漢字[かな]` into `<ruby>漢字<rt>かな</rt></ruby>`
+  if (html.includes('[') && html.includes(']')) {
+    html = html.replace(FURIGANA_BRACKET_RE, '<ruby>$1<rt>$2</rt></ruby>');
+  }
 
   // Format Image Occlusion rectangles (<span class="anki-io-rect" ...>{{c1::...}}</span>)
   if (html.includes('anki-io-rect')) {
@@ -243,12 +265,33 @@ export function formatCardPreviewHtml(
   const rendered = renderMathAndRichHtml(rawHtml, options.maskClozeAsQuestion ?? false);
   if (!rendered) return '';
 
-  // Keep rich media, Image Occlusion wrappers, and tables intact in card boxes
-  if (!options.singleLine && /<(?:img|table|svg|canvas|video|audio)\b|anki-io-wrap/i.test(rendered)) {
-    return rendered;
+  // Strip `<style>` blocks and oversized inline font-size / width / background styles
+  // on non-Image-Occlusion elements so 100px/48px/28px deck templates never burst out of
+  // compact LibraryView cards or table rows.
+  let sanitized = rendered.replace(EMBEDDED_STYLE_TAG_RE, '');
+  if (!sanitized.includes('anki-io-wrap')) {
+    sanitized = sanitized
+      .replace(/<\/?center\b[^>]*>/gi, '')
+      .replace(
+        /(<(?!span\b[^>]*\banki-io-rect)[^>]+?)\sstyle\s*=\s*(["'])([\s\S]*?)\2/gi,
+        (fullMatch, tagPrefix: string, quote: string, styleBody: string) => {
+          const cleanedStyle = styleBody
+            .replace(
+              /\b(?:font-size|line-height|width|min-width|max-width|height|min-height|margin|padding|background|background-color)\s*:[^;]+;?/gi,
+              ''
+            )
+            .trim();
+          return cleanedStyle ? `${tagPrefix} style=${quote}${cleanedStyle}${quote}` : tagPrefix;
+        }
+      );
   }
 
-  let normalized = rendered
+  // Keep rich media, Image Occlusion wrappers, and tables intact in card boxes
+  if (!options.singleLine && /<(?:img|table|svg|canvas|video|audio)\b|anki-io-wrap/i.test(sanitized)) {
+    return sanitized;
+  }
+
+  let normalized = sanitized
     .replace(/<(p|div|li|blockquote|h[1-6])\b[^>]*>(?:\s|&nbsp;|<br\s*\/?>)*<\/\1>/gi, '<br/>')
     .replace(/<\/?(?:ul|ol)\b[^>]*>/gi, '<br/>')
     .replace(/<li\b[^>]*>/gi, '<br/>• ')

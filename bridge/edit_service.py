@@ -61,15 +61,44 @@ class EditService:
                     note[k] = normalize_media_html_for_storage(str(v), media_dir)
                     updated_keys.add(k)
 
-        front_alias = ("正面", "Front", "Text", "文字", "问题", "Question", "Word", "Expression")
-        meaning_alias = ("释义", "背面", "Back", "Meaning", "Answer", "答案", "Back Extra", "背面额外")
-        example_alias = ("例句", "Example", "Sentence", "Examples")
-        etymology_alias = ("词源", "Etymology", "Root", "Origin")
+        front_alias = (
+            "正面",
+            "Front",
+            "Text",
+            "文字",
+            "问题",
+            "Question",
+            "Word",
+            "Expression",
+            "单词",
+            "VocabKanji",
+            "Mặt trước",
+            "中文",
+        )
+        meaning_alias = (
+            "释义",
+            "背面",
+            "Back",
+            "Meaning",
+            "Answer",
+            "答案",
+            "Back Extra",
+            "背面额外",
+            "解释",
+            "VocabDefSC",
+            "Tiếng Việt",
+            "English",
+            "Explain1",
+        )
+        example_alias = ("例句", "Example", "Sentence", "Examples", "Example1", "SentKanji1")
+        etymology_alias = ("词源", "字源", "Etymology", "Root", "Origin")
+        meta_skip = {"noteid", "note id", "id", "guid", "uuid", "link", "level", "suborder", "audio", "音标", "pinyin", "phiên âm"}
 
         has_updated_front = any(k in front_alias for k in updated_keys)
         if "front" in data and not has_updated_front:
             matched_front = next((f for f in field_names if f in front_alias), None)
-            target_front_key = matched_front or (field_names[0] if field_names else None)
+            non_meta_fields = [f for f in field_names if f.strip().lower() not in meta_skip]
+            target_front_key = matched_front or (non_meta_fields[0] if non_meta_fields else (field_names[0] if field_names else None))
             if target_front_key:
                 note[target_front_key] = normalize_media_html_for_storage(str(data["front"]), media_dir)
                 updated_keys.add(target_front_key)
@@ -84,8 +113,9 @@ class EditService:
                 if field_names[0] not in updated_keys and "front" not in data:
                     note[field_names[0]] = meaning_val
             else:
-                matched_meaning = next((f for f in field_names if f in meaning_alias), None)
-                target_meaning_key = matched_meaning or (field_names[1] if len(field_names) > 1 else None)
+                matched_meaning = next((f for f in field_names if f in meaning_alias and f not in updated_keys), None)
+                non_meta_rest = [f for f in field_names if f not in updated_keys and f.strip().lower() not in meta_skip]
+                target_meaning_key = matched_meaning or (non_meta_rest[0] if non_meta_rest else (field_names[1] if len(field_names) > 1 else None))
                 if target_meaning_key and target_meaning_key not in updated_keys:
                     note[target_meaning_key] = meaning_val
                     updated_keys.add(target_meaning_key)

@@ -2143,6 +2143,111 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertIn("平均 O(n log n)", data["frontHtml"])
         self.assertNotIn("快速排序", data["frontHtml"])
 
+    def test_32_eight_popular_apkg_models_study_search_edit_compatibility(self):
+        """回归守卫：8 大热门第三方 APKG 卡包在学习、搜索与编辑三模式下的渲染与字段识别。
+
+        覆盖：
+        1. ``strip_front_side_from_answer`` 剥离背面重复的 ``{{FrontSide}}``（``<hr id=answer>``、
+           ``<main id="FrontSide">``、前缀匹配及 ``.hanzi`` 块去重）。
+        2. ``convert_furigana_to_ruby`` 将日语振假名 `` 漢字[かな]`` 转为 ``<ruby>漢字<rt>かな</rt></ruby>``，
+           并在 ``{{kanji:...}}`` 题干模式下剥离读音避免剧透。
+        3. ``eggrolls-JLPT10k`` 脚本中的 ``VocabPoS`` / ``SentType1..4`` 还原为 ``［名］``/``［例］``/``［訳］``
+           并移除无效 ``.Top`` / ``.Search`` 装饰栏。
+        4. ``N1N2N3N4N5`` 蓝宝书例句卡（``class="sentenceexample"``）优先识别 ``Example*`` 字段，不误取 ``Level``/``Word``。
+        5. ``Chinese Grammar Wiki`` 语法判断卡提取 ``<div class="header">`` 提问提示语。
+        6. ``HSK1-6`` 背面自动补齐模板漏写的 ``Phiên âm`` 与 ``Tiếng Việt``，且 ``scope_card_css`` 过滤刺眼的 ``background-color: green``。
+        7. ``120.apkg`` 与 ``HSK1-6`` 中的 MDX 词典序号标记 `` `1` `` / `` `2` `` 被干净剥离。
+        """
+        from anki_modern_os.bridge.media_utils import (
+            convert_furigana_to_ruby,
+            pick_display_field,
+            plain_text_of,
+            sanitize_rendered_card_html,
+            scope_card_css,
+            strip_front_side_from_answer,
+        )
+
+        # 1. Furigana conversion & kanji-only mode
+        self.assertEqual(
+            convert_furigana_to_ruby("今[いま]の 私[わたし]があるのも 監督[かんとく]<b>あっての</b>ことです。"),
+            "<ruby>今<rt>いま</rt></ruby>の<ruby>私<rt>わたし</rt></ruby>があるのも<ruby>監督<rt>かんとく</rt></ruby><b>あっての</b>ことです。",
+        )
+        self.assertEqual(
+            convert_furigana_to_ruby("山田[やまだ] 監督[かんとく]は 恩人[おんじん]です。", strip_reading=True),
+            "山田監督は恩人です。",
+        )
+        # Phonetic brackets in English / Pinyin must NOT be mistaken for Japanese furigana
+        self.assertEqual(convert_furigana_to_ruby("abandon [ə'bændən]"), "abandon [ə'bændən]")
+        self.assertEqual(convert_furigana_to_ruby("爱 [ài]"), "爱 [ài]")
+
+        # 2. plain_text_of strips <rt>, furigana brackets, MDX `\d+` markers, and inline tags without CJK word spaces
+        self.assertEqual(
+            plain_text_of("`1`<b>爱</b>其子，择师而教之 <ruby>恩<rt>おん</rt></ruby><ruby>人<rt>じん</rt></ruby>"),
+            "爱其子，择师而教之 恩人",
+        )
+
+        # 3. strip_front_side_from_answer removes duplicated FrontSide across 4 template patterns
+        self.assertEqual(
+            strip_front_side_from_answer(
+                "<div>Front Question</div><hr id=answer><div>Back Answer</div>",
+                "<div>Front Question</div>",
+            ),
+            "<div>Back Answer</div>",
+        )
+        self.assertEqual(
+            strip_front_side_from_answer(
+                '<section id="Card"><main id="FrontSide"><h1>一敗塗地</h1></main><main id="BackSide"><p>一败涂地</p></main></section>',
+                '<section id="Card"><main id="FrontSide"><h1>一敗塗地</h1></main></section>',
+            ),
+            '<section id="Card"><main id="BackSide"><p>一败涂地</p></main></section>',
+        )
+        self.assertEqual(
+            strip_front_side_from_answer(
+                '<div class="hanzi">她比我高。</div><div class="spacer"></div><div class="pinyin">Tā bǐ wǒ gāo.</div>',
+                '<div class="header">Is this sentence grammatically correct?</div><div class="hanzi">她比我高。</div>',
+            ),
+            '<div class="pinyin">Tā bǐ wǒ gāo.</div>',
+        )
+
+        # 4. eggrolls-JLPT10k script transform restores [PoS] and [SentType] badges and strips .Top / .Search
+        jlpt_raw = (
+            '<div class="Top"><a href="#">Deck</a></div>'
+            '<h3 class="VocabPoS LabelIndent">一败涂地。</h3>'
+            '<h3 class="SentKanji LabelIndent">試合に負けた。</h3>'
+            '<h3 class="SentDef LabelIndent">比赛输了。</h3>'
+            '<a class="Search" href="#">Search</a>'
+            "<script>function getType(){return ['一', '例', '関', '対']} "
+            "const m = {'VocabPoS': '四字熟語' ? '四字熟語' : '名'}</script>"
+        )
+        jlpt_clean = sanitize_rendered_card_html(jlpt_raw)
+        self.assertNotIn('class="Top"', jlpt_clean)
+        self.assertNotIn('class="Search"', jlpt_clean)
+        self.assertIn('<em lang="ja">［四字熟語］</em>一败涂地。', jlpt_clean)
+        self.assertIn('<em lang="ja">［一］</em>試合に負けた。', jlpt_clean)
+        self.assertIn('<em lang="ja">［訳］</em>比赛输了。', jlpt_clean)
+
+        # 5. N1N2N3N4N5 sentence card picks Example1 instead of Level or Word
+        n1_fields = {
+            "Note ID": "N1-001",
+            "Link": "001",
+            "Level": "N1",
+            "Word": "～あっての",
+            "Example1": "山田[やまだ] 監督[かんとく]は 私[わたし]の 恩人[おんじん]です。 今[いま]の 私[わたし]があるのも 監督[かんとく]<b>あっての</b>ことです。",
+        }
+        n1_front_rendered = (
+            '<div class="top">例文カード<span class="level">【N1】</span></div>'
+            '<div class="sentenceexample">山田監督は私の恩人です。今の私があるのも監督<b>あっての</b>ことです。</div>'
+        )
+        self.assertEqual(pick_display_field(n1_fields, n1_front_rendered), "Example1")
+
+        # 6. scope_card_css strips harsh green background and tall min-height
+        scoped_css = scope_card_css(
+            ".card { font-size: 20px; background-color: green; min-height: 364px; color: #333; }"
+        )
+        self.assertNotIn("green", scoped_css)
+        self.assertNotIn("364px", scoped_css)
+        self.assertIn("color: #333", scoped_css)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1029,4 +1029,27 @@ assert(
   'Item #40: pasteShortcutStr 必须由 formatShortcut(..., envInfo.platform) 生成'
 );
 
+// Item #41: 8 大热门第三方 APKG 卡包在学习、搜索与编辑模式下的兼容性守卫
+const mediaUtilsPySrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'bridge/media_utils.py'),
+  'utf-8'
+);
+assert(
+  mediaUtilsPySrc.includes('def strip_front_side_from_answer') &&
+    mediaUtilsPySrc.includes('def convert_furigana_to_ruby') &&
+    mediaUtilsPySrc.includes('def _apply_jlpt_script_transforms') &&
+    mediaUtilsPySrc.includes('MDX_INDEX_MARKER_RE') &&
+    mediaUtilsPySrc.includes('CSS_HARSH_CARD_BG_RE') &&
+    reviewSrc.includes('convert_furigana_to_ruby') &&
+    searchSrc.includes('convert_furigana_to_ruby') &&
+    mathRendererSrc.includes('FURIGANA_BRACKET_RE') &&
+    mathRendererSrc.includes('MDX_INDEX_MARKER_RE') &&
+    cardEditorSrc.includes('pickEditorFrontAndBackKeys') &&
+    cardEditorSrc.includes('METADATA_SKIP_FIELDS') &&
+    cardEditorSrc.includes('READING_SKIP_FIELDS') &&
+    dashboardCssSrc.includes('.anki-native-card table') &&
+    dashboardCssSrc.includes('ruby rt'),
+  'Item #41: 8 大第三方 APKG 卡包兼容规则（FrontSide 去重、日语振假名转 ruby、JLPT 脚本标签还原、MDX 标记清洗、表格自适应与编辑器字段智能匹配）必须完整保留'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

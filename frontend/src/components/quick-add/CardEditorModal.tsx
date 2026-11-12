@@ -9,8 +9,110 @@ import { getAccentScale } from '../../utils/themeTokens';
 import { ImageOcclusionEditorModal } from './ImageOcclusionEditorModal';
 import { TowerWysiwygEditor } from './TowerWysiwygEditor';
 
-const FRONT_ALIASES = ['正面', 'Front', 'Text', '文字', '问题', 'Question', 'Word', 'Expression'];
-const BACK_ALIASES = ['背面', 'Back', 'Meaning', '释义', '答案', 'Back Extra', 'Answer', '背面额外', 'Examples', '例句'];
+const FRONT_ALIASES = [
+  '正面',
+  'Front',
+  'Text',
+  '文字',
+  '问题',
+  'Question',
+  'Word',
+  'Expression',
+  '单词',
+  'VocabKanji',
+  'Mặt trước',
+  '中文',
+];
+const BACK_ALIASES = [
+  '背面',
+  'Back',
+  'Meaning',
+  '释义',
+  '解释',
+  '答案',
+  'Back Extra',
+  'Answer',
+  '背面额外',
+  'VocabDefSC',
+  'Tiếng Việt',
+  'English',
+  'Explain1',
+  'Notes',
+  'Examples',
+  '例句',
+];
+const METADATA_SKIP_FIELDS = new Set([
+  'noteid',
+  'note id',
+  'id',
+  'guid',
+  'uuid',
+  'link',
+  'level',
+  'suborder',
+  'honorific',
+  'index',
+  'order',
+  '序号',
+  '编号',
+  'audio',
+  'vocabaudio',
+  'vocabpitch',
+  'vocabpos',
+  'example type',
+  'source url',
+  'article title',
+]);
+const READING_SKIP_FIELDS = new Set([
+  '音标',
+  'pinyin',
+  'phiên âm',
+  'vocabfurigana',
+  '读音',
+  'reading',
+  'phonetic',
+]);
+
+function pickEditorFrontAndBackKeys(
+  fieldKeys: string[],
+  allFields: Record<string, string>
+): { fKey: string; bKey: string } {
+  const fKey =
+    fieldKeys.find((k) => FRONT_ALIASES.includes(k) && (allFields[k] || '').trim()) ||
+    fieldKeys.find((k) => FRONT_ALIASES.includes(k)) ||
+    fieldKeys.find(
+      (k) =>
+        !METADATA_SKIP_FIELDS.has(k.trim().toLowerCase()) &&
+        !READING_SKIP_FIELDS.has(k.trim().toLowerCase()) &&
+        Boolean((allFields[k] || '').trim())
+    ) ||
+    fieldKeys.find((k) => !METADATA_SKIP_FIELDS.has(k.trim().toLowerCase())) ||
+    fieldKeys[0] ||
+    '正面';
+
+  const bKey =
+    fieldKeys.find(
+      (k) => k !== fKey && BACK_ALIASES.includes(k) && (allFields[k] || '').trim()
+    ) ||
+    fieldKeys.find((k) => k !== fKey && BACK_ALIASES.includes(k)) ||
+    fieldKeys.find(
+      (k) =>
+        k !== fKey &&
+        !METADATA_SKIP_FIELDS.has(k.trim().toLowerCase()) &&
+        !READING_SKIP_FIELDS.has(k.trim().toLowerCase()) &&
+        Boolean((allFields[k] || '').trim())
+    ) ||
+    fieldKeys.find(
+      (k) =>
+        k !== fKey &&
+        !METADATA_SKIP_FIELDS.has(k.trim().toLowerCase()) &&
+        !READING_SKIP_FIELDS.has(k.trim().toLowerCase())
+    ) ||
+    fieldKeys.find((k) => k !== fKey) ||
+    '背面';
+
+  return { fKey, bKey };
+}
 
 export type NoteCreationPreset = 'basic' | 'reversed' | 'cloze' | string;
 
@@ -147,12 +249,8 @@ export const CardEditorModal: React.FC = () => {
       const initDeckId = editingCardData.deckId || decks[0]?.id || '1';
       const allFields = editingCardData.fields || {};
 
-      const fieldKeys = Object.keys(allFields);
-      const fKey = fieldKeys.find((k) => FRONT_ALIASES.includes(k)) || fieldKeys[0] || '正面';
-      const bKey =
-        fieldKeys.find((k) => k !== fKey && BACK_ALIASES.includes(k)) ||
-        (fieldKeys.length > 1 ? fieldKeys[1] : undefined) ||
-        '背面';
+      const fieldKeys = editingCardData.fieldOrder || Object.keys(allFields);
+      const { fKey, bKey } = pickEditorFrontAndBackKeys(fieldKeys, allFields);
 
       setFrontFieldName(fKey);
       setBackFieldName(bKey);
@@ -376,9 +474,25 @@ export const CardEditorModal: React.FC = () => {
       clozeOrdinals.length > 0 ? activePreviewClozeOrd : undefined
     );
 
-    const populatedExtras = Object.entries(additionalFields).filter(
-      ([, val]) => Boolean(val && val.trim())
-    );
+    const populatedExtras = Object.entries(additionalFields).filter(([fKey, val]) => {
+      if (!val || !val.trim()) return false;
+      const kLower = fKey.trim().toLowerCase();
+      if (
+        kLower === 'noteid' ||
+        kLower === 'note id' ||
+        kLower === 'link' ||
+        kLower === 'suborder' ||
+        kLower === 'audio' ||
+        kLower === 'vocabaudio'
+      ) {
+        return false;
+      }
+      const rendered = renderMathAndRichHtml(
+        resolveMediaInHtml(val, effectiveMediaBaseUrl),
+        false
+      ).trim();
+      return Boolean(rendered);
+    });
 
     return {
       rawQ,
@@ -406,11 +520,16 @@ export const CardEditorModal: React.FC = () => {
     setSelectedPreset(presetId);
     setNoteTypeDropdownOpen(false);
     if (customModel && customModel.fields.length >= 1) {
-      setFrontFieldName(customModel.fields[0] || '正面');
-      setBackFieldName(customModel.fields[1] || '背面');
+      const dummyFields: Record<string, string> = {};
+      for (const f of customModel.fields) dummyFields[f] = '';
+      const { fKey, bKey } = pickEditorFrontAndBackKeys(customModel.fields, dummyFields);
+      setFrontFieldName(fKey || '正面');
+      setBackFieldName(bKey || '背面');
       const extra: Record<string, string> = {};
-      for (const fName of customModel.fields.slice(2)) {
-        extra[fName] = additionalFields[fName] || '';
+      for (const fName of customModel.fields) {
+        if (fName !== fKey && fName !== bKey) {
+          extra[fName] = additionalFields[fName] || '';
+        }
       }
       setAdditionalFields(extra);
       setShowMoreFields(Object.keys(extra).length > 0);
@@ -936,41 +1055,68 @@ export const CardEditorModal: React.FC = () => {
             />
 
             {/* Additional Fields */}
-            {Object.keys(additionalFields).length > 0 && (
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowMoreFields((prev) => !prev)}
-                  className="text-[12px] font-semibold text-[var(--brand-text)] hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <span>{showMoreFields ? '▾' : '▸'}</span>
-                  <span>
-                    {t('moreFieldsBtn', { n: Object.keys(additionalFields).length })}
-                  </span>
-                </button>
+            {Object.keys(additionalFields).length > 0 && (() => {
+              const allEntries = Object.entries(additionalFields);
+              const nonEmptyEntries = allEntries.filter(([, v]) => Boolean(v && v.trim()));
+              const emptyEntries = allEntries.filter(([, v]) => !v || !v.trim());
+              const visibleEntries =
+                allEntries.length > 12
+                  ? [...nonEmptyEntries, ...emptyEntries.slice(0, 4)]
+                  : [...nonEmptyEntries, ...emptyEntries];
+              return (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowMoreFields((prev) => !prev)}
+                    className="text-[12px] font-semibold text-[var(--brand-text)] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>{showMoreFields ? '▾' : '▸'}</span>
+                    <span>
+                      {t('moreFieldsBtn', { n: nonEmptyEntries.length || allEntries.length })}
+                    </span>
+                  </button>
 
-                {showMoreFields && (
-                  <div className="mt-3 space-y-3 ps-2 border-s-2 border-[var(--brand-border)]">
-                    {Object.entries(additionalFields).map(([fKey, fVal]) => (
-                      <div key={fKey} className="space-y-1">
-                        <label className="block text-[11px] text-[#8E8E93] font-medium">{fKey}</label>
-                        <input
-                          type="text"
-                          value={fVal}
-                          onChange={(e) =>
-                            setAdditionalFields((prev) => ({
-                              ...prev,
-                              [fKey]: e.target.value,
-                            }))
-                          }
-                          className={`w-full h-9 px-3 rounded-xl border text-[13px] focus:outline-none focus:border-[var(--brand)] ${inputBg} ${cardBorder}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                  {showMoreFields && (
+                    <div className="mt-3 space-y-3 ps-2 border-s-2 border-[var(--brand-border)]">
+                      {visibleEntries.map(([fKey, fVal]) => {
+                        const isMultiLineOrHtml =
+                          fVal.length > 80 || fVal.includes('\n') || /<(?:table|div|p|ul|ol|img|br)\b/i.test(fVal);
+                        return (
+                          <div key={fKey} className="space-y-1">
+                            <label className="block text-[11px] text-[#8E8E93] font-medium">{fKey}</label>
+                            {isMultiLineOrHtml ? (
+                              <textarea
+                                rows={3}
+                                value={fVal}
+                                onChange={(e) =>
+                                  setAdditionalFields((prev) => ({
+                                    ...prev,
+                                    [fKey]: e.target.value,
+                                  }))
+                                }
+                                className={`w-full py-2 px-3 rounded-xl border text-[13px] leading-relaxed focus:outline-none focus:border-[var(--brand)] resize-y ${inputBg} ${cardBorder}`}
+                              />
+                            ) : (
+                              <input
+                                type="text"
+                                value={fVal}
+                                onChange={(e) =>
+                                  setAdditionalFields((prev) => ({
+                                    ...prev,
+                                    [fKey]: e.target.value,
+                                  }))
+                                }
+                                className={`w-full h-9 px-3 rounded-xl border text-[13px] focus:outline-none focus:border-[var(--brand)] ${inputBg} ${cardBorder}`}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Tags Section */}
             <div className="space-y-2 pt-1">

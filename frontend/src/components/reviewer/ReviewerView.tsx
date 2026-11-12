@@ -78,7 +78,7 @@ export const ReviewerView: React.FC = () => {
     setConfirmingDelete(false);
     setFlagPopoverOpen(false);
     if (currentCard) {
-      const fMap =
+      const fMap: Record<string, string> =
         currentCard.fields && Object.keys(currentCard.fields).length > 0
           ? { ...currentCard.fields }
           : {
@@ -89,8 +89,25 @@ export const ReviewerView: React.FC = () => {
       setFieldsDraft(fMap);
       setOriginalFieldsDraft(fMap);
       const keys = currentCard.fieldOrder || Object.keys(fMap);
+      const meaningAliases = [
+        '释义',
+        '解释',
+        '背面',
+        'Back',
+        'Meaning',
+        'VocabDefSC',
+        'Tiếng Việt',
+        'English',
+        'Explain1',
+        'Back Extra',
+      ];
+      const preferredMeaningKey = keys.find(
+        (k) => meaningAliases.includes(k) && (fMap[k] || '').trim()
+      );
       if (editingField && editingField in fMap) {
         setActiveFieldKey(editingField);
+      } else if (preferredMeaningKey) {
+        setActiveFieldKey(preferredMeaningKey);
       } else if (keys.length > 1) {
         setActiveFieldKey(keys[1]);
       } else if (keys.length > 0) {
@@ -109,14 +126,54 @@ export const ReviewerView: React.FC = () => {
     if (!currentCard) return;
     const finalFields = nextFields || fieldsDraft;
     const keys = currentCard.fieldOrder || Object.keys(finalFields);
-    const frontKey = keys[0] || '正面';
+    const frontAliases = [
+      '正面',
+      'Front',
+      'Text',
+      'Word',
+      'Expression',
+      '单词',
+      'VocabKanji',
+      'Mặt trước',
+      '中文',
+    ];
+    const meaningAliases = [
+      '释义',
+      '解释',
+      '背面',
+      'Back',
+      'Meaning',
+      'VocabDefSC',
+      'Tiếng Việt',
+      'English',
+      'Explain1',
+      'Back Extra',
+    ];
+    const frontKey =
+      keys.find((k) => frontAliases.includes(k) && (finalFields[k] || '').trim()) ||
+      keys.find((k) => frontAliases.includes(k)) ||
+      keys[0] ||
+      '正面';
     const meaningKey =
-      keys.find((k) => k === '释义' || k === '背面' || k === 'Back' || k === 'Back Extra') ||
-      keys[1] ||
+      keys.find(
+        (k) => k !== frontKey && meaningAliases.includes(k) && (finalFields[k] || '').trim()
+      ) ||
+      keys.find((k) => k !== frontKey && meaningAliases.includes(k)) ||
+      keys.find((k) => k !== frontKey) ||
       frontKey;
-    const exampleKey = keys.find((k) => k === '例句' || k === 'Example');
-    const etymKey = keys.find((k) => k === '词源' || k === 'Etymology');
-    const readingKey = keys.find((k) => k === '读音' || k === 'Reading');
+    const exampleKey = keys.find(
+      (k) => k === '例句' || k === 'Example' || k === 'Example1' || k === 'SentKanji1'
+    );
+    const etymKey = keys.find((k) => k === '词源' || k === '字源' || k === 'Etymology');
+    const readingKey = keys.find(
+      (k) =>
+        k === '读音' ||
+        k === '音标' ||
+        k === 'Reading' ||
+        k === 'Pinyin' ||
+        k === 'Phiên âm' ||
+        k === 'VocabFurigana'
+    );
 
     appActions.saveInlineCardUpdate({
       fields: finalFields,

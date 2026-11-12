@@ -17,8 +17,10 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .media_utils import (
+    convert_furigana_to_ruby,
     get_media_dir,
     pick_display_field,
+    plain_text_of,
     render_native_card_sides,
     render_native_image_occlusion,
     resolve_media_img_src_for_webview,
@@ -732,14 +734,46 @@ class SearchService:
                 )
                 front_raw = fields_dict.get(front_key) or empty_title
                 back_raw = native.answer or (flds[1] if len(flds) > 1 else "")
+                if "Tiếng Việt" in fields_dict and fields_dict["Tiếng Việt"].strip():
+                    tv_val = fields_dict["Tiếng Việt"].strip()
+                    pa_val = fields_dict.get("Phiên âm", "").strip()
+                    if 'class="Tiếng Việt"' not in (back_raw or "") and "class='Tiếng Việt'" not in (back_raw or ""):
+                        header_parts = []
+                        if pa_val:
+                            header_parts.append(f'<div class="Phiên âm">{pa_val}</div>')
+                        header_parts.append(f'<div class="Tiếng Việt"><b>{tv_val}</b></div>')
+                        back_raw = "".join(header_parts) + (back_raw or "")
                 front_clean = self._strip_html_for_summary(front_raw) or empty_title
                 back_clean = self._strip_html_for_summary(back_raw)
 
-            front_html, front_audio = self._rewrite_media_and_audio(front_raw, media_dir)
+            show_front_ruby = "<ruby" in (native.question if native else "").lower()
+            front_html, front_audio = self._rewrite_media_and_audio(
+                front_raw,
+                media_dir,
+                strip_furigana_reading=(not show_front_ruby and bool(native and native.question)),
+            )
+            if native and native.question and not io_front:
+                hdr_m = re.search(
+                    r'<div\b[^>]*\bclass\s*=\s*["\']?header["\']?[^>]*>([\s\S]*?)</div\s*>',
+                    native.question,
+                    flags=re.I,
+                )
+                if hdr_m:
+                    hdr_plain = plain_text_of(hdr_m.group(1))
+                    if hdr_plain and hdr_plain != front_clean and hdr_plain not in front_clean:
+                        front_html = (
+                            f'<div class="text-[12px] font-medium text-[#8E8E93] mb-1">'
+                            f"{html.escape(hdr_plain)}</div>{front_html}"
+                        )
             back_html, back_audio = self._rewrite_media_and_audio(back_raw, media_dir)
             # 模板渲染已经把 [sound:] 剥进 answer_av_tags，这里补回来
             answer_audio = native.answer_audio if native else []
-            back_audio = answer_audio + [a for a in back_audio if a not in answer_audio]
+            question_audio = native.question_audio if native else []
+            back_audio = (
+                question_audio
+                + [a for a in answer_audio if a not in question_audio]
+                + [a for a in back_audio if a not in question_audio and a not in answer_audio]
+            )
 
             memory = getattr(card, "memory_state", None)
             stability = (
@@ -773,6 +807,7 @@ class SearchService:
                 "backHtml": back_html,
                 "audioFiles": front_audio + [a for a in back_audio if a not in front_audio],
                 "fields": fields_dict,
+                "fieldOrder": list(fields_dict.keys()),
                 "tags": list(note.tags),
                 "mastery": mastery,
                 "stability": stability,
@@ -820,7 +855,7 @@ class SearchService:
         return render_native_image_occlusion(note)
 
     @staticmethod
-    def _rewrite_media_and_audio(raw: str, media_dir: str):
+    def _rewrite_media_and_audio(raw: str, media_dir: str, strip_furigana_reading: bool = False):
         if not raw:
             return "", []
         audios: List[str] = []
@@ -832,6 +867,7 @@ class SearchService:
             return ""
 
         s = SOUND_TAG_RE.sub(_snd, raw)
+        s = convert_furigana_to_ruby(s, strip_reading=strip_furigana_reading)
         if media_dir:
             s = resolve_media_img_src_for_webview(s, media_dir)
         if "anki-io-rect" in s:
@@ -852,13 +888,7 @@ class SearchService:
 
     @staticmethod
     def _strip_html_for_summary(raw: str) -> str:
-        if not raw:
-            return ""
-        text = SOUND_TAG_RE.sub("", raw)
-        text = CLOZE_RE.sub(lambda m: m.group(2) or "", text)
-        text = re.sub(r"<br\s*/?>", " ", text, flags=re.I)
-        text = re.sub(r"<[^>]+>", "", text)
-        return re.sub(r"\s+", " ", html.unescape(text)).strip()
+        return plain_text_of(raw)
 
     @staticmethod
     def _format_due_text(col, card, lang: str = "zh-CN") -> str:

@@ -19,8 +19,10 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .media_utils import (
     NativeRender,
+    convert_furigana_to_ruby,
     get_media_dir,
     pick_display_field,
+    plain_text_of,
     render_native_card_sides,
     render_native_image_occlusion,
     resolve_media_img_src_for_webview,
@@ -387,12 +389,18 @@ class ReviewService:
         return get_media_dir(col)
 
     def _resolve_rich_html_and_audio(
-        self, raw_html: str, media_dir: str, cloze_ord: int = 1, is_question_side: bool = False
+        self,
+        raw_html: str,
+        media_dir: str,
+        cloze_ord: int = 1,
+        is_question_side: bool = False,
+        strip_furigana_reading: bool = False,
     ) -> Tuple[str, List[str]]:
         """
         Preserves rich HTML (`<b>`, `<span style>`, `<table>`, `<img>`, etc.),
         extracts `[sound:xxx.mp3]` into an audio file list, rewrites relative `<img src="...">`
-        to `file:///.../collection.media/...`, and formats Cloze deletions (`{{c1::...}}`).
+        to `file:///.../collection.media/...`, converts Japanese furigana brackets,
+        and formats Cloze deletions (`{{c1::...}}`).
         """
         if not raw_html:
             return "", []
@@ -406,6 +414,7 @@ class ReviewService:
             return ""
 
         processed = SOUND_TAG_RE.sub(_sound_replacer, raw_html)
+        processed = convert_furigana_to_ruby(processed, strip_reading=strip_furigana_reading)
 
         if media_dir:
             processed = resolve_media_img_src_for_webview(processed, media_dir)
@@ -480,14 +489,7 @@ class ReviewService:
 
     @staticmethod
     def _plain_text_summary(raw_html: str) -> str:
-        if not raw_html:
-            return ""
-        text = SOUND_TAG_RE.sub("", raw_html)
-        text = CLOZE_RE.sub(lambda m: m.group(2) or "", text)
-        text = re.sub(r"<br\s*/?>", " ", text, flags=re.I)
-        text = re.sub(r"</li>", " ", text, flags=re.I)
-        text = re.sub(r"<[^>]+>", "", text)
-        return re.sub(r"\s+", " ", html.unescape(text)).strip()
+        return plain_text_of(raw_html)
 
     def _serialize_review_card(
         self, col, cid: int, lang: str = "zh-CN", is_preview_only: bool = False
@@ -516,7 +518,7 @@ class ReviewService:
             # Cloze 与原生遮挡卡例外：它们的 frontAnswerHtml 已经负责补全/揭底，
             # 再叠一份完整答案会让同一句话在翻转时出现两次。
             native = (
-                NativeRender("", "", [], [], [])
+                NativeRender("", "", [], [], "")
                 if (io_front or is_cloze)
                 else render_native_card_sides(card, media_dir)
             )
@@ -530,9 +532,6 @@ class ReviewService:
             else:
                 # 正面取“模板真正显示的那个字段”——第一个字段未必是它。
                 # eggrolls-JLPT10k 把 NoteID 排在第一位，按 fields[0] 直出就是一串 uuid。
-                # 注意这里只换字段、不换排版：整段模板正面（连同卡包自己的标签栏、
-                # 反馈链接）搬过来会和 Studio 的正面设计打架，也会和背面里的
-                # {{FrontSide}} 重复。正文交出整张卡，交给背面去呈现就够了。
                 front_key = (
                     pick_display_field(fields_dict, native.question)
                     if native.question
@@ -542,23 +541,69 @@ class ReviewService:
                 back_raw = native.answer or (
                     fields_dict.get(field_keys[1], "") if len(field_keys) > 1 else ""
                 )
+                # HSK1-6 等卡包在字段中存了 Phiên âm / Tiếng Việt，但背面模板只写了图片与词典表；
+                # 若背面未出现越南语释义，将其补在背面顶部，保证翻面即可看到核心拼音与释义。
+                if "Tiếng Việt" in fields_dict and fields_dict["Tiếng Việt"].strip():
+                    tv_val = fields_dict["Tiếng Việt"].strip()
+                    pa_val = fields_dict.get("Phiên âm", "").strip()
+                    if 'class="Tiếng Việt"' not in (back_raw or "") and "class='Tiếng Việt'" not in (back_raw or ""):
+                        header_parts = []
+                        if pa_val:
+                            header_parts.append(f'<div class="Phiên âm">{pa_val}</div>')
+                        header_parts.append(f'<div class="Tiếng Việt"><b>{tv_val}</b></div>')
+                        back_raw = "".join(header_parts) + (back_raw or "")
 
+            show_front_ruby = "<ruby" in (native.question or "").lower()
             front_rich_q, front_audio = self._resolve_rich_html_and_audio(
-                front_raw, media_dir, cloze_ord=cloze_ord, is_question_side=True
+                front_raw,
+                media_dir,
+                cloze_ord=cloze_ord,
+                is_question_side=True,
+                strip_furigana_reading=(not show_front_ruby and bool(native.question)),
             )
             front_rich_a, _ = self._resolve_rich_html_and_audio(
-                front_raw, media_dir, cloze_ord=cloze_ord, is_question_side=False
+                front_raw,
+                media_dir,
+                cloze_ord=cloze_ord,
+                is_question_side=False,
+                strip_furigana_reading=False,
             )
+
+            # Chinese Grammar Wiki (CGW-ValidExample / CGW-InvalidExample) 在正面模板顶部有
+            # `<div class="header">Is this sentence grammatically correct?</div>` 提问提示语，
+            # 仅取 `中文` 字段会丢失题目要求；将其提取并挂在正面题干上方。
+            if native.question and not io_front and not is_cloze:
+                hdr_m = re.search(
+                    r'<div\b[^>]*\bclass\s*=\s*["\']?header["\']?[^>]*>([\s\S]*?)</div\s*>',
+                    native.question,
+                    flags=re.I,
+                )
+                if hdr_m:
+                    hdr_plain = plain_text_of(hdr_m.group(1))
+                    front_plain_probe = plain_text_of(front_raw)
+                    if hdr_plain and hdr_plain != front_plain_probe and hdr_plain not in front_plain_probe:
+                        hdr_badge = (
+                            f'<div class="text-[13px] font-medium text-[#8E8E93] mb-1.5">'
+                            f"{html.escape(hdr_plain)}</div>"
+                        )
+                        front_rich_q = hdr_badge + front_rich_q
+                        front_rich_a = hdr_badge + front_rich_a
+
             back_rich, back_audio = self._resolve_rich_html_and_audio(
                 back_raw, media_dir, cloze_ord=cloze_ord, is_question_side=False
             )
             # 原生渲染已经把 [sound:] 剥进 answer_av_tags，这里补回来
-            back_audio = native_back_audio + [f for f in back_audio if f not in native_back_audio]
+            back_audio = (
+                native.question_audio
+                + [f for f in front_audio if f not in native.question_audio]
+                + [f for f in native_back_audio if f not in native.question_audio and f not in front_audio]
+                + [f for f in back_audio if f not in native.question_audio and f not in front_audio and f not in native_back_audio]
+            )
             # 模板 HTML 与模板 CSS 必须成对出现：只搬 HTML 会让卡包背面变成无样式纯文本
             back_rich = wrap_card_with_styles(back_rich, native_back_css)
 
             all_audio: List[str] = []
-            for f in front_audio + back_audio:
+            for f in back_audio:
                 if f not in all_audio:
                     all_audio.append(f)
 
@@ -579,6 +624,8 @@ class ReviewService:
                 is_cloze,
                 lang,
                 plain_override=io_title,
+                native_question=native.question,
+                has_native_answer=bool(native.answer),
             )
 
             predictions = self._predict_intervals(col, card, lang)
@@ -670,16 +717,53 @@ class ReviewService:
         is_cloze: bool,
         lang: str = "zh-CN",
         plain_override: str = "",
+        native_question: str = "",
+        has_native_answer: bool = False,
     ) -> Dict[str, str]:
         empty_front = "未命名卡片" if lang == "zh-CN" else "Untitled Card"
         empty_back = "（点击编辑补充背面释义）" if lang == "zh-CN" else "(Click to add back content)"
         front_plain = plain_override or self._plain_text_summary(front_raw) or empty_front
         back_plain = self._plain_text_summary(back_raw)
 
-        etymology_raw = fields_dict.get("词源") or fields_dict.get("Etymology") or ""
+        etymology_raw = (
+            fields_dict.get("词源")
+            or fields_dict.get("字源")
+            or fields_dict.get("Etymology")
+            or ""
+        )
         example_raw = fields_dict.get("例句") or fields_dict.get("Example") or ""
-        hint_raw = fields_dict.get("提示") or fields_dict.get("Hint") or fields_dict.get("Back Extra") or ""
-        reading_raw = fields_dict.get("读音") or fields_dict.get("Reading") or ""
+        hint_raw = (
+            fields_dict.get("提示")
+            or fields_dict.get("Hint")
+            or fields_dict.get("Back Extra")
+            or ""
+        )
+        reading_raw = (
+            fields_dict.get("读音")
+            or fields_dict.get("音标")
+            or fields_dict.get("Reading")
+            or fields_dict.get("Phonetic")
+            or ""
+        )
+
+        reading_plain = self._plain_text_summary(reading_raw)
+        # 若模板正面存在，仅当音标/读音原本就出现在正面模板中（如 GRE 红宝书正面含 {{音标}}）才在正面展示，
+        # 避免未翻面时提前剧透背面读音，或重复展示正文中已有的读音。
+        if reading_plain:
+            if reading_plain == front_plain or reading_plain in front_plain:
+                reading_plain = ""
+            elif native_question and reading_plain not in plain_text_of(native_question):
+                reading_plain = ""
+
+        # 若背面已由 Anki 原生模板引擎完整渲染（has_native_answer=True），
+        # 已被模板包含在 back_raw 里的词源/例句/提示不再重复追加到卡片底部徽标区。
+        if has_native_answer and back_plain:
+            if etymology_raw and self._plain_text_summary(etymology_raw) in back_plain:
+                etymology_raw = ""
+            if example_raw and self._plain_text_summary(example_raw) in back_plain:
+                example_raw = ""
+            if hint_raw and self._plain_text_summary(hint_raw) in back_plain:
+                hint_raw = ""
 
         etymology_html, _ = self._resolve_rich_html_and_audio(etymology_raw, media_dir)
         example_html, _ = self._resolve_rich_html_and_audio(example_raw, media_dir)
@@ -691,7 +775,7 @@ class ReviewService:
             "frontHtml": front_rich_q or front_plain,
             "frontAnswerHtml": front_rich_a or front_rich_q or front_plain,
             "backHtml": back_rich if back_rich else (front_rich_a if is_cloze else ""),
-            "reading": self._plain_text_summary(reading_raw),
+            "reading": reading_plain,
             "etymology": etymology_html,
             "example": example_html,
             "extraHint": hint_html,

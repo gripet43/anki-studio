@@ -219,7 +219,7 @@ def render_native_image_occlusion(note) -> tuple[str, str, str]:
 
 
 # ---------------------------------------------------------------------------
-# 走 Anki 模板引擎渲染背面
+# 走 Anki 模板引擎渲染背面 & 日语振假名 / MDX 词典清洗
 # ---------------------------------------------------------------------------
 
 SCRIPT_BLOCK_RE = re.compile(r"<script\b[^>]*>[\s\S]*?</script\s*>", flags=re.I)
@@ -240,6 +240,135 @@ ANY_TAG_RE = re.compile(r"<[^>]+>")
 MEDIA_PLACEHOLDER_RE = re.compile(r"\[anki:(?:play|tts):[^\]]*\]", flags=re.I)
 SOUND_TAG_RE = re.compile(r"\[sound:([^\]]+)\]")
 CLOZE_RE = re.compile(r"\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}")
+
+# 日语振假名标注 ` 漢字[かんじ]` / `10[じゅう]`（仅匹配假名读音，不误伤英语音标 [ə'bændən] 或汉语拼音 [ài]）
+FURIGANA_BRACKET_RE = re.compile(
+    r" ?([0-9\u4e00-\u9fff\u3400-\u4dbf々〆ヵヶ\u3040-\u309f\u30a0-\u30ff]+)\[([\u3040-\u309f\u30a0-\u30ffー～〜・、，\s]+)\]"
+)
+RUBY_RT_RE = re.compile(r"<rt\b[^>]*>[\s\S]*?</rt\s*>", flags=re.I)
+RUBY_RP_RE = re.compile(r"<rp\b[^>]*>[\s\S]*?</rp\s*>", flags=re.I)
+# MDX 词典字段内残留的索引标记（如 HSK1-6 `Từ Điển` 开头的 `` `1`爱`4` ``）
+MDX_INDEX_MARKER_RE = re.compile(r"`\d+`")
+# N1-N5 蓝宝书倒计时空占位符 `<span class="timer" id="s2"...></span>`
+TIMER_SPAN_RE = re.compile(
+    r'<div\b[^>]*>\s*<span\b[^>]*\bclass\s*=\s*["\']?timer\b[^>]*>[\s\S]*?</span\s*>\s*</div\s*>',
+    flags=re.I,
+)
+# Anki 标准正反面分割线 `<hr id=answer>` / `<hr id="answer">`
+HR_ANSWER_RE = re.compile(r'<hr\b[^>]*\bid\s*=\s*["\']?answer["\']?[^>]*>', flags=re.I)
+# eggrolls-JLPT10k 正面与背面容器
+MAIN_FRONTSIDE_RE = re.compile(
+    r'<main\b[^>]*\bid\s*=\s*["\']?FrontSide["\']?[^>]*>[\s\S]*?</main\s*>',
+    flags=re.I,
+)
+MAIN_BACKSIDE_RE = re.compile(
+    r'<main\b[^>]*\bid\s*=\s*["\']?BackSide["\']?[^>]*>',
+    flags=re.I,
+)
+HIDDEN_VOCAB_AUDIO_DIV_RE = re.compile(
+    r'<div\b[^>]*\bclass\s*=\s*["\'][^"\']*!hidden[^"\']*["\'][^>]*>[\s\S]*?</div\s*>',
+    flags=re.I,
+)
+JLPT_TOP_BAR_RE = re.compile(
+    r'<div\b[^>]*\bclass\s*=\s*["\']?Top["\']?[^>]*>[\s\S]*?</div\s*>',
+    flags=re.I,
+)
+JLPT_SEARCH_LINK_RE = re.compile(
+    r'<a\b[^>]*\bclass\s*=\s*["\']?Search["\']?[^>]*>[\s\S]*?</a\s*>',
+    flags=re.I,
+)
+JLPT_SENT_TYPES_SCRIPT_RE = re.compile(
+    r"function\s+getType\s*\([^)]*\)\s*\{\s*return\s*\[([^\]]*)\]",
+    flags=re.I,
+)
+JLPT_VOCAB_POS_SCRIPT_RE = re.compile(
+    r"['\"]VocabPoS['\"]\s*:\s*['\"]([^'\"]*)['\"]\s*\?",
+    flags=re.I,
+)
+
+
+def convert_furigana_to_ruby(raw_html: str, strip_reading: bool = False) -> str:
+    """将字段内的 Anki 日语振假名语法 `` 漢字[かな]`` 转为 ``<ruby>漢字<rt>かな</rt></ruby>`` 或纯汉字，并清理内嵌 ``<style>`` 与 MDX 标记。"""
+    if not raw_html:
+        return ""
+    text = STYLE_BLOCK_RE.sub("", str(raw_html))
+    text = SCRIPT_BLOCK_RE.sub("", text)
+    text = MDX_INDEX_MARKER_RE.sub("", text)
+    if "[" in text and "]" in text:
+        if strip_reading:
+            text = FURIGANA_BRACKET_RE.sub(r"\1", text)
+        else:
+            text = FURIGANA_BRACKET_RE.sub(r"<ruby>\1<rt>\2</rt></ruby>", text)
+    return text
+
+
+def _apply_jlpt_script_transforms(raw_html: str) -> str:
+    """还原 ``eggrolls-JLPT10k`` 模板脚本中的 ``setType()`` 与顶栏清理逻辑。
+
+    该卡包把词性 ``{{VocabPoS}}`` 与例句类型 ``{{SentType1..4}}`` 写在 ``<script>`` 里，
+    由 ``setType()`` 动态往 ``.VocabPoS / .VocabPlus / .SentKanji / .SentFurigana / .SentDef``
+    注入 ``<em lang='ja'>［名］</em>``、``［例］``、``［関］``、``［対］``、``［訳］``、``［補］``，
+    而 CSS 的 ``.LabelIndent`` 预设了 ``-3em`` 悬挂缩进给这个标签留位置。若直接删脚本不补标签，
+    词性与关联词/反义词标记会丢失且整段文字向左悬空错位。
+    """
+    if "CardSide" not in raw_html and "VocabPoS" not in raw_html:
+        return raw_html
+
+    sent_types = ["例", "例", "例", "例"]
+    st_match = JLPT_SENT_TYPES_SCRIPT_RE.search(raw_html)
+    if st_match:
+        parsed_types = re.findall(r"['\"]([^'\"]*)['\"]", st_match.group(1))
+        for idx, val in enumerate(parsed_types[:4]):
+            clean_val = val.strip()
+            if clean_val and not clean_val.startswith("{{"):
+                sent_types[idx] = clean_val
+
+    vocab_pos = "名"
+    pos_match = JLPT_VOCAB_POS_SCRIPT_RE.search(raw_html)
+    if pos_match:
+        cand = pos_match.group(1).strip()
+        if cand and not cand.startswith("{{"):
+            vocab_pos = cand
+
+    text = JLPT_TOP_BAR_RE.sub("", raw_html)
+    text = JLPT_SEARCH_LINK_RE.sub("", text)
+
+    def _inject_tag(pattern: str, prefix_fn):
+        idx_box = [0]
+
+        def _repl(m):
+            open_tag, inner, close_tag = m.group(1), m.group(2), m.group(3)
+            cur_idx = idx_box[0]
+            idx_box[0] += 1
+            plain_inner = ANY_TAG_RE.sub("", inner).strip()
+            if not plain_inner or "<em" in inner:
+                return m.group(0)
+            label = prefix_fn(cur_idx)
+            return f"{open_tag}<em lang=\"ja\">［{label}］</em>{inner}{close_tag}"
+
+        return re.sub(pattern, _repl, text, flags=re.I)
+
+    text = _inject_tag(
+        r'(<h3\b[^>]*\bclass\s*=\s*["\'][^"\']*\bVocabPoS\b[^"\']*["\'][^>]*>)([\s\S]*?)(</h3\s*>)',
+        lambda _: vocab_pos,
+    )
+    text = _inject_tag(
+        r'(<h3\b[^>]*\bclass\s*=\s*["\'][^"\']*\bVocabPlus\b[^"\']*["\'][^>]*>)([\s\S]*?)(</h3\s*>)',
+        lambda _: "補",
+    )
+    text = _inject_tag(
+        r'(<h3\b[^>]*\bclass\s*=\s*["\'][^"\']*\bSentKanji\b[^"\']*["\'][^>]*>)([\s\S]*?)(</h3\s*>)',
+        lambda i: sent_types[i] if i < len(sent_types) else "例",
+    )
+    text = _inject_tag(
+        r'(<h3\b[^>]*\bclass\s*=\s*["\'][^"\']*\bSentFurigana\b[^"\']*["\'][^>]*>)([\s\S]*?)(</h3\s*>)',
+        lambda i: sent_types[i] if i < len(sent_types) else "例",
+    )
+    text = _inject_tag(
+        r'(<h3\b[^>]*\bclass\s*=\s*["\'][^"\']*\bSentDef\b[^"\']*["\'][^>]*>)([\s\S]*?)(</h3\s*>)',
+        lambda _: "訳",
+    )
+    return text
 
 
 def sanitize_rendered_card_html(raw_html: str) -> str:
@@ -263,10 +392,14 @@ def sanitize_rendered_card_html(raw_html: str) -> str:
     if not raw_html:
         return ""
 
-    text = SCRIPT_BLOCK_RE.sub("", raw_html)
+    text = _apply_jlpt_script_transforms(raw_html)
+    text = SCRIPT_BLOCK_RE.sub("", text)
     text = STYLE_BLOCK_RE.sub("", text)
+    text = TIMER_SPAN_RE.sub("", text)
     text = HINT_ANCHOR_RE.sub("", text)
     text = MEDIA_PLACEHOLDER_RE.sub("", text)
+    text = MDX_INDEX_MARKER_RE.sub("", text)
+    text = re.sub(r'<input\b[^>]*\bid\s*=\s*["\']?typeans["\']?[^>]*>', "", text, flags=re.I)
 
     def _fix_tag(tag_match):
         tag = tag_match.group(0)
@@ -274,7 +407,75 @@ def sanitize_rendered_card_html(raw_html: str) -> str:
             tag = STYLE_ATTR_RE.sub("", tag, count=1)
         return INLINE_HANDLER_RE.sub("", tag)
 
-    return normalize_rendered_whitespace(ANY_TAG_RE.sub(_fix_tag, text))
+    cleaned = normalize_rendered_whitespace(ANY_TAG_RE.sub(_fix_tag, text))
+    if "<ruby" in cleaned:
+        cleaned = re.sub(
+            r"(?<=[\u3040-\u30ff\u4e00-\u9fff\u3400-\u4dbf</>])\s+(?=<ruby\b|<b\b[^>]*>\s*<ruby\b)",
+            "",
+            cleaned,
+        )
+        cleaned = re.sub(r"(<b\b[^>]*>)\s+(?=<ruby\b)", r"\1", cleaned)
+    return cleaned
+
+
+def strip_front_side_from_answer(answer_html: str, question_html: str = "") -> str:
+    """剥离背面模板（``afmt``）开头重复的 ``{{FrontSide}}`` 或重复题干。
+
+    Anki 官方模板通常在 ``afmt`` 顶部写 ``{{FrontSide}}<hr id=answer>``，因为原生界面翻面时
+    整页替换；而 Anki Studio 在复习界面、卡片库与 Cmd+K 预览中，上方已常驻展示了卡片正面，
+    下方再渲染整段 ``answer_text`` 会导致正面词条/大字号题干重复出现两次，甚至在卡片库三行摘要
+    中把真正的释义挤出可视区。
+    """
+    if not answer_html:
+        return ""
+
+    text = answer_html.strip()
+
+    # 1. 标准 `<hr id=answer>` / `<hr id="answer">` 分割线
+    hr_match = HR_ANSWER_RE.search(text)
+    if hr_match:
+        after_hr = text[hr_match.end() :].strip()
+        if plain_text_of(after_hr) or "<img" in after_hr.lower():
+            return after_hr
+
+    # 2. `eggrolls-JLPT10k` 的 `<main id="FrontSide">...</main>` + `<main id="BackSide">`
+    if MAIN_FRONTSIDE_RE.search(text) and MAIN_BACKSIDE_RE.search(text):
+        without_front = MAIN_FRONTSIDE_RE.sub("", text, count=1)
+        without_front = HIDDEN_VOCAB_AUDIO_DIV_RE.sub("", without_front).strip()
+        if plain_text_of(without_front) or "<img" in without_front.lower():
+            return without_front
+
+    # 3. `afmt` 直接以 `{{FrontSide}}` 开头（无 `<hr id=answer>`，如 Chinese Grammar Wiki `Translation`）
+    q_clean = (question_html or "").strip()
+    if q_clean and text.startswith(q_clean) and len(text) > len(q_clean):
+        rest = text[len(q_clean) :].strip()
+        rest = re.sub(
+            r'^(?:<div\b[^>]*\bclass\s*=\s*["\']?spacer\w*["\']?[^>]*>\s*</div\s*>\s*|<hr\b[^>]*>\s*|<br\s*/?>\s*)+',
+            "",
+            rest,
+            flags=re.I,
+        ).strip()
+        if plain_text_of(rest) or "<img" in rest.lower():
+            return rest
+
+    # 4. `CGW-ValidExample` / `CGW-InvalidExample`：正面末尾是 `<div class="hanzi">...</div>`，背面开头重复该块
+    hanzi_m = re.match(
+        r'^(\s*<div\b[^>]*\bclass\s*=\s*["\']?hanzi["\']?[^>]*>[\s\S]*?</div\s*>)',
+        text,
+        flags=re.I,
+    )
+    if hanzi_m and q_clean and hanzi_m.group(1).strip() in q_clean:
+        rest = text[hanzi_m.end() :].strip()
+        rest = re.sub(
+            r'^(?:<div\b[^>]*\bclass\s*=\s*["\']?spacer\w*["\']?[^>]*>\s*</div\s*>\s*)+',
+            "",
+            rest,
+            flags=re.I,
+        ).strip()
+        if plain_text_of(rest):
+            return rest
+
+    return text
 
 
 NEWLINE_RUN_RE = re.compile(r"\s*\n\s*")
@@ -303,6 +504,14 @@ CSS_COMMENT_RE = re.compile(r"/\*[\s\S]*?\*/")
 CSS_TAG_RE = re.compile(r"</?[a-zA-Z][^>]*>")
 CSS_ROOT_SELECTOR_RE = re.compile(r"^(?:html|body|:root)\b", flags=re.I)
 CSS_DISPLAY_NONE_RE = re.compile(r"display\s*:\s*none\s*(?:!\s*important\s*)?;?", flags=re.I)
+CSS_HARSH_CARD_BG_RE = re.compile(
+    r"background(?:-color)?\s*:\s*(?:green|#008000|#0f0)\s*(?:!\s*important\s*)?;?",
+    flags=re.I,
+)
+CSS_TALL_MIN_HEIGHT_RE = re.compile(
+    r"min-height\s*:\s*[3-9]\d\dpx\s*(?:!\s*important\s*)?;?",
+    flags=re.I,
+)
 CSS_AT_SCOPED = ("@media", "@supports", "@container", "@layer", "@document")
 CARD_ROOT_CLASS = "anki-native-card"
 
@@ -310,7 +519,7 @@ CARD_ROOT_CLASS = "anki-native-card"
 def extract_model_css_text(raw_css: str) -> str:
     """从模板 ``css`` 字段里抽出纯 CSS 文本。
 
-    第三方卡包（尤其 2016 年前后那批）把整段 HTML 塞在 css 字段里：``</style>``、
+    第三方卡包（尤其 2016 年前后那批）把整段 HTML 写进 css 字段里：``</style>``、
     ``<style>``、``<!-- 注释 -->``、甚至一段 ``<script>``。原样插进 ``<style>`` 会让
     样式表在第一个 ``</style>`` 处提前闭合，后面的片段变成页面上的可见乱码。
     这里按 ``<style>`` 块取内容；没有标签时按纯 CSS 处理。
@@ -434,8 +643,10 @@ def scope_card_css(
             else:
                 if reveal_hidden:
                     body = CSS_DISPLAY_NONE_RE.sub("", body)
-                    if not body.strip():
-                        continue
+                body = CSS_HARSH_CARD_BG_RE.sub("", body)
+                body = CSS_TALL_MIN_HEIGHT_RE.sub("", body)
+                if not body.strip():
+                    continue
                 out.append(f"{_scope_selector_list(prelude, scope)}{{{body}}}")
             continue
         if ch == "}":
@@ -503,7 +714,7 @@ def render_native_card_sides(card, media_dir: str = "") -> NativeRender:
     ``{{#字段}}`` 条件段、``{{FrontSide}}``、``{{hint:}}`` 全部算完，那才是用户
     心里“这张卡的正面/背面”。
 
-    为什么**不能**传 ``browser=True``：那条路是给浏览器列表用的降级渲染，
+    ⚠️ 为什么**不能**传 ``browser=True``：那条路是给浏览器列表用的降级渲染，
     ``question_text`` 会直接退化成“第一个字段的原样文本”，跟模板毫无关系。
     ``UVBasic-English`` 这种把单词放在第一位的卡包恰好蒙对了，所以当初拿它比对了
     997 张卡也没看出问题；换上 ``eggrolls-JLPT10k``（第一个字段是 ``NoteID``）就
@@ -511,6 +722,10 @@ def render_native_card_sides(card, media_dir: str = "") -> NativeRender:
     用户看到的就是“乱码”。实测同一个模板：``browser=True`` 给 36 字符，
     ``browser=False`` 给 18,778 字符的完整正文。复习界面走的是
     ``card.question()/answer()``，也就是 ``browser=False``，这里必须对齐。
+
+    背面由 :func:`strip_front_side_from_answer` 剥掉模板顶部重复的正面块：Studio
+    的复习界面/卡片库/Cmd+K 上方已常驻展示正面，``afmt`` 里的 ``{{FrontSide}}``
+    再渲染一次就是同一句话出现两遍。
 
     最后一个字段是**作用域化之后的模板 CSS**（见 :func:`build_card_css`），调用方
     负责把它包成 ``<style>`` 并配上 ``.anki-native-card`` 容器。这不是可选项：
@@ -532,9 +747,10 @@ def render_native_card_sides(card, media_dir: str = "") -> NativeRender:
         question = sanitize_rendered_card_html(
             _as_text(getattr(output, "question_text", ""))
         )
-        answer = sanitize_rendered_card_html(
+        raw_answer_sanitized = sanitize_rendered_card_html(
             _as_text(getattr(output, "answer_text", ""))
         )
+        answer = strip_front_side_from_answer(raw_answer_sanitized, question)
         question_audio = _av_filenames(getattr(output, "question_av_tags", None))
         answer_audio = _av_filenames(getattr(output, "answer_av_tags", None))
         raw_css = _as_text(getattr(output, "css", ""))
@@ -566,16 +782,40 @@ def render_native_card_html(
     return sides.answer, sides.answer_audio, sides.css
 
 
+METADATA_FIELD_LOWER = {
+    "noteid",
+    "note id",
+    "id",
+    "guid",
+    "uuid",
+    "link",
+    "level",
+    "suborder",
+    "honorific",
+    "index",
+    "order",
+    "序号",
+    "编号",
+    "audio",
+    "vocabaudio",
+    "vocabpitch",
+    "vocabpos",
+    "example type",
+    "source url",
+    "article title",
+}
+
+
 def pick_display_field(fields: Dict[str, str], rendered_front: str) -> str:
     """挑出“正面真正显示的那个字段”。
 
     Anki 的正面是模板算出来的，跟字段顺序没关系；插件却一直拿 ``fields[0]`` 当正面。
-    对绝大多数卡包没问题（第一个字段就是主词），碰上 ``eggrolls-JLPT10k`` 这种把
-    ``NoteID`` 排在第一位的卡包，正面就直接是一串 uuid。
+    对绝大多数卡包没问题（第一个字段就是主词），碰上 ``eggrolls-JLPT10k`` 或
+    ``N1N2N3N4N5`` 这种把 ``NoteID`` / ``Note ID`` 排在第一位的卡包，正面就直接是一串 uuid。
 
-    判定办法：按字段顺序找第一个“内容真的出现在模板正面里”的字段。传入的
-    ``rendered_front`` 必须是**净化之后**的正文——原始渲染结果里那段脚本还带着
-    ``{{text:NoteID}}`` 替换出来的 uuid，会让第一个字段“看起来出现过”。
+    判定办法：按字段顺序找第一个“内容真的出现在模板正面里”的字段（通过 :func:`plain_text_of`
+    自动剥除日语振假名方括号 ``漢字[かな]`` 与 ``<rt>`` 注音再比对）。若正面是蓝宝书的
+    ``例文カード``（``class="sentenceexample"``），优先从例句字段中匹配。
     """
     if not fields:
         return ""
@@ -583,19 +823,63 @@ def pick_display_field(fields: Dict[str, str], rendered_front: str) -> str:
     probe_front = plain_text_of(rendered_front)
     if not probe_front:
         return first_key
+
+    is_sentence_card = (
+        "sentenceexample" in (rendered_front or "")
+        and 'class="word"' not in (rendered_front or "")
+    )
+
+    candidate_items = list(fields.items())
+    if is_sentence_card:
+        example_items = [
+            (k, v) for k, v in candidate_items if k.lower().startswith("example")
+        ]
+        other_items = [
+            (k, v) for k, v in candidate_items if not k.lower().startswith("example")
+        ]
+        candidate_items = example_items + other_items
+
+    for name, value in candidate_items:
+        if name.strip().lower() in METADATA_FIELD_LOWER:
+            continue
+        probe = plain_text_of(value)
+        if not probe:
+            continue
+        if probe in probe_front:
+            return name
+        probe_no_tilde = probe.lstrip("～〜~- ").strip()
+        if len(probe_no_tilde) >= 2 and probe_no_tilde in probe_front:
+            return name
+
     for name, value in fields.items():
         probe = plain_text_of(value)
         if probe and probe in probe_front:
             return name
+
     return first_key
 
 
+INLINE_FORMAT_TAG_RE = re.compile(
+    r"</?(?:ruby|rb|rp|b|strong|i|em|u|s|font|sub|sup|mark|span)\b[^>]*>",
+    flags=re.I,
+)
+
+
 def plain_text_of(raw_html: str) -> str:
-    """HTML → 纯文本（去标签、去音频标记、解实体、压空白），用来做文本比对。"""
+    """HTML → 纯文本（去脚本/样式、去标签、去音频标记、去振假名读音、解实体、压空白），用来做文本比对与摘要。"""
     if not raw_html or not isinstance(raw_html, str):
         return ""
-    text = SOUND_TAG_RE.sub(" ", raw_html)
+    text = SCRIPT_BLOCK_RE.sub(" ", raw_html)
+    text = STYLE_BLOCK_RE.sub(" ", text)
+    text = RUBY_RT_RE.sub("", text)
+    text = RUBY_RP_RE.sub("", text)
+    text = SOUND_TAG_RE.sub(" ", text)
+    text = MEDIA_PLACEHOLDER_RE.sub(" ", text)
+    text = MDX_INDEX_MARKER_RE.sub(" ", text)
+    if "[" in text and "]" in text:
+        text = FURIGANA_BRACKET_RE.sub(r"\1", text)
     text = CLOZE_RE.sub(lambda m: m.group(2) or "", text)
+    text = INLINE_FORMAT_TAG_RE.sub("", text)
     text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", html.unescape(text)).strip()
 

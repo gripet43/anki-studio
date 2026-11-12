@@ -15,6 +15,36 @@
 
 ## [Unreleased]
 
+## [v1.4.5] - 2026-11-12
+
+- **[Gemini] 8 大热门第三方 `.apkg` 卡牌库在学习模式、搜索模式与编辑模式下的全面兼容校验与样式修复**（[`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`bridge/edit_service.py`](bridge/edit_service.py)、[`frontend/src/utils/mathRenderer.ts`](frontend/src/utils/mathRenderer.ts)、[`frontend/src/index.css`](frontend/src/index.css)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`tests/test_bridge.py`](tests/test_bridge.py)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - **校验范围**：以 Anki 原生界面渲染为标准，对下载目录最新的 8 个热门 `.apkg` 卡牌库（`HSK1-6_full_audio_image_and_Vietnamese_meaning_.apkg`、`Chinese_Grammar_Wiki_Study_Deck (1).apkg`、`egg_rollsJLPT_N1N5__v35NO_ENGLISH (1).apkg`、`blank (1).apkg` 成语大全、`N1N2N3N4N5.apkg` 蓝宝书文法、`GRE.apkg` 极品GRE红宝书、`167000.apkg` 考研英语例句、`120.apkg` 高中120文言文实词）进行逐一解包与三模式全链路校验，定位并修复以下 7 类共性及卡包特定渲染问题：
+  - **1. 消除背面重复显示正面内容（`{{FrontSide}}` 去重）**：
+    - 第三方模板常在 `afmt` 顶部写 `{{FrontSide}}<hr id=answer>`、`<main id="FrontSide">...</main>` 或重复正面 `.hanzi` 块，而 Anki Studio 在复习界面、卡片库与 Cmd+K 预览中上方已常驻展示正面，原样渲染 `answer_text` 会导致正面词条/句子重复出现两次并挤占卡片库 3 行摘要。
+    - 在 `media_utils.py` 新增 `strip_front_side_from_answer(answer_html, question_html)`，自动识别并剥离 `<hr id=answer>` 之前的内容、`<main id="FrontSide">` 块、完全匹配的 `question_html` 前缀（如 `GRE.apkg` 与 `Chinese Grammar Wiki` 的 `Translation` 模板）以及重复的 `<div class="hanzi">` 题干块，同时清理 `{{type:...}}` 残留的 `<input id=typeans>` 占位框。
+  - **2. 日语振假名 ` 漢字[かな]` 转 `<ruby>` 与题干防剧透**：
+    - `egg_rollsJLPT` 与 `N1N2N3N4N5` 在字段内使用 Anki 日语插件语法 ` 漢字[かな]`（如 `一[いち] 敗[ぱい] 塗[と] 地[ち]`、`山田[やまだ] 監督[かんとく]`）。此前直接取原始字段展示时会在正面、卡片库与编辑器预览中直接暴露裸方括号读音。
+    - 在后端 `media_utils.py`（`convert_furigana_to_ruby`）与前端 `mathRenderer.ts` 中新增假名专用正则（严格仅匹配假名读音，不误伤英语音标 `[ə'bændən]` 或汉语拼音 `[ài]`），自动转换为 `<ruby>漢字<rt>かな</rt></ruby>`；当模板正面使用 `{{kanji:...}}` 不显示注音时（如 `N1N2N3N4N5` 例句卡），正面自动剥离方括号读音防止提前剧透，翻面后在 `frontAnswerHtml` 中完整呈现 `<ruby>` 振假名。
+  - **3. 还原 `egg_rollsJLPT` 脚本动态注入的 `［词性］` / `［例句类型］` 徽标并清理无效装饰栏**：
+    - `eggrolls-JLPT10k-v3.5` 将 `{{VocabPoS}}` 与 `{{SentType1..4}}` 写在 `<script>` 中由 `setType()` 动态注入 `［名］`、`［一］`、`［例］`、`［関］`、`［対］`、`［訳］`，且 CSS `.LabelIndent` 预留了 `-3em` 悬挂缩进；直接剥离脚本会导致词性与同反义词标签消失且整段左移悬空。
+    - 新增 `_apply_jlpt_script_transforms()` 在剥离 `<script>` 前提取词性与例句类型并注入 `<em lang="ja">［...］</em>`，同时移除卡片顶部不生效的 `.Top` 导航栏与 `.Search` 外部搜索按钮。
+  - **4. 修正 `N1N2N3N4N5`（167 字段 26 模板）例句卡正面字段识别与内嵌 `<style>` 污染**：
+    - 升级 `pick_display_field()`：忽略 `NoteID`、`Note ID`、`Link`、`Level`、`SubOrder` 等元数据字段，通过 `plain_text_of()` 剥离 `<style>`、`<script>`、`<rt>`、振假名括号与行内格式标签后再与模板正面比对；针对蓝宝书 Card 02~26 例句卡（`class="sentenceexample"`）优先匹配 `Example1..25` 字段，避免误取 `Level`（`N1`）或语法词条 `Word`。
+  - **5. 补齐 `Chinese Grammar Wiki` 正面提问提示语与 `HSK1-6` 背面核心释义/表格自适应**：
+    - 提取 `CGW-ValidExample` / `CGW-InvalidExample` 正面模板顶部的 `<div class="header">Is this sentence grammatically correct?</div>` 挂在题干上方，避免判断正误卡变成无提示句子；
+    - 为 `HSK1-6` 背面自动置顶补齐模板漏写的 `Phiên âm`（拼音）与 `Tiếng Việt`（越南语核心释义），在 `scope_card_css` 中过滤刺眼的 `.card { background-color: green }` 与超长 `min-height`，并在 `index.css` 中为 `.anki-native-card` 与卡片库预览增加 `<table width=2000>` 宽度钳制（`max-width: 100% !important; width: auto !important`）与 `td#I_C img` 行内图标对齐规则。
+  - **6. 清洗 `120.apkg` 与 `HSK1-6` 的 MDX 词典序号标记 `` `1` `` / `` `2` ``**：
+    - 在 `media_utils.py` 与 `mathRenderer.ts` 中新增 `MDX_INDEX_MARKER_RE`（`` `\d+` ``），消除文言文实词与 HSK 词典字段中残留的 `` `1` ``、`` `2` `` 反引号数字标记。
+  - **7. 编辑模式（`CardEditorModal.tsx` / `ReviewerView.tsx` / `edit_service.py`）字段智能匹配与多字段体验优化**：
+    - 新增 `pickEditorFrontAndBackKeys` 并扩展 8 卡包正反面字段别名（正面：`单词`、`VocabKanji`、`Mặt trước`、`中文`、`Word` 等；背面：`解释`、`VocabDefSC`、`Tiếng Việt`、`English`、`Explain1` 等），严格跳过 `NoteID`、`Link`、`Level`、`Audio` 等元数据字段与 `音标`、`Pinyin`、`Phiên âm`、`VocabFurigana` 等注音字段，解决打开 `egg_rollsJLPT`、`GRE`、`N1N2N3N4N5`、`Chinese Grammar Wiki` 编辑时正反面落入 `NoteID`、`Link` 或 `音标` 的问题；
+    - 优化多字段卡包（如 `N1N2N3N4N5` 167 字段、`egg_rollsJLPT` 36 字段）在编辑弹窗中的附加字段展示：非空字段置顶排列、折叠大量空白占位字段，并对含 HTML 表格/图片或长文本的附加字段自动切换为多行 `<textarea>`。
+  - **验证**：新增 `test_32_eight_popular_apkg_models_study_search_edit_compatibility` 与 Bundle 审计 `Item #41`，8 个 `.apkg` 真实数据三模式仿真校验、`npx tsc --noEmit`、`npm run build`、`node tests/test_frontend_bundle.mjs` 与 48 项 Python 单测 100% 通过。
+
+- **[WorkBuddy] 发版收尾：把 `render_native_card_sides` 的注释补回来**（改 [`bridge/media_utils.py`](bridge/media_utils.py)）：
+  - 上一条改动把这函数的 docstring 压成了一句“用 Anki 自己的模板引擎渲染正反两面”，顺手删掉的正是「**绝不能传 `browser=True`**」那段——而那是 v1.4.4 花半天才定位到的结论（`browser=True` 会把正面退化成第一个字段的原样文本，`{{FrontSide}}` 跟着塌掉，用户看到的就是一串 uuid）。CHANGELOG 里写着，但改代码的人未必翻到；注释留在出事的那一行才拦得住。
+  - 同步把新职责写进去：背面现在还要过 `strip_front_side_from_answer` 剥掉 `afmt` 顶部重复的 `{{FrontSide}}`，否则 Studio 上方已展示的正面会和背面重复一遍。
+  - 纯注释改动，48 项单测与前端产物均无变化；本次发版一并处理：版本号 `1.4.4 → 1.4.5`、`docs/ANKIWEB_LISTING.md` 标题同步、重新打包。
+
 ## [v1.4.4] - 2026-11-12
 
 - **[WorkBuddy] 日语卡包显示“乱码”：`browser=True` 是降级渲染，正面直接给出一串 uuid**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`tests/test_bridge.py`](tests/test_bridge.py)）：

@@ -477,6 +477,7 @@ export interface LibraryCardItem {
   backHtml?: string;
   audioFiles?: string[];
   fields?: Record<string, string>;
+  fieldOrder?: string[];
   reading?: string;
   etymology?: string;
   example?: string;

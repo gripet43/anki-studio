@@ -225,7 +225,67 @@ mark[data-empty="true"]::after {
   background: #ffffff;
   color: #1d1d1f;
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  white-space: normal;
+  font-weight: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.anki-native-card > .card {
+  padding: 12px 14px;
+  max-width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+.anki-native-card > .card:has(> section#Card) {
+  padding: 0;
+}
+
+.anki-native-card table,
+.library-card-title table,
+.library-card-snippet-body table {
+  max-width: 100% !important;
+  width: auto !important;
+  table-layout: auto;
+  border-collapse: collapse;
+}
+
+.anki-native-card td,
+.anki-native-card th,
+.library-card-title td,
+.library-card-title th,
+.library-card-snippet-body td,
+.library-card-snippet-body th {
+  max-width: 100%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.anki-native-card td img,
+.anki-native-card th img,
+.anki-native-card td#I_C img,
+:is(.library-card-title, .library-card-snippet-body) td img {
+  display: inline-block !important;
+  margin: 2px 4px 2px 0 !important;
+  vertical-align: middle !important;
+  border-radius: 2px !important;
+}
+
+ruby {
+  ruby-align: center;
+}
+
+ruby rt {
+  font-size: 0.62em;
+  line-height: 1.1;
+  font-weight: 500;
+  opacity: 0.85;
+  user-select: none;
 }
 
 /* Overscroll containment for modals & drawers */
