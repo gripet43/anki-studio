@@ -19,6 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .media_utils import (
     get_media_dir,
+    render_native_card_html,
     render_native_image_occlusion,
     resolve_media_img_src_for_webview,
 )
@@ -507,11 +508,20 @@ class ReviewService:
             # 原生 Image Occlusion 的第一个字段是 Occlusion（SVG 覆盖层），
             # 底图在 Image 字段。按 field_keys[0] 直出只会显示几个黑矩形。
             io_front, io_back, io_title = render_native_image_occlusion(note)
+            # 背面正文一律交给 Anki 模板引擎，取 fields[1] 会让多字段卡包的
+            # 拓展字段（释义 / 例句 / 词源 / 柯林斯…）在背诵界面整段消失。
+            # Cloze 与原生遮挡卡例外：它们的 frontAnswerHtml 已经负责补全/揭底，
+            # 再叠一份完整答案会让同一句话在翻转时出现两次。
+            native_back, native_back_audio = (
+                ("", []) if (io_front or is_cloze) else render_native_card_html(card)
+            )
             if io_front:
                 front_raw, back_raw = io_front, io_back
             else:
                 front_raw = fields_dict.get(field_keys[0], "") if field_keys else ""
-                back_raw = fields_dict.get(field_keys[1], "") if len(field_keys) > 1 else ""
+                back_raw = native_back or (
+                    fields_dict.get(field_keys[1], "") if len(field_keys) > 1 else ""
+                )
 
             front_rich_q, front_audio = self._resolve_rich_html_and_audio(
                 front_raw, media_dir, cloze_ord=cloze_ord, is_question_side=True
@@ -522,6 +532,8 @@ class ReviewService:
             back_rich, back_audio = self._resolve_rich_html_and_audio(
                 back_raw, media_dir, cloze_ord=cloze_ord, is_question_side=False
             )
+            # 原生渲染已经把 [sound:] 剥进 answer_av_tags，这里补回来
+            back_audio = native_back_audio + [f for f in back_audio if f not in native_back_audio]
 
             all_audio: List[str] = []
             for f in front_audio + back_audio:

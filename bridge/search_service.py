@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .media_utils import (
     get_media_dir,
+    render_native_card_html,
     render_native_image_occlusion,
     resolve_media_img_src_for_webview,
 )
@@ -684,18 +685,22 @@ class SearchService:
             # Anki 原生 Image Occlusion 的第一个字段是 Occlusion（SVG 覆盖层），
             # 底图在 Image 字段里。若按 flds[0] 直出，用户只会看到几个黑矩形。
             io_front, io_back, io_title = self._render_native_image_occlusion(note)
+            native_audio: List[str] = []
             if io_front:
                 front_raw, back_raw = io_front, io_back
                 front_clean = io_title or ("图片遮挡" if lang == "zh-CN" else "Image Occlusion")
                 back_clean = ""
             else:
                 front_raw = flds[0] if flds else empty_title
-                back_raw = flds[1] if len(flds) > 1 else ""
+                # 与复习界面同源：背面走 Anki 模板引擎，取 flds[1] 会丢掉拓展字段
+                native_back, native_audio = render_native_card_html(card)
+                back_raw = native_back or (flds[1] if len(flds) > 1 else "")
                 front_clean = self._strip_html_for_summary(front_raw) or empty_title
                 back_clean = self._strip_html_for_summary(back_raw)
 
             front_html, front_audio = self._rewrite_media_and_audio(front_raw, media_dir)
             back_html, back_audio = self._rewrite_media_and_audio(back_raw, media_dir)
+            back_audio = native_audio + [a for a in back_audio if a not in native_audio]
 
             memory = getattr(card, "memory_state", None)
             stability = (

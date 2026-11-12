@@ -1864,6 +1864,75 @@ class BridgeRouterAuditTest(unittest.TestCase):
             delattr(self.mock_col, "save")
             delattr(self.mock_col.sched, "reset")
 
+    def test_28_review_back_uses_native_template_not_second_field(self):
+        """背面正文必须走 Anki 模板引擎，不能只取 ``fields[1]``。
+
+        回归护栏：``UVBasic-English`` 这类多字段卡包（单词/音标/释义/vocab/柯林斯…）
+        在编辑界面字段齐全，但背诵界面背面只显示音标——因为序列化时把
+        ``field_keys[1]`` 当成了整张背面。修复后背面交给 ``card.render_output()``，
+        拓展字段全部回来，同时模板里的脚本/样式/``{{hint}}`` 脚手架必须清干净。
+        """
+        from anki_modern_os.bridge.media_utils import sanitize_rendered_card_html
+
+        answer_html = (
+            '<div id="english" class="section">perceive'
+            '<div class="phonetic">[pə\'si:v]</div></div>'
+            '<div id="chinese" class="extension">vt.察觉 <br />v.感知</div>'
+            '<div id="sample_en" class="extension">This means that our noses are limited…</div>'
+            '<a class=hint href="#" onclick="this.style.display=\'none\';return false;" '
+            'draggable=false>vocab简明</a>'
+            '<div id="hintabc" class=hint style="display: none">When we <b>perceive</b> something…</div>'
+            '<div id="vocab" class="section" onclick="toggle(\'vocab\')">&nbsp;</div>'
+            "<script>function toggle(e){}</script>"
+            "<style>#ext_collins{display:none}</style>"
+        )
+
+        class StubAVTag:
+            filename = "perceive.mp3"
+
+        class StubRenderOutput:
+            answer_text = answer_html
+            question_text = '<div id="english">perceive</div>'
+            answer_av_tags = [StubAVTag()]
+
+        card = self.mock_col.get_card(201)
+        rendered_calls = []
+
+        def fake_render_output(browser=False):
+            rendered_calls.append(browser)
+            return StubRenderOutput()
+
+        card.render_output = fake_render_output
+
+        card_data = self._call("start_review", {"deckId": "1"})["data"]["cards"][0]
+
+        # 1. 拓展字段全部出现在背面，不再是“只有音标”
+        self.assertIn("vt.察觉", card_data["backHtml"])
+        self.assertIn("This means that our noses are limited", card_data["backHtml"])
+        # 2. 正面维持原设计（field[0]），不被模板渲染接管
+        self.assertEqual(card_data["front"], "快速排序")
+        # 3. 模板里的脏东西一律清掉，否则会撑破 React 的样式表或抛 ReferenceError
+        for dirty in ("<script", "<style", "onclick", "display: none", "<a class=hint"):
+            self.assertNotIn(dirty, card_data["backHtml"])
+        # 4. {{hint:}} 的隐藏内容要露出来（脚本不跑就没有展开入口）
+        self.assertIn("When we <b>perceive</b> something", card_data["backHtml"])
+        # 5. 原生渲染剥掉的 [sound:] 要从 answer_av_tags 补回音频列表
+        self.assertIn("perceive.mp3", card_data["audioFiles"])
+        # 6. 批量序列化时用 browser=True，避免误触发别的插件的 card_did_render 钩子
+        self.assertEqual(rendered_calls, [True])
+
+        # 没有模板引擎可用时（老版本 Anki / 单元测试桩）必须安静降级，不能抛异常
+        from anki_modern_os.bridge.media_utils import render_native_card_html
+
+        del card.render_output
+        self.assertEqual(render_native_card_html(object()), ("", []))
+        self.assertEqual(render_native_card_html(None), ("", []))
+        self.assertEqual(sanitize_rendered_card_html(""), "")
+
+        # 降级后回落取 fields[1]，行为与修复前一致（至少不是空白页面）
+        fallback = self._call("start_review", {"deckId": "1"})["data"]["cards"][0]
+        self.assertIn("<b>分治</b>", fallback["backHtml"])
+
 
 if __name__ == "__main__":
     unittest.main()

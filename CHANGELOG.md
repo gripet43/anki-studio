@@ -15,6 +15,17 @@
 
 ## [Unreleased]
 
+- **[WorkBuddy] 背诵界面背面只显示一行音标：背面正文改由 Anki 模板引擎渲染**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`tests/test_bridge.py`](tests/test_bridge.py)）：
+  - **现象**：用户装上 `Anki.apkg`（997 张 `UVBasic-English` 卡，10 字段）后反馈「编辑时拓展字段都在，学习模式的背面却只有一个音标」。定位到 `_serialize_review_card` 里 `back_raw = fields_dict.get(field_keys[1])`——**把「第二个字段」当成了整张背面**。这个卡包的 `fields[1]` 恰好是 `英美音标`，于是 `中文释义 / vocab简明 / vocab扩展 / 真题原句 / 柯林斯星级 / 柯林斯解释` 六个字段全部被丢掉。只要卡包不是「两字段」形态，拓展字段就会这样整段消失，且编辑界面看不出异常，肉眼很难归因。`_extract_structured_fields` 里写死的 `词源 / 例句 / 提示 / 读音` 四个字段名同样不匹配这个卡包，等于第二重漏掉。
+  - **修法**：新增 `media_utils.render_native_card_html(card)`，背面一律取 `card.render_output().answer_text`，`{{字段}}`、`{{#字段}}` 条件段、`{{FrontSide}}`、`{{hint:}}` 由 Anki 自己算完。复习队列与卡包库（`search_service._serialize_library_card`）同源改造，两处不再各写一套。取不到模板引擎时（老版本 / 单测桩）安静回落 `fields[1]`，行为与修复前一致。
+  - **验证方式**：用 Anki.app 自带的 Python 3.13 + `app_packages` 直接打开解包后的 `collection.anki2`，对真实 997 张卡跑通渲染；再加载改造后的 `review_service` 复算 `backHtml`，确认六个字段全部回到背面、`<script>/<style>/onclick` 均已清除。`UVBasic-English` 逐卡比对确认 `browser` 取 True/False 输出完全一致。
+  - **模板 CSS 故意不注入**：该卡包的 `css` 字段起手就是 `</style>` + html 注释 + `<style>` + `@import` + 一段 `function toggle()` 的 `<script>`——塞进 React 会直接撑破样式表，尾巴变成可见乱码；而且那套样式按白底写（`background-color:#fff`），落到深色主题里是白块，`.card / .section` 这类通用类名还会泄漏到全站。**只保留正文结构，视觉交给插件自己的设计系统**，这也是「柯林斯解释」在插件里默认展开的原因（模板原本靠脚本点击折叠，而 `dangerouslySetInnerHTML` 不执行脚本，藏起来就再也点不开）。
+  - **三处必须清掉的模板残留**：`<script>`（不执行，且真执行等于让第三方卡包在本插件的特权 WebView 里跑任意 JS，那里面有 pycmd 桥）、`{{hint:}}` 脚手架（`<a class=hint>` 标签 + `display:none` 的内容块，脚本不跑就没有展开入口，改为直接露出内容）、`onclick` 内联事件（点了会抛 ReferenceError）。
+  - **`white-space: pre-wrap` 的连带问题**：正文容器为保留纯文本卡的手动换行用了 `pre-wrap`，而模板缩进是成片 `\n\n\n`，直接注入会变成背面上好几行空行。新增 `normalize_rendered_whitespace` 把换行压成一个空格（不是删掉，避免把相邻行内元素粘成 `foobar`）。
+  - **Cloze 与原生遮挡卡不走新路径**：`frontAnswerHtml` 已经负责把挖空补全，背面再叠一份完整答案会让同一句话在翻转时出现两次；原生 IO 仍用 `render_native_image_occlusion`。
+  - **性能实测**：`render_output` 走 Rust 后端，100 张卡全字段序列化从 40 ms 起（0.40 ms/卡，含原有的 FSRS 预测与 revlog 查询），可以忽略。`browser=True` 只是为了不触发 `card_did_render` 钩子（那是给真正复习界面用的，批量序列化会误伤别的插件）。
+  - **新增 `test_28_review_back_uses_native_template_not_second_field`**：锁住「背面含拓展字段 / 正面维持 field[0] / 脏东西清干净 / hint 内容露出 / 音频从 `answer_av_tags` 补回 / `browser=True` / 无引擎时降级」七件事。
+
 - **[WorkBuddy] 仓库转 public 后的收尾：README 补预览图与缺失的测试命令，清掉「仓库还是私有」的过期说明**（改 [`README.md`](README.md)、[`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)、[`tests/WINDOWS_HANDOFF.md`](tests/WINDOWS_HANDOFF.md)）：
   - **README 顶部加了预览 GIF**（复用 `docs/assets/anki-studio-preview.gif`，相对路径引用，GitHub 侧直接渲染），并为「预览图」新增第 4 小节，写明生成脚本与可调参数。
   - **补上 README 漏写的门禁命令**：原来「自动化测试与体检」只列了 `node tests/test_frontend_bundle.mjs`，漏了 `python3 -m unittest discover -s tests`，照文档做的人会漏跑一半测试。现补齐并注明「两组全绿再提交，改完还要 `npm run build`」。
