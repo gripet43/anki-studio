@@ -66,11 +66,11 @@ export const SyncStateIcon: React.FC<SyncStateIconProps> = ({ state, size = 'sm'
     );
   }
 
-  // Neutral static cloud for past sync snapshots ("quiet success, honest snapshot")
+  // Static cloud for past sync snapshots: shape says "cloud", brand tint says "synced OK"
   return (
     <svg
       aria-hidden="true"
-      className={`${cls} text-[var(--text-secondary)] shrink-0 transition-colors`}
+      className={`${cls} text-[var(--brand-text)] shrink-0 transition-colors`}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

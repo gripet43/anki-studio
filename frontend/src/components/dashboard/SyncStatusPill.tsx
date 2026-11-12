@@ -109,7 +109,6 @@ export const SyncStatusPill: React.FC = () => {
     appActions.syncCollection();
   };
 
-  const pillSurface = 'dashboard-surface hover:border-[var(--brand-border)]';
   const popoverSurface = 'dashboard-tooltip';
 
   const effectiveNow = Math.max(nowTick, lastSyncedTimestamp || 0);
@@ -132,64 +131,66 @@ export const SyncStatusPill: React.FC = () => {
       onBlurCapture={handleBlurCapture}
       className="relative select-none"
     >
-      {/* Outer Pill Trigger: clicks trigger sync; hover/focus discloses snapshot details */}
+      {/* Lightweight Inline Status Trigger matching reference visual */}
       <button
         type="button"
         onClick={() => handleTriggerSync()}
         disabled={isSyncActive}
         aria-label={triggerAriaLabel}
-        className={`group relative h-9 ps-3.5 pe-2.5 rounded-full border text-[12px] flex items-center gap-2 transition-colors duration-200 backdrop-blur-md motion-safe:active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] sync-pill-forced-border ${pillSurface} ${
+        className={`group relative h-9 px-2.5 rounded-xl text-[12.5px] flex items-center gap-2 transition-colors duration-200 motion-safe:active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] ${
           isSyncActive
-            ? 'ring-1 ring-[var(--status-warning)]/30 cursor-default'
-            : syncJustFinished
-            ? 'border-[var(--status-success)]/60 ring-1 ring-[var(--status-success)]/35 cursor-default'
-            : 'cursor-pointer hover:shadow-md hover:border-[var(--brand-border)]'
+            ? 'cursor-default'
+            : 'cursor-pointer hover:bg-black/[0.035] dark:hover:bg-white/[0.05]'
         }`}
       >
-        {/* Left Semantic Icon (Neutral Cloud for past snapshot; green check ONLY transiently on sync finish) */}
-        <div className="relative flex items-center justify-center w-3.5 h-3.5 shrink-0">
-          <SyncStateIcon state={syncVisualState} size="sm" />
-        </div>
+        {/* Status Icon：同步中为脉冲点，其余按快照真实状态显示云图标（已同步 = 绿色云） */}
+        <span
+          aria-hidden="true"
+          className="w-3.5 h-3.5 shrink-0 flex items-center justify-center"
+        >
+          {isSyncActive ? (
+            <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] motion-safe:animate-ping" />
+          ) : (
+            <SyncStateIcon state={syncVisualState} size="sm" />
+          )}
+        </span>
 
-        {/* Sync Label & Factual Relative Time */}
+        {/* Sync Label & Relative Time */}
         <div className="flex items-center min-w-0 overflow-hidden">
           {isSyncActive ? (
-            <span className="text-[12px] font-semibold text-[var(--status-warning)] tracking-tight motion-safe:animate-pulse truncate">
+            <span className="text-[12.5px] font-medium text-[var(--status-warning)] tracking-tight motion-safe:animate-pulse truncate">
               {isInitialSyncing && !syncing
                 ? t('loadingLocalCollection')
                 : t('syncing')}
             </span>
           ) : syncJustFinished ? (
-            <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight flex items-center gap-1 animate-sync-reveal">
+            <span className="text-[12.5px] font-semibold text-[var(--status-success)] tracking-tight flex items-center gap-1 animate-sync-reveal">
               <span>{t('syncCompleted')}</span>
             </span>
           ) : hasSynced ? (
-            <div className="flex items-center gap-1.5">
-              <span className="font-medium text-[12px] leading-none text-[var(--text-primary)]">
+            <div className="flex items-center gap-1.5 text-[var(--text-secondary)]">
+              <span className="font-medium text-[12.5px] leading-none">
                 {t('synced')}
               </span>
-              <span aria-hidden="true" className="text-[var(--text-muted)] text-[11px] leading-none">
+              <span aria-hidden="true" className="text-[var(--text-muted)] text-[12px] leading-none">
                 ·
               </span>
               <time
                 dateTime={isoTimestamp}
-                className="text-[11px] text-[var(--text-secondary)] font-normal tracking-tight tabular-nums leading-none"
+                className="text-[12.5px] font-medium tracking-tight tabular-nums leading-none"
               >
                 {relativeTimeStr}
               </time>
             </div>
           ) : (
-            <span className="font-medium text-[12px] text-[var(--text-secondary)] leading-none">
+            <span className="font-medium text-[12.5px] text-[var(--text-secondary)] leading-none">
               {t('notSyncedShort')}
             </span>
           )}
         </div>
 
-        {/* Hairline Divider */}
-        <div aria-hidden="true" className="w-px h-3.5 bg-[var(--border-subtle)] mx-0.5 shrink-0" />
-
-        {/* Action Trigger Icon + Optional Shortcut Hint */}
-        <div className="flex items-center gap-1.5 px-1 py-0.5 rounded-full">
+        {/* Refresh Action Icon + Optional Shortcut Hint */}
+        <div className="flex items-center gap-1.5 ms-1">
           <svg
             aria-hidden="true"
             style={isSyncActive ? { willChange: 'transform' } : undefined}
@@ -203,7 +204,7 @@ export const SyncStatusPill: React.FC = () => {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2.2"
+            strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
           >
@@ -222,7 +223,7 @@ export const SyncStatusPill: React.FC = () => {
 
         {/* Bottom Progress Sweep during active sync */}
         {isSyncActive && (
-          <div aria-hidden="true" className="absolute inset-x-3 bottom-0 h-[2px] rounded-full overflow-hidden bg-black/5 dark:bg-white/5">
+          <div aria-hidden="true" className="absolute inset-x-2 bottom-0 h-[2px] rounded-full overflow-hidden bg-black/5 dark:bg-white/5">
             <div className="h-full w-full bg-gradient-to-r from-transparent via-[var(--status-warning)] to-transparent animate-shimmer-sweep" />
           </div>
         )}
@@ -235,18 +236,9 @@ export const SyncStatusPill: React.FC = () => {
         >
           {/* Header */}
           <div className="flex items-center gap-2 pb-2.5 border-b border-[var(--border-subtle)]">
-            <svg
-              aria-hidden="true"
-              className="w-4 h-4 text-[var(--brand-text)] shrink-0"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
-            </svg>
+            <div className="relative flex items-center justify-center w-4 h-4 shrink-0">
+              <SyncStateIcon state={syncVisualState} size="sm" />
+            </div>
             <span className="text-[13px] font-semibold tracking-tight">
               {t('syncCloudTitle')}
             </span>

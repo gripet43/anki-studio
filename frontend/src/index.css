@@ -296,15 +296,8 @@ progress {
 }
 
 .dashboard-header {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  margin-block: -4px;
-  padding-block: 4px;
-  background-color: var(--bg-canvas);
-  background: color-mix(in srgb, var(--bg-canvas) 88%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(1.08);
-  backdrop-filter: blur(18px) saturate(1.08);
+  position: relative;
+  z-index: 20;
 }
 
 .dashboard-surface {
@@ -319,10 +312,22 @@ progress {
 }
 
 .dashboard-hero {
-  background-image: linear-gradient(
-    108deg,
-    color-mix(in srgb, var(--brand-soft) 34%, var(--bg-card)),
-    var(--bg-card) 46%
+  background-color: var(--bg-card);
+  background-image: radial-gradient(
+    ellipse 340px 190px at calc(100% - 88px) 72%,
+    rgba(255, 162, 76, 0.12) 0%,
+    rgba(255, 162, 76, 0.04) 52%,
+    transparent 82%
+  );
+}
+
+.dark .dashboard-hero,
+.oled .dashboard-hero {
+  background-image: radial-gradient(
+    ellipse 340px 190px at calc(100% - 88px) 72%,
+    rgba(255, 148, 56, 0.14) 0%,
+    rgba(255, 148, 56, 0.04) 52%,
+    transparent 82%
   );
 }
 
@@ -339,7 +344,7 @@ progress {
 }
 
 .dashboard-stat-pill {
-  min-height: 30px;
+  min-height: 26px;
   border: 1px solid transparent;
   transition:
     background-color var(--dur-fast) var(--ease-std),
@@ -407,12 +412,24 @@ progress {
   box-shadow: var(--dashboard-shadow-raised);
 }
 
-/* 学习按钮继承每张卡片的 --deck-brand / --deck-brand-hover，与图标和进度条同色 */
+/* 学习按钮采用柔和品牌底色（Level-2 Tonal Button）：
+   视觉层级低于英雄区唯一的实心主按钮「开始今日学习」（Level-1 Solid），
+   但带柔和品牌色底、品牌色字与细描边，层级明显高于旁边的中性描边「查看」按钮（Level-3 Secondary） */
 .deck-study-btn {
-  background-color: var(--deck-brand);
+  background-color: var(--deck-brand-soft);
+  color: var(--deck-brand-text);
+  border: 1px solid color-mix(in srgb, var(--deck-border) 72%, transparent);
+  box-shadow: none;
 }
 .deck-study-btn:hover:not(:disabled) {
-  background-color: var(--deck-brand-hover);
+  background-color: var(--deck-brand-soft-strong);
+  color: var(--deck-brand-text);
+  border-color: var(--deck-border);
+  filter: none;
+}
+
+.deck-view-btn {
+  color: var(--text-secondary);
 }
 
 /* 窄卡片：将「查看」收敛为纯图标、隐藏次要的新卡指示，避免 due 指示与按钮拥挤溢出 */

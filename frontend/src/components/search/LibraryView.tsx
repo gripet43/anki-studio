@@ -1070,7 +1070,49 @@ export const LibraryView: React.FC = () => {
               )}
             </div>
 
-            {/* Pill 6: Multi-Dimension Sort Dropdown */}
+            {hasActiveFilters && (
+              <button
+                onClick={() => {
+                  appActions.searchLibraryDebounced({
+                    query: '',
+                    status: 'all',
+                    difficulty: 'all',
+                    flag: 'all',
+                    tag: 'all',
+                    deckId: 'all',
+                    sortBy: 'default',
+                  });
+                  showToast(t('resetFilters'));
+                }}
+                className={`h-8 px-3.5 rounded-full text-[12px] font-medium cursor-pointer transition-all active:scale-95 ${
+                  isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-[#1D1D1F] hover:bg-black/10'
+                }`}
+              >
+                {t('resetFilters')}
+              </button>
+            )}
+          </div>
+
+          {/* 视图属性组（右对齐）：匹配计数 —— 排序。
+              排序不参与「缩小结果集」，它是与筛选交叉的另一个维度（不改变"看哪些"，只改变"看什么顺序"），
+              所以脱离筛选胶囊组：靠右对齐、以极细竖线与筛选区分隔，并用无边框 Ghost 按钮（筛选是带边框胶囊）
+              + 弱化小字标签「排序」/ 强化当前值 的排印差异，让层级关系一眼可读。 */}
+          <div className="flex items-center gap-2.5 ms-auto">
+            {hasNarrowingFilter && (
+              <span className={`text-[12px] ${subText}`}>
+                {t('matchedCountText', { n: totalMatchedCount.toLocaleString() })}
+              </span>
+            )}
+
+            {/* 竖线只在「匹配计数」存在时出现：此时它分隔的是两段文字；
+                计数缺席时单独一条线会退化成一根无处依附的杂线，故隐藏 */}
+            {hasNarrowingFilter && (
+              <span
+                aria-hidden="true"
+                className={`hidden sm:block w-px h-4 ${isDark ? 'bg-white/[0.12]' : 'bg-black/[0.08]'}`}
+              />
+            )}
+
             <div ref={sortDropdownRef} className="relative">
               <button
                 type="button"
@@ -1082,29 +1124,69 @@ export const LibraryView: React.FC = () => {
                   setTagDropdownOpen(false);
                   setDeckDropdownOpen(false);
                 }}
-                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
-                  librarySortBy !== 'default'
-                    ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)]'
-                    : `border hover:border-[var(--brand-border)] ${cardSurface}`
+                aria-haspopup="menu"
+                aria-expanded={sortDropdownOpen}
+                className={`h-8 ps-2 pe-2.5 rounded-lg text-[12px] flex items-center gap-1.5 cursor-pointer transition-colors ${
+                  sortDropdownOpen
+                    ? isDark
+                      ? 'bg-white/[0.07]'
+                      : 'bg-black/[0.05]'
+                    : isDark
+                    ? 'hover:bg-white/[0.05]'
+                    : 'hover:bg-black/[0.035]'
                 }`}
               >
-                <svg className="w-3.5 h-3.5 opacity-70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  className={`w-3.5 h-3.5 shrink-0 transition-colors ${
+                    librarySortBy !== 'default'
+                      ? 'text-[var(--brand-text)]'
+                      : 'text-[var(--text-secondary)]'
+                  }`}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
                   <path d="m3 16 4 4 4-4" />
                   <path d="M7 20V4" />
                   <path d="m21 8-4-4-4 4" />
                   <path d="M17 4v16" />
                 </svg>
-                <span>
-                  {t('sortFilterLabel')} · {sortLabels[librarySortBy]}
+                <span className="text-[11.5px] text-[var(--text-muted)] tracking-tight">
+                  {t('sortFilterLabel')}
                 </span>
-                <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <span aria-hidden="true" className="text-[var(--text-muted)] opacity-40 leading-none">
+                  ·
+                </span>
+                <span
+                  className={`font-medium tracking-tight transition-colors ${
+                    librarySortBy !== 'default'
+                      ? 'text-[var(--brand-text)]'
+                      : 'text-[var(--text-primary)]'
+                  }`}
+                >
+                  {sortLabels[librarySortBy]}
+                </span>
+                <svg
+                  className="w-2.5 h-2.5 opacity-45 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
                   <path d="m6 9 6 6 6-6" />
                 </svg>
               </button>
 
               {sortDropdownOpen && (
                 <div
-                  className={`absolute start-0 top-10 z-40 w-[230px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
+                  className={`absolute end-0 top-10 z-40 w-[230px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
                 >
                   {(
                     [
@@ -1143,35 +1225,7 @@ export const LibraryView: React.FC = () => {
                 </div>
               )}
             </div>
-
-            {hasActiveFilters && (
-              <button
-                onClick={() => {
-                  appActions.searchLibraryDebounced({
-                    query: '',
-                    status: 'all',
-                    difficulty: 'all',
-                    flag: 'all',
-                    tag: 'all',
-                    deckId: 'all',
-                    sortBy: 'default',
-                  });
-                  showToast(t('resetFilters'));
-                }}
-                className={`h-8 px-3.5 rounded-full text-[12px] font-medium cursor-pointer transition-all active:scale-95 ${
-                  isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-[#1D1D1F] hover:bg-black/10'
-                }`}
-              >
-                {t('resetFilters')}
-              </button>
-            )}
           </div>
-
-          {hasNarrowingFilter && (
-            <span className={`text-[12px] ${subText}`}>
-              {t('matchedCountText', { n: totalMatchedCount.toLocaleString() })}
-            </span>
-          )}
         </div>
 
         {/* Skeleton Loading & Cloud Sync State */}

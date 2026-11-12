@@ -68,6 +68,13 @@ function serializeFromWysiwyg(container: HTMLElement): string {
   return clone.innerHTML;
 }
 
+const STUDY_EMOJIS = [
+  '💡', '⭐', '⚠️', '📌', '✅',
+  '❌', '📝', '🔍', '🎯', '🚀',
+  '📚', '🧠', '🔥', '💎', '⏳',
+  '🔗', '❓', '❗', '🎉', '💪',
+];
+
 export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
   label,
   badge,
@@ -86,7 +93,10 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
     translate(resolvedLang, key, params);
 
   const editorRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const savedRangeRef = useRef<Range | null>(null);
+  const anyDropdownOpenRef = useRef(false);
 
   // Dropdown states
   const [headingOpen, setHeadingOpen] = useState(false);
@@ -101,6 +111,55 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
   // Track initial value loaded to avoid cursor jumps
   const lastLoadedValueRef = useRef<string | null>(null);
   const lastLoadedMediaBaseRef = useRef<string | undefined>(undefined);
+
+  const closeAllDropdowns = () => {
+    setHeadingOpen(false);
+    setEmojiOpen(false);
+    setAlignOpen(false);
+    setTableOpen(false);
+    setHelpOpen(false);
+  };
+
+  const toggleDropdown = (which: 'heading' | 'emoji' | 'align' | 'table' | 'help') => {
+    setHeadingOpen((prev) => (which === 'heading' ? !prev : false));
+    setEmojiOpen((prev) => (which === 'emoji' ? !prev : false));
+    setAlignOpen((prev) => (which === 'align' ? !prev : false));
+    setTableOpen((prev) => (which === 'table' ? !prev : false));
+    setHelpOpen((prev) => (which === 'help' ? !prev : false));
+  };
+
+  const saveSelectionRange = () => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || !editorRef.current) return;
+    const range = sel.getRangeAt(0);
+    if (editorRef.current.contains(range.commonAncestorContainer)) {
+      savedRangeRef.current = range.cloneRange();
+    }
+  };
+
+  const focusAndRestoreSelection = () => {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    const sel = window.getSelection();
+    if (!sel) return;
+
+    if (
+      savedRangeRef.current &&
+      editorRef.current.contains(savedRangeRef.current.commonAncestorContainer)
+    ) {
+      sel.removeAllRanges();
+      sel.addRange(savedRangeRef.current);
+      return;
+    }
+
+    // If the user has not clicked inside the editor yet, place the caret at the end
+    const range = document.createRange();
+    range.selectNodeContents(editorRef.current);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    savedRangeRef.current = range.cloneRange();
+  };
 
   useEffect(() => {
     if (!editorRef.current) return;
@@ -117,6 +176,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
   const handleInput = () => {
     if (!editorRef.current) return;
+    saveSelectionRange();
     const serialized = serializeFromWysiwyg(editorRef.current);
     lastLoadedValueRef.current = serialized;
     setCharCount(editorRef.current.textContent?.length || 0);
@@ -124,27 +184,43 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
   };
 
   useEffect(() => {
-    const handleClickOutside = () => {
-      setHeadingOpen(false);
-      setEmojiOpen(false);
-      setAlignOpen(false);
-      setTableOpen(false);
-      setHelpOpen(false);
+    anyDropdownOpenRef.current =
+      headingOpen || emojiOpen || alignOpen || tableOpen || helpOpen;
+  }, [headingOpen, emojiOpen, alignOpen, tableOpen, helpOpen]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (toolbarRef.current && toolbarRef.current.contains(e.target as Node)) {
+        return;
+      }
+      closeAllDropdowns();
+    };
+    // 捕获阶段消费 Esc：仅当有浮层打开时才拦截，
+    // 否则 Esc 会既关下拉又冒泡到制卡弹窗，把整个编辑流程一起关掉
+    const handleKeyDownEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || !anyDropdownOpenRef.current) return;
+      e.stopPropagation();
+      e.preventDefault();
+      closeAllDropdowns();
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDownEscape, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDownEscape, true);
+    };
   }, []);
 
   const execCmd = (command: string, arg: string | undefined = undefined) => {
     if (!editorRef.current) return;
-    editorRef.current.focus();
+    focusAndRestoreSelection();
     document.execCommand(command, false, arg);
     handleInput();
   };
 
   const setHeading = (tag: string) => {
     if (!editorRef.current) return;
-    editorRef.current.focus();
+    focusAndRestoreSelection();
     document.execCommand('formatBlock', false, tag);
     setHeadingOpen(false);
     handleInput();
@@ -152,15 +228,30 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
   const insertEmoji = (emoji: string) => {
     if (!editorRef.current) return;
-    editorRef.current.focus();
-    document.execCommand('insertText', false, emoji);
+    focusAndRestoreSelection();
+    const inserted = document.execCommand('insertText', false, emoji);
+    if (!inserted) {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        const textNode = document.createTextNode(emoji);
+        range.insertNode(textNode);
+        range.setStartAfter(textNode);
+        range.setEndAfter(textNode);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } else {
+        editorRef.current.appendChild(document.createTextNode(emoji));
+      }
+    }
     setEmojiOpen(false);
     handleInput();
   };
 
   const insertTable = (rows = 2, cols = 3) => {
     if (!editorRef.current) return;
-    editorRef.current.focus();
+    focusAndRestoreSelection();
 
     let tableHtml = `<table style="width:100%; border-collapse:collapse; margin:10px 0; border:1px solid ${
       isDark ? '#343646' : '#E5E5EA'
@@ -192,7 +283,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
   const insertClozeBadge = () => {
     if (!editorRef.current) return;
-    editorRef.current.focus();
+    focusAndRestoreSelection();
 
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
@@ -239,13 +330,14 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
     range.setEndAfter(pill);
     selection.removeAllRanges();
     selection.addRange(range);
+    savedRangeRef.current = range.cloneRange();
 
     handleInput();
   };
 
   const insertMath = () => {
     if (!editorRef.current) return;
-    editorRef.current.focus();
+    focusAndRestoreSelection();
     const selection = window.getSelection();
     const selected = selection?.toString() || 'x^2 + y^2 = r^2';
     document.execCommand('insertHTML', false, `\\( ${selected} \\)`);
@@ -254,7 +346,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
   const insertMark = () => {
     if (!editorRef.current) return;
-    editorRef.current.focus();
+    focusAndRestoreSelection();
     const selection = window.getSelection();
     const selected = selection?.toString() || '...';
     const markHtml = `<mark style="background:${
@@ -276,7 +368,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
         if (file && onPasteImage) {
           const imgHtml = await onPasteImage(file);
           if (imgHtml && editorRef.current) {
-            editorRef.current.focus();
+            focusAndRestoreSelection();
             document.execCommand('insertHTML', false, imgHtml);
             handleInput();
           }
@@ -291,7 +383,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
     if (file && onPasteImage && editorRef.current) {
       const imgHtml = await onPasteImage(file);
       if (imgHtml) {
-        editorRef.current.focus();
+        focusAndRestoreSelection();
         document.execCommand('insertHTML', false, imgHtml);
         handleInput();
       }
@@ -329,7 +421,9 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
   const containerBorder = isDark ? 'border-[#2C2E3A]' : 'border-[#E2E2E8]';
   const containerBg = isDark ? 'bg-[#171822]' : 'bg-white';
-  const toolbarBg = isDark ? 'bg-[#151620] border-b border-[#262836]' : 'bg-[#FAFAFC] border-b border-[#ECECF0]';
+  const toolbarBg = isDark
+    ? 'bg-[#151620] border-b border-[#262836] rounded-t-[11px]'
+    : 'bg-[#FAFAFC] border-b border-[#ECECF0] rounded-t-[11px]';
   const iconBtnClass = `h-7 w-7 rounded flex items-center justify-center transition-colors cursor-pointer text-[#6E6E73] hover:text-[#1D1D1F] dark:text-[#8E8E93] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10`;
 
   return (
@@ -351,9 +445,9 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
         </span>
       </div>
 
-      {/* Editor Container */}
+      {/* Editor Container — keep overflow visible so toolbar popovers (Emoji, Heading, Table, Align, Help) are never clipped */}
       <div
-        className={`rounded-xl border transition-shadow focus-within:ring-2 focus-within:ring-[var(--brand)]/25 focus-within:border-[var(--brand)] overflow-hidden ${containerBorder} ${containerBg}`}
+        className={`relative rounded-xl border transition-shadow focus-within:ring-2 focus-within:ring-[var(--brand)]/25 focus-within:border-[var(--brand)] ${containerBorder} ${containerBg}`}
       >
         <input
           ref={fileInputRef}
@@ -363,17 +457,21 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
           className="hidden"
         />
 
-        {/* Top Tower Toolbar */}
-        <div className={`px-2.5 py-1.5 flex items-center justify-between gap-1 overflow-x-auto no-scrollbar ${toolbarBg}`}>
-          <div className="flex items-center gap-0.5 shrink-0">
+        {/* Top Tower Toolbar — flex-wrap without horizontal scroll clipping on dropdown popovers */}
+        <div
+          ref={toolbarRef}
+          className={`relative z-20 px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-1 ${toolbarBg}`}
+        >
+          <div className="flex flex-wrap items-center gap-0.5">
             {/* Heading Dropdown (#) */}
             <div className="relative">
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setHeadingOpen((prev) => !prev)}
+                onClick={() => toggleDropdown('heading')}
                 title={t('slashInsertBtn')}
-                className={iconBtnClass}
+                aria-expanded={headingOpen}
+                className={`${iconBtnClass} ${headingOpen ? 'bg-[var(--brand-soft)] !text-[var(--brand-text)]' : ''}`}
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="4" y1="9" x2="20" y2="9" />
@@ -385,15 +483,13 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
               {headingOpen && (
                 <div
-                  className={`absolute start-0 top-8 z-50 w-32 rounded-lg border shadow-xl p-1 backdrop-blur-xl ${
-                    isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
-                  }`}
+                  className="dashboard-tooltip absolute start-0 top-8 z-50 w-32 rounded-xl border p-1 animate-in fade-in duration-150"
                 >
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setHeading('<p>')}
-                    className="w-full text-start px-2.5 py-1.5 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1.5 text-[12px] rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer"
                   >
                     P
                   </button>
@@ -401,7 +497,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setHeading('<h1>')}
-                    className="w-full text-start px-2.5 py-1.5 text-[15px] font-bold rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1.5 text-[15px] font-bold rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer"
                   >
                     H1
                   </button>
@@ -409,7 +505,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setHeading('<h2>')}
-                    className="w-full text-start px-2.5 py-1.5 text-[13px] font-bold rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1.5 text-[13px] font-bold rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer"
                   >
                     H2
                   </button>
@@ -417,7 +513,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setHeading('<h3>')}
-                    className="w-full text-start px-2.5 py-1.5 text-[12px] font-semibold rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1.5 text-[12px] font-semibold rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer"
                   >
                     H3
                   </button>
@@ -430,9 +526,10 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setEmojiOpen((prev) => !prev)}
+                onClick={() => toggleDropdown('emoji')}
                 title="Emoji"
-                className={iconBtnClass}
+                aria-expanded={emojiOpen}
+                className={`${iconBtnClass} ${emojiOpen ? 'bg-[var(--brand-soft)] !text-[var(--brand-text)]' : ''}`}
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10" />
@@ -444,17 +541,17 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
               {emojiOpen && (
                 <div
-                  className={`absolute start-0 top-8 z-50 p-2 rounded-xl border shadow-xl grid grid-cols-4 gap-1.5 w-44 backdrop-blur-xl ${
-                    isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
-                  }`}
+                  role="menu"
+                  aria-label="Emoji"
+                  className="dashboard-tooltip absolute start-0 top-8 z-50 p-2 rounded-xl border grid grid-cols-5 gap-1 w-52 animate-in fade-in duration-150"
                 >
-                  {['💡', '⭐', '⚠️', '📌', '✅', '❌', '📝', '🔍', '🎯', '🚀', '📚', '🧠'].map((em) => (
+                  {STUDY_EMOJIS.map((em) => (
                     <button
                       key={em}
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => insertEmoji(em)}
-                      className="h-8 rounded hover:bg-black/5 dark:hover:bg-white/10 text-[16px] flex items-center justify-center cursor-pointer"
+                      className="h-8 rounded-lg hover:bg-[var(--brand-soft)] hover:scale-110 transition-transform text-[16px] flex items-center justify-center cursor-pointer"
                     >
                       {em}
                     </button>
@@ -573,9 +670,10 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setTableOpen((prev) => !prev)}
+                onClick={() => toggleDropdown('table')}
                 title="Table"
-                className={iconBtnClass}
+                aria-expanded={tableOpen}
+                className={`${iconBtnClass} ${tableOpen ? 'bg-[var(--brand-soft)] !text-[var(--brand-text)]' : ''}`}
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect width="18" height="18" x="3" y="3" rx="2" />
@@ -588,15 +686,13 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
               {tableOpen && (
                 <div
-                  className={`absolute start-0 top-8 z-50 p-1.5 rounded-lg border shadow-xl w-32 backdrop-blur-xl ${
-                    isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
-                  }`}
+                  className="dashboard-tooltip absolute start-0 top-8 z-50 p-1.5 rounded-xl border w-32 animate-in fade-in duration-150"
                 >
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => insertTable(2, 2)}
-                    className="w-full text-start px-2.5 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1 text-[12px] rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer"
                   >
                     2 × 2
                   </button>
@@ -604,7 +700,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => insertTable(2, 3)}
-                    className="w-full text-start px-2.5 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1 text-[12px] rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer"
                   >
                     2 × 3
                   </button>
@@ -612,7 +708,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => insertTable(3, 3)}
-                    className="w-full text-start px-2.5 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2.5 py-1 text-[12px] rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer"
                   >
                     3 × 3
                   </button>
@@ -638,9 +734,10 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setAlignOpen((prev) => !prev)}
+                onClick={() => toggleDropdown('align')}
                 title="Align"
-                className={iconBtnClass}
+                aria-expanded={alignOpen}
+                className={`${iconBtnClass} ${alignOpen ? 'bg-[var(--brand-soft)] !text-[var(--brand-text)]' : ''}`}
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="3" y1="6" x2="21" y2="6" />
@@ -651,9 +748,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
               {alignOpen && (
                 <div
-                  className={`absolute start-0 top-8 z-50 p-1 rounded-lg border shadow-xl w-24 backdrop-blur-xl ${
-                    isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
-                  }`}
+                  className="dashboard-tooltip absolute start-0 top-8 z-50 p-1 rounded-xl border w-24 animate-in fade-in duration-150"
                 >
                   <button
                     type="button"
@@ -662,7 +757,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                       execCmd('justifyLeft');
                       setAlignOpen(false);
                     }}
-                    className="w-full text-start px-2 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2 py-1 text-[12px] rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer"
                   >
                     ⇤
                   </button>
@@ -673,7 +768,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                       execCmd('justifyCenter');
                       setAlignOpen(false);
                     }}
-                    className="w-full text-start px-2 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2 py-1 text-[12px] rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer"
                   >
                     ⇔
                   </button>
@@ -684,7 +779,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                       execCmd('justifyRight');
                       setAlignOpen(false);
                     }}
-                    className="w-full text-start px-2 py-1 text-[12px] rounded hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)]"
+                    className="w-full text-start px-2 py-1 text-[12px] rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer"
                   >
                     ⇥
                   </button>
@@ -766,18 +861,19 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setHelpOpen((prev) => !prev)}
+              onClick={() => toggleDropdown('help')}
               title="?"
-              className="w-5 h-5 rounded-full border text-[11px] font-bold flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white border-black/15 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+              aria-expanded={helpOpen}
+              className={`w-5 h-5 rounded-full border text-[11px] font-bold flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white border-black/15 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer ${
+                helpOpen ? 'bg-[var(--brand-soft)] !text-[var(--brand-text)] !border-[var(--brand-border)]' : ''
+              }`}
             >
               ?
             </button>
 
             {helpOpen && (
               <div
-                className={`absolute end-0 top-7 z-50 p-3 rounded-xl border shadow-xl w-64 text-[11px] space-y-1.5 backdrop-blur-xl ${
-                  isDark ? 'bg-[#1F202A] border-[#343646] text-[#D8D8E0]' : 'bg-white border-[#E5E5EA] text-[#3A3A3C]'
-                }`}
+                className="dashboard-tooltip absolute end-0 top-7 z-50 p-3 rounded-xl border w-64 text-[11px] space-y-1.5 animate-in fade-in duration-150"
               >
                 <div className="font-bold text-[12px] pb-1 border-b border-black/10 dark:border-white/10 text-[var(--brand-text)]">
                   WYSIWYG
@@ -804,11 +900,14 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
         </div>
 
         {/* Main WYSIWYG ContentEditable Surface */}
-        <div className="relative p-3.5 sm:p-4">
+        <div className="relative p-3.5 sm:p-4 rounded-b-[11px]">
           <div
             ref={editorRef}
             contentEditable={true}
             onInput={handleInput}
+            onKeyUp={saveSelectionRange}
+            onMouseUp={saveSelectionRange}
+            onFocus={saveSelectionRange}
             onPaste={handlePaste}
             onKeyDown={handleKeyDown}
             style={{ minHeight: `${minHeight}px` }}

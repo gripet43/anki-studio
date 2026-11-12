@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useCountUp } from '../../hooks/useCountUp';
 import {
   formatFullDateWithWeekday,
-  formatShortcut,
   translate,
 } from '../../i18n/translations';
 import { appActions, setAppState, useAppStore } from '../../stores/useAppStore';
@@ -23,14 +22,12 @@ export const DashboardView: React.FC = () => {
     accentColor,
     resolvedLang,
     showShortcutHints,
-    envInfo,
   } = useAppStore();
 
   const isSyncPending = isInitialSyncing || syncing;
 
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
-  const platform = envInfo.platform;
 
   // Item #3: Interactive Floating Tooltips for Heatmap & Weekly Rhythm
   const [hoveredHeatmapCell, setHoveredHeatmapCell] = useState<{
@@ -205,7 +202,23 @@ export const DashboardView: React.FC = () => {
   };
 
   const maxWeeklyCount = Math.max(1, ...dashboard.weeklyRhythm.days.map((d) => d.count));
-  const displayName = dashboard.userName ? `, ${dashboard.userName}` : '';
+  const displayName = dashboard.userName
+    ? /[\u4e00-\u9fff]/.test(dashboard.greeting)
+      ? `，${dashboard.userName}`
+      : `, ${dashboard.userName}`
+    : '';
+  const formattedDateDisplay = useMemo(
+    () => dashboard.dateDisplay.replace(/(\d+)\s*月\s*(\d+)\s*日\s+/, '$1 月 $2 日 · '),
+    [dashboard.dateDisplay]
+  );
+  const dueReviewParts = useMemo(
+    () => t('dueReviewPill', { n: '__N__' }).split('__N__'),
+    [resolvedLang]
+  );
+  const dueNewParts = useMemo(
+    () => t('dueNewPill', { n: '__N__' }).split('__N__'),
+    [resolvedLang]
+  );
 
   const isVacationActive = Boolean(dashboard.vacation?.isActive);
   const vacDays = Math.max(1, dashboard.vacation?.days || 1);
@@ -238,27 +251,27 @@ export const DashboardView: React.FC = () => {
   }, [dashboard.vacation?.startDate, dashboard.vacation?.endDate, resolvedLang]);
 
   return (
-    <div className="dashboard-shell flex-1 h-screen overflow-y-auto px-5 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-6">
+    <div className="dashboard-shell flex-1 h-screen overflow-y-auto px-6 sm:px-8 lg:px-10 py-6 sm:py-8 space-y-7 sm:space-y-8">
       {/* Top Header Row — Synced Status Capsule & Cmd+K Search */}
       <header
         onMouseDown={startWindowDrag}
         onDoubleClick={handleWindowDoubleClick}
-        className="dashboard-header flex flex-wrap items-center justify-between gap-3 select-none cursor-default"
+        className="dashboard-header flex flex-wrap items-center justify-between gap-4 select-none cursor-default"
       >
         <div className="min-w-[180px]">
-          <h1 className="text-[20px] sm:text-[22px] font-bold tracking-tight max-w-full text-balance">
+          <h1 className="text-[22px] sm:text-[24px] font-bold tracking-tight max-w-full text-balance leading-tight">
             {dashboard.greeting}
             {displayName}
           </h1>
           {isSyncPending ? (
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-1.5">
               <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-ping shrink-0" />
               <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight">
                 {syncing ? t('syncingAnkiWebAria') : t('loadingLocalCollection')}
               </span>
             </div>
           ) : syncJustFinished ? (
-            <div className="flex items-center gap-1.5 mt-1 animate-sync-reveal">
+            <div className="flex items-center gap-1.5 mt-1.5 animate-sync-reveal">
               <svg className="w-3.5 h-3.5 text-[var(--status-success)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" className="animate-draw-check" />
               </svg>
@@ -267,22 +280,20 @@ export const DashboardView: React.FC = () => {
               </span>
             </div>
           ) : (
-            <p className={`text-[13px] ${subText} mt-0.5 font-medium`}>
-              {dashboard.dateDisplay}
+            <p className={`text-[13px] ${subText} mt-1.5 font-medium`}>
+              {formattedDateDisplay}
             </p>
           )}
         </div>
 
-        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 ms-auto">
-          {/* Apple Inset Translucent Synced Status Capsule with Rich Flyout */}
+        <div className="flex items-center gap-3 sm:gap-4 shrink-0 ms-auto">
+          {/* Inline Sync Status Indicator with Rich Flyout */}
           <SyncStatusPill />
 
           {/* Cmd+K Global Search Box */}
           <button
             onClick={() => setAppState({ cmdKOpen: true })}
-            className={`h-9 ${
-              showShortcutHints ? 'w-[190px] sm:w-[220px]' : 'w-[156px] sm:w-[180px]'
-            } px-3.5 rounded-xl border text-[12px] flex items-center justify-between cursor-pointer transition-all hover:border-[var(--brand-border)] ${cardSurface}`}
+            className={`h-9 w-[204px] sm:w-[236px] px-3.5 rounded-xl border text-[12.5px] flex items-center gap-2 cursor-pointer transition-all hover:border-[var(--brand-border)] ${cardSurface}`}
           >
             <span className={`flex items-center gap-2 ${subText} truncate`}>
               <svg
@@ -295,15 +306,8 @@ export const DashboardView: React.FC = () => {
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
-              <span className="truncate">{t('searchPlaceholder')}</span>
+              <span className="truncate">{t('cmdPaletteAriaLabel').replace(/^全局/, '')}</span>
             </span>
-            {showShortcutHints && (
-              <kbd
-                className="px-1.5 py-0.5 text-[10px] rounded border shrink-0 bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-muted)]"
-              >
-                {formatShortcut('Cmd K', platform)}
-              </kbd>
-            )}
           </button>
         </div>
       </header>
@@ -543,7 +547,7 @@ export const DashboardView: React.FC = () => {
 
           {/* Dynamic Today's Study Progress Board / Active Vacation Protection Hero */}
           <section
-            className={`dashboard-hero relative rounded-2xl border p-5 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5 lg:gap-8 transition-all duration-500 ${cardSurface} ${
+            className={`dashboard-hero relative rounded-[24px] border px-7 sm:px-9 py-6 sm:py-7 flex flex-col lg:flex-row lg:items-center justify-between gap-6 lg:gap-8 transition-all duration-500 ${cardSurface} ${
               isSyncPending
                 ? 'border-[var(--brand-border)] shadow-md ring-1 ring-[var(--brand)]/20'
                 : isVacationActive
@@ -555,185 +559,168 @@ export const DashboardView: React.FC = () => {
           >
             {/* 背景火焰：裁切只作用在这一层，卡片本身不裁，否则连胜说明浮层会被切掉 */}
             <div
-              className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl"
+              className="pointer-events-none absolute inset-0 overflow-hidden rounded-[24px]"
               aria-hidden="true"
             >
               <StreakFlameBackdrop isDark={isDark} />
             </div>
-            <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-7 flex-1 min-w-0">
-              {/* Left Ring */}
-              <div
-                className="relative w-[112px] h-[112px] shrink-0 flex items-center justify-center"
-                role="progressbar"
-                aria-valuenow={isVacationActive ? vacRemaining : completed}
-                aria-valuemin={0}
-                aria-valuemax={isVacationActive ? vacDays : totalWorkload}
-                aria-label={isVacationActive ? t('vacationModalTitle') : t('todayProgressTitle')}
-              >
-                <svg className="w-full h-full -rotate-90" viewBox="0 0 112 112">
-                  <circle
-                    cx="56"
-                    cy="56"
-                    r={radius}
-                    stroke="var(--dashboard-track)"
-                    strokeWidth="9"
-                    fill="none"
-                  />
-                  <circle
-                    cx="56"
-                    cy="56"
-                    r={radius}
-                    stroke={
-                      isSyncPending
-                        ? 'var(--status-warning)'
-                        : isVacationActive
-                        ? 'var(--status-success)'
-                        : brandHex
-                    }
-                    strokeWidth="9"
-                    strokeLinecap="round"
-                    fill="none"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={
-                      isSyncPending
-                        ? circumference * 0.75
-                        : isVacationActive
-                        ? vacDashoffset
-                        : strokeDashoffset
-                    }
-                    style={{
-                      transition: 'stroke-dashoffset 0.85s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.3s ease',
-                    }}
-                    className={isSyncPending ? 'animate-spin origin-center' : ''}
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  {isSyncPending ? (
-                    <>
-                      <div className="w-4 h-4 rounded-full border-2 border-[var(--status-warning)]/20 border-t-[var(--status-warning)] animate-spin" />
-                      <span className="text-[10px] text-[var(--status-warning)] font-semibold mt-1">
-                        {t('syncing')}
-                      </span>
-                    </>
-                  ) : isVacationActive ? (
-                    <>
-                      <span className="text-[25px] font-bold leading-none text-[var(--status-success)]">
-                        {vacRemaining}
-                        <span className="text-[12px] font-semibold ms-0.5">
-                          {t('daysUnit')}
-                        </span>
-                      </span>
-                      <span className={`text-[10px] ${subText} mt-1 font-mono`}>
-                        / {vacDays} {t('daysUnit')}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span className={`text-[26px] font-bold leading-none tabular-nums ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
-                        {animatedCompleted}
-                      </span>
-                      <span className={`text-[11px] ${subText} mt-1`}>
-                        / {totalWorkload} {t('cardsUnit')}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
 
-              {/* Central Overview */}
-              {isVacationActive && !isSyncPending ? (
-                <div className="space-y-3 flex-1 min-w-[200px]">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--status-success-soft)] text-[var(--status-success)]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] animate-pulse" />
-                      <span>{t('vacationActiveBadge')}</span>
-                    </span>
-                    {dashboard.vacation?.reason && (
-                      <span className={`text-[12px] font-medium ${subText}`}>
-                        · {dashboard.vacation.reason}
-                      </span>
+            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 lg:gap-8 flex-1 min-w-0">
+              {/* Left + Center-Left: Ring & 3-Line Progress Stack */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 sm:gap-7 min-w-0">
+                {/* Zone 1: Left Circular Ring */}
+                <div
+                  className="relative w-[104px] h-[104px] shrink-0 flex items-center justify-center"
+                  role="progressbar"
+                  aria-valuenow={isVacationActive ? vacRemaining : completed}
+                  aria-valuemin={0}
+                  aria-valuemax={isVacationActive ? vacDays : totalWorkload}
+                  aria-label={isVacationActive ? t('vacationModalTitle') : t('todayProgressTitle')}
+                >
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 112 112">
+                    <circle
+                      cx="56"
+                      cy="56"
+                      r={radius}
+                      stroke="var(--dashboard-track)"
+                      strokeWidth="8.5"
+                      fill="none"
+                    />
+                    <circle
+                      cx="56"
+                      cy="56"
+                      r={radius}
+                      stroke={
+                        isSyncPending
+                          ? 'var(--status-warning)'
+                          : isVacationActive
+                          ? 'var(--status-success)'
+                          : brandHex
+                      }
+                      strokeWidth="8.5"
+                      strokeLinecap="round"
+                      fill="none"
+                      strokeDasharray={circumference}
+                      strokeDashoffset={
+                        isSyncPending
+                          ? circumference * 0.75
+                          : isVacationActive
+                          ? vacDashoffset
+                          : strokeDashoffset
+                      }
+                      style={{
+                        transition: 'stroke-dashoffset 0.85s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.3s ease',
+                      }}
+                      className={isSyncPending ? 'animate-spin origin-center' : ''}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    {isSyncPending ? (
+                      <>
+                        <div className="w-4 h-4 rounded-full border-2 border-[var(--status-warning)]/20 border-t-[var(--status-warning)] animate-spin" />
+                        <span className="text-[10px] text-[var(--status-warning)] font-semibold mt-1">
+                          {t('syncing')}
+                        </span>
+                      </>
+                    ) : isVacationActive ? (
+                      <>
+                        <span className="text-[25px] font-bold leading-none text-[var(--status-success)]">
+                          {vacRemaining}
+                          <span className="text-[12px] font-semibold ms-0.5">
+                            {t('daysUnit')}
+                          </span>
+                        </span>
+                        <span className={`text-[10px] ${subText} mt-1 font-mono`}>
+                          / {vacDays} {t('daysUnit')}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className={`text-[26px] font-extrabold leading-none tracking-tight tabular-nums ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
+                          {animatedCompleted}
+                        </span>
+                        <span className={`text-[11px] ${subText} mt-1.5 font-medium tabular-nums`}>
+                          / {totalWorkload} {t('cardsUnit')}
+                        </span>
+                      </>
                     )}
                   </div>
+                </div>
 
-                  <div className="space-y-1">
-                    <div className="flex items-baseline gap-2.5 flex-wrap">
-                      <span className="text-[22px] font-bold tracking-tight whitespace-nowrap">
+                {/* Zone 2: 3-Line Progress Stack */}
+                {isVacationActive && !isSyncPending ? (
+                  <div className="space-y-2.5 min-w-[200px]">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--status-success-soft)] text-[var(--status-success)]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] animate-pulse" />
+                        <span>{t('vacationActiveBadge')}</span>
+                      </span>
+                      {dashboard.vacation?.reason && (
+                        <span className={`text-[12px] font-medium ${subText}`}>
+                          · {dashboard.vacation.reason}
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[22px] font-bold tracking-tight whitespace-nowrap block">
                         {vacationTimelineInfo.startLabel} – {vacationTimelineInfo.endLabel}
                       </span>
+                      <p className={`text-[12px] ${subText} font-medium`}>
+                        {t('vacationSafeguardsSummary')}
+                      </p>
                     </div>
-                    <p className={`text-[12px] ${subText} font-medium`}>
-                      {t('vacationSafeguardsSummary')}
-                    </p>
                   </div>
+                ) : (
+                  <div className="flex flex-col justify-center min-w-[200px]">
+                    <div>
+                      <span className={`text-[13px] font-medium whitespace-nowrap ${subText}`}>
+                        {t('todayProgressTitle')}
+                      </span>
+                    </div>
 
-                  <div className="flex items-center gap-2.5 flex-wrap pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => appActions.openVacationModal('status')}
-                      style={{ backgroundColor: brandHex }}
-                      className="btn-primary !h-9 !px-4 !text-[12px] flex items-center gap-1.5 whitespace-nowrap"
-                    >
-                      <span>{t('endVacationBtn')}</span>
-                    </button>
+                    <div className="mt-2.5">
+                      {isSyncPending ? (
+                        <div className="h-8 w-52 rounded-lg animate-skeleton-shimmer" />
+                      ) : totalPending > 0 ? (
+                        <div className={`flex items-baseline gap-2.5 flex-wrap ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
+                          <span className="text-[27px] sm:text-[29px] font-extrabold tracking-tight leading-none whitespace-nowrap">
+                            {t('remainingCards', { n: totalPending })}
+                          </span>
+                          <span className={`text-[13.5px] font-medium whitespace-nowrap ${subText}`}>
+                            {t('estimatedMinutes', { n: dashboard.todayStats.estimatedMinutes })}
+                          </span>
+                        </div>
+                      ) : completed > 0 ? (
+                        <div className={`flex items-baseline gap-2.5 flex-wrap ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
+                          <span className="text-[18px] sm:text-[20px] font-bold tracking-tight text-[var(--status-success)] flex items-center gap-2 whitespace-nowrap">
+                            <svg className="w-5 h-5 text-[var(--status-success)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <circle cx="12" cy="12" r="10" />
+                              <polyline points="16 10 11 15 8 12" />
+                            </svg>
+                            <span>{t('allClearedTitle')}</span>
+                          </span>
+                          <span className={`text-[13px] whitespace-nowrap ${subText}`}>
+                            {t('allClearedSub', { n: completed })}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className={`flex items-baseline gap-2.5 flex-wrap ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
+                          <span className="text-[18px] sm:text-[20px] font-bold tracking-tight whitespace-nowrap">
+                            {t('noDueTodayTitle')}
+                          </span>
+                          <span className={`text-[13px] whitespace-nowrap ${subText}`}>{t('noDueTodaySub')}</span>
+                        </div>
+                      )}
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setAppState({ activeTab: 'library' })}
-                      className="btn-secondary !h-9 !px-3.5 !text-[12px] whitespace-nowrap"
-                    >
-                      {t('navLibrary')}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3 flex-1 min-w-[200px]">
-                  <div>
-                    <span className={`text-[12px] font-medium whitespace-nowrap ${subText}`}>
-                      {t('todayProgressTitle')}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* Inline Typographic Breakdown: 待复习 14 · 新卡 2 */}
                     {isSyncPending ? (
-                      <div className="h-8 w-56 rounded-lg animate-skeleton-shimmer" />
-                    ) : totalPending > 0 ? (
-                      <div className={`flex items-baseline gap-2.5 flex-wrap ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
-                        <span className="text-[24px] sm:text-[26px] font-bold tracking-tight whitespace-nowrap">
-                          {t('remainingCards', { n: totalPending })}
-                        </span>
-                        <span className={`text-[13px] whitespace-nowrap ${subText}`}>
-                          {t('estimatedMinutes', { n: dashboard.todayStats.estimatedMinutes })}
-                        </span>
-                      </div>
-                    ) : completed > 0 ? (
-                      <div className={`flex items-baseline gap-2.5 flex-wrap ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
-                        <span className="text-[18px] sm:text-[20px] font-bold tracking-tight text-[var(--status-success)] flex items-center gap-2 whitespace-nowrap">
-                          <svg className="w-5 h-5 text-[var(--status-success)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <circle cx="12" cy="12" r="10" />
-                            <polyline points="16 10 11 15 8 12" />
-                          </svg>
-                          <span>{t('allClearedTitle')}</span>
-                        </span>
-                        <span className={`text-[13px] whitespace-nowrap ${subText}`}>
-                          {t('allClearedSub', { n: completed })}
-                        </span>
+                      <div className="flex items-center gap-2 mt-3">
+                        <div className="h-5 w-20 rounded animate-skeleton-shimmer" />
+                        <div className="h-5 w-16 rounded animate-skeleton-shimmer" />
                       </div>
                     ) : (
-                      <div className={`flex items-baseline gap-2.5 flex-wrap ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
-                        <span className="text-[18px] sm:text-[20px] font-bold tracking-tight whitespace-nowrap">
-                          {t('noDueTodayTitle')}
-                        </span>
-                        <span className={`text-[13px] whitespace-nowrap ${subText}`}>{t('noDueTodaySub')}</span>
-                      </div>
-                    )}
-                    {isSyncPending ? (
-                      <div className="flex items-center gap-2">
-                        <div className="h-7 w-20 rounded-full animate-skeleton-shimmer" />
-                        <div className="h-7 w-16 rounded-full animate-skeleton-shimmer" />
-                        <div className="h-7 w-20 rounded-full animate-skeleton-shimmer" />
-                      </div>
-                    ) : (
-                      <div className={`flex items-center gap-2 flex-wrap ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
+                      <div className={`flex items-center gap-2.5 flex-wrap mt-3 text-[13px] ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
                         <button
                           type="button"
                           onClick={() => {
@@ -747,11 +734,18 @@ export const DashboardView: React.FC = () => {
                             });
                           }}
                           title={t('dueReviewPill', { n: dashboard.todayStats.dueReview })}
-                          className="dashboard-stat-pill px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)] hover:opacity-85 cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                          className={`dashboard-stat-pill -mx-1.5 px-1.5 py-0.5 rounded-lg inline-flex items-baseline gap-1 whitespace-nowrap hover:bg-black/[0.04] dark:hover:bg-white/[0.06] cursor-pointer ${subText}`}
                         >
-                          <span className="w-2 h-2 rounded-full bg-[var(--brand)]" aria-hidden="true" />
-                          <span>{t('dueReviewPill', { n: dashboard.todayStats.dueReview })}</span>
+                          <span>{dueReviewParts[0]}</span>
+                          <strong className="font-bold text-[13.5px] text-[var(--text-primary)] tabular-nums">
+                            {dashboard.todayStats.dueReview}
+                          </strong>
+                          {dueReviewParts[1] && <span>{dueReviewParts[1]}</span>}
                         </button>
+
+                        <span aria-hidden="true" className="text-[var(--text-muted)] opacity-55 select-none">
+                          •
+                        </span>
 
                         <button
                           type="button"
@@ -766,150 +760,170 @@ export const DashboardView: React.FC = () => {
                             });
                           }}
                           title={t('dueNewPill', { n: dashboard.todayStats.dueNew })}
-                          className="dashboard-stat-pill px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--status-warning-soft)] text-[var(--status-warning)] hover:opacity-85 cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                          className={`dashboard-stat-pill -mx-1.5 px-1.5 py-0.5 rounded-lg inline-flex items-baseline gap-1 whitespace-nowrap hover:bg-black/[0.04] dark:hover:bg-white/[0.06] cursor-pointer ${subText}`}
                         >
-                          <span className="w-2 h-2 rounded-full bg-[var(--status-warning)]" aria-hidden="true" />
-                          <span>{t('dueNewPill', { n: dashboard.todayStats.dueNew })}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAppState({ activeTab: 'library' });
-                            appActions.searchLibraryDebounced({
-                              status: 'completed',
-                              query: '',
-                              difficulty: 'all',
-                              tag: 'all',
-                              deckId: 'all',
-                            });
-                          }}
-                          title={t('completedPill', { n: completed })}
-                          className="dashboard-stat-pill px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--status-success-soft)] text-[var(--status-success)] hover:opacity-85 cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
-                        >
-                          <span className="w-2 h-2 rounded-full bg-[var(--status-success)]" aria-hidden="true" />
-                          <span>{t('completedPill', { n: completed })}</span>
+                          <span>{dueNewParts[0]}</span>
+                          <strong className="font-bold text-[13.5px] text-[var(--text-primary)] tabular-nums">
+                            {dashboard.todayStats.dueNew}
+                          </strong>
+                          {dueNewParts[1] && <span>{dueNewParts[1]}</span>}
                         </button>
 
                         {dashboard.todayStats.dueReview >= 60 && (
-                          <button
-                            type="button"
-                            onClick={() => appActions.openIcuModal('rescue')}
-                            className="dashboard-stat-pill px-3 py-1.5 rounded-full text-[12px] font-medium flex items-center gap-1.5 whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)] hover:opacity-90 cursor-pointer"
-                          >
-                            <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M3 17l6-6 4 4 8-8" />
-                              <path d="M17 7h4v4" />
-                            </svg>
-                            <span>{t('backlogRescueBtn')}</span>
-                          </button>
+                          <>
+                            <span aria-hidden="true" className="text-[var(--text-muted)] opacity-55 select-none">
+                              •
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => appActions.openIcuModal('rescue')}
+                              className="dashboard-stat-pill px-2 py-0.5 rounded-full text-[11.5px] font-medium inline-flex items-center gap-1 whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)] hover:opacity-90 cursor-pointer"
+                            >
+                              <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M3 17l6-6 4 4 8-8" />
+                                <path d="M17 7h4v4" />
+                              </svg>
+                              <span>{t('backlogRescueBtn')}</span>
+                            </button>
+                          </>
                         )}
                       </div>
                     )}
                   </div>
+                )}
+              </div>
 
-                  {/* Primary Action Button & Breakdown Pills */}
-                  <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap pt-0.5">
-                    {isSyncPending ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="h-10 px-5 rounded-xl border font-medium text-[13px] flex items-center gap-2 cursor-wait whitespace-nowrap bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
+              {/* Zone 3: Horizontally Centered Action Buttons (Right of Progress Text) */}
+              <div className="flex items-center gap-3 flex-wrap lg:ms-auto lg:me-6">
+                {isSyncPending ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="h-10 px-5 rounded-xl border font-medium text-[13px] flex items-center gap-2 cursor-wait whitespace-nowrap bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                  >
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-[var(--status-warning)]/30 border-t-[var(--status-warning)] animate-spin" />
+                    <span>{t('syncing')}</span>
+                  </button>
+                ) : isVacationActive ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => appActions.openVacationModal('status')}
+                      style={{ backgroundColor: brandHex }}
+                      className="btn-primary !h-10 !px-5 !rounded-xl !text-[13px] flex items-center gap-1.5 whitespace-nowrap"
+                    >
+                      <span>{t('endVacationBtn')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAppState({ activeTab: 'library' })}
+                      className="btn-secondary !h-10 !px-4 !rounded-xl !text-[13px] bg-[var(--bg-card)]/90 whitespace-nowrap"
+                    >
+                      {t('navLibrary')}
+                    </button>
+                  </>
+                ) : totalPending > 0 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => appActions.startReview(decks[0]?.id)}
+                      style={{ backgroundColor: brandHex }}
+                      className={`btn-primary !h-10 !px-5 !rounded-xl !text-[13px] font-semibold flex items-center gap-2 whitespace-nowrap shadow-[0_4px_12px_rgba(var(--brand-rgb),0.24)] ${
+                        syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
+                      }`}
+                    >
+                      <svg className="w-3 h-3 fill-current shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                        <polygon points="6 4 20 12 6 20 6 4" />
+                      </svg>
+                      <span>{t('startTodayStudy')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => appActions.startLowEnergySession(decks[0]?.id)}
+                      className="btn-secondary !h-10 !px-4 !rounded-xl !text-[13px] font-medium bg-[var(--bg-card)]/90 text-[var(--text-primary)] hover:text-[var(--brand-text)] flex items-center gap-1.5 whitespace-nowrap shadow-2xs"
+                      title={t('lowEnergySub')}
+                    >
+                      <svg
+                        className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
                       >
-                        <span className="w-3.5 h-3.5 rounded-full border-2 border-[var(--status-warning)]/30 border-t-[var(--status-warning)] animate-spin" />
-                        <span>{t('syncing')}</span>
-                      </button>
-                    ) : totalPending > 0 ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => appActions.startReview(decks[0]?.id)}
-                          style={{ backgroundColor: brandHex }}
-                          className={`btn-primary !h-10 !px-6 whitespace-nowrap ${
-                            syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
-                          }`}
-                        >
-                          <span className="text-xs">▶</span>
-                          <span>{t('startTodayStudy')}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => appActions.startLowEnergySession(decks[0]?.id)}
-                          className="btn-secondary !h-10 !px-3.5 text-[var(--text-secondary)] hover:text-current flex items-center gap-1.5 whitespace-nowrap"
-                          title={t('lowEnergySub')}
-                        >
-                          <svg
-                            className="w-3.5 h-3.5 text-[var(--brand-text)] shrink-0"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
-                          >
-                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                          </svg>
-                          <span>{t('lowEnergyBtn')}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => appActions.openCustomStudyModal('mistakes')}
-                          className="btn-secondary !h-10 !px-3.5 text-[var(--text-secondary)] hover:text-current flex items-center gap-1.5 whitespace-nowrap"
-                          title={t('customStudyModalTitle')}
-                        >
-                          <svg
-                            className="w-3.5 h-3.5 text-[var(--brand-text)] shrink-0"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                          >
-                            <circle cx="12" cy="12" r="10" />
-                            <circle cx="12" cy="12" r="4" />
-                          </svg>
-                          <span>{t('customStudyEntryBtn')}</span>
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => appActions.openCustomStudyModal('mistakes')}
-                          style={{ backgroundColor: brandHex }}
-                          className={`btn-primary !h-10 !px-5 flex items-center gap-1.5 whitespace-nowrap ${
-                            syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
-                          }`}
-                        >
-                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                            <circle cx="12" cy="12" r="10" />
-                            <circle cx="12" cy="12" r="4" />
-                          </svg>
-                          <span>{t('customStudyEntryBtn')}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAppState({ activeTab: 'library' })}
-                          className={`btn-secondary !h-10 !px-5 whitespace-nowrap ${
-                            syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
-                          }`}
-                        >
-                          {t('browseAllLibraryBtn')}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                      </svg>
+                      <span>{t('lowEnergyBtn')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => appActions.openCustomStudyModal('mistakes')}
+                      className="btn-secondary !h-10 !px-4 !rounded-xl !text-[13px] font-medium bg-[var(--bg-card)]/90 text-[var(--text-primary)] hover:text-[var(--brand-text)] flex items-center gap-1.5 whitespace-nowrap shadow-2xs"
+                      title={t('customStudyModalTitle')}
+                    >
+                      <svg
+                        className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <line x1="4" y1="6" x2="20" y2="6" />
+                        <circle cx="9" cy="6" r="2" />
+                        <line x1="4" y1="12" x2="20" y2="12" />
+                        <circle cx="15" cy="12" r="2" />
+                        <line x1="4" y1="18" x2="20" y2="18" />
+                        <circle cx="10" cy="18" r="2" />
+                      </svg>
+                      <span>{t('customStudyEntryBtn')}</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => appActions.openCustomStudyModal('mistakes')}
+                      style={{ backgroundColor: brandHex }}
+                      className={`btn-primary !h-10 !px-5 !rounded-xl !text-[13px] flex items-center gap-1.5 whitespace-nowrap ${
+                        syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
+                      }`}
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <line x1="4" y1="6" x2="20" y2="6" />
+                        <circle cx="9" cy="6" r="2" />
+                        <line x1="4" y1="12" x2="20" y2="12" />
+                        <circle cx="15" cy="12" r="2" />
+                        <line x1="4" y1="18" x2="20" y2="18" />
+                        <circle cx="10" cy="18" r="2" />
+                      </svg>
+                      <span>{t('customStudyEntryBtn')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAppState({ activeTab: 'library' })}
+                      className={`btn-secondary !h-10 !px-5 !rounded-xl !text-[13px] bg-[var(--bg-card)]/90 whitespace-nowrap ${
+                        syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
+                      }`}
+                    >
+                      {t('browseAllLibraryBtn')}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
-            {/* Right: Clean, un-crammed Streak Details Card (stacks cleanly below on < lg windows) */}
+            {/* Zone 4: Right Streak Details over Flame Backdrop (No vertical border line on desktop) */}
             <div
-              className={`relative shrink-0 pt-4 lg:pt-0 lg:ps-8 border-t lg:border-t-0 lg:border-s dashboard-divider flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center text-start lg:text-end min-w-[140px] ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}
+              className={`relative shrink-0 pt-4 lg:pt-0 lg:ps-4 border-t lg:border-t-0 dashboard-divider flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center text-start lg:text-end min-w-[116px] ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}
             >
-              <div className="relative z-10 flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center w-full gap-3 lg:gap-0">
+              <div className="relative z-10 flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center w-full gap-3 lg:gap-2.5">
                 <div className="flex items-center lg:justify-end gap-1.5 whitespace-nowrap">
-                  <span className={`text-[12px] ${subText}`}>{t('streakTitle')}</span>
+                  <span className={`text-[13px] font-medium ${subText}`}>{t('streakTitle')}</span>
                   <span className="relative inline-flex group/streak">
                     <button
                       type="button"
@@ -934,7 +948,7 @@ export const DashboardView: React.FC = () => {
                       className="dashboard-tooltip pointer-events-none absolute end-0 top-full z-50 mt-2 w-[248px] rounded-xl border px-3 py-2.5 text-start whitespace-normal text-[11px] leading-[1.6] opacity-0 translate-y-1 transition-[opacity,transform] duration-150 group-hover/streak:opacity-100 group-hover/streak:translate-y-0 group-focus-within/streak:opacity-100 group-focus-within/streak:translate-y-0"
                     >
                       <span className="block font-semibold mb-1">
-                        {t('streakRulesTooltipTitle')}
+                        {t('streakRulesTooltipTitle')} · {t('streakSub', { longest: dashboard.streak.longest })}
                       </span>
                       {t('streakRulesTooltipBody')}
                     </span>
@@ -945,34 +959,28 @@ export const DashboardView: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <div className="flex items-baseline lg:flex-col lg:items-end gap-2 lg:gap-0">
+                <div className="flex items-baseline lg:justify-end gap-1 whitespace-nowrap">
                   {isSyncPending ? (
-                    <div className="h-8 w-20 rounded-lg animate-skeleton-shimmer lg:mt-1 self-end" />
+                    <div className="h-8 w-16 rounded-lg animate-skeleton-shimmer lg:mt-1 self-end" />
                   ) : (
-                    <div className="lg:mt-1 flex items-baseline justify-end gap-1.5 whitespace-nowrap">
-                      {/* 火苗图标已去掉，改用火焰色数字承载「连胜」语义（#FF8A00 与背景火焰同色系） */}
-                      <span className="text-[26px] sm:text-[28px] font-bold leading-none tabular-nums text-[var(--status-warning)]">
+                    <>
+                      <span className="text-[32px] sm:text-[35px] font-extrabold leading-none tracking-tight tabular-nums text-[#EA580C] dark:text-[#FB923C]">
                         {animatedStreakDays}
                       </span>
-                      <span className={`text-[13px] ${subText}`}>{t('daysUnit')}</span>
-                    </div>
+                      <span className={`text-[13px] font-medium ${subText}`}>{t('daysUnit')}</span>
+                    </>
                   )}
-                  <div className={`text-[11px] whitespace-nowrap ${subText} lg:mt-1.5`}>
-                    {t('streakSub', {
-                      longest: dashboard.streak.longest,
-                    })}
-                  </div>
                 </div>
               </div>
             </div>
           </section>
 
           {/* Deck Cards Grid */}
-          <section className="space-y-3.5">
+          <section className="space-y-4">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-baseline gap-2.5 flex-wrap">
-                <h2 className="text-[15px] font-bold whitespace-nowrap">{t('myDecksTitle')}</h2>
-                <span className={`text-[12px] whitespace-nowrap ${subText}`}>
+                <h2 className="text-[15.5px] font-bold whitespace-nowrap">{t('myDecksTitle')}</h2>
+                <span className={`text-[12.5px] whitespace-nowrap ${subText}`}>
                   {/* 没有子牌组时 top 与 total 相等，再写「N 个主牌组 · 共 N 个牌组」就是同义反复 */}
                   {topLevelDecks.length === decks.length
                     ? t('decksTotalOnly', { n: decks.length })
@@ -1007,13 +1015,13 @@ export const DashboardView: React.FC = () => {
             </div>
 
             {isSyncPending ? (
-              <div className="dashboard-deck-grid grid gap-4">
+              <div className="dashboard-deck-grid grid gap-5">
                 {Array.from({ length: 2 }).map((_, idx) => (
                   <div
                     key={idx}
-                    className={`rounded-2xl border p-5 flex flex-col ${cardSurface}`}
+                    className={`rounded-2xl border px-6 py-5.5 flex flex-col ${cardSurface}`}
                   >
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3.5">
                       <div className="w-10 h-10 rounded-xl animate-skeleton-shimmer shrink-0" />
                       <div className="space-y-2 flex-1 pt-0.5">
                         <div className="w-24 h-4 rounded animate-skeleton-shimmer" />
@@ -1024,8 +1032,8 @@ export const DashboardView: React.FC = () => {
                         <div className="w-10 h-2.5 rounded animate-skeleton-shimmer" />
                       </div>
                     </div>
-                    <div className="w-full h-1.5 rounded-full animate-skeleton-shimmer mt-4" />
-                    <div className="flex items-center justify-between mt-4">
+                    <div className="w-full h-1.5 rounded-full animate-skeleton-shimmer mt-5" />
+                    <div className="flex items-center justify-between mt-4.5">
                       <div className="w-28 h-3 rounded animate-skeleton-shimmer" />
                       <div className="w-24 h-7 rounded-lg animate-skeleton-shimmer" />
                     </div>
@@ -1038,7 +1046,7 @@ export const DashboardView: React.FC = () => {
                 <p className={`text-[12px] ${subText}`}>{t('noDecksSub')}</p>
               </div>
             ) : (
-              <div className="dashboard-deck-grid grid gap-4">
+              <div className="dashboard-deck-grid grid gap-5">
                 {displayedDecks.map((deck) => {
                   const iconNode = deckIconMap[deck.accent] || deckIconMap.indigo;
                   const deckScale = getAccentScale(deckAccentToTheme[deck.accent] || 'indigo', theme);
@@ -1064,14 +1072,17 @@ export const DashboardView: React.FC = () => {
                       style={{
                         '--deck-brand': deckScale.brand,
                         '--deck-brand-hover': deckScale.brandHover,
+                        '--deck-brand-soft': deckScale.brandSoft,
+                        '--deck-brand-soft-strong': deckScale.brandSoftStrong,
+                        '--deck-brand-text': deckScale.brandText,
                         '--deck-border': deckScale.brandBorder,
                       } as React.CSSProperties}
-                      className={`deck-card group relative flex cursor-pointer flex-col rounded-2xl border p-5 transition-[transform,border-color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:border-[var(--deck-border)] focus-within:border-[var(--deck-border)] ${cardSurface} ${hintOpen ? 'z-30' : ''} ${
+                      className={`deck-card group relative flex cursor-pointer flex-col rounded-2xl border px-6 py-5.5 transition-[transform,border-color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:border-[var(--deck-border)] focus-within:border-[var(--deck-border)] ${cardSurface} ${hintOpen ? 'z-30' : ''} ${
                         syncJustFinished ? 'animate-sync-reveal delay-stagger-2' : ''
                       }`}
                     >
                       {/* Identity + mastery hero stat */}
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-start gap-3.5">
                         <div
                           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform duration-[var(--dur-base)] ease-[var(--ease-out)] group-hover:scale-105"
                           style={{ backgroundColor: deckScale.brandSoft, color: deckScale.brandText }}
@@ -1079,8 +1090,8 @@ export const DashboardView: React.FC = () => {
                           {iconNode}
                         </div>
                         <div className="min-w-0 flex-1 pt-0.5">
-                          <h3 className="truncate text-[14px] font-semibold leading-tight">{deck.name}</h3>
-                          <div className={`mt-1 truncate text-[11px] ${subText}`}>
+                          <h3 className="truncate text-[14.5px] font-semibold leading-tight">{deck.name}</h3>
+                          <div className={`mt-1.5 truncate text-[11.5px] ${subText}`}>
                             {deck.totalCards.toLocaleString()} {t('cardsUnit')}
                             {deck.childrenCount > 0
                               ? t('subDecksCount', { n: deck.childrenCount })
@@ -1101,11 +1112,11 @@ export const DashboardView: React.FC = () => {
                           }}
                           className="group/mastery -m-1 shrink-0 cursor-help rounded-lg p-1 text-right outline-none focus-visible:ring-2 focus-visible:ring-[var(--deck-border)]"
                         >
-                          <div className="text-[18px] font-bold leading-none tabular-nums tracking-tight transition-colors duration-[var(--dur-fast)] group-hover/mastery:text-[var(--deck-brand)]">
+                          <div className="text-[19px] font-bold leading-none tabular-nums tracking-tight transition-colors duration-[var(--dur-fast)] group-hover/mastery:text-[var(--deck-brand)]">
                             {deck.mastery}
                             <span className={`text-[12px] font-semibold ${subText}`}>%</span>
                           </div>
-                          <div className={`mt-1 text-[10px] font-medium tracking-wide ${subText}`}>
+                          <div className={`mt-1.5 text-[10.5px] font-medium tracking-wide ${subText}`}>
                             {t('masteryLabel')}
                           </div>
                         </div>
@@ -1113,7 +1124,7 @@ export const DashboardView: React.FC = () => {
 
                       {/* Full-width segmented mastery bar */}
                       <div
-                        className="mt-4 flex h-1.5 w-full overflow-hidden rounded-full"
+                        className="mt-5 flex h-1.5 w-full overflow-hidden rounded-full"
                         style={{ backgroundColor: trackColor }}
                         role="img"
                         aria-label={`${deck.name} ${t('masteryLabel')} ${deck.mastery}%`}
@@ -1125,8 +1136,8 @@ export const DashboardView: React.FC = () => {
                       </div>
 
                       {/* Due indicators + persistent actions */}
-                      <div className="mt-4 flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-3 text-[11px]">
+                      <div className="mt-4.5 flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-3.5 text-[11.5px]">
                           <span className="flex items-center gap-1.5 whitespace-nowrap font-semibold" style={{ color: deckScale.brandText }}>
                             <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: deckScale.brand }} />
                             {t('dueReviewPill', { n: deck.dueReview })}
@@ -1141,7 +1152,7 @@ export const DashboardView: React.FC = () => {
                             </span>
                           </span>
                         </div>
-                        <div className="flex shrink-0 items-center gap-1.5">
+                        <div className="flex shrink-0 items-center gap-2">
                           <button
                             type="button"
                             title={t('viewInLibraryBtn')}
@@ -1208,10 +1219,10 @@ export const DashboardView: React.FC = () => {
           </section>
 
           {/* Bottom Analytics Row: Activity Heatmap & Weekly Rhythm */}
-          <section className="dashboard-analytics-grid grid grid-cols-12 gap-4 pb-4">
+          <section className="dashboard-analytics-grid grid grid-cols-12 gap-5 pb-4">
             {/* Left: Heatmap */}
             <div
-              className={`col-span-12 xl:col-span-7 rounded-2xl border p-5 sm:p-6 flex flex-col justify-between relative ${cardSurface} ${
+              className={`col-span-12 xl:col-span-7 rounded-2xl border p-6 sm:p-7 flex flex-col justify-between relative ${cardSurface} ${
                 syncJustFinished ? 'animate-sync-reveal delay-stagger-3' : ''
               }`}
             >
@@ -1219,7 +1230,7 @@ export const DashboardView: React.FC = () => {
                 <div className="flex flex-col justify-between h-full gap-4">
                   <div className="flex items-start justify-between">
                     <div>
-                      <h3 className="text-[14px] font-bold">{t('heatmapTitle')}</h3>
+                      <h3 className="text-[14.5px] font-bold">{t('heatmapTitle')}</h3>
                       <div className="w-36 h-3 rounded animate-skeleton-shimmer mt-1.5" />
                     </div>
                     <div className="flex items-center gap-1">
@@ -1228,7 +1239,7 @@ export const DashboardView: React.FC = () => {
                       ))}
                     </div>
                   </div>
-                  <div className="dashboard-heatmap-viewport my-2">
+                  <div className="dashboard-heatmap-viewport my-3">
                     <div className="dashboard-heatmap-content">
                       <div className="grid grid-cols-26 gap-1.5">
                         {Array.from({ length: 26 }).map((_, colIdx) => (
@@ -1245,7 +1256,7 @@ export const DashboardView: React.FC = () => {
                     </div>
                   </div>
                   <div
-                    className="dashboard-divider pt-3.5 border-t flex items-center gap-8"
+                    className="dashboard-divider pt-4 border-t flex items-center gap-8"
                   >
                     <div className="w-20 h-7 rounded animate-skeleton-shimmer" />
                     <div className="w-20 h-7 rounded animate-skeleton-shimmer" />
@@ -1257,8 +1268,8 @@ export const DashboardView: React.FC = () => {
                 <>
                   <div className="flex items-start justify-between gap-2 flex-wrap">
                     <div>
-                      <h3 className="text-[14px] font-bold">{t('heatmapTitle')}</h3>
-                      <p className={`text-[11px] ${subText} mt-0.5`}>
+                      <h3 className="text-[14.5px] font-bold">{t('heatmapTitle')}</h3>
+                      <p className={`text-[11.5px] ${subText} mt-1`}>
                         {t('heatmapSub', { n: dashboard.heatmap.totalYearReviews.toLocaleString() })}
                       </p>
                     </div>
@@ -1276,7 +1287,7 @@ export const DashboardView: React.FC = () => {
                   </div>
 
                   <div
-                    className="my-4 relative"
+                    className="my-5 relative"
                     onMouseLeave={() => setHoveredHeatmapCell(null)}
                   >
                     {hoveredHeatmapCell && (
@@ -1354,7 +1365,7 @@ export const DashboardView: React.FC = () => {
                           ))}
                         </div>
 
-                        <div className={`mt-2.5 flex items-center justify-between text-[10px] ${subText} px-0.5`}>
+                        <div className={`mt-3 flex items-center justify-between text-[10.5px] ${subText} px-0.5`}>
                           {dynamicMonthLabels.map((m, idx) => (
                             <span
                               key={`${m}-${idx}`}
@@ -1371,23 +1382,23 @@ export const DashboardView: React.FC = () => {
                   </div>
 
                   <div
-                    className="dashboard-divider pt-3.5 border-t flex items-center gap-6 sm:gap-8 flex-wrap"
+                    className="dashboard-divider pt-4 border-t flex items-center gap-7 sm:gap-9 flex-wrap"
                   >
                     <div>
-                      <div className="text-[15px] font-bold whitespace-nowrap">
+                      <div className="text-[15.5px] font-bold whitespace-nowrap">
                         {dashboard.heatmap.weekTotalCards} {t('cardsUnit')}
                       </div>
-                      <div className={`text-[11px] whitespace-nowrap ${subText}`}>{t('weekStudied')}</div>
+                      <div className={`text-[11px] mt-0.5 whitespace-nowrap ${subText}`}>{t('weekStudied')}</div>
                     </div>
                     <div>
-                      <div className="text-[15px] font-bold whitespace-nowrap">
+                      <div className="text-[15.5px] font-bold whitespace-nowrap">
                         {dashboard.heatmap.dailyAverage} {t('cardsUnit')}
                       </div>
-                      <div className={`text-[11px] whitespace-nowrap ${subText}`}>{t('dailyAvg')}</div>
+                      <div className={`text-[11px] mt-0.5 whitespace-nowrap ${subText}`}>{t('dailyAvg')}</div>
                     </div>
                     <div>
-                      <div className="text-[15px] font-bold whitespace-nowrap">{dashboard.heatmap.retentionRate}%</div>
-                      <div className={`text-[11px] whitespace-nowrap ${subText}`}>{t('retentionRate')}</div>
+                      <div className="text-[15.5px] font-bold whitespace-nowrap">{dashboard.heatmap.retentionRate}%</div>
+                      <div className={`text-[11px] mt-0.5 whitespace-nowrap ${subText}`}>{t('retentionRate')}</div>
                     </div>
                     <div className="ms-auto">
                       <span className="px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)]">
@@ -1401,17 +1412,17 @@ export const DashboardView: React.FC = () => {
 
             {/* Right: Weekly Rhythm Bar Chart */}
             <div
-              className={`col-span-12 xl:col-span-5 rounded-2xl border p-5 sm:p-6 flex flex-col justify-between relative ${cardSurface} ${
+              className={`col-span-12 xl:col-span-5 rounded-2xl border p-6 sm:p-7 flex flex-col justify-between relative ${cardSurface} ${
                 syncJustFinished ? 'animate-sync-reveal delay-stagger-3' : ''
               }`}
             >
               {isSyncPending ? (
                 <div className="flex flex-col justify-between h-full gap-4">
                   <div>
-                    <h3 className="text-[14px] font-bold">{t('weeklyRhythmTitle')}</h3>
+                    <h3 className="text-[14.5px] font-bold">{t('weeklyRhythmTitle')}</h3>
                     <div className="w-28 h-3 rounded animate-skeleton-shimmer mt-1.5" />
                   </div>
-                  <div className="my-2 h-[145px] flex items-end justify-between gap-3 pt-6 px-2">
+                  <div className="my-3 h-[145px] flex items-end justify-between gap-3 pt-6 px-2">
                     {[65, 25, 45, 18, 35, 15, 28].map((h, idx) => (
                       <div
                         key={idx}
@@ -1421,7 +1432,7 @@ export const DashboardView: React.FC = () => {
                     ))}
                   </div>
                   <div
-                    className="dashboard-divider pt-3.5 border-t"
+                    className="dashboard-divider pt-4 border-t"
                   >
                     <div className="w-48 h-3 rounded animate-skeleton-shimmer" />
                   </div>
@@ -1429,12 +1440,12 @@ export const DashboardView: React.FC = () => {
               ) : (
                 <>
                   <div>
-                    <h3 className="text-[14px] font-bold">{t('weeklyRhythmTitle')}</h3>
-                    <p className={`text-[11px] ${subText} mt-0.5`}>{t('weeklyRhythmSub')}</p>
+                    <h3 className="text-[14.5px] font-bold">{t('weeklyRhythmTitle')}</h3>
+                    <p className={`text-[11.5px] ${subText} mt-1`}>{t('weeklyRhythmSub')}</p>
                   </div>
 
                   <div
-                    className="my-4 h-[145px] flex items-end justify-between gap-3 pt-6 px-2 relative"
+                    className="my-5 h-[145px] flex items-end justify-between gap-3 pt-6 px-2 relative"
                     onMouseLeave={() => setHoveredRhythmIdx(null)}
                   >
                     {dashboard.weeklyRhythm.days.map((day, idx) => {
@@ -1453,7 +1464,7 @@ export const DashboardView: React.FC = () => {
                         <div
                           key={day.label}
                           onMouseEnter={() => setHoveredRhythmIdx(idx)}
-                          className="flex-1 flex flex-col items-center gap-2 h-full justify-end relative cursor-pointer"
+                          className="flex-1 flex flex-col items-center gap-2.5 h-full justify-end relative cursor-pointer"
                         >
                           {isHovered && (
                             <div
@@ -1487,7 +1498,7 @@ export const DashboardView: React.FC = () => {
                     })}
                   </div>
 
-                  <div className={`dashboard-divider pt-3.5 border-t text-[11px] ${subText}`}>
+                  <div className={`dashboard-divider pt-4 border-t text-[11px] ${subText}`}>
                     {t('weeklyRhythmFooter', {
                       sec: dashboard.weeklyRhythm.avgSecondsPerCard,
                       min: dashboard.weeklyRhythm.longestSessionMinutes,

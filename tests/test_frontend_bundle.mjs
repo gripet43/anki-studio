@@ -788,15 +788,30 @@ assert(
     dashboardSrc.includes('dashboard-deck-grid') &&
     dashboardSrc.includes('dashboard-heatmap-viewport') &&
     dashboardSrc.includes('dashboard-tooltip') &&
+    dashboardSrc.includes("'--deck-brand-soft'") &&
+    dashboardSrc.includes("'--deck-brand-text'") &&
     dashboardCssSrc.includes('--dashboard-shadow-card') &&
     dashboardCssSrc.includes('.dashboard-surface') &&
     dashboardCssSrc.includes('.dashboard-deck-grid') &&
     dashboardCssSrc.includes('.dashboard-heatmap-viewport') &&
+    dashboardCssSrc.includes('background-color: var(--deck-brand-soft)') &&
+    statsViewSrc.includes('hoveredForecastIdx') &&
+    statsViewSrc.includes('hoveredMaturitySeg') &&
+    statsViewSrc.includes('hoveredRetentionIdx') &&
+    statsViewSrc.includes('hoveredHourlyIdx') &&
+    statsViewSrc.includes('dashboard-tooltip') &&
+    wysiwygSrc.includes('STUDY_EMOJIS') &&
+    wysiwygSrc.includes('savedRangeRef') &&
+    wysiwygSrc.includes("toggleDropdown('emoji')") &&
+    !wysiwygSrc.includes('overflow-x-auto') &&
+    customStudyModalSrc.includes('role="radiogroup"') &&
+    customStudyModalSrc.includes('<details') &&
+    customStudyModalSrc.includes("e.key === 'Escape'") &&
     cssBundle.includes('dashboard-surface') &&
     cssBundle.includes('dashboard-deck-grid') &&
     cssBundle.includes('dashboard-heatmap-viewport') &&
     syncPillSrc.includes('dashboard-tooltip'),
-  'Item #36: Dashboard must use semantic surface tokens, content-aware deck/heatmap layout, and shared tooltip styling'
+  'Item #36: Dashboard must use semantic surface tokens, Level-2 tonal deck study button, unified StatsView tooltips, unclipped WYSIWYG emoji picker, and 3-tier CustomStudyModal hierarchy'
 );
 
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

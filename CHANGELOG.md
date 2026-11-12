@@ -15,6 +15,58 @@
 
 ## [Unreleased]
 
+- **[Gemini] 「自定义学习」弹窗（`CustomStudyModal.tsx`）三层信息架构重构与模式专属动态参数收敛**（[`frontend/src/components/study/CustomStudyModal.tsx`](frontend/src/components/study/CustomStudyModal.tsx)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - **1. 解决高饱和实心蓝泛滥（Primary Color Overload）**：
+    - 原弹窗内同时出现 5 处高饱和实心主色（模式选中图标、错题天数 `7d`、抽卡上限 `30`、特训开关、底部主按钮），导致视觉重心碎裂。
+    - 现重构为清晰的 3 级色彩权重：仅底部主行动按钮「**▶ 开始专项特训 (N)**」保留高饱和实心品牌色（Level-1 Primary CTA）；模式卡片与天数胶囊采用柔和品牌色调（Level-2 Tonal，`border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-text)]`）；「本轮抽卡上限」改为 macOS 风格一体化分段滑块轨道（`bg-white dark:bg-[#2A2C38] shadow-2xs`）。
+  - **2. 顶栏全局作用域提升 + 模式驱动的动态专属参数（Contextual Controls）**：
+    - 将全局前提「**目标牌组**」提升至精简后的顶栏右侧，去除顶栏下冗余长句副标题；
+    - 中部配置区严格随所选特训模式切换主控件：「错题集特训」与「提前复习」直出 5 档时间跨度选择器；「旗标 / 标签专项」直出 7 色旗标与 `#标签` 选择器；在其他三个非旗标模式下，将「按旗标 / 标签筛选」收纳进原生 `<details>/<summary>` 渐进式披露折叠栏（有附加筛选时显示数量角标与一键重置），消除原先 9 个旗标按钮常驻霸屏的视觉拥挤。
+  - **3. 修正「额外新卡加练」的调度与排序逻辑**：
+    - 未学新卡（`ivl=0, lapses=0`）无所谓“失误最多”或“间隔最短”，在「额外新卡加练」模式下将排序选项收敛为合理的「到期/加入顺序」与「随机乱序」，并将该模式下的默认调度开关设为正式计入 FSRS 学习（仍支持手动切换为纯预览），同时补齐 `Escape` 键关闭弹窗支持。
+
+- **[WorkBuddy] 首页顶栏两处视觉收敛：移除搜索框快捷键角标、同步状态绿点改为云端图标**（[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/components/dashboard/SyncStatusPill.tsx`](frontend/src/components/dashboard/SyncStatusPill.tsx)、[`frontend/src/components/common/SyncStateIcon.tsx`](frontend/src/components/common/SyncStateIcon.tsx)）：
+  - **搜索框去掉常驻快捷键角标**：删除右上角搜索框内 `⌘K` / `Ctrl K` 的 `<kbd>` 徽标，仅保留放大镜图标与「搜索卡片与牌组」提示文字（容器由 `justify-between` 回归单子元素排布），同时清理因此空置的 `formatShortcut` 导入与 `envInfo.platform` 取值。
+  - **同步状态指示器由纯色绿点改为云朵图标**：`SyncStatusPill` 触发区原先的 `bg-[#22C55E]` 圆点复用 `SyncStateIcon`（`size="sm"`，14px 定宽槽位避免状态切换时文字跳动），形状随真实状态变化——已同步 = 云朵、同步完成瞬间 = 对勾、从未同步 = 断云、同步中仍保留橙色脉冲点。配色统一走**主题色**（`var(--brand-text)`，随用户所选强调色变化），与浮窗标题栏、设置页同步卡片三处形态与色彩完全一致。
+  - **保留 `StreakFlameBackdrop` 的径向暖光晕与 `.dashboard-hero` 橙色径向底色**：经实机对比确认 Gemini 这版「外焰柔光 + 暖芯 + 右侧暖光晕」的组合优于早期只有剪影的版本，本轮不再回退，双层火苗与新版 `viewBox` 留白一并沿用。
+
+- **[WorkBuddy] 卡片库筛选栏：排序脱离筛选胶囊组，改为右侧独立的「视图属性」控件**（[`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)）：排序与筛选是**交叉维度**（筛选决定「看哪些」，排序只决定「看什么顺序」，不缩小结果集），原先却与状态/难度/旗标/标签/牌组共用同一套带边框胶囊样式并排陈列，层级被抹平。本轮重排：
+  - **位置**：移出筛选组，`ms-auto` 顶到该行最右侧，与左侧筛选形成「左：筛选 / 右：视图属性」的二段式结构；匹配计数与排序同组，两者之间用 1px 竖线分隔。
+  - **形态**：由带边框胶囊改为**无边框 Ghost 按钮**（仅 hover/展开时给一层极浅底色）——筛选组全员是描边胶囊，唯一的无边框控件自然读作「另一类东西」。
+  - **排印**：`排序` 用 11.5px 弱化小字，`·` 分隔符降到 40% 不透明度，当前值用 12px/500 正文色；排序偏离默认时仅将图标与值染成 `var(--brand-text)`，不填充底色，避免又变回「一个被选中的筛选」。
+  - **竖线的出现条件**：仅在「匹配 N 张」计数存在时渲染。计数缺席时单独一条竖线会退化成一根无处依附的杂线（已离屏比对 A/B 两版确认）。
+  - **下拉方向**：菜单锚点由 `start-0` 改为 `end-0`，避免控件贴右后被面板右侧溢出裁切。
+
+- **[WorkBuddy] 制卡富文本编辑器 Esc 作用域收敛**（[`frontend/src/components/quick-add/TowerWysiwygEditor.tsx`](frontend/src/components/quick-add/TowerWysiwygEditor.tsx)）：下拉浮层（表情/标题/表格/对齐/快捷键说明）的 `Esc` 关闭逻辑原先挂在 `document` 冒泡阶段，会与制卡弹窗自身的 `Esc` 关闭同时命中——表情面板打开时按一次 Esc 会直接触发整窗关闭（脏数据还会弹二次确认）。改为 **捕获阶段 + 仅在有浮层打开时拦截并 `stopPropagation`**，无浮层打开时完全不介入，Esc 正常关闭弹窗。
+
+- **[Gemini] 牌组卡片「学习」按钮二级视觉降阶、学习统计页图表 Hover 浮窗统一与新建卡片编辑器表情选择器修复**（[`frontend/src/index.css`](frontend/src/index.css)、[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/components/stats/StatsView.tsx`](frontend/src/components/stats/StatsView.tsx)、[`frontend/src/components/quick-add/TowerWysiwygEditor.tsx`](frontend/src/components/quick-add/TowerWysiwygEditor.tsx)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - **1. 首页牌组卡片「学习」按钮降为第 2 层级（Tonal / Soft Primary）**：
+    - 英雄区「`▶ 开始今日学习`」保持全场唯一的**第 1 层级**高饱和实心主按钮（`bg: var(--brand)` + 纯白文字 + 品牌色投影）；
+    - 将每张牌组卡片右下角的「`▶ 学习`」（`.deck-study-btn`）由实心纯白字降为**第 2 层级柔和品牌色调按钮**（`background-color: var(--deck-brand-soft)`、`color: var(--deck-brand-text)`、`border: 1px solid color-mix(in srgb, var(--deck-border) 72%, transparent)`，悬停加深至 `var(--deck-brand-soft-strong)`），与左上角牌组图标色调遥相呼应，既不争夺英雄区主按钮的注意力，又在色彩饱和度与边界感上明显高于旁边**第 3 层级**透明描边的「`查看`」按钮（`.deck-view-btn`）。
+  - **2. 学习统计页（`StatsView.tsx`）全部图表鼠标 Hover 浮窗与首页 `.dashboard-tooltip` 统一**：
+    - 移除「未来 30 天复习负载预测」、「卡片成熟度构成」、「12 周历史记忆留存率」与「24 小时学习活跃分布」四张图表原先使用的浏览器原生 `title` 提示，统一接入与首页热力图/周节奏一致的 `.dashboard-tooltip` 语义化双行浮动卡片（第 1 行次级灰展示日期/时段/分段维度，第 2 行彩色 `tabular-nums` 展示张数、成熟/年轻拆分或记忆准确率），支持鼠标悬停与键盘聚焦双触发，并带左右边界夹紧防溢出。
+  - **3. 修复新建卡片富文本编辑器（`TowerWysiwygEditor.tsx`）点击表情无弹窗的问题**：
+    - **根因**：工具栏容器设置了 `overflow-x-auto`（根据 CSS 规范强制将 `overflow-y` 计算为 `auto` 形成裁切盒），且外层编辑器容器设置了 `overflow-hidden`，导致高度超过 36px 工具栏的 `absolute top-8` 下拉浮层（表情、标题、表格、对齐、快捷键说明）被 100% 裁切不可见。
+    - **修复**：移除工具栏 `overflow-x-auto` 与外层容器 `overflow-hidden`（改为 `flex-wrap` 与顶部独立圆角 `rounded-t-[11px]`），补齐 `toolbarRef.contains` 外部点击判断、多下拉菜单互斥开关（`toggleDropdown`）、`Escape` 关闭以及编辑器光标选区记忆恢复（`savedRangeRef`，即使未先点击编辑区也能自动将表情插入末尾），并将常用制卡表情扩充至 20 枚（5×4 网格）。
+
+- **[Gemini] 首页纵向版式间距与视觉呼吸感优化（遵循 `@modern-web-guidance` 留白与视觉层级规范）**（[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/components/dashboard/StreakFlameBackdrop.tsx`](frontend/src/components/dashboard/StreakFlameBackdrop.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
+  - **修复顶栏与英雄卡上沿粘连**：移除 [`index.css`](frontend/src/index.css) `.dashboard-header` 原有的 `margin-block: -4px` 负向收缩与半透明吸顶遮罩（避免首屏态把英雄区往上拉并贴近 `11 月 12 日 · 星期四`），并将问候语与日期行距由 `mt-0.5` 提升至 `mt-1.5`。
+  - **拉开全页四大区块纵向节奏**：将 `.dashboard-shell` 外围内边距由 `px-5 sm:px-6 lg:px-8 py-5 sm:py-6` 提升至 `px-6 sm:px-8 lg:px-10 py-6 sm:py-8`，纵向区块间距由 `space-y-6`（24px）提升至 `space-y-7 sm:space-y-8`（28px–32px）。
+  - **舒展英雄卡内部行距与火焰顶距**：
+    - 卡片内边距由 `px-6 sm:px-7 py-5 sm:py-6` 升级为 `px-7 sm:px-9 py-6 sm:py-7`（圆角 `rounded-[24px]`）；
+    - 中左三行文案栈（「今日学习进度」/「还剩 N 张 · 预计 M 分钟」/「待复习 X · 新卡 Y」）行距由紧绷的 `space-y-1.5` 拉开为 `mt-2.5` + `mt-3`，使三行总高度与左侧 `104px` 进度圆环自然对齐；
+    - 右侧「连续打卡 ⓘ」与「20 天」大数字纵向间距由 `lg:gap-1`（4px）拉开至 `lg:gap-2.5`（10px）；
+    - 调整 [`StreakFlameBackdrop.tsx`](frontend/src/components/dashboard/StreakFlameBackdrop.tsx) 高度与 `viewBox`（`h-[138px]`，主火尖下移至 `y=18`），在卡片顶部留出约 `22px` 纯净留白，避免火尖顶到卡片上边框。
+  - **优化牌组与统计区内部留白与搜索框展示**：牌组网格与底部图表网格间距统一升级为 `gap-5`，牌组卡片内边距提升至 `px-6 py-5.5`（分段进度条上下间距 `mt-5` / `mt-4.5`），热力图与周节奏卡片升级为 `p-6 sm:p-7` + `my-5` + `pt-4`；右上角搜索框复用既有 `cmdPaletteAriaLabel` 呈现「搜索卡片与牌组」（快捷键角标经复核已于本轮移除，见上方 WorkBuddy 条目）。
+
+- **[Gemini] 首页顶栏与「今日学习进度」英雄区视觉对齐重构**（[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/components/dashboard/SyncStatusPill.tsx`](frontend/src/components/dashboard/SyncStatusPill.tsx)、[`frontend/src/components/dashboard/StreakFlameBackdrop.tsx`](frontend/src/components/dashboard/StreakFlameBackdrop.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
+  - **顶栏（Header）**：问候语连接符支持中文全角逗号（`晚上好，大馒头`），日期副标统一采用 `11 月 11 日 · 星期三` 中圆点分隔；同步状态改为无外框内联指示器（绿点 `•` + 同步相对时间 + 独立刷新图标 `↻`，悬停仍弹出完整快照详情浮窗）；右侧搜索框以放大镜图标 +「搜索卡片与牌组」提示文字呈现。
+  - **英雄区（Hero Card）四栏水平居中布局**：
+    1. **左栏进度环**：`104×104` 圆环居中展示已完成张数与 `/ N 张` 总量；
+    2. **中左三行文案栈**：第一行「今日学习进度」，第二行大字号「还剩 N 张」+「预计 M 分钟」，第三行由原彩色胶囊沉淀为清爽的纯排印内联可点击统计「`待复习 14 · 新卡 2`」（点击仍直达卡库对应筛选）；
+    3. **中右操作按钮组**：由原先压在标题正下方改为在卡片中部偏右水平居中排列（「`▶ 开始今日学习`」+「`⚡ 轻量复习`」+ 带滑块调节图标的「`自定义学习`」）；
+    4. **右栏连续打卡与双层暖焰背景**：移除桌面端多余的左侧竖向分割线与底部「最长 N 天」副标（合并至 `ⓘ` 规则浮层内），`19 天` 升级为 `34px` 暖橙粗体数字，搭配 `StreakFlameBackdrop` 新增的双层火苗（外焰 + 暖芯）与右侧径向暖光晕（英雄卡底色同步改为同位置橙色径向淡染，光晕与卡片底色连成一体）。
+
 - **[Gemini] Windows 验版报告第二轮（2026-11-12）3 项新问题修复（深色模式次级文字与图表对比度提升、快捷键清单平台动态适配与二元/四键模式对齐、`get_dashboard` 首屏轻量聚合与统计按需异步加载）**：
   - **问题 1（深色模式下次级文字与图表数值对比度偏低）**（[`frontend/src/index.css`](frontend/src/index.css)、[`frontend/src/utils/themeTokens.ts`](frontend/src/utils/themeTokens.ts)、[`frontend/src/components/stats/StatsView.tsx`](frontend/src/components/stats/StatsView.tsx)、[`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)）：
     - 在 `index.css` 中提亮 `.dark`（`--text-secondary: #B8BAC6`、`--text-muted: #A4A6B4`）与 `.oled`（`--text-secondary: #B4B6C2`、`--text-muted: #9E9FAD`）全局变量；在 `themeTokens.ts` 中提亮深色模式 `indigo`（`#86C2F8 -> #98CCFD`）、`emerald`（`#72D5A1 -> #7EE0AE`）、`cyan`（`#7EC1F8 -> #92CAFA`）的 `brandText` 与 `brandMutedBar`。
@@ -95,7 +147,7 @@
   - 验证：`tsc` 0 错误、Bundle 审计 ALL PASSED、37 项单测通过、产物 677.04 kB。
 
 - **[WorkBuddy]** 首页三处视觉收敛（[DashboardView.tsx](file:///Users/gripet/Library%20Application%20Support/Anki2/addons21/anki_modern_os/frontend/src/components/dashboard/DashboardView.tsx)）：
-  - **连胜火焰去掉柔化**：`StreakFlameBackdrop` 只保留清晰的火苗剪影——移除 `feGaussianBlur`（`stdDeviation=2`）与底部那层径向光晕，两者叠加会在卡片底边糊出一片橙雾；底部改用渐变自身的 `stop-opacity` 淡出，被卡片圆角裁切时不留硬边。透明度从 0.20 → 0.22（深色 0.28 → 0.30），补偿去掉柔化后的视觉重量。
+  - **连胜火焰去掉柔化**：`StreakFlameBackdrop` 只保留清晰的火苗剪影——移除 `feGaussianBlur`（`stdDeviation=2`）与底部那层径向光晕，两者叠加会在卡片底边糊出一片橙雾；底部改用渐变自身的 `stop-opacity` 淡出，被卡片圆角裁切时不留硬边。透明度从 0.20 → 0.22（深色 0.28 → 0.30），补偿去掉柔化后的视觉重量。（**已被后续版本取代**：见上方「双层暖焰背景」，改用低不透明度径向光晕 + 双层清晰火苗，实机对比效果更好，`feGaussianBlur` 不再回归。）
   - **移除牌组卡片常驻播放键**：右下角默认不再显示圆形 ▶，只在悬停时出现「查看 / 学习」两个胶囊；给按钮容器补 `min-h-7` 占位，避免悬停瞬间卡片高度抖动。
   - **统计标签并入信息行**：「待复习 / 新卡 / 已完成」三个 pill 从按钮行右侧搬到「预计 N 分钟」后面，与剩余卡数同行展示；按钮行只保留「开始今日学习 / 轻量复习 / 自定义学习」等动作，行动与数据分层更清楚。
   - **连胜数字去图标改色**：去掉「19 天」前面那个 20px 火苗图标，数字本身改为火焰色 `#FF8A00`（与背景火焰渐变中段同色），把「火」的语义从图标交给数字；`天` 与「最长 N 天」保持次级灰，层级仍然清楚。

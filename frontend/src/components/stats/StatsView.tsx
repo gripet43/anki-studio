@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { translate } from '../../i18n/translations';
 import { useAppStore } from '../../stores/useAppStore';
 import { getAccentScale } from '../../utils/themeTokens';
@@ -29,6 +29,17 @@ export const StatsView: React.FC = () => {
       : 'bg-white border-[#EAECEF] text-[#1D1D1F]';
 
   const subText = 'text-[#5C5E66] dark:text-[#A8AAB8]';
+
+  // Interactive hover state unified with DashboardView's `.dashboard-tooltip` popovers
+  const [hoveredForecastIdx, setHoveredForecastIdx] = useState<number | null>(null);
+  const [hoveredMaturitySeg, setHoveredMaturitySeg] = useState<{
+    label: string;
+    count: number;
+    pctLabel: string;
+    color: string;
+  } | null>(null);
+  const [hoveredRetentionIdx, setHoveredRetentionIdx] = useState<number | null>(null);
+  const [hoveredHourlyIdx, setHoveredHourlyIdx] = useState<number | null>(null);
 
   const {
     maturityBreakdown,
@@ -101,6 +112,71 @@ export const StatsView: React.FC = () => {
     });
   }, [hourlyDistribution, resolvedLang]);
 
+  const hoveredForecastDay =
+    hoveredForecastIdx !== null ? forecast30d[hoveredForecastIdx] ?? null : null;
+  const hoveredRetentionPt =
+    hoveredRetentionIdx !== null ? retentionCurve[hoveredRetentionIdx] ?? null : null;
+  const hoveredHourlyItem =
+    hoveredHourlyIdx !== null ? hourlyDistribution[hoveredHourlyIdx] ?? null : null;
+
+  const maturitySegments = [
+    {
+      key: 'mature',
+      widthPct: maturePct,
+      count: maturityBreakdown.mature,
+      pctLabel: formatPctLabel(maturityBreakdown.mature, maturePct),
+      label: t('statsMatureCardsLegend'),
+      className: 'bg-[var(--status-success)]',
+      color: 'var(--status-success)',
+    },
+    {
+      key: 'young',
+      widthPct: youngPct,
+      count: maturityBreakdown.young,
+      pctLabel: formatPctLabel(maturityBreakdown.young, youngPct),
+      label: t('statsYoungCardsLegend'),
+      className: '',
+      style: { backgroundColor: brandHex },
+      color: brandHex,
+    },
+    {
+      key: 'learning',
+      widthPct: learnPct,
+      count: maturityBreakdown.learning,
+      pctLabel: formatPctLabel(maturityBreakdown.learning, learnPct),
+      label: t('statsLearningCardsLegend'),
+      className: 'bg-[var(--status-warning)]',
+      color: 'var(--status-warning)',
+    },
+    {
+      key: 'new',
+      widthPct: newPct,
+      count: maturityBreakdown.newCards,
+      pctLabel: formatPctLabel(maturityBreakdown.newCards, newPct),
+      label: t('statsUnseenCardsLegend'),
+      className: 'bg-[var(--status-info)]',
+      color: 'var(--status-info)',
+    },
+    {
+      key: 'suspended',
+      widthPct: suspPct,
+      count: maturityBreakdown.suspended,
+      pctLabel: formatPctLabel(maturityBreakdown.suspended, suspPct),
+      label: t('statusSuspended'),
+      className: 'bg-[#FF9F0A]',
+      color: '#FF9F0A',
+    },
+    {
+      key: 'buried',
+      widthPct: buriedPct,
+      count: maturityBreakdown.buried || 0,
+      pctLabel: formatPctLabel(maturityBreakdown.buried || 0, buriedPct),
+      label: t('statusBuried'),
+      className: 'bg-[#8E8E93]/70',
+      color: '#8E8E93',
+    },
+  ];
+
   return (
     <div className="flex-1 h-full overflow-y-auto px-8 py-6 pb-20 space-y-6 select-none">
       {/* Header */}
@@ -143,7 +219,7 @@ export const StatsView: React.FC = () => {
       {/* Top Row: 30-Day Review Load Forecast (col-span-8) + Card Maturity Breakdown (col-span-4) */}
       <section className="grid grid-cols-12 gap-4">
         {/* 1. 30-Day Review Load Forecast */}
-        <div className={`col-span-8 rounded-2xl border p-6 flex flex-col justify-between shadow-xs ${cardSurface}`}>
+        <div className={`col-span-8 rounded-2xl border p-6 flex flex-col justify-between shadow-xs relative ${cardSurface}`}>
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-[15px] font-bold">
@@ -168,24 +244,60 @@ export const StatsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Unified baseline bar columns */}
-          <div className="h-[140px] flex items-end gap-1 px-1">
-            {forecast30d.map((day) => {
+          {/* Unified baseline bar columns with Dashboard-aligned floating tooltip */}
+          <div
+            className="h-[140px] flex items-end gap-1 px-1 relative"
+            onMouseLeave={() => setHoveredForecastIdx(null)}
+          >
+            {hoveredForecastDay && hoveredForecastIdx !== null && (
+              <div
+                style={{
+                  left: `${Math.min(
+                    86,
+                    Math.max(14, (hoveredForecastIdx / Math.max(1, forecast30d.length - 1)) * 100)
+                  )}%`,
+                }}
+                className="dashboard-tooltip absolute -top-12 -translate-x-1/2 z-50 pointer-events-none px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all duration-75"
+              >
+                <div className="text-[10px] text-[var(--text-secondary)]">
+                  {hoveredForecastDay.label} · {hoveredForecastDay.total.toLocaleString()} {t('cardsUnit')}
+                </div>
+                <div className="text-[11px] font-semibold mt-0.5 flex items-center gap-1.5 tabular-nums">
+                  <span style={{ color: brandHex }}>
+                    {t('statsMatureCardsLegend')} {hoveredForecastDay.mature.toLocaleString()}
+                  </span>
+                  <span className="text-[var(--text-muted)]">·</span>
+                  <span style={{ color: accentScale.heatmap[2] }}>
+                    {t('statsYoungCardsLegend')} {hoveredForecastDay.young.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {forecast30d.map((day, idx) => {
               const totalH =
                 day.total > 0 ? Math.max(8, Math.round((day.total / maxForecast) * 100)) : 3;
               const matureRatio = day.total > 0 ? Math.round((day.mature / day.total) * 100) : 0;
+              const isHovered = hoveredForecastIdx === idx;
               return (
                 <div
                   key={day.dayOffset}
-                  title={`${day.label}: ${day.total} (${day.mature} / ${day.young})`}
-                  className="flex-1 h-full flex flex-col justify-end items-center group cursor-pointer"
+                  tabIndex={0}
+                  role="img"
+                  aria-label={`${day.label}: ${day.total} (${day.mature} / ${day.young})`}
+                  onMouseEnter={() => setHoveredForecastIdx(idx)}
+                  onFocus={() => setHoveredForecastIdx(idx)}
+                  onBlur={() => setHoveredForecastIdx(null)}
+                  className="flex-1 h-full flex flex-col justify-end items-center group cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 rounded-sm"
                 >
                   <div
                     style={{
                       height: `${totalH}%`,
                       backgroundColor: day.total > 0 ? accentScale.heatmap[1] : accentScale.brandMutedBar,
                     }}
-                    className="w-full max-w-[14px] rounded-t-sm overflow-hidden flex flex-col justify-end group-hover:brightness-110 transition-all"
+                    className={`w-full max-w-[14px] rounded-t-sm overflow-hidden flex flex-col justify-end transition-all duration-200 ${
+                      isHovered ? 'scale-x-110 ring-2 ring-[var(--brand)] brightness-110' : 'group-hover:brightness-110'
+                    }`}
                   >
                     <div
                       style={{ height: `${matureRatio}%`, backgroundColor: brandHex }}
@@ -210,7 +322,7 @@ export const StatsView: React.FC = () => {
         </div>
 
         {/* 2. Card Maturity Distribution Breakdown */}
-        <div className={`col-span-4 rounded-2xl border p-6 flex flex-col justify-between shadow-xs ${cardSurface}`}>
+        <div className={`col-span-4 rounded-2xl border p-6 flex flex-col justify-between shadow-xs relative ${cardSurface}`}>
           <div>
             <h2 className="text-[15px] font-bold">
               {t('statsMaturityTitle')}
@@ -220,43 +332,44 @@ export const StatsView: React.FC = () => {
             </p>
           </div>
 
-          <div className="my-4 space-y-3">
+          <div className="my-4 space-y-3 relative">
+            {hoveredMaturitySeg && (
+              <div className="dashboard-tooltip absolute -top-13 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all duration-75">
+                <div className="text-[10px] text-[var(--text-secondary)]">
+                  {hoveredMaturitySeg.label}
+                </div>
+                <div className="text-[11px] font-semibold mt-0.5 flex items-center gap-1.5 tabular-nums">
+                  <span style={{ color: hoveredMaturitySeg.color }}>
+                    {hoveredMaturitySeg.count.toLocaleString()} {t('cardsUnit')}
+                  </span>
+                  <span className="text-[var(--text-muted)]">·</span>
+                  <span>{hoveredMaturitySeg.pctLabel}</span>
+                </div>
+              </div>
+            )}
+
             {/* Seamless 100% full-width stacked progress bar */}
             <div
               role="img"
               aria-label={t('statsMaturityTitle')}
+              onMouseLeave={() => setHoveredMaturitySeg(null)}
               className="w-full h-3 rounded-full overflow-hidden flex bg-[#ECECF2] dark:bg-[#2A2C36]"
             >
-              <div
-                style={{ width: `${maturePct}%` }}
-                className="bg-[var(--status-success)] transition-all"
-                title={`${t('statsMatureCardsLegend')}: ${maturityBreakdown.mature} (${formatPctLabel(maturityBreakdown.mature, maturePct)})`}
-              />
-              <div
-                style={{ width: `${youngPct}%`, backgroundColor: brandHex }}
-                className="transition-all"
-                title={`${t('statsYoungCardsLegend')}: ${maturityBreakdown.young} (${formatPctLabel(maturityBreakdown.young, youngPct)})`}
-              />
-              <div
-                style={{ width: `${learnPct}%` }}
-                className="bg-[var(--status-warning)] transition-all"
-                title={`${t('statsLearningCardsLegend')}: ${maturityBreakdown.learning} (${formatPctLabel(maturityBreakdown.learning, learnPct)})`}
-              />
-              <div
-                style={{ width: `${newPct}%` }}
-                className="bg-[var(--status-info)] transition-all"
-                title={`${t('statsUnseenCardsLegend')}: ${maturityBreakdown.newCards} (${formatPctLabel(maturityBreakdown.newCards, newPct)})`}
-              />
-              <div
-                style={{ width: `${suspPct}%` }}
-                className="bg-[#FF9F0A] transition-all"
-                title={`${t('statusSuspended')}: ${maturityBreakdown.suspended} (${formatPctLabel(maturityBreakdown.suspended, suspPct)})`}
-              />
-              <div
-                style={{ width: `${buriedPct}%` }}
-                className="bg-[#8E8E93]/70 transition-all"
-                title={`${t('statusBuried')}: ${maturityBreakdown.buried || 0} (${formatPctLabel(maturityBreakdown.buried || 0, buriedPct)})`}
-              />
+              {maturitySegments.map((seg) => (
+                <div
+                  key={seg.key}
+                  style={{ width: `${seg.widthPct}%`, ...(seg.style || {}) }}
+                  onMouseEnter={() =>
+                    setHoveredMaturitySeg({
+                      label: seg.label,
+                      count: seg.count,
+                      pctLabel: seg.pctLabel,
+                      color: seg.color,
+                    })
+                  }
+                  className={`${seg.className} transition-all cursor-pointer hover:brightness-110`}
+                />
+              ))}
             </div>
 
             <div className="space-y-2 pt-1 text-[12px]">
@@ -327,7 +440,7 @@ export const StatsView: React.FC = () => {
       {/* Bottom Row: Historical Retention Curve (col-span-6) + 24-Hour Study Time Distribution (col-span-6) */}
       <section className="grid grid-cols-12 gap-4">
         {/* 3. Historical Retention Curve with Dynamic Baseline & Clean Timeline */}
-        <div className={`col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs ${cardSurface}`}>
+        <div className={`col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs relative ${cardSurface}`}>
           <div className="flex items-center justify-between mb-3">
             <div>
               <h2 className="text-[15px] font-bold">
@@ -342,8 +455,36 @@ export const StatsView: React.FC = () => {
             </span>
           </div>
 
-          {/* Bars Container */}
-          <div className="h-[135px] flex items-end gap-1.5 px-2">
+          {/* Bars Container with Dashboard-aligned floating tooltip */}
+          <div
+            className="h-[135px] flex items-end gap-1.5 px-2 relative"
+            onMouseLeave={() => setHoveredRetentionIdx(null)}
+          >
+            {hoveredRetentionPt && hoveredRetentionIdx !== null && (
+              <div
+                style={{
+                  left: `${Math.min(
+                    84,
+                    Math.max(16, (hoveredRetentionIdx / Math.max(1, retentionCurve.length - 1)) * 100)
+                  )}%`,
+                }}
+                className="dashboard-tooltip absolute -top-11 -translate-x-1/2 z-50 pointer-events-none px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all duration-75"
+              >
+                <div className="text-[10px] text-[var(--text-secondary)]">
+                  {hoveredRetentionPt.period}
+                </div>
+                <div className="text-[11px] font-semibold mt-0.5 flex items-center gap-1.5 tabular-nums">
+                  <span style={{ color: accentScale.heatmap[1] }}>
+                    {hoveredRetentionPt.reviews.toLocaleString()} {t('cardsUnit')}
+                  </span>
+                  <span className="text-[var(--text-muted)]">·</span>
+                  <span className="text-[var(--status-success)]">
+                    {hoveredRetentionPt.reviews > 0 ? `${hoveredRetentionPt.retentionRate}%` : '--'}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {retentionCurve.map((pt, idx) => {
               const barH =
                 pt.reviews > 0
@@ -353,6 +494,7 @@ export const StatsView: React.FC = () => {
                     )
                   : 4;
               const isLatest = idx === retentionCurve.length - 1;
+              const isHovered = hoveredRetentionIdx === idx;
 
               return (
                 <div
@@ -360,12 +502,14 @@ export const StatsView: React.FC = () => {
                   tabIndex={0}
                   role="img"
                   aria-label={`${pt.period}: ${pt.reviews > 0 ? `${pt.retentionRate}%` : '--'} (${pt.reviews})`}
-                  title={`${pt.period}: ${pt.retentionRate}% (${pt.reviews})`}
+                  onMouseEnter={() => setHoveredRetentionIdx(idx)}
+                  onFocus={() => setHoveredRetentionIdx(idx)}
+                  onBlur={() => setHoveredRetentionIdx(null)}
                   className="flex-1 min-w-0 h-full flex flex-col items-center justify-end group cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 rounded-sm"
                 >
                   <span
                     className={`text-[10px] font-bold tabular-nums whitespace-nowrap mb-1 ${
-                      isLatest
+                      isLatest || isHovered
                         ? 'text-[var(--brand-text)]'
                         : 'text-[#3A3C46] dark:text-[#D8DAE8] group-hover:text-[var(--brand-text)]'
                     }`}
@@ -375,10 +519,14 @@ export const StatsView: React.FC = () => {
                   <div
                     style={{
                       height: `${barH}%`,
-                      backgroundColor: isLatest ? brandHex : accentScale.heatmap[2],
+                      backgroundColor: isLatest || isHovered ? brandHex : accentScale.heatmap[2],
                     }}
-                    className={`w-full max-w-[24px] rounded-t-md transition-all group-hover:brightness-110 ${
-                      isLatest ? 'shadow-xs' : 'opacity-90 group-hover:opacity-100'
+                    className={`w-full max-w-[24px] rounded-t-md transition-all duration-200 ${
+                      isHovered
+                        ? 'scale-x-105 shadow-md brightness-110'
+                        : isLatest
+                        ? 'shadow-xs'
+                        : 'opacity-90 group-hover:opacity-100'
                     }`}
                   />
                 </div>
@@ -397,7 +545,7 @@ export const StatsView: React.FC = () => {
         </div>
 
         {/* 4. 24-Hour Study Time Distribution */}
-        <div className={`col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs ${cardSurface}`}>
+        <div className={`col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs relative ${cardSurface}`}>
           <div className="flex items-center justify-between mb-3">
             <div>
               <h2 className="text-[15px] font-bold">
@@ -407,27 +555,60 @@ export const StatsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Bars Container */}
-          <div className="h-[135px] flex items-end gap-1 px-2">
-            {hourlyDistribution.map((item) => {
+          {/* Bars Container with Dashboard-aligned floating tooltip */}
+          <div
+            className="h-[135px] flex items-end gap-1 px-2 relative"
+            onMouseLeave={() => setHoveredHourlyIdx(null)}
+          >
+            {hoveredHourlyItem && hoveredHourlyIdx !== null && (
+              <div
+                style={{
+                  left: `${Math.min(
+                    86,
+                    Math.max(14, (hoveredHourlyIdx / Math.max(1, hourlyDistribution.length - 1)) * 100)
+                  )}%`,
+                }}
+                className="dashboard-tooltip absolute -top-11 -translate-x-1/2 z-50 pointer-events-none px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all duration-75"
+              >
+                <div className="text-[10px] text-[var(--text-secondary)]">
+                  {hoveredHourlyItem.hour}
+                </div>
+                <div className="text-[11px] font-semibold mt-0.5 flex items-center gap-1.5 tabular-nums">
+                  <span style={{ color: accentScale.heatmap[1] }}>
+                    {hoveredHourlyItem.count.toLocaleString()} {t('cardsUnit')}
+                  </span>
+                  <span className="text-[var(--text-muted)]">·</span>
+                  <span className="text-[var(--status-success)]">
+                    {hoveredHourlyItem.accuracy}%
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {hourlyDistribution.map((item, idx) => {
               const hPct =
                 item.count > 0 ? Math.max(8, Math.round((item.count / maxHourly) * 100)) : 3;
               const isPeak = item.count > 0 && item.count >= maxHourly * 0.65;
+              const isHovered = hoveredHourlyIdx === idx;
               return (
                 <div
                   key={item.hour}
                   tabIndex={0}
                   role="img"
                   aria-label={`${item.hour}: ${item.count} (${item.accuracy}%)`}
-                  title={`${item.hour} - ${item.count} (${item.accuracy}%)`}
+                  onMouseEnter={() => setHoveredHourlyIdx(idx)}
+                  onFocus={() => setHoveredHourlyIdx(idx)}
+                  onBlur={() => setHoveredHourlyIdx(null)}
                   className="flex-1 min-w-0 h-full flex flex-col items-center justify-end group cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 rounded-sm"
                 >
                   <div
                     style={{
                       height: `${hPct}%`,
-                      backgroundColor: isPeak ? brandHex : accentScale.brandMutedBar,
+                      backgroundColor: isPeak || isHovered ? brandHex : accentScale.brandMutedBar,
                     }}
-                    className="w-full max-w-[12px] rounded-t-sm transition-all group-hover:brightness-110"
+                    className={`w-full max-w-[12px] rounded-t-sm transition-all duration-200 ${
+                      isHovered ? 'scale-x-110 ring-2 ring-[var(--brand)] brightness-110' : 'group-hover:brightness-110'
+                    }`}
                   />
                 </div>
               );
