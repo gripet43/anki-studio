@@ -362,8 +362,10 @@ Anki Studio biến cửa sổ chính của Anki thành không gian làm việc c
 
 | 文件 | 用途 | 规格 |
 |---|---|---|
-| `docs/assets/anki-studio-preview.gif` | 描述顶部主视觉 | 900×563、13 帧、约 1.3 MB |
+| `docs/assets/anki-studio-preview.gif` | 描述顶部主视觉 | **1200×850、4 帧 × 2.8 秒、564 KB** |
 | `tests/reports/screenshots/r4/01-home.png` | 静态首页（GIF 加载失败时的后备） | 1296×776 |
 | `tests/reports/screenshots/r4/07-dark.png` | 深色主题 | 1280×800 |
 
-GIF 由 `tests/reports/screenshots/r4/` 中的 5 张真实截图（首页 / 卡片库 / 复习 / 统计 / 深色）交叉淡入合成，非录屏。若之后要换成真正的操作录屏，建议控制在 3 MB 以内：AnkiWeb 用户在列表页点进来，过大的首屏动图会明显拖慢加载。
+GIF 由 4 张 **2944×2086 的 macOS 整窗截图**（今日概览 / 全局搜索 / 进度减负 / 休假模式）硬切合成，非录屏。四张原始 JPEG 合计约 1.5 MB，**没有入库**——为一张 564 KB 的预览图把仓库撑大不合算。要换素材时按「同尺寸、同构图、纯白外底」重新截即可，生成命令与全部画质注意事项见 README「预览图」小节和 `scripts/build_preview_gif.py` 的 docstring。
+
+体积上，AnkiWeb 列表页点进来的首屏就会加载它，**建议控制在 1.5 MB 以内**；当前 564 KB 有充足余量，真要换成操作录屏也别超过这个量级。
