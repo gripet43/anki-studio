@@ -1586,23 +1586,6 @@ export const ReviewerView: React.FC = () => {
                   </button>
                 )}
               </div>
-
-              <button
-                type="button"
-                onClick={() => appActions.triggerNativeEscape()}
-                className={`w-full h-8 rounded-xl border text-[11px] font-medium flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                  isDark
-                    ? 'border-white/[0.08] text-[#8E8E93] hover:text-white hover:bg-white/5'
-                    : 'border-[#E5E5EA] text-[#6E6E73] hover:text-black hover:bg-black/5'
-                }`}
-              >
-                <span>{t('switchToNative')}</span>
-                {showShortcutHints && (
-                  <kbd className="text-[10px] opacity-70 font-mono">
-                    {formatShortcut('Ctrl Opt M', platform)}
-                  </kbd>
-                )}
-              </button>
             </div>
           </aside>
         )}

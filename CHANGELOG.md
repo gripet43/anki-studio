@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+## [v1.4.14] - 2026-11-13
+
+- **[DeepSeek] 移除「卡片信息」面板底部多余的「切回原生」按钮**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)）：该入口与三层防迷失机制（`Ctrl+Opt+M` / `Ctrl+Alt+M` 快捷键、工具菜单、原生工具栏胶囊）完全重复，放在卡片检查器底部既占空间又容易误触。移除后原生兜底入口一个不少。
+  - 验证：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 106 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.13 → 1.4.14。
+
 ## [v1.4.13] - 2026-11-13
 
 - **[DeepSeek] 修复兼容模式图片全部破图：QtWebEngine 默认禁止 file:// 页面加载本地媒体服务**（改 [`__init__.py`](__init__.py)、[`tests/test_general_fixes.py`](tests/test_general_fixes.py)；README / DESIGN 计数同步）：
