@@ -1066,7 +1066,7 @@ export const ReviewerView: React.FC = () => {
                       {currentCard.tags.length > 2 && (
                         <span
                           title={currentCard.tags.slice(2).map((tItem) => `#${tItem}`).join(', ')}
-                          className={`px-1.5 py-0.5 rounded-md text-[10px] cursor-help ${
+                          className={`px-1.5 py-0.5 rounded-md text-[10px] cursor-default ${
                             isDark
                               ? 'bg-white/[0.04] text-[#7E7E86]'
                               : 'bg-[#ECECF2] text-[#8E8E93]'

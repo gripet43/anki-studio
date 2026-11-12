@@ -15,6 +15,18 @@
 
 ## [Unreleased]
 
+- **[WorkBuddy] 统一去掉「问号光标」+ 修正左侧栏「进度减负」在积压时的橙色实心格误读**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)）：
+  - **1. 三处 `cursor-help`（问号光标）全部回落为默认光标**：帮助性提示靠 `title` 气泡与视觉上的 `?` 图标已经足够表达，光标再变问号属于多余且打断输入的信号——
+    - 首页「连续打卡」旁的信息图标（用户指出的这一处）；
+    - 首页牌组卡的掌握度百分比热区（刻意保留可点悬停范围，只把 `cursor-help` 换 `cursor-default`，`group/mastery` 悬停反馈不受影响）；
+    - 复习界面标签栏的 `+N` 溢出芯片。
+    - 复核：`grep -rn "cursor-help\|cursor: help" frontend/src` 返回 0 条。
+  - **2. 「进度减负」不再给整格铺 `--status-warning-soft` 底色**：
+    - **现象**：全新安装的 Windows 机器上，左下角「休假模式 | 进度减负」分段控件里右格是橙色实心块，看起来像「当前选中了进度减负」，与默认状态不符。
+    - **根因（不是 bug，是样式缺陷）**：该按钮和「休假模式」同处一个 `grid grid-cols-2` 分段容器。容器里某一格被**实心填充**，语义上就等于「这一项当前生效」——这与 `hasAvalanche`（`overdue_count >= 30 or total_due >= 60`，见 `bridge/vacation_service.py`）真正要表达的「你有积压，可以来减负」完全不是一回事。首页英雄区那颗同功能的「进度减负」胶囊用的是品牌色描边/浅染，两处语气本就不一致。用户重新导入合集后 `crt` 与今天的差值会让 `today` 直接跳到两百多天，39 张复习卡到期就足以触发 `overdue_count >= 30`，所以这个态很容易被撞上。
+    - **改法**：有积压时只染内容不铺底——图标与文字走 `text-[var(--brand-text)] font-semibold`，右侧那枚提示点由 `animate-pulse` 的琥珀色改为实心 `bg-[var(--brand)]`，与首页胶囊同一套品牌语气；无积压时保持原中性灰（`#9A9CA6` / `#5C5E66`，暗色悬停 `bg-white/[0.06]`）。两种状态都保留 `focus-visible:ring-[var(--brand)]` 键盘可达性。
+    - **验证**：用真实 `web/assets/index.css` 以 3× DPR 渲染「改前 / 改后·有积压 / 改后·无积压」三态对照，确认改后不再读作「选中态」，默认态零变化。
+
 - **[WorkBuddy] 首页牌组卡配色改为「由主题色派生」，不再按位置轮流派发六个写死的色系**（新增 [`frontend/src/utils/deckPalette.ts`](frontend/src/utils/deckPalette.ts)，改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
   - **问题**：后端 `_build_decks_list` 里 `color_idx = len(decks_out) % len(accents)`，把 indigo / blue / emerald / amber / rose / purple 六个色系按牌组顺序轮流发下去；前端再由 `deckAccentToTheme` 把这六个名字映射到主题库里的 indigo / cyan / emerald / amber / rose / violet。**卡片颜色因此与用户选定的主题色完全无关**——选了「经典蓝」，第二张牌组仍是青的、第三张仍是绿的、第四张是橙的，看起来像一套彩虹配色，而不是「我的主题」。
   - **改法**：以 `getAccentScale(accentColor, theme)` 为唯一色源，按牌组在列表中的次序叠加两档很轻的偏移，派生出一整套 `AccentScale` 供卡片使用：

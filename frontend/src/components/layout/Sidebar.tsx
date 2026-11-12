@@ -381,16 +381,24 @@ export const Sidebar: React.FC = () => {
             )}
           </button>
 
-          {/* 2. 进度减负 (Backlog Relief) */}
+          {/* 2. 进度减负 (Backlog Relief)
+              注意：这里**不能**给整格铺底色。它和「休假模式」同处一个分段容器，
+              一旦某一格被实心填充，就会被读成「这一项当前是选中/开启状态」，
+              而积压提示只是一个建议入口，不是开关。所以有积压时只染图标与文字，
+              与首页英雄区那颗同品牌色的「进度减负」胶囊保持同一套语气。 */}
           <button
             type="button"
             onClick={() => appActions.openIcuModal('rescue')}
-            className={`py-1.5 px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
+            className={`py-1.5 px-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
               dashboard.backlog?.hasAvalanche
-                ? 'bg-[var(--status-warning-soft)] text-[var(--status-warning)] font-semibold shadow-2xs'
-                : isDark
-                ? 'text-[#9A9CA6] hover:text-white hover:bg-white/[0.06] hover:shadow-2xs'
-                : 'text-[#5C5E66] hover:text-[#111215] hover:bg-white hover:shadow-2xs'
+                ? `font-semibold text-[var(--brand-text)] ${
+                    isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'
+                  }`
+                : `font-medium ${
+                    isDark
+                      ? 'text-[#9A9CA6] hover:text-white hover:bg-white/[0.06] hover:shadow-2xs'
+                      : 'text-[#5C5E66] hover:text-[#111215] hover:bg-white hover:shadow-2xs'
+                  }`
             }`}
             title={t('backlogRescueTooltip')}
           >
@@ -410,7 +418,7 @@ export const Sidebar: React.FC = () => {
             </svg>
             <span className="truncate">{t('backlogRescueBtn')}</span>
             {dashboard.backlog?.hasAvalanche && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)] shrink-0 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand)] shrink-0" />
             )}
           </button>
         </div>

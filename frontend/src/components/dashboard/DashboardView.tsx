@@ -925,7 +925,7 @@ export const DashboardView: React.FC = () => {
                     <button
                       type="button"
                       aria-label={t('streakRulesTooltipTitle')}
-                      className="h-3.5 w-3.5 flex items-center justify-center rounded-full transition-colors cursor-help text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                      className="h-3.5 w-3.5 flex items-center justify-center rounded-full transition-colors cursor-default text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
                     >
                       <svg
                         viewBox="0 0 16 16"
@@ -1107,7 +1107,7 @@ export const DashboardView: React.FC = () => {
                             e.stopPropagation();
                             openMasteryHint(deck.id);
                           }}
-                          className="group/mastery -m-1 shrink-0 cursor-help rounded-lg p-1 text-right outline-none focus-visible:ring-2 focus-visible:ring-[var(--deck-border)]"
+                          className="group/mastery -m-1 shrink-0 cursor-default rounded-lg p-1 text-right outline-none focus-visible:ring-2 focus-visible:ring-[var(--deck-border)]"
                         >
                           <div className="text-[19px] font-bold leading-none tabular-nums tracking-tight transition-colors duration-[var(--dur-fast)] group-hover/mastery:text-[var(--deck-brand)]">
                             {deck.mastery}
