@@ -994,6 +994,258 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 卡片库排序（LibraryView 排序控件的后端契约）
+# ---------------------------------------------------------------------------
+
+#: 排序下拉里的全部非默认选项。前端把 key 原样塞进 sortBy，后端逐个分支处理，
+#: 任何一个拼错或分支漏掉都会表现为「排序点了没反应」，所以逐个守住。
+SORT_KEYS = (
+    "lapses_desc",
+    "ivl_asc",
+    "ivl_desc",
+    "due_asc",
+    "stability_asc",
+    "front_asc",
+    "newest",
+)
+
+
+def _sort_projection(key: str, card: dict[str, Any]) -> tuple:
+    """把一张卡映射成排序键元组，必须与 search_service 的 sort 分支一一对应。
+
+    只取参与比较的前几个字段（不含 id 兜底项）：id 是时间戳，主键相同时才
+    参与比较，不影响「整体单调」这个不变量。
+    """
+    if key == "lapses_desc":
+        return (-int(card.get("lapses", 0) or 0),)
+    if key == "ivl_asc":
+        return (int(card.get("intervalDays", 0) or 0),)
+    if key == "ivl_desc":
+        return (-int(card.get("intervalDays", 0) or 0),)
+    if key == "due_asc":
+        status = card.get("status")
+        rank = 0 if status == "due" else (1 if status == "review" else 2)
+        return (rank, int(card.get("dueRaw", 999999) or 0))
+    if key == "stability_asc":
+        return (int(card.get("mastery", 0) or 0), float(card.get("stability", 0.0) or 0.0))
+    if key == "front_asc":
+        return (str(card.get("front", "")).lower(),)
+    if key == "newest":
+        return (-int(card.get("id", 0) or 0),)
+    raise KeyError(f"未知排序项 {key}")
+
+
+def run_library_sort_checks(runner: ScenarioRunner) -> None:
+    """七种排序：结果集不能变，顺序必须单调。"""
+
+    baseline_total: int | None = None
+
+    def baseline(payload: dict) -> None:
+        nonlocal baseline_total
+        data = runner.expect_success(payload)
+        if data.get("total") is None:
+            raise KeyError("默认查询缺 total")
+        baseline_total = int(data["total"])
+
+    runner.check("search_cards", baseline, {"query": "", "limit": 200}, label="sort:baseline")
+
+    for key in SORT_KEYS:
+        def check(payload: dict, key: str = key) -> None:
+            data = runner.expect_success(payload)
+            cards = data.get("cards") or []
+            if baseline_total is not None and int(data.get("total", -1)) != baseline_total:
+                raise AssertionError(
+                    f"排序 {key} 改变了结果集总数：{data.get('total')} != {baseline_total}"
+                )
+            values = [_sort_projection(key, c) for c in cards]
+            for i in range(1, len(values)):
+                if values[i] < values[i - 1]:
+                    raise AssertionError(
+                        f"排序 {key} 在第 {i} 项逆序：{values[i - 1]} → {values[i]}"
+                    )
+
+        runner.check(
+            "search_cards", check, {"query": "", "sortBy": key, "limit": 200},
+            label=f"sort:{key}",
+        )
+
+    def unknown_key(payload: dict) -> None:
+        # 前端万一写了个新 key 而后端还没实现，也不允许 500 或静默清空
+        data = runner.expect_success(payload)
+        if data.get("error"):
+            raise AssertionError(f"未知排序项报错：{data['error']}")
+        if baseline_total is not None and int(data.get("total", -1)) != baseline_total:
+            raise AssertionError("未知排序项把结果集改掉了")
+
+    runner.check(
+        "search_cards", unknown_key, {"query": "", "sortBy": "definitely_not_a_sort", "limit": 50},
+        label="sort:unknown-key",
+    )
+
+
+# ---------------------------------------------------------------------------
+# 自定义学习：四种预设的语义边界（CustomStudyModal 三层改造后的契约）
+# ---------------------------------------------------------------------------
+
+
+def _assert_preset_semantics(runner: ScenarioRunner, preset: str, ids: list[int]) -> None:
+    id_list = ",".join(str(i) for i in ids)
+    if preset == "extra_new":
+        bad = runner.sqlite_count(
+            f"select count(*) from cards where id in ({id_list}) and not (type=0 or queue=0)"
+        )
+        if bad:
+            raise AssertionError(f"额外新卡里混入 {bad} 张非新卡")
+    elif preset == "flagged":
+        bad = runner.sqlite_count(
+            f"select count(*) from cards where id in ({id_list}) and (flags & 7) = 0"
+        )
+        if bad:
+            raise AssertionError(f"旗标专项里混入 {bad} 张无旗标卡")
+    elif preset == "ahead":
+        bad = runner.sqlite_count(
+            f"select count(*) from cards where id in ({id_list})"
+            " and not (queue in (2, 3) or type=2)"
+        )
+        if bad:
+            raise AssertionError(f"提前复习里混入 {bad} 张非复习型卡片")
+
+
+def run_custom_study_preset_checks(runner: ScenarioRunner) -> None:
+    """四种预设各自返回什么，以及「启动特训」必须零副作用。
+
+    ``extra_new`` 在本轮改造后默认 ``isPreviewOnly=false``（计入 FSRS），
+    这条路径以前从没跑过，所以顺手把「启动后调度字段零 diff」钉死：
+    只要哪天它开始偷偷改队列/到期，这里立刻红。
+    """
+
+    if runner.key == "mixed":
+        flagged = runner.sqlite_count("select count(*) from cards where (flags & 7) > 0")
+        runner.results.append(
+            CheckResult(
+                runner.key,
+                "custom-study:flag-data",
+                flagged > 0,
+                "" if flagged > 0 else "mixed 场景声明了 7 色旗标，但库里一张带旗标的卡都没有",
+            )
+        )
+
+    limit = 30
+    presets = ("extra_new", "mistakes", "flagged", "ahead")
+    before = _schedule_snapshot(runner)
+
+    for preset in presets:
+        def preview(payload: dict, preset: str = preset) -> None:
+            data = runner.expect_success(payload)
+            matched = int(data.get("totalMatched", -1))
+            count = int(data.get("count", -1))
+            if matched < 0 or count < 0:
+                raise KeyError(f"{preset} 预览缺 totalMatched/count")
+            if count != min(limit, matched):
+                raise AssertionError(f"{preset} 预览 count={count} 与 min(limit, totalMatched)={min(limit, matched)} 不符")
+            if data.get("isPreviewOnly") is not True:
+                raise AssertionError(f"{preset} 预览默认应为纯预览")
+
+        runner.check(
+            "preview_custom_study", preview, {"preset": preset, "limit": limit},
+            label=f"custom-study:preview:{preset}",
+        )
+
+        # 额外新卡加练默认计入 FSRS，其余预设默认纯预览
+        preview_only = preset != "extra_new"
+
+        def start(payload: dict, preset: str = preset, preview_only: bool = preview_only) -> None:
+            data = runner.expect_success(payload)
+            ids = [int(x) for x in (data.get("cardIds") or [])]
+            if len(ids) > limit:
+                raise AssertionError(f"{preset} 返回 {len(ids)} 张，超过 limit={limit}")
+            if int(data.get("count", -1)) != len(ids):
+                raise AssertionError(f"{preset} 的 count 与 cardIds 长度不一致")
+            if bool(data.get("isPreviewOnly")) != preview_only:
+                raise AssertionError(
+                    f"{preset} 的 isPreviewOnly 回显 {data.get('isPreviewOnly')}，期望 {preview_only}"
+                )
+            if ids:
+                _assert_preset_semantics(runner, preset, ids)
+
+        runner.check(
+            "start_custom_study", start,
+            {"preset": preset, "limit": limit, "isPreviewOnly": preview_only},
+            label=f"custom-study:start:{preset}",
+        )
+
+    # 指定旗标颜色（7 色旗标专项），逐张核对 colors
+    def flag_color(payload: dict) -> None:
+        data = runner.expect_success(payload)
+        ids = [int(x) for x in (data.get("cardIds") or [])]
+        if not ids:
+            return
+        bad = runner.sqlite_count(
+            "select count(*) from cards where id in ("
+            + ",".join(str(i) for i in ids)
+            + ") and (flags & 7) <> 3"
+        )
+        if bad:
+            raise AssertionError(f"旗标色 3 专项里混入 {bad} 张其它颜色")
+
+    runner.check(
+        "start_custom_study", flag_color,
+        {"preset": "flagged", "flag": "3", "limit": limit},
+        label="custom-study:flag-color",
+    )
+
+    # 牌组作用域：目标牌组从弹窗顶栏进来，返回的卡必须都落在该牌组（含子牌组）里。
+    # 注意两点来自实战的坑：
+    #   1) 裸 SQL 读到的 decks.name 用 \x1f 分层级，不是 API 返回的 ::；
+    #   2) 必须挑一个真的有卡的牌组，否则返回空集，检查等于没跑。
+    deck_rows = runner._sqlite_rows(
+        "select d.id, d.name, count(c.id) as n from decks d"
+        " left join cards c on c.did = d.id where d.id > 1 group by d.id"
+        " order by n desc, d.id"
+    )
+    deck_rows = [row for row in deck_rows if int(row[2]) > 0]
+    if deck_rows:
+        did = int(deck_rows[0][0])
+        deck_name = str(deck_rows[0][1]).replace("\x1f", "::")
+        allowed = {did} | {
+            int(row[0])
+            for row in deck_rows
+            if str(row[1]).replace("\x1f", "::").startswith(deck_name + "::")
+        }
+        allowed_sql = ",".join(str(d) for d in sorted(allowed))
+
+        def deck_scope(payload: dict, allowed_sql: str = allowed_sql) -> None:
+            data = runner.expect_success(payload)
+            ids = [int(x) for x in (data.get("cardIds") or [])]
+            if not ids:
+                return
+            bad = runner.sqlite_count(
+                "select count(*) from cards where id in ("
+                + ",".join(str(i) for i in ids)
+                + f") and did not in ({allowed_sql})"
+            )
+            if bad:
+                raise AssertionError(f"牌组专项里混入 {bad} 张其它牌组的卡")
+
+        runner.check(
+            "start_custom_study", deck_scope,
+            {"preset": "custom", "deckId": str(did), "cardScope": "all", "limit": limit},
+            label="custom-study:deck-scope",
+        )
+
+    after = _schedule_snapshot(runner)
+    diff = _diff_count(before, after)
+    runner.results.append(
+        CheckResult(
+            runner.key,
+            "custom-study:no-schedule-side-effect",
+            diff == 0,
+            "" if diff == 0 else f"启动特训改动了 {diff} 张卡的调度字段",
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
 # 主流程
 # ---------------------------------------------------------------------------
 
@@ -1032,6 +1284,8 @@ def main() -> int:
         try:
             with ScenarioRunner(key, verbose=args.verbose) as runner:
                 run_checks(runner)
+                run_library_sort_checks(runner)
+                run_custom_study_preset_checks(runner)
                 run_deck_options(runner)
                 run_maintenance_checks(runner)
                 run_occlusion_checks(runner)

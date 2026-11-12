@@ -99,6 +99,11 @@ python3 verify_isolation.py --check      # 确认真实库未被改动
 | `deck-options:roundtrip` | 写 42 读回必须是 42 |
 | `batch:tag-persisted` / `answer:revlog` | 批量加标签真的进 `notes.tags`；答题真的产生一条 revlog |
 | `set_card_flag` / `toggle_suspend` / `quick_add` | 写下去真的落库（查 sqlite 验证，不信返回值） |
+| `sort:*` | 七种排序（失误降序/间隔升降/到期/稳定度/正面/最新）结果集总数不变、顺序严格单调；未知 `sortBy` 不崩也不清空 |
+| `custom-study:preview:*` / `start:*` | 四种预设的 `count == min(limit, totalMatched)`，返回卡片符合预设语义（只出新卡/只出带旗标/只出复习型），`isPreviewOnly` 正确回显 |
+| `custom-study:no-schedule-side-effect` | 连跑四次「启动特训」（含 `isPreviewOnly=false`）后全库调度字段零 diff |
+| `custom-study:flag-color` | 指定旗标色时返回的卡片颜色必须一致 |
+| `custom-study:flag-data` | `mixed` 场景必须真的有带旗标的卡，防止配方退化后旗标检查空跑 |
 
 另外每个返回值都会过一遍「非法数值」检查：出现 `Infinity` / `NaN` 直接判失败，
 因为 Python 的 json 会把它们写成非法字面量，前端 `JSON.parse` 会当场抛错。
@@ -112,7 +117,7 @@ python3 verify_isolation.py --check      # 确认真实库未被改动
 修复后已升级为正式断言 `native-io:frontHtml` 与 `native-io:review`，同时列表与复习
 两条渲染路径都被守住。**目前没有未认领的已知缺陷。**
 
-全部在 `state/smoke/` 的副本上执行，跑完即删。**11 个场景、471 项检查约 6 秒**。
+全部在 `state/smoke/` 的副本上执行，跑完即删。**11 个场景、692 项检查约 5 秒**。
 
 ### 覆盖范围
 
@@ -144,7 +149,7 @@ python3 verify_isolation.py --check      # 确认真实库未被改动
 | `newbie` | 100 卡全新 | 新卡队列、首次学习、学习步长 |
 | `exam` | ~800 卡 / 3 层牌组 | Basic + Cloze、30% 新卡、标签、复习历史（回归主力） |
 | `backlog` | 600 卡全逾期 | 进度减负、Future Due 峰值、dailyLoad |
-| `mixed` | 400 卡 | 暂停 / 隐藏 / 学习 / 重学混排、批量操作边界 |
+| `mixed` | 400 卡 | 暂停 / 隐藏 / 学习 / 重学混排、**7 色用户旗标**、批量操作边界 |
 | `power` | 3000 卡 / 8 牌组 | 多笔记类型、大标签量、分页与查询延迟 |
 | `media` | 200 卡 + 9 个素材 | 图片/音频引用、孤立媒体文件 |
 | `occlusion` | 60 卡全遮挡 | 项目自定义 `.anki-io-wrap` 结构、hide-all / hide-one |
@@ -163,11 +168,11 @@ notes 与 cards 指纹。
 
 ```bash
 python3 build.py --verify-repro exam occlusion dirty
-# → exam … 可复现  notes 7ef8d9ad…  cards 85f78f28…
+# → exam … 可复现  notes 7ef8d9ad…  cards 99535d26…
 ```
 
 指纹刻意排除 `id` / `mod` / `due`：前两者是时间戳，后者对学习卡存的是毫秒时刻，
-每次生成必然不同。剩下 `type / queue / ivl / factor / reps / lapses` 与笔记正文
+每次生成必然不同。剩下 `type / queue / ivl / factor / reps / lapses / flags` 与笔记正文
 才是真正应该稳定的部分。
 
 ## 生成原理
@@ -200,6 +205,8 @@ Anki 26 的 collection 在打开状态下由 Rust 后端持有连接，写调度
     revlog_per_card=(1, 6),
     overdue_range=(-10, 60),
     tag_pool=("标签1", "标签2"),
+    # 需要带旗标时加这一行（1~7 是颜色，未列出的部分为无旗标）
+    flag_mix={1: 0.10, 3: 0.05},
     seed=20261111,
 )
 ```

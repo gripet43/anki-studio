@@ -47,8 +47,8 @@ def _fingerprint(path: Path) -> tuple[str, str]:
     try:
         notes = [row[0] for row in conn.execute("select flds from notes order by flds")]
         cards = conn.execute(
-            "select type, queue, ivl, factor, reps, lapses from cards"
-            " order by type, queue, ivl, factor, reps, lapses"
+            "select type, queue, ivl, factor, reps, lapses, flags from cards"
+            " order by type, queue, ivl, factor, reps, lapses, flags"
         ).fetchall()
     finally:
         conn.close()

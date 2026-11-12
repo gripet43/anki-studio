@@ -87,6 +87,9 @@ class ScenarioSpec:
     notetype_mix: dict[str, float] = field(default_factory=lambda: {"Basic": 1.0})
     #: 状态占比，键取自 STATE_KEYS，剩余部分补 review
     state_mix: dict[str, float] = field(default_factory=dict)
+    #: 用户旗标占比，键为颜色 1~7（对应 cards.flags 低 3 位），未列出的部分为「无旗标」。
+    #: 注意：这是唯一能造出「带旗标卡片」的入口，缺了它 flag 筛选与旗标专项全是空跑。
+    flag_mix: dict[int, float] = field(default_factory=dict)
     #: 每张卡的复习次数范围，0 表示不写 revlog
     revlog_per_card: tuple[int, int] = (0, 0)
     #: 复习卡间隔范围（天）
@@ -389,10 +392,23 @@ def _assign_states(spec: ScenarioSpec, db_path: Path) -> dict[str, Any]:
         states.extend(["review"] * (len(cids) - len(states)))
         rng.shuffle(states)
 
+        # 用户旗标：Anki 用 cards.flags 的低 3 位存颜色 1~7，0 表示无旗标
+        flags_pool: list[int] = []
+        for color, ratio in spec.flag_mix.items():
+            if not 1 <= int(color) <= 7:
+                raise ValueError(f"{spec.key}: 旗标颜色必须是 1~7，收到 {color}")
+            flags_pool.extend([int(color)] * int(round(len(cids) * ratio)))
+        flags_pool = flags_pool[: len(cids)]
+        flags_pool.extend([0] * (len(cids) - len(flags_pool)))
+        rng.shuffle(flags_pool)
+
         queue_dist: dict[str, int] = {}
-        for cid, state in zip(cids, states):
+        flag_dist: dict[str, int] = {}
+        for idx, (cid, state) in enumerate(zip(cids, states)):
             ctype, queue = STATE_KEYS[state]
             queue_dist[state] = queue_dist.get(state, 0) + 1
+            flag = flags_pool[idx]
+            flag_dist[str(flag)] = flag_dist.get(str(flag), 0) + 1
 
             if state == "new":
                 due = rng.randint(1, max(1, len(cids)))
@@ -411,8 +427,8 @@ def _assign_states(spec: ScenarioSpec, db_path: Path) -> dict[str, Any]:
                     due = today + rng.randint(*spec.overdue_range)
 
             conn.execute(
-                "update cards set type=?, queue=?, due=?, ivl=?, factor=?, reps=?, lapses=? where id=?",
-                (ctype, queue, due, ivl, factor, reps, lapses, cid),
+                "update cards set type=?, queue=?, due=?, ivl=?, factor=?, reps=?, lapses=?, flags=? where id=?",
+                (ctype, queue, due, ivl, factor, reps, lapses, flag, cid),
             )
 
         # revlog：按卡片状态生成合理的复习历史
@@ -433,7 +449,7 @@ def _assign_states(spec: ScenarioSpec, db_path: Path) -> dict[str, Any]:
                     revlog_count += 1
 
         conn.commit()
-        return {"queue_dist": queue_dist, "revlog": revlog_count}
+        return {"queue_dist": queue_dist, "flag_dist": flag_dist, "revlog": revlog_count}
     finally:
         conn.close()
 

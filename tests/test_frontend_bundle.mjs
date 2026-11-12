@@ -814,4 +814,69 @@ assert(
   'Item #36: Dashboard must use semantic surface tokens, Level-2 tonal deck study button, unified StatsView tooltips, unclipped WYSIWYG emoji picker, and 3-tier CustomStudyModal hierarchy'
 );
 
+// Item #37: 卡片库排序层级 + 同步云图标 + 顶栏角标移除 + 编辑器 Esc 作用域 + 火焰暖光晕
+const syncIconSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/common/SyncStateIcon.tsx'),
+  'utf-8'
+);
+const flameSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/dashboard/StreakFlameBackdrop.tsx'),
+  'utf-8'
+);
+
+// 排序是「交叉维度」：必须在筛选胶囊组之外、靠右、且自身不是描边胶囊。
+const sortBlockStart = librarySrc.indexOf('ref={sortDropdownRef}');
+assert(sortBlockStart > 0, 'Item #37: LibraryView 里找不到 sortDropdownRef 排序控件');
+const sortBlockEnd = librarySrc.indexOf('{sortDropdownOpen &&', sortBlockStart);
+assert(sortBlockEnd > sortBlockStart, 'Item #37: 排序控件结构变了，找不到下拉面板起点');
+const sortButtonSrc = librarySrc.slice(sortBlockStart, sortBlockEnd);
+assert(
+  librarySrc.includes('ms-auto') &&
+    sortButtonSrc.includes('aria-haspopup="menu"') &&
+    !sortButtonSrc.includes('rounded-full'),
+  'Item #37: 排序控件必须靠右（ms-auto）、带 aria-haspopup，且不能再用筛选胶囊的 rounded-full 形态'
+);
+assert(
+  librarySrc.includes('absolute end-0 top-10 z-40 w-[230px]'),
+  'Item #37: 排序下拉必须锚定 end-0，否则贴右后会被视口右侧裁掉'
+);
+
+// 同步状态里的绿点已换成云朵图标，颜色走主题色而不是写死的状态绿。
+assert(
+  syncPillSrc.includes('SyncStateIcon') &&
+    syncPillSrc.includes('size="sm"') &&
+    !syncPillSrc.includes('bg-[#22C55E]'),
+  'Item #37: SyncStatusPill 必须用 SyncStateIcon 云朵，且不得回退到 bg-[#22C55E] 绿点'
+);
+assert(
+  syncIconSrc.includes('text-[var(--brand-text)]'),
+  'Item #37: SyncStateIcon 的云端快照图标必须用主题色 --brand-text'
+);
+
+// 顶栏搜索框不再挂 ⌘K / Ctrl K 角标。
+assert(
+  !dashboardSrc.includes('⌘K') && !dashboardSrc.includes('<kbd'),
+  'Item #37: DashboardView 不应再渲染快捷键角标（⌘K / <kbd>）'
+);
+
+// 富文本编辑器的 Esc 必须在捕获阶段消费，否则会连带关掉整个制卡弹窗。
+assert(
+  wysiwygSrc.includes("addEventListener('keydown', handleKeyDownEscape, true)") &&
+    wysiwygSrc.includes('anyDropdownOpenRef'),
+  'Item #37: TowerWysiwygEditor 的 Esc 必须在捕获阶段拦截，且仅在有浮层打开时生效'
+);
+
+// 连胜火焰的双层火苗 + 径向暖光晕是用户明确认可的版本，守死不让它再被删。
+assert(
+  flameSrc.includes('glowGradId') && flameSrc.includes('<ellipse'),
+  'Item #37: StreakFlameBackdrop 必须保留径向暖光晕（<ellipse> + glowGradId）'
+);
+const heroRuleStart = dashboardCssSrc.indexOf('.dashboard-hero {');
+assert(heroRuleStart > 0, 'Item #37: index.css 里找不到 .dashboard-hero 规则');
+const heroRule = dashboardCssSrc.slice(heroRuleStart, dashboardCssSrc.indexOf('}', heroRuleStart));
+assert(
+  heroRule.includes('radial-gradient'),
+  'Item #37: .dashboard-hero 底色必须是与火焰配套的橙色 radial-gradient，不要退回斜向品牌色淡染'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');
