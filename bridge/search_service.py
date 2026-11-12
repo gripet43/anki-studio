@@ -743,7 +743,24 @@ class SearchService:
                             header_parts.append(f'<div class="Phiên âm">{pa_val}</div>')
                         header_parts.append(f'<div class="Tiếng Việt"><b>{tv_val}</b></div>')
                         back_raw = "".join(header_parts) + (back_raw or "")
-                front_clean = self._strip_html_for_summary(front_raw) or empty_title
+                picked_clean = self._strip_html_for_summary(fields_dict.get(front_key, "")) if front_key else ""
+                rendered_q_body = re.sub(
+                    r'<div\b[^>]*\bclass\s*=\s*["\']?header["\']?[^>]*>[\s\S]*?</div\s*>',
+                    "",
+                    native.question or "",
+                    flags=re.I,
+                )
+                rendered_q_clean = self._strip_html_for_summary(rendered_q_body)
+                sfld_clean = self._strip_html_for_summary(str(getattr(note, "sfld", "") or ""))
+                # 优先使用模板正面匹配出的非元数据字段文本或渲染正面文本，sfld 仅在两者均为空时作兜底
+                if picked_clean and front_key.strip().lower() not in {"noteid", "note id", "id", "guid", "uuid", "link", "level"}:
+                    front_clean = picked_clean
+                elif rendered_q_clean:
+                    front_clean = rendered_q_clean
+                elif sfld_clean:
+                    front_clean = sfld_clean
+                else:
+                    front_clean = empty_title
                 back_clean = self._strip_html_for_summary(back_raw)
 
             show_front_ruby = "<ruby" in (native.question if native else "").lower()

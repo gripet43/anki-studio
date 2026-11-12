@@ -2249,5 +2249,77 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertIn("color: #333", scoped_css)
 
 
+    def test_33_step1_smart_full_page_flip_and_sfld_fallback(self):
+        """第 1 步核心架构升级回归：智能整页翻面判定 + ReviewService replaceFrontOnFlip + SearchService sfld 兜底。"""
+        from anki_modern_os.bridge.media_utils import should_replace_front_on_flip
+
+        class StubTemplateCard:
+            def __init__(self, afmt: str):
+                self._afmt = afmt
+
+            def template(self):
+                return {"afmt": self._afmt}
+
+        # 1. afmt 含 {{FrontSide}} 时直接整页替换
+        self.assertTrue(
+            should_replace_front_on_flip(
+                StubTemplateCard("{{FrontSide}}<hr id=answer>{{Back}}"),
+                "高校",
+                "<div>无关文本</div>",
+            )
+        )
+        # 2. afmt 不含 {{FrontSide}}，但答案面已手写复述正面正文（如 CGW / N1N2N3N4N5）时同样整页替换
+        self.assertTrue(
+            should_replace_front_on_flip(
+                StubTemplateCard("<div class='hanzi'>{{中文}}</div>{{英文}}"),
+                "她比我高。",
+                "<div class='hanzi'>她比我高。</div><div>She is taller than me.</div>",
+            )
+        )
+        # 3. 柯林斯类无 FrontSide 且答案面不复述正面时保留上方正面
+        self.assertFalse(
+            should_replace_front_on_flip(
+                StubTemplateCard("<div class='phonetic'>{{英美音标}}</div><div class='ext'>{{柯林斯}}</div>"),
+                "perceive",
+                "<div class='phonetic'>[pə'si:v]</div><div class='ext'>vt. 察觉</div>",
+            )
+        )
+
+        # 4. ReviewService 正确透传 replaceFrontOnFlip 且整页替换时保留完整 answer（不剥 FrontSide）
+        class StubFrontSideOutput:
+            question_text = "<div class='q'>高校</div>"
+            answer_text = "<div class='q'>高校</div><hr id=answer><div class='a'>高中</div>"
+            question_av_tags = []
+            answer_av_tags = []
+            css = ".card{color:#333}"
+
+        card = self.mock_col.get_card(201)
+        card.template = lambda: {"afmt": "{{FrontSide}}<hr id=answer>{{释义}}"}
+        card.render_output = lambda *a, **k: StubFrontSideOutput()
+
+        rev = self._call("start_review", {"deckId": "1"})["data"]["cards"][0]
+        self.assertTrue(rev["replaceFrontOnFlip"])
+        self.assertIn("高校", rev["backHtml"])
+        self.assertIn("高中", rev["backHtml"])
+
+        # 5. SearchService 优先采用非元数据模板/渲染正文作摘要，不让 sfld='2005' 或 UUID 成为标题
+        class StubSearchOutput:
+            question_text = "<div class='header'>Is this correct?</div><div class='hanzi'>她比我高。</div>"
+            answer_text = "<div class='hanzi'>她比我高。</div><div class='pinyin'>Tā bǐ wǒ gāo.</div>"
+            question_av_tags = []
+            answer_av_tags = []
+            css = ".card{color:#333}"
+
+        note101 = self.mock_col.get_note(101)
+        note101["正面"] = "她比我高。"
+        self.mock_col.db.conn.execute("UPDATE notes SET sfld = '2005' WHERE id = 101")
+        self.mock_col.db.conn.commit()
+        card.render_output = lambda *a, **k: StubSearchOutput()
+
+        search_item = self._call("search_cards", {"query": "", "limit": 10})["data"]["cards"][0]
+        self.assertEqual(search_item["front"], "她比我高。")
+        self.assertNotEqual(search_item["front"], "2005")
+
+
 if __name__ == "__main__":
     unittest.main()

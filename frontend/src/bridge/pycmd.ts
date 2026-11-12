@@ -423,6 +423,7 @@ export interface ReviewCardItem {
   frontHtml: string;
   frontAnswerHtml?: string;
   backHtml: string;
+  replaceFrontOnFlip?: boolean;
   audioFiles?: string[];
   fields: Record<string, string>;
   fieldOrder?: string[];

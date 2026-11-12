@@ -993,8 +993,8 @@ export const ReviewerView: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Headword & Reading */}
-                {(() => {
+                {/* Headword & Reading (hidden on flip when replaceFrontOnFlip is true so afmt replaces the whole card cleanly) */}
+                {!(isCardFlipped && currentCard.replaceFrontOnFlip) && (() => {
                   const frontHtmlContent = isCardFlipped
                     ? currentCard.frontAnswerHtml || currentCard.frontHtml || currentCard.front
                     : currentCard.frontHtml || currentCard.front;
@@ -1024,11 +1024,13 @@ export const ReviewerView: React.FC = () => {
 
                 {isCardFlipped ? (
                   <div className="ui-answer-reveal">
-                    <div
-                      className={`h-[1px] my-5 ui-divider-reveal ${
-                        isDark ? 'bg-white/[0.07]' : 'bg-[#ECECF2]'
-                      }`}
-                    />
+                    {!currentCard.replaceFrontOnFlip && (
+                      <div
+                        className={`h-[1px] my-5 ui-divider-reveal ${
+                          isDark ? 'bg-white/[0.07]' : 'bg-[#ECECF2]'
+                        }`}
+                      />
+                    )}
 
                     {/* Meaning */}
                     <div

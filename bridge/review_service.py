@@ -26,6 +26,7 @@ from .media_utils import (
     render_native_card_sides,
     render_native_image_occlusion,
     resolve_media_img_src_for_webview,
+    should_replace_front_on_flip,
     wrap_card_with_styles,
 )
 
@@ -520,7 +521,7 @@ class ReviewService:
             native = (
                 NativeRender("", "", [], [], "")
                 if (io_front or is_cloze)
-                else render_native_card_sides(card, media_dir)
+                else render_native_card_sides(card, media_dir, strip_front_side=False)
             )
             native_back, native_back_audio, native_back_css = (
                 native.answer,
@@ -569,6 +570,13 @@ class ReviewService:
                 strip_furigana_reading=False,
             )
 
+            front_plain_probe = plain_text_of(front_raw)
+            replace_front_on_flip = (
+                False
+                if (io_front or is_cloze)
+                else should_replace_front_on_flip(card, front_plain_probe, native.answer)
+            )
+
             # Chinese Grammar Wiki (CGW-ValidExample / CGW-InvalidExample) 在正面模板顶部有
             # `<div class="header">Is this sentence grammatically correct?</div>` 提问提示语，
             # 仅取 `中文` 字段会丢失题目要求；将其提取并挂在正面题干上方。
@@ -580,7 +588,6 @@ class ReviewService:
                 )
                 if hdr_m:
                     hdr_plain = plain_text_of(hdr_m.group(1))
-                    front_plain_probe = plain_text_of(front_raw)
                     if hdr_plain and hdr_plain != front_plain_probe and hdr_plain not in front_plain_probe:
                         hdr_badge = (
                             f'<div class="text-[13px] font-medium text-[#8E8E93] mb-1.5">'
@@ -686,6 +693,7 @@ class ReviewService:
                 "frontHtml": parsed["frontHtml"],
                 "frontAnswerHtml": parsed["frontAnswerHtml"],
                 "backHtml": parsed["backHtml"],
+                "replaceFrontOnFlip": replace_front_on_flip,
                 "audioFiles": all_audio,
                 "fields": fields_dict,
                 "fieldOrder": field_keys,

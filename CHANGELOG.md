@@ -15,6 +15,21 @@
 
 ## [Unreleased]
 
+## [v1.4.6] - 2026-11-12
+
+- **[Gemini] 落地方案「第 1 步」核心架构升级：智能整页翻面 + 3 字段以上编辑器真实字段平铺与空字段折叠 + 渲染文本摘要（`sfld` 仅作兜底）**（[`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`tests/test_bridge.py`](tests/test_bridge.py)）：
+  - **1. 智能整页翻面（Smart Full-Page Replacement on Flip）**：在 `media_utils.py` 新增 `should_replace_front_on_flip(card, front_plain, full_answer_html)` 与 `render_native_card_sides(..., strip_front_side=...)`，通过模板 `afmt` 是否包含 `{{FrontSide}}` 或渲染答案是否已包含题干正文（兼容 `Chinese Grammar Wiki` 与 `N1N2N3N4N5` 等手写复述正面模板）精确判定是否整页替换；`ReviewService` 下发 `replaceFrontOnFlip` 标志并保留完整答案面，`ReviewerView.tsx` 翻面后自动隐藏上方重复题干与分隔线，实现零重复、贴近原生的翻面切换。
+  - **2. 3 字段以上编辑器真实字段平铺与空字段折叠**：`CardEditorModal.tsx` 在新建与 2 字段卡片保持简洁双塔编辑布局，在编辑 ≥3 字段笔记时按卡型真实 `fieldOrder` 顺序直接平铺所有非空字段，并将全部空白字段折叠于「展开更多字段 (N)」按钮下以便按需补填（如 167 字段蓝宝书）；未修改草稿切入预览时直接呈现 `render_output()` 原生渲染结果并尊重 `replaceFrontOnFlip`。
+  - **3. 搜索摘要改用渲染文本、`sfld` 仅作兜底**：`SearchService._serialize_library_card` 优先取非元数据模板匹配字段或渲染后 `question_text` 纯文本作为卡片库标题，`sfld`（排序键，如柯林斯 `2005`、蓝宝书 `UUID`）仅在前述均为空时最后兜底。
+  - **验证**：新增 `test_33_step1_smart_full_page_flip_and_sfld_fallback`，全部 Python 单测、`tsc --noEmit`、前端构建、`.ankiaddon` 打包与 Bundle 门禁测试 100% 通过。
+
+- **[WorkBuddy] 复核与发版：真实卡包判定分布、编辑器保存路径、已知边界**（不采信自述，全部自己重跑）：
+  - **门禁**：49 项 Python 单测、`npx tsc --noEmit`、`npm run build`、Bundle 审计全绿。额外查了编辑器保存路径：`isMultiFieldEdit` 分支按 `noteFieldOrder` 把 `allFieldsMap` **全量**回填进 `mergedFields` 再提交，折叠起来的空字段不会被丢掉——这是「按字段数平铺」最容易出数据事故的地方，确认安全。
+  - **整页翻面判定的真实分布**：日语 `eggrolls-JLPT10k` 10,641 张 **100% 由模板 `afmt` 里的 `{{FrontSide}}` 命中**（确定性判定，正是方案第一步想要的）；柯林斯 `UVBasic-English` 997 张 **0 张命中模板、100% 由「答案正文包含正面文本」兜底命中**。柯林斯的答案首行是 `perceive [pə'si:v]}(2005.0) vt.察觉…` 这种内联词条，词与音标都在背面里，所以隐藏上方大标题不丢信息，但**翻面观感会变**：大字主词消失、分隔线消失，整屏让给卡面。这是贴近原生的取舍，已知会变，不是回归。
+  - **已知边界（本版不动）**：兜底用的是 `clean_front in ans_plain` 全文包含比对——它在这里的角色是「判重」而非「猜字段」，与之前反对的字段名白名单不是一回事；但若某卡包背面只在例句里顺带提到正面词、并未在开头重述标题，就会误隐藏大标题。真出现反例时把「全文包含」收紧成「答案开头 N 字符内包含」即可，不必回退架构。
+  - **中间态说明**：正面目前仍是单字段文本，背面是整张卡，翻面时会从「纯字段」跳到「卡包自己的排版」。这是有意保留的半步，下一步可把正面也换成 `question_text`，彻底不再选字段。
+  - 版本号 `1.4.5 → 1.4.6`，`docs/ANKIWEB_LISTING.md` 标题同步，重新打包。
+
 ## [v1.4.5] - 2026-11-12
 
 - **[Gemini] 8 大热门第三方 `.apkg` 卡牌库在学习模式、搜索模式与编辑模式下的全面兼容校验与样式修复**（[`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`bridge/edit_service.py`](bridge/edit_service.py)、[`frontend/src/utils/mathRenderer.ts`](frontend/src/utils/mathRenderer.ts)、[`frontend/src/index.css`](frontend/src/index.css)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`tests/test_bridge.py`](tests/test_bridge.py)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：

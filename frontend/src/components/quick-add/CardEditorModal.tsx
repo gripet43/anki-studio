@@ -175,6 +175,9 @@ export const CardEditorModal: React.FC = () => {
   const [frontFieldName, setFrontFieldName] = useState<string>('正面');
   const [backFieldName, setBackFieldName] = useState<string>('背面');
   const [additionalFields, setAdditionalFields] = useState<Record<string, string>>({});
+  const [noteFieldOrder, setNoteFieldOrder] = useState<string[]>([]);
+  const [allFieldsMap, setAllFieldsMap] = useState<Record<string, string>>({});
+  const [originalFieldsMap, setOriginalFieldsMap] = useState<Record<string, string>>({});
   const [showMoreFields, setShowMoreFields] = useState(false);
 
   // Real-time Duplicate Detection State
@@ -278,6 +281,23 @@ export const CardEditorModal: React.FC = () => {
       setBack(rawBack);
       setTags(initTags);
 
+      const resolvedFields: Record<string, string> = {};
+      const orderedKeys: string[] = [];
+      for (const k of fieldKeys) {
+        if (!orderedKeys.includes(k)) orderedKeys.push(k);
+        resolvedFields[k] = resolveMediaInHtml(allFields[k] ?? '', effectiveMediaBaseUrl);
+      }
+      for (const [k, v] of Object.entries(allFields)) {
+        if (!orderedKeys.includes(k)) orderedKeys.push(k);
+        if (!(k in resolvedFields)) {
+          resolvedFields[k] = resolveMediaInHtml(v ?? '', effectiveMediaBaseUrl);
+        }
+      }
+
+      setNoteFieldOrder(orderedKeys);
+      setAllFieldsMap(resolvedFields);
+      setOriginalFieldsMap({ ...resolvedFields });
+
       const extra: Record<string, string> = {};
       for (const [k, v] of Object.entries(allFields)) {
         if (k !== fKey && k !== bKey) {
@@ -285,7 +305,7 @@ export const CardEditorModal: React.FC = () => {
         }
       }
       setAdditionalFields(extra);
-      setShowMoreFields(Object.keys(extra).length > 0);
+      setShowMoreFields(orderedKeys.length >= 3 ? false : Object.keys(extra).length > 0);
 
       setOriginalSnapshot({
         front: rawFront,
@@ -302,6 +322,9 @@ export const CardEditorModal: React.FC = () => {
       setFront('');
       setBack('');
       setAdditionalFields({});
+      setNoteFieldOrder([]);
+      setAllFieldsMap({});
+      setOriginalFieldsMap({});
       setTags([]);
       setOriginalSnapshot({
         front: '',
@@ -395,18 +418,39 @@ export const CardEditorModal: React.FC = () => {
     );
   }, [backendDupPreview, localDuplicateInfo, front]);
 
+  const isMultiFieldEdit = isEditMode && noteFieldOrder.length >= 3;
+
   // Dirty state computation
   const hasChanges = useMemo(() => {
     if (!isEditMode) {
       return Boolean(front.trim() || back.trim() || tags.length > 0);
     }
-    if (front.trim() !== originalSnapshot.front.trim()) return true;
-    if (back.trim() !== originalSnapshot.back.trim()) return true;
     if (selectedDeckId !== originalSnapshot.deckId) return true;
     if (tags.length !== originalSnapshot.tags.length) return true;
     if (tags.some((tItem, idx) => tItem !== originalSnapshot.tags[idx])) return true;
+    if (isMultiFieldEdit) {
+      for (const k of noteFieldOrder) {
+        if ((allFieldsMap[k] || '').trim() !== (originalFieldsMap[k] || '').trim()) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (front.trim() !== originalSnapshot.front.trim()) return true;
+    if (back.trim() !== originalSnapshot.back.trim()) return true;
     return false;
-  }, [front, back, tags, selectedDeckId, originalSnapshot, isEditMode]);
+  }, [
+    front,
+    back,
+    tags,
+    selectedDeckId,
+    originalSnapshot,
+    isEditMode,
+    isMultiFieldEdit,
+    noteFieldOrder,
+    allFieldsMap,
+    originalFieldsMap,
+  ]);
 
   // Cloze indicator & distinct cloze ordinals (c1, c2, c3...)
   const clozeOrdinals = useMemo(() => {
@@ -641,22 +685,35 @@ export const CardEditorModal: React.FC = () => {
     }
   };
 
+  const canSubmit = isMultiFieldEdit
+    ? noteFieldOrder.some((k) => Boolean((allFieldsMap[k] || '').trim()))
+    : Boolean(front.trim());
+
   const handleSubmit = async () => {
-    if (!front.trim() || submitting) return;
+    if (!canSubmit || submitting) return;
     setSubmitting(true);
     applyFormatting('cloze');
 
     try {
       if (isEditMode && editingCardData) {
-        const formattedFront = front.trim();
-        const formattedBack = back.trim();
-
         const mergedFields: Record<string, string> = {};
-        for (const [k, v] of Object.entries(additionalFields)) {
-          mergedFields[k] = v.trim();
+        if (isMultiFieldEdit) {
+          for (const k of noteFieldOrder) {
+            mergedFields[k] = (allFieldsMap[k] ?? '').trim();
+          }
+          for (const [k, v] of Object.entries(allFieldsMap)) {
+            if (!(k in mergedFields)) mergedFields[k] = (v ?? '').trim();
+          }
+        } else {
+          for (const [k, v] of Object.entries(additionalFields)) {
+            mergedFields[k] = v.trim();
+          }
+          mergedFields[frontFieldName] = front.trim();
+          mergedFields[backFieldName] = back.trim();
         }
-        mergedFields[frontFieldName] = formattedFront;
-        mergedFields[backFieldName] = formattedBack;
+
+        const formattedFront = (mergedFields[frontFieldName] ?? front).trim();
+        const formattedBack = (mergedFields[backFieldName] ?? back).trim();
 
         await appActions.saveCardEdits({
           cardId: editingCardData.id,
@@ -1018,105 +1075,217 @@ export const CardEditorModal: React.FC = () => {
               </div>
             )}
 
-            {/* Front WYSIWYG Box (Tower Editor — with Image Occlusion integrated in toolbar row) */}
-            <TowerWysiwygEditor
-              label={`${frontFieldName} (${t('cardFrontLabel')})`}
-              badge={t('requiredBadge')}
-              value={front}
-              onChange={(val) => setFront(val)}
-              placeholder={t('editorFrontPlaceholder', { shortcut: clozeShortcutStr })}
-              minHeight={130}
-              isDark={isDark}
-              accentColor={brandHex}
-              mediaBaseUrl={effectiveMediaBaseUrl}
-              onPasteImage={appActions.pasteImageFromClipboard}
-              onKeyDownShortcut={handleEditorKeyDown}
-              showCloze={true}
-              onOpenImageOcclusion={() => setIoEditorOpen(true)}
-              hasImageOcclusion={front.includes('anki-io-wrap')}
-            />
+            {isMultiFieldEdit ? (
+              (() => {
+                const populatedFieldKeys = noteFieldOrder.filter((k) =>
+                  Boolean((allFieldsMap[k] || '').trim())
+                );
+                const emptyFieldKeys = noteFieldOrder.filter(
+                  (k) => !(allFieldsMap[k] || '').trim()
+                );
 
-            {/* Back WYSIWYG Box (Tower Editor) */}
-            <TowerWysiwygEditor
-              label={`${backFieldName} (${t('cardBackLabel')})`}
-              badge={
-                selectedPreset === 'reversed' ? t('notePresetReversedTitle') : undefined
-              }
-              value={back}
-              onChange={(val) => setBack(val)}
-              placeholder={t('editorBackPlaceholder')}
-              minHeight={150}
-              isDark={isDark}
-              accentColor={brandHex}
-              mediaBaseUrl={effectiveMediaBaseUrl}
-              onPasteImage={appActions.pasteImageFromClipboard}
-              onKeyDownShortcut={handleEditorKeyDown}
-              showCloze={true}
-            />
+                const renderNoteField = (fKey: string) => {
+                  const fVal = allFieldsMap[fKey] || '';
+                  const isPrimaryRich = fKey === frontFieldName || fKey === backFieldName;
+                  if (isPrimaryRich) {
+                    const roleLabel =
+                      fKey === frontFieldName
+                        ? `${fKey} (${t('cardFrontLabel')})`
+                        : `${fKey} (${t('cardBackLabel')})`;
+                    return (
+                      <TowerWysiwygEditor
+                        key={fKey}
+                        label={roleLabel}
+                        badge={fKey === frontFieldName ? t('requiredBadge') : undefined}
+                        value={fVal}
+                        onChange={(val) => {
+                          setAllFieldsMap((prev) => ({ ...prev, [fKey]: val }));
+                          if (fKey === frontFieldName) setFront(val);
+                          if (fKey === backFieldName) setBack(val);
+                        }}
+                        placeholder={t('editorBackPlaceholder')}
+                        minHeight={115}
+                        isDark={isDark}
+                        accentColor={brandHex}
+                        mediaBaseUrl={effectiveMediaBaseUrl}
+                        onPasteImage={appActions.pasteImageFromClipboard}
+                        onKeyDownShortcut={handleEditorKeyDown}
+                        showCloze={true}
+                        onOpenImageOcclusion={
+                          fKey === frontFieldName ? () => setIoEditorOpen(true) : undefined
+                        }
+                        hasImageOcclusion={
+                          fKey === frontFieldName ? fVal.includes('anki-io-wrap') : false
+                        }
+                      />
+                    );
+                  }
 
-            {/* Additional Fields */}
-            {Object.keys(additionalFields).length > 0 && (() => {
-              const allEntries = Object.entries(additionalFields);
-              const nonEmptyEntries = allEntries.filter(([, v]) => Boolean(v && v.trim()));
-              const emptyEntries = allEntries.filter(([, v]) => !v || !v.trim());
-              const visibleEntries =
-                allEntries.length > 12
-                  ? [...nonEmptyEntries, ...emptyEntries.slice(0, 4)]
-                  : [...nonEmptyEntries, ...emptyEntries];
-              return (
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowMoreFields((prev) => !prev)}
-                    className="text-[12px] font-semibold text-[var(--brand-text)] hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>{showMoreFields ? '▾' : '▸'}</span>
-                    <span>
-                      {t('moreFieldsBtn', { n: nonEmptyEntries.length || allEntries.length })}
-                    </span>
-                  </button>
+                  const isMultiLineOrHtml =
+                    fVal.length > 80 ||
+                    fVal.includes('\n') ||
+                    /<(?:table|div|p|ul|ol|img|br)\b/i.test(fVal);
 
-                  {showMoreFields && (
-                    <div className="mt-3 space-y-3 ps-2 border-s-2 border-[var(--brand-border)]">
-                      {visibleEntries.map(([fKey, fVal]) => {
-                        const isMultiLineOrHtml =
-                          fVal.length > 80 || fVal.includes('\n') || /<(?:table|div|p|ul|ol|img|br)\b/i.test(fVal);
-                        return (
-                          <div key={fKey} className="space-y-1">
-                            <label className="block text-[11px] text-[#8E8E93] font-medium">{fKey}</label>
-                            {isMultiLineOrHtml ? (
-                              <textarea
-                                rows={3}
-                                value={fVal}
-                                onChange={(e) =>
-                                  setAdditionalFields((prev) => ({
-                                    ...prev,
-                                    [fKey]: e.target.value,
-                                  }))
-                                }
-                                className={`w-full py-2 px-3 rounded-xl border text-[13px] leading-relaxed focus:outline-none focus:border-[var(--brand)] resize-y ${inputBg} ${cardBorder}`}
-                              />
-                            ) : (
-                              <input
-                                type="text"
-                                value={fVal}
-                                onChange={(e) =>
-                                  setAdditionalFields((prev) => ({
-                                    ...prev,
-                                    [fKey]: e.target.value,
-                                  }))
-                                }
-                                className={`w-full h-9 px-3 rounded-xl border text-[13px] focus:outline-none focus:border-[var(--brand)] ${inputBg} ${cardBorder}`}
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
+                  return (
+                    <div key={fKey} className="space-y-1.5">
+                      <label className="block text-[12px] font-semibold text-[#6E6E73] dark:text-[#A0A2B2]">
+                        {fKey}
+                      </label>
+                      {isMultiLineOrHtml ? (
+                        <textarea
+                          rows={3}
+                          value={fVal}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setAllFieldsMap((prev) => ({ ...prev, [fKey]: val }));
+                            setAdditionalFields((prev) => ({ ...prev, [fKey]: val }));
+                          }}
+                          className={`w-full py-2 px-3 rounded-xl border text-[13px] leading-relaxed focus:outline-none focus:border-[var(--brand)] resize-y ${inputBg} ${cardBorder}`}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={fVal}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setAllFieldsMap((prev) => ({ ...prev, [fKey]: val }));
+                            setAdditionalFields((prev) => ({ ...prev, [fKey]: val }));
+                          }}
+                          className={`w-full h-9 px-3 rounded-xl border text-[13px] focus:outline-none focus:border-[var(--brand)] ${inputBg} ${cardBorder}`}
+                        />
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })()}
+                  );
+                };
+
+                return (
+                  <div className="space-y-4">
+                    {populatedFieldKeys.map((fKey) => renderNoteField(fKey))}
+
+                    {emptyFieldKeys.length > 0 && (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowMoreFields((prev) => !prev)}
+                          className="text-[12px] font-semibold text-[var(--brand-text)] hover:underline flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span>{showMoreFields ? '▾' : '▸'}</span>
+                          <span>{t('moreFieldsBtn', { n: emptyFieldKeys.length })}</span>
+                        </button>
+
+                        {showMoreFields && (
+                          <div className="mt-3 space-y-3 ps-2.5 border-s-2 border-[var(--brand-border)]">
+                            {emptyFieldKeys.map((fKey) => renderNoteField(fKey))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()
+            ) : (
+              <>
+                {/* Front WYSIWYG Box (Tower Editor — with Image Occlusion integrated in toolbar row) */}
+                <TowerWysiwygEditor
+                  label={`${frontFieldName} (${t('cardFrontLabel')})`}
+                  badge={t('requiredBadge')}
+                  value={front}
+                  onChange={(val) => setFront(val)}
+                  placeholder={t('editorFrontPlaceholder', { shortcut: clozeShortcutStr })}
+                  minHeight={130}
+                  isDark={isDark}
+                  accentColor={brandHex}
+                  mediaBaseUrl={effectiveMediaBaseUrl}
+                  onPasteImage={appActions.pasteImageFromClipboard}
+                  onKeyDownShortcut={handleEditorKeyDown}
+                  showCloze={true}
+                  onOpenImageOcclusion={() => setIoEditorOpen(true)}
+                  hasImageOcclusion={front.includes('anki-io-wrap')}
+                />
+
+                {/* Back WYSIWYG Box (Tower Editor) */}
+                <TowerWysiwygEditor
+                  label={`${backFieldName} (${t('cardBackLabel')})`}
+                  badge={
+                    selectedPreset === 'reversed' ? t('notePresetReversedTitle') : undefined
+                  }
+                  value={back}
+                  onChange={(val) => setBack(val)}
+                  placeholder={t('editorBackPlaceholder')}
+                  minHeight={150}
+                  isDark={isDark}
+                  accentColor={brandHex}
+                  mediaBaseUrl={effectiveMediaBaseUrl}
+                  onPasteImage={appActions.pasteImageFromClipboard}
+                  onKeyDownShortcut={handleEditorKeyDown}
+                  showCloze={true}
+                />
+
+                {/* Additional Fields (New card / 2-field presets) */}
+                {Object.keys(additionalFields).length > 0 && (() => {
+                  const allEntries = Object.entries(additionalFields);
+                  const nonEmptyEntries = allEntries.filter(([, v]) => Boolean(v && v.trim()));
+                  const emptyEntries = allEntries.filter(([, v]) => !v || !v.trim());
+                  const visibleEntries =
+                    allEntries.length > 12
+                      ? [...nonEmptyEntries, ...emptyEntries.slice(0, 4)]
+                      : [...nonEmptyEntries, ...emptyEntries];
+                  return (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowMoreFields((prev) => !prev)}
+                        className="text-[12px] font-semibold text-[var(--brand-text)] hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>{showMoreFields ? '▾' : '▸'}</span>
+                        <span>
+                          {t('moreFieldsBtn', { n: nonEmptyEntries.length || allEntries.length })}
+                        </span>
+                      </button>
+
+                      {showMoreFields && (
+                        <div className="mt-3 space-y-3 ps-2 border-s-2 border-[var(--brand-border)]">
+                          {visibleEntries.map(([fKey, fVal]) => {
+                            const isMultiLineOrHtml =
+                              fVal.length > 80 || fVal.includes('\n') || /<(?:table|div|p|ul|ol|img|br)\b/i.test(fVal);
+                            return (
+                              <div key={fKey} className="space-y-1">
+                                <label className="block text-[11px] text-[#8E8E93] font-medium">{fKey}</label>
+                                {isMultiLineOrHtml ? (
+                                  <textarea
+                                    rows={3}
+                                    value={fVal}
+                                    onChange={(e) =>
+                                      setAdditionalFields((prev) => ({
+                                        ...prev,
+                                        [fKey]: e.target.value,
+                                      }))
+                                    }
+                                    className={`w-full py-2 px-3 rounded-xl border text-[13px] leading-relaxed focus:outline-none focus:border-[var(--brand)] resize-y ${inputBg} ${cardBorder}`}
+                                  />
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={fVal}
+                                    onChange={(e) =>
+                                      setAdditionalFields((prev) => ({
+                                        ...prev,
+                                        [fKey]: e.target.value,
+                                      }))
+                                    }
+                                    className={`w-full h-9 px-3 rounded-xl border text-[13px] focus:outline-none focus:border-[var(--brand)] ${inputBg} ${cardBorder}`}
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </>
+            )}
 
             {/* Tags Section */}
             <div className="space-y-2 pt-1">
@@ -1398,69 +1567,110 @@ export const CardEditorModal: React.FC = () => {
 
               {/* Main Card Body */}
               <div className="my-auto flex flex-col items-center justify-center w-full py-2">
-                {previewCardContent.rawQ.trim() ? (
-                  <div
-                    className={`select-text break-words [&_img]:max-h-64 [&_img]:rounded-xl [&_img]:mx-auto [&_img]:my-2 [&_blockquote]:border-s-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:ps-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px] ${previewCardContent.questionSizeClass}`}
-                    dangerouslySetInnerHTML={{
-                      __html: previewCardContent.questionHtml,
-                    }}
-                  />
-                ) : (
-                  <div className="text-[14px] text-[#8E8E93] italic py-8 text-center">
-                    {t('editorFrontPlaceholder', { shortcut: clozeShortcutStr })}
-                  </div>
-                )}
-
-                {/* Answer Reveal Section */}
-                {previewFlipped && (
-                  <div className="w-full mt-6 pt-6 relative space-y-4 text-start ui-answer-reveal">
-                    <div
-                      aria-hidden="true"
-                      className={`absolute inset-x-0 top-0 border-t ${cardBorder} ui-divider-reveal`}
-                    />
-
-                    {previewCardContent.rawA.trim() ? (
-                      <div
-                        className="text-[16px] sm:text-[17px] leading-relaxed font-medium select-text break-words [&_img]:max-h-64 [&_img]:rounded-xl [&_img]:my-2 [&_blockquote]:border-s-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:ps-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px]"
-                        dangerouslySetInnerHTML={{
-                          __html: previewCardContent.answerHtml,
-                        }}
-                      />
-                    ) : !isCloze && !front.includes('anki-io-wrap') ? (
-                      <div className="text-[13px] text-[#8E8E93] italic">
-                        {t('noBackContentPlaceholder')}
-                      </div>
-                    ) : null}
-
-                    {/* Additional Custom Fields (Reading / Etymology / Example / Notes) */}
-                    {previewCardContent.populatedExtras.length > 0 && (
-                      <div className="grid grid-cols-1 gap-2.5 pt-2">
-                        {previewCardContent.populatedExtras.map(([fKey, fVal]) => (
+                {isEditMode && !hasChanges && editingCardData?.backHtml ? (
+                  (() => {
+                    const nativeReplace = Boolean((editingCardData as ReviewCardItem).replaceFrontOnFlip);
+                    const nativeFrontHtml = resolveMediaInHtml(
+                      editingCardData.frontHtml || '',
+                      effectiveMediaBaseUrl
+                    );
+                    const nativeBackHtml = resolveMediaInHtml(
+                      editingCardData.backHtml || '',
+                      effectiveMediaBaseUrl
+                    );
+                    return (
+                      <>
+                        {!(previewFlipped && nativeReplace) && (
                           <div
-                            key={fKey}
-                            className={`p-3 rounded-xl border text-[13px] ${
-                              isDark
-                                ? 'bg-[#14151E] border-[#282A38]'
-                                : 'bg-[#F8F9FB] border-[#ECEEF4]'
+                            className="w-full select-text break-words text-[17px] leading-relaxed"
+                            dangerouslySetInnerHTML={{ __html: nativeFrontHtml }}
+                          />
+                        )}
+                        {previewFlipped && (
+                          <div
+                            className={`w-full select-text break-words text-[16px] leading-relaxed ui-answer-reveal ${
+                              nativeReplace ? '' : 'mt-6 pt-6 relative'
                             }`}
                           >
-                            <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--brand-text)] mb-1">
-                              {fKey}
-                            </div>
-                            <div
-                              className="leading-relaxed text-[#3A3A3C] dark:text-[#D5D6E0]"
-                              dangerouslySetInnerHTML={{
-                                __html: renderMathAndRichHtml(
-                                  resolveMediaInHtml(fVal, effectiveMediaBaseUrl),
-                                  false
-                                ),
-                              }}
-                            />
+                            {!nativeReplace && (
+                              <div
+                                aria-hidden="true"
+                                className={`absolute inset-x-0 top-0 border-t ${cardBorder} ui-divider-reveal`}
+                              />
+                            )}
+                            <div dangerouslySetInnerHTML={{ __html: nativeBackHtml }} />
                           </div>
-                        ))}
+                        )}
+                      </>
+                    );
+                  })()
+                ) : (
+                  <>
+                    {previewCardContent.rawQ.trim() ? (
+                      <div
+                        className={`select-text break-words [&_img]:max-h-64 [&_img]:rounded-xl [&_img]:mx-auto [&_img]:my-2 [&_blockquote]:border-s-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:ps-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px] ${previewCardContent.questionSizeClass}`}
+                        dangerouslySetInnerHTML={{
+                          __html: previewCardContent.questionHtml,
+                        }}
+                      />
+                    ) : (
+                      <div className="text-[14px] text-[#8E8E93] italic py-8 text-center">
+                        {t('editorFrontPlaceholder', { shortcut: clozeShortcutStr })}
                       </div>
                     )}
-                  </div>
+
+                    {/* Answer Reveal Section */}
+                    {previewFlipped && (
+                      <div className="w-full mt-6 pt-6 relative space-y-4 text-start ui-answer-reveal">
+                        <div
+                          aria-hidden="true"
+                          className={`absolute inset-x-0 top-0 border-t ${cardBorder} ui-divider-reveal`}
+                        />
+
+                        {previewCardContent.rawA.trim() ? (
+                          <div
+                            className="text-[16px] sm:text-[17px] leading-relaxed font-medium select-text break-words [&_img]:max-h-64 [&_img]:rounded-xl [&_img]:my-2 [&_blockquote]:border-s-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:ps-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px]"
+                            dangerouslySetInnerHTML={{
+                              __html: previewCardContent.answerHtml,
+                            }}
+                          />
+                        ) : !isCloze && !front.includes('anki-io-wrap') ? (
+                          <div className="text-[13px] text-[#8E8E93] italic">
+                            {t('noBackContentPlaceholder')}
+                          </div>
+                        ) : null}
+
+                        {/* Additional Custom Fields (Reading / Etymology / Example / Notes) */}
+                        {previewCardContent.populatedExtras.length > 0 && (
+                          <div className="grid grid-cols-1 gap-2.5 pt-2">
+                            {previewCardContent.populatedExtras.map(([fKey, fVal]) => (
+                              <div
+                                key={fKey}
+                                className={`p-3 rounded-xl border text-[13px] ${
+                                  isDark
+                                    ? 'bg-[#14151E] border-[#282A38]'
+                                    : 'bg-[#F8F9FB] border-[#ECEEF4]'
+                                }`}
+                              >
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--brand-text)] mb-1">
+                                  {fKey}
+                                </div>
+                                <div
+                                  className="leading-relaxed text-[#3A3A3C] dark:text-[#D5D6E0]"
+                                  dangerouslySetInnerHTML={{
+                                    __html: renderMathAndRichHtml(
+                                      resolveMediaInHtml(fVal, effectiveMediaBaseUrl),
+                                      false
+                                    ),
+                                  }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -1514,7 +1724,7 @@ export const CardEditorModal: React.FC = () => {
             <button
               type="button"
               onClick={() => handleSubmit()}
-              disabled={!front.trim() || submitting}
+              disabled={!canSubmit || submitting}
               style={{ backgroundColor: brandHex }}
               className="btn-primary !h-9 !px-5"
             >
