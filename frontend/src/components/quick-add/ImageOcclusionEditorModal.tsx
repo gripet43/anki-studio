@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePresence } from '../../hooks/usePresence';
-import { translate } from '../../i18n/translations';
+import { formatShortcut, translate } from '../../i18n/translations';
 import { useAppStore } from '../../stores/useAppStore';
 import { resolveMediaSrcValue } from '../../utils/mediaUrl';
 
@@ -148,9 +148,12 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
   onClose,
   onApply,
 }) => {
-  const { resolvedLang } = useAppStore();
+  const { resolvedLang, envInfo } = useAppStore();
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
+  // 粘贴快捷键随平台变化：macOS 是 Cmd+V，Windows/Linux 是 Ctrl+V。
+  // 文案里写死 Cmd 会让 Windows 用户照着按却没反应（r4 Windows 验版 A8 项）。
+  const pasteShortcutStr = formatShortcut('Cmd+V', envInfo.platform);
 
   const [titleText, setTitleText] = useState('');
   const [imgSrc, setImgSrc] = useState('');
@@ -519,7 +522,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
                 </svg>
               </div>
               <div className="text-[14px] font-bold">
-                {uploadingImage ? t('processingText') : t('ioEmptyCanvasTitle')}
+                {uploadingImage ? t('processingText') : t('ioEmptyCanvasTitle', { shortcut: pasteShortcutStr })}
               </div>
               <p className="text-[11px] text-[#8E8E93] mt-1.5 max-w-[380px]">
                 {t('ioEmptyCanvasSub')}

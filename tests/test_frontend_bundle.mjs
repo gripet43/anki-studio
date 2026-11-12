@@ -937,4 +937,96 @@ assert(
   `Item #39: 牌组色相偏移最大 ${Math.max(...deckHueOffsets)}°，超过 15° 就跑出主题色家族了`
 );
 
+// ── Item #40：文案里的快捷键必须随平台走，不得写死 `Cmd` ──────────────
+// 背景：r4 的 Windows 验版把 A8（快捷键与界面提示一致）判为失败，唯一原因是
+// `editorFrontPlaceholder` 里写死了 `Cmd+Shift+C`，Windows 上照样显示 Cmd。
+// 修掉当前这一条不够——下一位助手随手新加一条带快捷键的文案就会复发。
+// 所以这里不看具体某个键，而是扫全部语言包：**任何一条文案值只要出现 `Cmd`
+// 却不同时出现 `Ctrl`（即没有把两个平台并列写出来），就判失败**。
+const i18nDir = path.resolve(ADDON_ROOT, 'frontend/src/i18n');
+const i18nFiles = [
+  path.join(i18nDir, 'translations.ts'),
+  ...fs
+    .readdirSync(path.join(i18nDir, 'locales'))
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => path.join(i18nDir, 'locales', f)),
+];
+
+const hardcodedCmdSites = [];
+for (const file of i18nFiles) {
+  fs.readFileSync(file, 'utf-8')
+    .split('\n')
+    .forEach((line, idx) => {
+      const m = line.match(/^\s*([A-Za-z0-9_]+):\s*"((?:[^"\\]|\\.)*)"/);
+      if (!m) return;
+      const [, key, value] = m;
+      if (/\bCmd\b/.test(value) && !/\bCtrl\b/.test(value)) {
+        hardcodedCmdSites.push(`${path.basename(file)}:${idx + 1} (${key})`);
+      }
+    });
+}
+assert(
+  hardcodedCmdSites.length === 0,
+  `Item #40: 以下文案写死了 Cmd，Windows/Linux 上会显示按不出来的快捷键，` +
+    `请改成 {shortcut} 并由 formatShortcut() 注入（或像 ioEmptyCanvasSub 那样把 Ctrl 一并写出）：\n  ` +
+    hardcodedCmdSites.join('\n  ')
+);
+
+// 两条已参数化的键：每个含该键的语言包都必须真的带上 {shortcut}。
+const SHORTCUT_PARAM_KEYS = ['editorFrontPlaceholder', 'ioEmptyCanvasTitle'];
+const unparameterized = [];
+for (const file of i18nFiles) {
+  const src = fs.readFileSync(file, 'utf-8');
+  for (const key of SHORTCUT_PARAM_KEYS) {
+    const m = src.match(new RegExp(`^\\s*${key}:\\s*"([^"]*)"`, 'm'));
+    if (!m) continue; // 该语言包未覆盖此键，由 TranslationTable 类型在编译期兜底
+    if (!m[1].includes('{shortcut}')) unparameterized.push(`${path.basename(file)} (${key})`);
+  }
+}
+assert(
+  unparameterized.length === 0,
+  `Item #40: 以下语言包的文案缺少 {shortcut} 占位符，快捷键会退化成写死文本：\n  ` +
+    unparameterized.join('\n  ')
+);
+
+// 复用文件开头已读取的 translationsSrc（同一个文件），不重复声明。
+assert(
+  translationsSrc.includes('${k}') && translationsSrc.includes('String(v)'),
+  'Item #40: translate() 的 {占位符} 插值实现被移除了，传入 params 也不会生效'
+);
+
+// 光有占位符不够，调用点必须真的把参数传进去，否则界面上会直接显示 `{shortcut}`。
+const cardEditorSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/CardEditorModal.tsx'),
+  'utf-8'
+);
+const ioEditorSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx'),
+  'utf-8'
+);
+
+const frontPlaceholderCalls = (
+  cardEditorSrc.match(/t\('editorFrontPlaceholder',\s*\{\s*shortcut:/g) || []
+).length;
+assert(
+  !cardEditorSrc.includes("t('editorFrontPlaceholder')"),
+  'Item #40: CardEditorModal 里仍有不带 shortcut 参数的 editorFrontPlaceholder 调用（会直接显示 {shortcut}）'
+);
+assert(
+  frontPlaceholderCalls === 2,
+  `Item #40: CardEditorModal 应有 2 处带 shortcut 参数的 editorFrontPlaceholder 调用（输入框 placeholder + 预览空态），实际 ${frontPlaceholderCalls} 处`
+);
+assert(
+  /const clozeShortcutStr = formatShortcut\('Cmd\+Shift\+C',\s*envInfo\.platform\)/.test(cardEditorSrc),
+  'Item #40: clozeShortcutStr 必须由 formatShortcut(..., envInfo.platform) 生成，不能写死 Cmd+Shift+C'
+);
+assert(
+  /t\('ioEmptyCanvasTitle',\s*\{\s*shortcut:/.test(ioEditorSrc),
+  'Item #40: 图片遮挡空画布的 ioEmptyCanvasTitle 未传入 shortcut 参数'
+);
+assert(
+  /const pasteShortcutStr = formatShortcut\('Cmd\+V',\s*envInfo\.platform\)/.test(ioEditorSrc),
+  'Item #40: pasteShortcutStr 必须由 formatShortcut(..., envInfo.platform) 生成'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

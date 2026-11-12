@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+- **[WorkBuddy] 修掉 r4 Windows 验版判失败的 A8：文案里写死的快捷键改为按平台注入**（改 [`frontend/src/i18n/translations.ts`](frontend/src/i18n/translations.ts)、[`frontend/src/i18n/locales/`](frontend/src/i18n/locales/)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx`](frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - **报告结论**：[`tests/reports/windows-20261112-r4.md`](tests/reports/windows-20261112-r4.md) 里 15 项界面检查 13 项通过，**A8「快捷键与界面提示一致」判失败**，唯一原因是制卡编辑器正面输入框的 placeholder 在 Windows 上仍写 `Cmd+Shift+C`。B3（同步中脉冲、已同步云朵跟随主题色）是沙盒没有 AnkiWeb 凭据导致无法目视，代码层已确认实现，不属缺陷。
+  - **同一缺陷的第二处**：排查时发现 `ioEmptyCanvasTitle`（图片遮挡空画布标题）也是写死 `Cmd+V` 的，Windows 上会提示「直接按 Cmd+V 粘贴剪贴板图片」。r4 报告只点到编辑器一处，此处一并修掉。
+  - **改法**：两条文案在 16 个语言包里统一改为占位符 `{shortcut}`，由调用点注入 `formatShortcut('Cmd+Shift+C' | 'Cmd+V', envInfo.platform)`——macOS 得 `Cmd+Shift+C`，Windows/Linux 得 `Ctrl+Shift+C`。`CardEditorModal` 的输入框 placeholder 与预览空态两处共用同一个 `clozeShortcutStr`，`ImageOcclusionEditorModal` 用 `pasteShortcutStr`。
+  - **刻意不动的两处**：`ioEmptyCanvasSub` 写的是「`Cmd+V / Ctrl+V`」两个平台并列列出，用户自己会对号入座；`settingsShortcutsSub` 是在解释「这里会自动适配 Cmd 与 Ctrl」这一机制本身。两者都已在句中出现 `Ctrl`，不属写死。
+  - **守卫（Item #40，6 组断言）**：r4 的根因是「新增文案时漏了平台适配」，只修当前两条必然复发，所以守卫**不针对具体某个键**——扫描全部 16 个语言包，任何一条文案值只要出现 `Cmd` 却不同时出现 `Ctrl` 就判失败，并打印文件:行号:键名。另外断言两条键在每个语言包里都带 `{shortcut}`、`translate()` 的插值实现仍在、以及 `CardEditorModal` 的 2 处调用都真的传入了参数（否则界面会直接显示 `{shortcut}`）。
+  - **验证**：① 变异测试——把 32 处 `{shortcut}` 全改回 `Cmd+Shift+C`（模拟「各语言包统一写死」这一 Item #33 抓不到的形态），Item #40 精确报出 32 条位置；② 端到端——esbuild 打包真实 `translations.ts` 后调用 `translate()`，确认 `mac` 得 `Cmd+Shift+C`、`win` 得 `Ctrl+Shift+C`、无裸占位符残留；德语与日语语言包抽验同样带 `{shortcut}`。
+
 - **[WorkBuddy] 统一去掉「问号光标」+ 修正左侧栏「进度减负」在积压时的橙色实心格误读**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)）：
   - **1. 三处 `cursor-help`（问号光标）全部回落为默认光标**：帮助性提示靠 `title` 气泡与视觉上的 `?` 图标已经足够表达，光标再变问号属于多余且打断输入的信号——
     - 首页「连续打卡」旁的信息图标（用户指出的这一处）；

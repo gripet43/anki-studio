@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { callAnki, isAnkiNativeEnv } from '../../bridge/pycmd';
 import { usePresence } from '../../hooks/usePresence';
-import { translate } from '../../i18n/translations';
+import { formatShortcut, translate } from '../../i18n/translations';
 import { appActions, LibraryCardItem, ReviewCardItem, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
 import { renderMathAndRichHtml } from '../../utils/mathRenderer';
 import { extractMediaBaseUrlFromHtml, resolveMediaInHtml } from '../../utils/mediaUrl';
@@ -51,6 +51,9 @@ export const CardEditorModal: React.FC = () => {
   const isDark = theme === 'dark' || theme === 'oled';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
+  // 正面输入框的占位提示里带挖空快捷键，必须随平台走（macOS `Cmd` / Windows·Linux `Ctrl`）。
+  // 16 个语言包里该文案统一写成 `{shortcut}`，由这里注入，避免任何一端再写死 Cmd。
+  const clozeShortcutStr = formatShortcut('Cmd+Shift+C', envInfo.platform);
 
   const isEditMode = Boolean(editingCardData);
 
@@ -902,7 +905,7 @@ export const CardEditorModal: React.FC = () => {
               badge={t('requiredBadge')}
               value={front}
               onChange={(val) => setFront(val)}
-              placeholder={t('editorFrontPlaceholder')}
+              placeholder={t('editorFrontPlaceholder', { shortcut: clozeShortcutStr })}
               minHeight={130}
               isDark={isDark}
               accentColor={brandHex}
@@ -1258,7 +1261,7 @@ export const CardEditorModal: React.FC = () => {
                   />
                 ) : (
                   <div className="text-[14px] text-[#8E8E93] italic py-8 text-center">
-                    {t('editorFrontPlaceholder')}
+                    {t('editorFrontPlaceholder', { shortcut: clozeShortcutStr })}
                   </div>
                 )}
 
