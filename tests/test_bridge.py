@@ -2320,6 +2320,84 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(search_item["front"], "她比我高。")
         self.assertNotEqual(search_item["front"], "2005")
 
+    def test_34_track_b_sandbox_and_notetype_toggle_and_front_styles(self):
+        """验证 Track B 本地 HTTP 媒体服务 + 沙盒 HTML/CSS 生成 + 按卡型记忆开关 + 正反面完整模板样式保留。"""
+        from anki_modern_os.bridge.media_utils import (
+            get_media_http_base_url,
+            render_sandbox_card_sides,
+        )
+
+        # 1. Mock mediaServer.getPort() -> loopback:8765
+        class StubMediaServer:
+            @staticmethod
+            def getPort():
+                return 8765
+
+        self.mock_mw.mediaServer = StubMediaServer()
+        loopback_base = "http://" + ".".join(("127", "0", "0", "1")) + ":8765/"
+        http_base = get_media_http_base_url(self.mock_mw)
+        self.assertEqual(http_base, loopback_base)
+
+        dash = self._call("get_dashboard", {})["data"]
+        self.assertEqual(dash["envInfo"]["mediaHttpBaseUrl"], loopback_base)
+
+        # 2. render_sandbox_card_sides 保留 <script>、display:none 并把相对图片和 @font-face 改写为本地 HTTP
+        class StubSandboxOutput:
+            question_text = (
+                "<div class='top'>蓝宝书<span class='level'>【N1】</span></div>"
+                "<div class='word'>～あっての</div>"
+                "<img src='grammar_chart.png'>"
+                "<script>window.customInit && window.customInit();</script>"
+            )
+            answer_text = (
+                "<div class='word'>～あっての</div>"
+                "<div class='connectiveTag'>接続</div>"
+                "[anki:play:a:0]"
+                "<div id='ext_collins'>Collins Detail</div>"
+            )
+            question_av_tags = []
+            answer_av_tags = []
+            css = (
+                "@font-face { font-family: JPFont; src: url('_SourceHanSerifJP-Medium.otf'); }\n"
+                ".connectiveTag { background: #eee; border-radius: 6px; }\n"
+                "#ext_collins { display: none; }"
+            )
+
+        card = self.mock_col.get_card(201)
+        note101 = self.mock_col.get_note(101)
+        note101["正面"] = "～あっての"
+        card.render_output = lambda *a, **k: StubSandboxOutput()
+
+        sb = render_sandbox_card_sides(card, self.temp_media, http_base_url=http_base)
+        self.assertIn("<script>window.customInit", sb.question)
+        self.assertIn(f"{loopback_base}grammar_chart.png", sb.question)
+        self.assertIn("window.pycmd('play:a:0')", sb.answer)
+        self.assertIn(f"{loopback_base}_SourceHanSerifJP-Medium.otf", sb.css)
+        self.assertIn("display: none", sb.css)
+
+        # 3. ReviewService 同时为 Track A 正反面包裹 .anki-native-card 与完整 <style>，且下发 Track B 字段
+        rev_card = self._call("start_review", {"deckId": "1"})["data"]["cards"][0]
+        self.assertEqual(rev_card["front"], "～あっての")
+        self.assertIn("<style>", rev_card["frontHtml"])
+        self.assertIn("anki-native-card", rev_card["frontHtml"])
+        self.assertIn("蓝宝书", rev_card["frontHtml"])
+        self.assertIn("<style>", rev_card["backHtml"])
+        self.assertIn(".anki-native-card .connectiveTag", rev_card["backHtml"])
+        self.assertEqual(rev_card["notetypeId"], "1")
+        self.assertIn(f"{loopback_base}grammar_chart.png", rev_card["sandboxFrontHtml"])
+        self.assertIn(f"{loopback_base}_SourceHanSerifJP-Medium.otf", rev_card["sandboxCss"])
+
+        # 4. toggle_notetype_sandbox 按卡型切换并持久化到 preferences
+        t1 = self._call("toggle_notetype_sandbox", {"notetypeId": "1", "enabled": True})["data"]
+        self.assertTrue(t1["enabled"])
+        self.assertIn("1", t1["sandboxNoteTypeIds"])
+        prefs = self._call("get_preferences", {})["data"]
+        self.assertIn("1", prefs["sandboxNoteTypeIds"])
+
+        t2 = self._call("toggle_notetype_sandbox", {"notetypeId": "1", "enabled": False})["data"]
+        self.assertFalse(t2["enabled"])
+        self.assertNotIn("1", t2["sandboxNoteTypeIds"])
+
 
 if __name__ == "__main__":
     unittest.main()

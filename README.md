@@ -47,11 +47,16 @@ npm run build    # 打包生产静态资源到 web/ 目录
 
 ### 2. 自动化测试与体检
 ```bash
-node tests/test_frontend_bundle.mjs                   # 前端 bundle 与 i18n / 样式守卫
-python3 -m unittest discover -s tests -p "test_*.py"  # Python 侧单元测试
+node tests/test_frontend_bundle.mjs                   # 前端字符串审计：护栏 / IPC / 样式 / i18n
+node tests/frontend/run.mjs                           # 前端单元套件：纯逻辑 + 叶子组件渲染（58 项）
+python3 -m unittest discover -s tests -p "test_*.py"  # Python 侧单元测试（90 项，含兼容性自检、三处通用修复）
+
+cd tests/scenarios && ./gate.sh                       # 隔离场景冒烟：11 个场景 / 692 项检查（不动真实数据）
 ```
 
-两组都必须全绿再提交；改完还要跑一次 `npm run build`，确保 `web/assets` 与源码同步。
+前三组都必须全绿再提交；改完还要跑一次 `npm run build`，确保 `web/assets` 与源码同步。
+改到桥接层业务逻辑时，再跑一次场景冒烟。前端单元套件只依赖 `frontend/node_modules`
+里已有的 esbuild，无需额外安装测试框架。
 
 ### 3. 打包发布
 ```bash
@@ -88,6 +93,7 @@ GIF 只有 256 色，画质上有几个已经踩过并写在脚本 docstring 里
 | 运行环境 | Qt6 / Anki 内置 Python 3.13 |
 | 操作系统 | macOS、Windows、Linux（三端均已适配平台快捷键与路径） |
 | 数据安全 | 全部写操作走 Anki 官方 API（`col.update_card` / `col.sched.*`），由 Anki 维护 `mod` / `usn`，不直接改写合集数据库文件 |
+| 运行时自检 | 启动时校验 Anki 版本、4 个原生界面补丁与 8 个生命周期钩子；任一失效会在控制台打印 `patch health` 报告，也可通过 `get_patch_health` 读取 |
 | 网络 | 插件本身**不发任何网络请求**，同步仍由 Anki 原生完成 |
 
 > 为什么下限写死在一个具体版本：Anki 的兼容判断是 `int_version() < min_point_version`，

@@ -4,6 +4,7 @@ import { formatShortcut, translate } from '../../i18n/translations';
 import { appActions, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
 import { renderMathAndRichHtml } from '../../utils/mathRenderer';
 import { getAccentScale } from '../../utils/themeTokens';
+import { SandboxCardFrame } from './SandboxCardFrame';
 
 export const ReviewerView: React.FC = () => {
   const {
@@ -29,6 +30,7 @@ export const ReviewerView: React.FC = () => {
     envInfo,
     showShortcutHints,
     activeDeckId,
+    sandboxNoteTypeIds,
   } = useAppStore();
 
   const isDark = theme === 'dark' || theme === 'oled';
@@ -747,6 +749,34 @@ export const ReviewerView: React.FC = () => {
                 )}
               </div>
 
+              {currentCard.notetypeId && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    currentCard.notetypeId &&
+                    appActions.toggleNoteTypeSandbox(currentCard.notetypeId)
+                  }
+                  title={`${t('nativeSwitch')} (${currentCard.noteTypeName || 'Basic'})`}
+                  className={`h-8 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
+                    sandboxNoteTypeIds.includes(currentCard.notetypeId)
+                      ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)]'
+                      : headerBtnSurface
+                  }`}
+                >
+                  <svg
+                    className="w-3.5 h-3.5 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="3" />
+                    <path d="M9 3v18" />
+                  </svg>
+                  <span>{t('nativeSwitch')}</span>
+                </button>
+              )}
+
               <button
                 onClick={() => {
                   if (currentCard) appActions.openCardEditor(currentCard);
@@ -993,117 +1023,145 @@ export const ReviewerView: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Headword & Reading (hidden on flip when replaceFrontOnFlip is true so afmt replaces the whole card cleanly) */}
-                {!(isCardFlipped && currentCard.replaceFrontOnFlip) && (() => {
-                  const frontHtmlContent = isCardFlipped
-                    ? currentCard.frontAnswerHtml || currentCard.frontHtml || currentCard.front
-                    : currentCard.frontHtml || currentCard.front;
-                  const frontCleanText = (frontHtmlContent || '').replace(/<[^>]*>/g, '').trim();
-                  const frontTextLen = frontCleanText.length;
-                  const frontTypographyClass =
-                    frontTextLen > 80
-                      ? 'text-[17px] font-semibold leading-relaxed tracking-normal'
-                      : frontTextLen > 35
-                      ? 'text-[22px] font-bold leading-snug tracking-tight'
-                      : 'text-[30px] font-bold leading-tight tracking-tight';
-
-                  return (
-                    <div className="mb-6 select-text cursor-text">
-                      <div
-                        className={`${frontTypographyClass} whitespace-pre-wrap break-words [&_img]:max-h-64 [&_img]:rounded-xl [&_img]:my-2 [&_.anki-io-wrap_img]:!my-0 [&_.anki-io-wrap_img]:!max-h-80`}
-                        dangerouslySetInnerHTML={{
-                          __html: renderMathAndRichHtml(frontHtmlContent, !isCardFlipped),
-                        }}
-                      />
-                      {currentCard.reading && (
-                        <p className="text-[13px] text-[#8E8E98] mt-1.5">{currentCard.reading}</p>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {isCardFlipped ? (
-                  <div className="ui-answer-reveal">
-                    {!currentCard.replaceFrontOnFlip && (
-                      <div
-                        className={`h-[1px] my-5 ui-divider-reveal ${
-                          isDark ? 'bg-white/[0.07]' : 'bg-[#ECECF2]'
-                        }`}
-                      />
-                    )}
-
-                    {/* Meaning */}
-                    <div
-                      className={`text-[17px] font-medium leading-relaxed select-text cursor-text whitespace-pre-wrap break-words [&_img]:max-h-60 [&_img]:rounded-xl [&_img]:my-3 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[14px] ${
-                        isDark
-                          ? 'text-[#EFEFF5] [&_code]:bg-white/10'
-                          : 'text-[#1D1D1F] [&_code]:bg-[#F2F2F7]'
-                      }`}
-                      dangerouslySetInnerHTML={{
-                        __html: renderMathAndRichHtml(currentCard.backHtml || currentCard.meaning),
-                      }}
+                {Boolean(
+                  currentCard.notetypeId &&
+                    sandboxNoteTypeIds.includes(currentCard.notetypeId) &&
+                    (currentCard.sandboxFrontHtml || currentCard.sandboxBackHtml)
+                ) ? (
+                  <div className="my-2">
+                    <SandboxCardFrame
+                      cardId={currentCard.id}
+                      frontHtml={currentCard.sandboxFrontHtml || currentCard.frontHtml}
+                      backHtml={currentCard.sandboxBackHtml || currentCard.backHtml}
+                      cssText={currentCard.sandboxCss || ''}
+                      isFlipped={isCardFlipped}
+                      isDark={isDark}
+                      audioFiles={currentCard.audioFiles}
                     />
-
-                    {/* Progressive Hints */}
-                    <div className="mt-5 space-y-2.5">
-                      {currentCard.etymology && (
-                        <div className="flex items-center gap-2.5 text-[13px]">
-                          <span className="px-2 py-0.5 rounded bg-[var(--brand-soft)] text-[var(--brand-text)] text-[11px] font-medium shrink-0">
-                            {t('etymologyBadge')}
-                          </span>
-                          <span
-                            className={isDark ? 'text-[#C8C8D2]' : 'text-[#4A4A52]'}
-                            dangerouslySetInnerHTML={{
-                              __html: renderMathAndRichHtml(currentCard.etymology),
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      {revealedHintsCount >= 2 && currentCard.example && (
-                        <div className="flex items-center gap-2.5 text-[13px]">
-                          <span className="px-2 py-0.5 rounded bg-[var(--brand-soft)] text-[var(--brand-text)] text-[11px] font-medium shrink-0">
-                            {t('exampleBadge')}
-                          </span>
-                          <span
-                            className={isDark ? 'text-[#C8C8D2]' : 'text-[#4A4A52]'}
-                            dangerouslySetInnerHTML={{
-                              __html: renderMathAndRichHtml(currentCard.example),
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      {revealedHintsCount >= 3 && currentCard.extraHint ? (
-                        <div className="flex items-center gap-2.5 text-[13px]">
-                          <span className="px-2 py-0.5 rounded bg-[var(--status-success-soft)] text-[var(--status-success)] text-[11px] font-medium shrink-0">
-                            {t('collocationBadge')}
-                          </span>
-                          <span
-                            className={isDark ? 'text-[#C8C8D2]' : 'text-[#4A4A52]'}
-                            dangerouslySetInnerHTML={{
-                              __html: renderMathAndRichHtml(currentCard.extraHint),
-                            }}
-                          />
-                        </div>
-                      ) : currentCard.extraHint ? (
-                        <button
-                          onClick={() => appActions.revealNextHint()}
-                          className="text-[12px] text-[#8E8E93] hover:text-[var(--brand-text)] transition-colors cursor-pointer pt-1 block"
-                        >
-                          {t('tabRevealHint')}
-                        </button>
-                      ) : null}
-                    </div>
                   </div>
                 ) : (
-                  <div
-                    className={`py-7 flex flex-col items-center justify-center border-t mt-4 gap-3.5 ${
-                      isDark ? 'border-white/[0.05]' : 'border-[#ECECF2]'
-                    }`}
-                  >
-                    <p className="text-[13px] text-[#8E8E93]">{t('recallPrompt')}</p>
-                  </div>
+                  <>
+                    {/* Headword & Reading (hidden on flip when replaceFrontOnFlip is true so afmt replaces the whole card cleanly) */}
+                    {!(isCardFlipped && currentCard.replaceFrontOnFlip) && (() => {
+                      const frontHtmlContent = isCardFlipped
+                        ? currentCard.frontAnswerHtml || currentCard.frontHtml || currentCard.front
+                        : currentCard.frontHtml || currentCard.front;
+                      const isNativeStyledFront = Boolean(
+                        frontHtmlContent && frontHtmlContent.includes('anki-native-card')
+                      );
+                      const frontCleanText = (frontHtmlContent || '').replace(/<[^>]*>/g, '').trim();
+                      const frontTextLen = frontCleanText.length;
+                      const frontTypographyClass = isNativeStyledFront
+                        ? 'w-full select-text break-words text-[17px] leading-relaxed'
+                        : frontTextLen > 80
+                        ? 'text-[17px] font-semibold leading-relaxed tracking-normal whitespace-pre-wrap'
+                        : frontTextLen > 35
+                        ? 'text-[22px] font-bold leading-snug tracking-tight whitespace-pre-wrap'
+                        : 'text-[30px] font-bold leading-tight tracking-tight whitespace-pre-wrap';
+
+                      return (
+                        <div className="mb-6 select-text cursor-text">
+                          <div
+                            className={`${frontTypographyClass} break-words [&_img]:max-h-64 [&_img]:rounded-xl [&_img]:my-2 [&_.anki-io-wrap_img]:!my-0 [&_.anki-io-wrap_img]:!max-h-80`}
+                            dangerouslySetInnerHTML={{
+                              __html: renderMathAndRichHtml(frontHtmlContent, !isCardFlipped),
+                            }}
+                          />
+                          {currentCard.reading && !isNativeStyledFront && (
+                            <p className="text-[13px] text-[#8E8E98] mt-1.5">{currentCard.reading}</p>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {isCardFlipped ? (
+                      <div className="ui-answer-reveal">
+                        {!currentCard.replaceFrontOnFlip && (
+                          <div
+                            className={`h-[1px] my-5 ui-divider-reveal ${
+                              isDark ? 'bg-white/[0.07]' : 'bg-[#ECECF2]'
+                            }`}
+                          />
+                        )}
+
+                        {/* Meaning */}
+                        <div
+                          className={`select-text cursor-text break-words ${
+                            (currentCard.backHtml || '').includes('anki-native-card')
+                              ? 'w-full text-[16px] leading-relaxed'
+                              : 'text-[17px] font-medium leading-relaxed whitespace-pre-wrap [&_img]:max-h-60 [&_img]:rounded-xl [&_img]:my-3'
+                          } [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[14px] ${
+                            isDark
+                              ? 'text-[#EFEFF5] [&_code]:bg-white/10'
+                              : 'text-[#1D1D1F] [&_code]:bg-[#F2F2F7]'
+                          }`}
+                          dangerouslySetInnerHTML={{
+                            __html: renderMathAndRichHtml(currentCard.backHtml || currentCard.meaning),
+                          }}
+                        />
+
+                        {/* Progressive Hints */}
+                        <div className="mt-5 space-y-2.5">
+                          {currentCard.etymology && (
+                            <div className="flex items-center gap-2.5 text-[13px]">
+                              <span className="px-2 py-0.5 rounded bg-[var(--brand-soft)] text-[var(--brand-text)] text-[11px] font-medium shrink-0">
+                                {t('etymologyBadge')}
+                              </span>
+                              <span
+                                className={isDark ? 'text-[#C8C8D2]' : 'text-[#4A4A52]'}
+                                dangerouslySetInnerHTML={{
+                                  __html: renderMathAndRichHtml(currentCard.etymology),
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          {revealedHintsCount >= 2 && currentCard.example && (
+                            <div className="flex items-center gap-2.5 text-[13px]">
+                              <span className="px-2 py-0.5 rounded bg-[var(--brand-soft)] text-[var(--brand-text)] text-[11px] font-medium shrink-0">
+                                {t('exampleBadge')}
+                              </span>
+                              <span
+                                className={isDark ? 'text-[#C8C8D2]' : 'text-[#4A4A52]'}
+                                dangerouslySetInnerHTML={{
+                                  __html: renderMathAndRichHtml(currentCard.example),
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          {revealedHintsCount >= 3 && currentCard.extraHint ? (
+                            <div className="flex items-center gap-2.5 text-[13px]">
+                              <span className="px-2 py-0.5 rounded bg-[var(--status-success-soft)] text-[var(--status-success)] text-[11px] font-medium shrink-0">
+                                {t('collocationBadge')}
+                              </span>
+                              <span
+                                className={isDark ? 'text-[#C8C8D2]' : 'text-[#4A4A52]'}
+                                dangerouslySetInnerHTML={{
+                                  __html: renderMathAndRichHtml(currentCard.extraHint),
+                                }}
+                              />
+                            </div>
+                          ) : currentCard.extraHint ? (
+                            <button
+                              onClick={() => appActions.revealNextHint()}
+                              className="text-[12px] text-[#8E8E93] hover:text-[var(--brand-text)] transition-colors cursor-pointer pt-1 block"
+                            >
+                              {t('tabRevealHint')}
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className={`py-7 flex flex-col items-center justify-center border-t mt-4 gap-3.5 ${
+                          isDark ? 'border-white/[0.05]' : 'border-[#ECECF2]'
+                        }`}
+                      >
+                        <p className="text-[13px] text-[#8E8E93]">{t('recallPrompt')}</p>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Bottom Card Tags & Review Count — Smart Collapsed */}

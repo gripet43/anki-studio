@@ -168,12 +168,14 @@ export function renderMathAndRichHtml(
   const targetOrdStr = activeClozeOrd !== undefined ? String(activeClozeOrd) : '1';
 
   // Strip raw <script> blocks and MDX dictionary index markers (`1`爱`4`);
-  // keep scoped `.anki-native-card` <style> blocks intact while stripping unscoped inline field <style> blocks
+  // extract scoped `.anki-native-card` <style> blocks BEFORE running Furigana/LaTeX/newline
+  // replacements so `\n -> <br/>` never corrupts CSS rules inside `<style>...</style>`!
   html = html.replace(EMBEDDED_SCRIPT_RE, '');
   html = html.replace(MDX_INDEX_MARKER_RE, '');
+  const preservedStyleBlocks: string[] = [];
   html = html.replace(EMBEDDED_STYLE_TAG_RE, (fullMatch, cssContent: string) => {
     if (cssContent && cssContent.includes('.anki-native-card')) {
-      return fullMatch;
+      preservedStyleBlocks.push(fullMatch);
     }
     return '';
   });
@@ -244,13 +246,14 @@ export function renderMathAndRichHtml(
     return formatLatexExpression(expr, false);
   });
 
-  // 3. Newline preservation: convert \n to <br/> if not preceded by <br>
-  if (html.includes('\n')) {
+  // 3. Newline preservation: convert \n to <br/> for plain text / simple fields,
+  //    but never inside `.anki-native-card` template HTML where newlines are template indentation.
+  if (html.includes('\n') && !html.includes('anki-native-card')) {
     html = html.replace(/(<br\s*\/?>)\s*\r?\n/gi, '$1');
     html = html.replace(/\r\n|\r|\n/g, '<br/>');
   }
 
-  return html;
+  return preservedStyleBlocks.length > 0 ? `${preservedStyleBlocks.join('')}${html}` : html;
 }
 
 /**

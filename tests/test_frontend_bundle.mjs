@@ -1052,4 +1052,23 @@ assert(
   'Item #41: 8 大第三方 APKG 卡包兼容规则（FrontSide 去重、日语振假名转 ruby、JLPT 脚本标签还原、MDX 标记清洗、表格自适应与编辑器字段智能匹配）必须完整保留'
 );
 
+// Item #42: 复习器 `<style>` 块防 `<br/>` 破坏守卫 + Track B 原生沙盒模式（SandboxCardFrame + mediasrv HTTP）
+const sandboxFrameSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/reviewer/SandboxCardFrame.tsx'),
+  'utf-8'
+);
+const sandboxCodeNoComments = sandboxFrameSrc.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+assert(
+  mathRendererSrc.includes('preservedStyleBlocks') &&
+    mathRendererSrc.includes("!html.includes('anki-native-card')") &&
+    mediaUtilsPySrc.includes('def get_media_http_base_url') &&
+    mediaUtilsPySrc.includes('def render_sandbox_card_sides') &&
+    sandboxCodeNoComments.includes('sandbox="allow-scripts"') &&
+    !sandboxCodeNoComments.includes('allow-same-origin') &&
+    sandboxCodeNoComments.includes('anki-sandbox-pycmd') &&
+    reviewerSrc.includes('SandboxCardFrame') &&
+    reviewerSrc.includes('toggleNoteTypeSandbox'),
+  'Item #42: mathRenderer.ts 必须保护 <style> 块不被注入 <br/>，且 Track B SandboxCardFrame 必须使用 sandbox="allow-scripts"（严禁 allow-same-origin）与本地 HTTP 媒体服务'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

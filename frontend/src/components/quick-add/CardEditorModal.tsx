@@ -148,6 +148,8 @@ export const CardEditorModal: React.FC = () => {
     resolvedLang,
     envInfo,
     libraryAllTags,
+    cmdKCardStyles,
+    libraryCardStyles,
   } = useAppStore();
 
   const isDark = theme === 'dark' || theme === 'oled';
@@ -231,6 +233,18 @@ export const CardEditorModal: React.FC = () => {
     }
     return '';
   }, [envInfo.mediaBaseUrl, editingCardData]);
+
+  // 词库 / 第三方卡包的模板 CSS 由后端按卡型去重下发（搜索接口的 cardStyles 字段），
+  // 存在 store 里而不是塞进每张卡的 HTML——200 条结果里同卡型只占一份。
+  // 编辑器预览本身不渲染 Anki 模板，必须按当前卡型把这份样式表取回来，否则
+  // 从卡片库 / Cmd+K 打开的卡（尤其柯林斯、蓝宝书这类词库）预览会掉成无样式裸文本。
+  const injectedCardStyle = useMemo(() => {
+    const notetypeId = editingCardData?.notetypeId
+      ? String(editingCardData.notetypeId)
+      : '';
+    if (!notetypeId) return '';
+    return cmdKCardStyles[notetypeId] || libraryCardStyles[notetypeId] || '';
+  }, [cmdKCardStyles, libraryCardStyles, editingCardData]);
 
   // Fetch available Note Types from Anki collection when modal opens
   useEffect(() => {
@@ -498,8 +512,11 @@ export const CardEditorModal: React.FC = () => {
       .replace(/<[^>]+>/g, '')
       .trim();
 
+    const hasInjectedCardStyle = Boolean(injectedCardStyle.trim());
     const hasBlockMarkup = /<(?:img|table|ul|ol|blockquote|pre|h[1-6])\b|anki-io-wrap/i.test(rawQ);
-    const questionSizeClass = hasBlockMarkup
+    const questionSizeClass = hasInjectedCardStyle
+      ? 'w-full text-start'
+      : hasBlockMarkup
       ? 'text-[17px] leading-relaxed font-normal text-start w-full'
       : plainQ.length > 80
       ? 'text-[18px] leading-relaxed font-medium text-start w-full'
@@ -507,15 +524,26 @@ export const CardEditorModal: React.FC = () => {
       ? 'text-[22px] leading-snug font-semibold text-center'
       : 'text-[28px] sm:text-[30px] leading-tight font-bold tracking-tight text-center';
 
-    const questionHtml = renderMathAndRichHtml(
-      rawQ,
-      !previewFlipped,
-      clozeOrdinals.length > 0 ? activePreviewClozeOrd : undefined
+    // 有模板样式时套上卡包自己的作用域容器：模板 CSS 一律以 `.card` 打底，
+    // 少这一层就只剩插件的排版，等于样式注入了也一条都命中不了。
+    const wrapWithCardStyle = (html: string): string =>
+      hasInjectedCardStyle && html && !html.includes('anki-native-card')
+        ? `<div class="anki-native-card"><div class="card">${html}</div></div>`
+        : html;
+
+    const questionHtml = wrapWithCardStyle(
+      renderMathAndRichHtml(
+        rawQ,
+        !previewFlipped,
+        clozeOrdinals.length > 0 ? activePreviewClozeOrd : undefined
+      )
     );
-    const answerHtml = renderMathAndRichHtml(
-      rawA,
-      false,
-      clozeOrdinals.length > 0 ? activePreviewClozeOrd : undefined
+    const answerHtml = wrapWithCardStyle(
+      renderMathAndRichHtml(
+        rawA,
+        false,
+        clozeOrdinals.length > 0 ? activePreviewClozeOrd : undefined
+      )
     );
 
     const populatedExtras = Object.entries(additionalFields).filter(([fKey, val]) => {
@@ -546,6 +574,7 @@ export const CardEditorModal: React.FC = () => {
       questionHtml,
       answerHtml,
       populatedExtras,
+      hasInjectedCardStyle,
     };
   }, [
     isEditMode,
@@ -558,6 +587,7 @@ export const CardEditorModal: React.FC = () => {
     clozeOrdinals,
     activePreviewClozeOrd,
     additionalFields,
+    injectedCardStyle,
   ]);
 
   const handleSelectNotePreset = (presetId: NoteCreationPreset, customModel?: NoteTypeOption) => {
@@ -1570,16 +1600,31 @@ export const CardEditorModal: React.FC = () => {
                 {isEditMode && !hasChanges && editingCardData?.backHtml ? (
                   (() => {
                     const nativeReplace = Boolean((editingCardData as ReviewCardItem).replaceFrontOnFlip);
+                    const rawFrontHtml = editingCardData.frontHtml || '';
+                    const rawBackHtml = editingCardData.backHtml || '';
+                    const embeddedStyleMatch = /<style\b[^>]*>([\s\S]*?)<\/style\s*>/i.exec(rawBackHtml);
+                    // 复习卡的反面 HTML 自带 <style>（后端 wrap_card_with_styles 的产物）；
+                    // 卡片库 / Cmd+K 来的词库卡没有——模板 CSS 由 cardStyles 按卡型下发，
+                    // 这里按当前卡型取回并注入，否则预览会掉成无样式裸文本。
+                    const cardTemplateCss = embeddedStyleMatch ? '' : injectedCardStyle;
+                    const hasCardTemplateCss = Boolean(cardTemplateCss.trim());
+                    const wrapWithCardStyle = (html: string): string =>
+                      hasCardTemplateCss && html && !html.includes('anki-native-card')
+                        ? `<div class="anki-native-card"><div class="card">${html}</div></div>`
+                        : html;
                     const nativeFrontHtml = resolveMediaInHtml(
-                      editingCardData.frontHtml || '',
+                      wrapWithCardStyle(rawFrontHtml),
                       effectiveMediaBaseUrl
                     );
                     const nativeBackHtml = resolveMediaInHtml(
-                      editingCardData.backHtml || '',
+                      wrapWithCardStyle(rawBackHtml),
                       effectiveMediaBaseUrl
                     );
                     return (
                       <>
+                        {hasCardTemplateCss ? (
+                          <style dangerouslySetInnerHTML={{ __html: cardTemplateCss }} />
+                        ) : null}
                         {!(previewFlipped && nativeReplace) && (
                           <div
                             className="w-full select-text break-words text-[17px] leading-relaxed"
@@ -1606,6 +1651,9 @@ export const CardEditorModal: React.FC = () => {
                   })()
                 ) : (
                   <>
+                    {previewCardContent.hasInjectedCardStyle ? (
+                      <style dangerouslySetInnerHTML={{ __html: injectedCardStyle }} />
+                    ) : null}
                     {previewCardContent.rawQ.trim() ? (
                       <div
                         className={`select-text break-words [&_img]:max-h-64 [&_img]:rounded-xl [&_img]:mx-auto [&_img]:my-2 [&_blockquote]:border-s-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:ps-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px] ${previewCardContent.questionSizeClass}`}

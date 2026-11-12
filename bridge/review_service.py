@@ -19,14 +19,17 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .media_utils import (
     NativeRender,
+    SandboxRender,
     convert_furigana_to_ruby,
     get_media_dir,
-    pick_display_field,
+    get_media_http_base_url,
     plain_text_of,
     render_native_card_sides,
     render_native_image_occlusion,
+    render_sandbox_card_sides,
+    resolve_front_field_name,
     resolve_media_img_src_for_webview,
-    should_replace_front_on_flip,
+    resolve_replace_front_on_flip,
     wrap_card_with_styles,
 )
 
@@ -501,9 +504,11 @@ class ReviewService:
             deck = col.decks.get(card.did, default=False) or {"id": card.did, "name": "Default"}
             media_dir = self._get_media_dir(col)
 
-            model = note.note_type() if hasattr(note, "note_type") else {"name": "Basic", "type": 0}
+            model = note.note_type() if hasattr(note, "note_type") else {"id": 1, "name": "Basic", "type": 0}
+            notetype_id = str(model.get("id") or getattr(note, "mid", 1) or 1)
             is_cloze = bool(model.get("type") == 1)
             cloze_ord = int(getattr(card, "ord", 0)) + 1
+            http_base_url = get_media_http_base_url(self.mw)
 
             # Bug #5: Expose cardType ('new' | 'learning' | 'review') so frontend decrements dueNew vs dueReview accurately
             card_type_code = int(getattr(card, "type", 0))
@@ -518,10 +523,19 @@ class ReviewService:
             # 拓展字段（释义 / 例句 / 词源 / 柯林斯…）在背诵界面整段消失。
             # Cloze 与原生遮挡卡例外：它们的 frontAnswerHtml 已经负责补全/揭底，
             # 再叠一份完整答案会让同一句话在翻转时出现两次。
+            raw_output = None
+            if not io_front and not is_cloze:
+                try:
+                    raw_output = card.render_output()
+                except Exception:
+                    raw_output = None
+
             native = (
                 NativeRender("", "", [], [], "")
-                if (io_front or is_cloze)
-                else render_native_card_sides(card, media_dir, strip_front_side=False)
+                if (io_front or is_cloze or raw_output is None)
+                else render_native_card_sides(
+                    card, media_dir, strip_front_side=False, raw_output=raw_output
+                )
             )
             native_back, native_back_audio, native_back_css = (
                 native.answer,
@@ -534,7 +548,7 @@ class ReviewService:
                 # 正面取“模板真正显示的那个字段”——第一个字段未必是它。
                 # eggrolls-JLPT10k 把 NoteID 排在第一位，按 fields[0] 直出就是一串 uuid。
                 front_key = (
-                    pick_display_field(fields_dict, native.question)
+                    resolve_front_field_name(fields_dict, native.question, card)
                     if native.question
                     else (field_keys[0] if field_keys else "")
                 )
@@ -554,33 +568,55 @@ class ReviewService:
                         header_parts.append(f'<div class="Tiếng Việt"><b>{tv_val}</b></div>')
                         back_raw = "".join(header_parts) + (back_raw or "")
 
+            front_plain_probe = plain_text_of(front_raw)
+            native_q_plain = plain_text_of(native.question) if native.question else ""
+            # 当正面模板本身包含结构化排版或样式（如蓝宝书正面的连接方式与例句、CGW 题干、蛋卷词条等），
+            # 且与当前卡片正面字段对应时，正面 HTML 同样走 Anki 模板渲染并挂载作用域样式表，
+            # 保证学习模式未翻面与已翻面都与编辑器预览、原生 Anki 完全一致。
+            use_native_question_html = bool(
+                not io_front
+                and not is_cloze
+                and native.question
+                and front_plain_probe
+                and (
+                    front_plain_probe in native_q_plain
+                    or front_plain_probe.lstrip("～〜~- ").strip() in native_q_plain
+                )
+                and (native_back_css or "<" in native.question)
+            )
+
             show_front_ruby = "<ruby" in (native.question or "").lower()
+            front_source_html = native.question if use_native_question_html else front_raw
             front_rich_q, front_audio = self._resolve_rich_html_and_audio(
-                front_raw,
+                front_source_html,
                 media_dir,
                 cloze_ord=cloze_ord,
                 is_question_side=True,
                 strip_furigana_reading=(not show_front_ruby and bool(native.question)),
             )
             front_rich_a, _ = self._resolve_rich_html_and_audio(
-                front_raw,
+                front_source_html,
                 media_dir,
                 cloze_ord=cloze_ord,
                 is_question_side=False,
                 strip_furigana_reading=False,
             )
+            if use_native_question_html and native_back_css:
+                front_rich_q = wrap_card_with_styles(front_rich_q, native_back_css)
+                front_rich_a = wrap_card_with_styles(front_rich_a, native_back_css)
 
-            front_plain_probe = plain_text_of(front_raw)
-            replace_front_on_flip = (
-                False
-                if (io_front or is_cloze)
-                else should_replace_front_on_flip(card, front_plain_probe, native.answer)
+            replace_front_on_flip = resolve_replace_front_on_flip(
+                card,
+                front_plain_probe,
+                native.answer,
+                is_cloze=bool(is_cloze),
+                is_image_occlusion=bool(io_front),
             )
 
             # Chinese Grammar Wiki (CGW-ValidExample / CGW-InvalidExample) 在正面模板顶部有
             # `<div class="header">Is this sentence grammatically correct?</div>` 提问提示语，
             # 仅取 `中文` 字段会丢失题目要求；将其提取并挂在正面题干上方。
-            if native.question and not io_front and not is_cloze:
+            if native.question and not io_front and not is_cloze and not use_native_question_html:
                 hdr_m = re.search(
                     r'<div\b[^>]*\bclass\s*=\s*["\']?header["\']?[^>]*>([\s\S]*?)</div\s*>',
                     native.question,
@@ -674,9 +710,18 @@ class ReviewService:
                 else 5.0
             )
 
+            sandbox_render = (
+                SandboxRender("", "", "")
+                if (io_front or raw_output is None)
+                else render_sandbox_card_sides(
+                    card, media_dir, http_base_url=http_base_url, raw_output=raw_output
+                )
+            )
+
             return {
                 "id": str(card.id),
                 "noteId": str(note.id),
+                "notetypeId": notetype_id,
                 "noteTypeName": str(model.get("name", "Basic")),
                 "isCloze": is_cloze,
                 "cardType": card_type_str,
@@ -694,6 +739,9 @@ class ReviewService:
                 "frontAnswerHtml": parsed["frontAnswerHtml"],
                 "backHtml": parsed["backHtml"],
                 "replaceFrontOnFlip": replace_front_on_flip,
+                "sandboxFrontHtml": sandbox_render.question,
+                "sandboxBackHtml": sandbox_render.answer,
+                "sandboxCss": sandbox_render.css,
                 "audioFiles": all_audio,
                 "fields": fields_dict,
                 "fieldOrder": field_keys,

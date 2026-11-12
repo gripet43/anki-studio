@@ -322,6 +322,7 @@ export interface EnvInfo {
   ankiVersion: string;
   platformBadge: string;
   mediaBaseUrl?: string;
+  mediaHttpBaseUrl?: string;
 }
 
 export interface UserPreferences {
@@ -330,6 +331,7 @@ export interface UserPreferences {
   language: string;
   customNickname: string;
   collapsedDeckIds: string[];
+  sandboxNoteTypeIds?: string[];
   debugMode?: boolean;
   showShortcutHints?: boolean;
 }
@@ -407,6 +409,7 @@ export interface ReviewHistoryEntry {
 export interface ReviewCardItem {
   id: string;
   noteId: string;
+  notetypeId?: string;
   noteTypeName?: string;
   isCloze?: boolean;
   cardType?: 'new' | 'learning' | 'review';
@@ -424,6 +427,9 @@ export interface ReviewCardItem {
   frontAnswerHtml?: string;
   backHtml: string;
   replaceFrontOnFlip?: boolean;
+  sandboxFrontHtml?: string;
+  sandboxBackHtml?: string;
+  sandboxCss?: string;
   audioFiles?: string[];
   fields: Record<string, string>;
   fieldOrder?: string[];
@@ -476,6 +482,8 @@ export interface LibraryCardItem {
   back: string;
   frontHtml?: string;
   backHtml?: string;
+  /** 翻面时是否整页替换正面（与复习界面同源；Cloze / IO 恒为 false）。 */
+  replaceFrontOnFlip?: boolean;
   audioFiles?: string[];
   fields?: Record<string, string>;
   fieldOrder?: string[];

@@ -32,6 +32,7 @@ class BridgeRouter:
         toggle_native_callback: Optional[Callable[[], Any]] = None,
         config_getter: Optional[Callable[[], Dict[str, Any]]] = None,
         config_writer: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+        health_getter: Optional[Callable[[], Dict[str, Any]]] = None,
     ):
         if col_getter is None:
             def default_col_getter():
@@ -56,6 +57,9 @@ class BridgeRouter:
         self._toggle_native = toggle_native_callback
         self._get_config = config_getter or (lambda: {})
         self._write_config = config_writer or (lambda cfg: cfg)
+        # Runtime compatibility report (Anki version + monkey-patch/hook status),
+        # produced by `bridge/compat.py` and refreshed once at startup.
+        self._get_health = health_getter or (lambda: {})
 
         self.deck_service = DeckService(self._get_col, self._get_mw, self._get_config)
         self.review_service = ReviewService(
@@ -152,6 +156,21 @@ class BridgeRouter:
     def action_run_maintenance(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.deck_service.run_maintenance_action(data)
 
+    # ---- Runtime Compatibility / Diagnostics ----
+
+    def action_get_patch_health(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Returns the startup patch/hook/version report (see bridge/compat.py).
+
+        Surfaced for diagnostics: a failed monkey-patch is intentionally
+        non-fatal, so this is the only way to tell whether the immersive shell
+        actually took over Anki's native dialogs on this Anki/Qt build.
+        """
+        try:
+            report = self._get_health()
+        except Exception as exc:
+            return {"state": "unknown", "error": str(exc), "warnings": []}
+        return report if isinstance(report, dict) else {}
+
     # ---- User Preferences Persistence Actions (Part 3 #4) ----
 
     def action_get_preferences(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -163,6 +182,7 @@ class BridgeRouter:
             "resolvedLanguage": self.deck_service._resolve_language(cfg.get("language")),
             "customNickname": cfg.get("custom_nickname", ""),
             "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
+            "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
             "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
             "envInfo": self.deck_service._resolve_platform_and_version(),
         }
@@ -179,6 +199,8 @@ class BridgeRouter:
             patch["custom_nickname"] = str(data["customNickname"]).strip()
         if "collapsedDeckIds" in data and isinstance(data["collapsedDeckIds"], list):
             patch["collapsed_deck_ids"] = [str(x) for x in data["collapsedDeckIds"]]
+        if "sandboxNoteTypeIds" in data and isinstance(data["sandboxNoteTypeIds"], list):
+            patch["sandbox_notetype_ids"] = [str(x) for x in data["sandboxNoteTypeIds"] if str(x).strip()]
         if "showShortcutHints" in data:
             patch["show_shortcut_hints"] = bool(data["showShortcutHints"])
 
@@ -192,8 +214,36 @@ class BridgeRouter:
                 "resolvedLanguage": self.deck_service._resolve_language(saved.get("language")),
                 "customNickname": saved.get("custom_nickname", ""),
                 "collapsedDeckIds": saved.get("collapsed_deck_ids", []),
+                "sandboxNoteTypeIds": [str(x) for x in (saved.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(saved.get("show_shortcut_hints", False)),
             },
+        }
+
+    def action_toggle_notetype_sandbox(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Toggles per-NoteType Track B Sandbox Compatibility Mode and persists in config."""
+        notetype_id = str((data or {}).get("notetypeId", "") or "").strip()
+        if not notetype_id:
+            return {"saved": False, "sandboxNoteTypeIds": []}
+        cfg = self._get_config()
+        current_ids = [str(x) for x in (cfg.get("sandbox_notetype_ids") or []) if str(x).strip()]
+        enabled_override = (data or {}).get("enabled")
+        if isinstance(enabled_override, bool):
+            should_enable = enabled_override
+        else:
+            should_enable = notetype_id not in current_ids
+
+        if should_enable and notetype_id not in current_ids:
+            current_ids.append(notetype_id)
+        elif not should_enable and notetype_id in current_ids:
+            current_ids = [x for x in current_ids if x != notetype_id]
+
+        saved = self._write_config({"sandbox_notetype_ids": current_ids})
+        final_ids = [str(x) for x in (saved.get("sandbox_notetype_ids") or current_ids)]
+        return {
+            "saved": True,
+            "notetypeId": notetype_id,
+            "enabled": notetype_id in final_ids,
+            "sandboxNoteTypeIds": final_ids,
         }
 
     # ---- Review, Audio & FSRS Actions ----

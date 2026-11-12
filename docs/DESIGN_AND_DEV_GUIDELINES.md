@@ -1,8 +1,8 @@
 # Anki Studio — 设计规范与开发工程标准手册
 
-> **版本**：v1.2.0  
-> **适用范围**：Anki Studio 全局前端、Python 运行时、插件桥接与构建打包流水线  
-> **核心原则**：保持 Apple 人机交互设计（HIG）质感、系统级流畅度与绝对代码健壮性。
+> - **版本**：v1.4.6（与 `manifest.json` 的 `human_version` 对齐，改版时同步更新）
+> - **适用范围**：Anki Studio 全局前端、Python 运行时、插件桥接与构建打包流水线
+> - **核心原则**：保持 Apple 人机交互设计（HIG）质感、系统级流畅度与绝对代码健壮性。
 
 ---
 
@@ -48,7 +48,7 @@ Anki Studio 不做表层“换皮”，而是以现代桌面 OS（macOS Sonoma /
 
 ### 1. 色彩与主题矩阵（Light / Dark / OLED）
 
-系统原生支持三套主题与四种强调色，所有色值必须通过统一语义 Token 声明：
+系统原生支持三套主题与 **8 套强调色**，所有色值必须通过统一语义 Token 声明：
 
 | 语义角色 | Light 模式 | Dark 模式 | OLED 纯黑模式 |
 | :--- | :--- | :--- | :--- |
@@ -59,11 +59,22 @@ Anki Studio 不做表层“换皮”，而是以现代桌面 OS（macOS Sonoma /
 | **次级说明文字（Muted Text）** | `#8E8E93` | `#8E8E93` | `#8E8E93` |
 | **高亮主文本（Primary Text）** | `#1D1D1F` | `#F5F5F7` | `#FFFFFF` |
 
-**强调色（Accent Colors）**：
-- **Indigo**：`#5E5CE6`（默认，经典灵动紫）
-- **Cyan**：`#007AFF`（专业科技蓝）
-- **Emerald**：`#28CD41`（清晰活力绿）
-- **Rose**：`#FF375F`（典雅玫瑰红）
+**强调色（Accent Colors，共 8 套，唯一真实源为 `frontend/src/utils/themeTokens.ts`）**：
+
+| ID | 名称 | 品牌色 | 气质 |
+| :--- | :--- | :--- | :--- |
+| `indigo` | 经典蓝 · Studio Blue | `#3076C3` | Anki Studio 官方固定品牌色（默认） |
+| `emerald` | 松石绿 · Sage | `#2F9461` | 护眼温润的自然鼠尾草与松林绿 |
+| `cyan` | 雾海蓝 · Ocean | `#2B7ABF` | 清澈克制的北欧深海蓝 |
+| `rose` | 赤陶粉 · Rose | `#C44D6C` | 柔和低饱和的复古赤陶灰粉 |
+| `amber` | 琥珀金 · Ochre | `#C27429` | 知性温暖的秋日琥珀与羊皮纸色调 |
+| `teal` | 峡湾青 · Fjord | `#23868C` | 冷静理性的蓝绿平衡色 |
+| `violet` | 暮光紫 · Iris | `#7A50B6` | 优雅静谧的创意工作室紫晶色 |
+| `slate` | 石墨灰 · Graphite | `#475569` | 纯粹无干扰的 Notion 极简黑白灰风格 |
+
+> 首页牌组卡的颜色**由所选强调色派生**（同色系内做色相 ±13° 与深浅分级），不再按牌组序号
+> 轮发彩虹色。派生规则与不变量见 `frontend/src/utils/deckPalette.ts`，并由
+> `tests/frontend/specs/deckPalette.spec.ts` 守着「色相不出族」。
 
 ---
 
@@ -213,6 +224,7 @@ sequenceDiagram
   await callAnki<DashboardData>('get_dashboard', { ... });
   ```
 - **路由分发**：Python 端由 [`bridge/router.py`](../bridge/router.py) 进行方法分发，所有公开 API 方法必须返回符合 JSON 规范的字典或基本类型，且显式捕获内部异常，严禁向前端抛出未格式化的 Python Traceback。
+- **运行时兼容性自检**：为了沉浸感而接管 Anki/Qt 私有接口（进度弹窗、tooltip、Preferences、同步错误）的每一处 patch 都自带 `try/except`，失败时**不会崩、但会静默降级**。因此 [`bridge/compat.py`](../bridge/compat.py) 在启动后汇总「Anki 版本是否达标 + 4 个补丁 + 8 个生命周期钩子」的生效状态，降级时在 Anki 控制台打印 `patch health` 报告，前端也可通过 IPC action `get_patch_health` 读取同一份结构化报告（含 `state: ok|degraded` 与逐条原因）。**新增 patch 或钩子时必须同步更新 `PATCH_SPECS` / `HOOK_SPECS`，否则自检会漏报。**
 
 ### 2. 三层防迷失安全网（Anti-Lost Safety Nets）
 
@@ -239,17 +251,32 @@ sequenceDiagram
 任何日常开发、界面微调或重构，均须遵守以下工程流水线红线：
 
 ```bash
-# 1. 编译前端生产静态资源
+# 1. 编译前端生产静态资源（web/ 与源码必须同步）
 cd frontend && npm run build
 
-# 2. 执行自动化体检套件（涵盖护栏检查、TypeScript 编译验证、Token完整性）
+# 2. 前端字符串审计：护栏 / IPC 协议 / CSS 规范 / i18n（ALL CHECKS PASSED）
 node tests/test_frontend_bundle.mjs
 
-# 3. 产出最终可发布的 Anki Addon 标准归档
+# 3. 前端单元套件：纯逻辑 + 叶子组件渲染（58 项，见 tests/frontend/README.md）
+node tests/frontend/run.mjs
+
+# 4. Python 单测：桥接层、卡片安全、发布不变量、兼容性自检与通用修复（当前 90 项）
+python3 -m unittest discover -s tests -p "test_*.py"
+
+# 5. （改到业务逻辑时）隔离场景冒烟：11 个场景 / 692 项检查，不动真实数据
+cd tests/scenarios && ./gate.sh
+
+# 6. 产出最终可发布的 Anki Addon 标准归档
 python3 scripts/build_ankiaddon.py
 ```
 
-> **自动化测试规范**：`tests/test_frontend_bundle.mjs` 作为发布前的门禁守卫，必须确保所有核心导出项、双向通信协议与 CSS 规范 100% 通过（`ALL CHECKS PASSED`）后方可交付。
+> **门禁语义**：第 2、3、4 步必须全绿（`ALL CHECKS PASSED` / `OK`）才能交付；第 5 步在改动
+> 桥接层业务逻辑时必跑。前端字符串审计保证「护栏还在」，前端单元套件保证「算得对」，两者
+> 不可互相替代。
+>
+> **已知盲区**：组件的交互（点击、拖拽、弹窗焦点、iframe 沙盒通信）目前只有
+> `tests/scenarios/` 的场景库 + 手工目视，没有自动化 DOM 测试；新增交互逻辑时请在
+> `tests/frontend/specs/render.spec.tsx` 至少补一条静态渲染断言。
 
 ---
 

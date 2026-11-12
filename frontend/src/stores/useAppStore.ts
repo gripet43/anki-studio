@@ -120,6 +120,7 @@ export interface AppState {
   advancedStats: AdvancedStatsData;
   showAllDashboardDecks: boolean;
   collapsedDeckIds: string[];
+  sandboxNoteTypeIds: string[];
 
   // Reviewer & Real Timing
   reviewQueue: ReviewCardItem[];
@@ -150,6 +151,8 @@ export interface AppState {
 
   // Card Library & Faceted Filters + Backend Pagination
   libraryCards: LibraryCardItem[];
+  /** notetypeId → 作用域化模板 CSS，卡片库/编辑器预览靠它还原词库卡包样式。 */
+  libraryCardStyles: Record<string, string>;
   libraryTotalCount: number;
   libraryFilteredCount: number;
   libraryFacetCounts: LibraryFacetCounts | null;
@@ -224,6 +227,7 @@ const initialState: AppState = {
   advancedStats: EMPTY_ADVANCED_STATS,
   showAllDashboardDecks: false,
   collapsedDeckIds: [],
+  sandboxNoteTypeIds: [],
 
   reviewQueue: [],
   currentCardIndex: 0,
@@ -249,6 +253,7 @@ const initialState: AppState = {
   cmdKSearching: false,
 
   libraryCards: [],
+  libraryCardStyles: {},
   libraryTotalCount: 0,
   libraryFilteredCount: 0,
   libraryFacetCounts: null,
@@ -438,6 +443,9 @@ export const appActions = {
         resolvedLang: effectiveLang,
         customNickname: prefs?.customNickname ?? state.customNickname,
         collapsedDeckIds: prefs?.collapsedDeckIds || state.collapsedDeckIds,
+        sandboxNoteTypeIds: Array.isArray(prefs?.sandboxNoteTypeIds)
+          ? prefs.sandboxNoteTypeIds.map((id) => String(id))
+          : state.sandboxNoteTypeIds,
         showShortcutHints: prefs?.showShortcutHints !== undefined ? prefs.showShortcutHints : state.showShortcutHints,
         debugModeUnlocked: Boolean(prefs?.debugMode) || state.debugModeUnlocked,
         envInfo: dash?.envInfo || state.envInfo,
@@ -600,6 +608,7 @@ export const appActions = {
           hasMore: boolean;
           cards: LibraryCardItem[];
           allTags: string[];
+          cardStyles?: Record<string, string>;
         }>('search_cards', {
           query: nextQuery,
           status: nextStatus,
@@ -623,6 +632,7 @@ export const appActions = {
                 : prev.libraryFacetCounts,
             libraryHasMoreFromBackend: Boolean(res.hasMore),
             libraryAllTags: res.allTags || prev.libraryAllTags,
+            libraryCardStyles: { ...prev.libraryCardStyles, ...(res.cardStyles || {}) },
             librarySearching: false,
           }));
         } else {
@@ -650,6 +660,7 @@ export const appActions = {
           filteredCount: number;
           hasMore: boolean;
           cards: LibraryCardItem[];
+          cardStyles?: Record<string, string>;
         }>('search_cards', {
           query: state.librarySearchQuery,
           status: state.filterStatus,
@@ -669,6 +680,7 @@ export const appActions = {
             libraryCards: [...prev.libraryCards, ...appended],
             libraryFilteredCount: res.filteredCount ?? prev.libraryFilteredCount,
             libraryHasMoreFromBackend: Boolean(res.hasMore),
+            libraryCardStyles: { ...prev.libraryCardStyles, ...(res.cardStyles || {}) },
             librarySearching: false,
           }));
         } else {
@@ -1413,6 +1425,33 @@ export const appActions = {
       ? state.collapsedDeckIds.filter((id) => id !== deckId)
       : [...state.collapsedDeckIds, deckId];
     appActions.updatePreferences({ collapsedDeckIds: nextCollapsed });
+  },
+
+  async toggleNoteTypeSandbox(notetypeId: string) {
+    const cleanId = String(notetypeId || '').trim();
+    if (!cleanId) return;
+    const exists = state.sandboxNoteTypeIds.includes(cleanId);
+    const nextIds = exists
+      ? state.sandboxNoteTypeIds.filter((id) => id !== cleanId)
+      : [...state.sandboxNoteTypeIds, cleanId];
+    setAppState({ sandboxNoteTypeIds: nextIds });
+
+    if (isAnkiNativeEnv()) {
+      try {
+        const res = await callAnki<{
+          saved: boolean;
+          sandboxNoteTypeIds?: string[];
+        }>('toggle_notetype_sandbox', {
+          notetypeId: cleanId,
+          enabled: !exists,
+        });
+        if (res && Array.isArray(res.sandboxNoteTypeIds)) {
+          setAppState({
+            sandboxNoteTypeIds: res.sandboxNoteTypeIds.map((id) => String(id)),
+          });
+        }
+      } catch {}
+    }
   },
 
   async createDeck(name: string, parentFullName?: string) {

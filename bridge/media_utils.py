@@ -14,7 +14,7 @@ from pathlib import Path
 import re
 import urllib.parse
 import urllib.request
-from typing import Dict, List, NamedTuple
+from typing import Any, Dict, List, NamedTuple, Tuple
 
 IMG_TAG_RE = re.compile(r"<img\b[^>]*>", flags=re.I)
 IMG_SRC_ATTR_RE = re.compile(
@@ -48,6 +48,34 @@ def get_media_base_url(media_dir: str) -> str:
         return f"file://{clean}/" if clean else ""
 
 
+def get_media_http_base_url(mw=None) -> str:
+    """解析 Anki 内置本地媒体服务器 HTTP 根路径。
+
+    供 ``sandbox="allow-scripts"`` 的跨源 ``srcdoc`` iframe 加载图片、音频与
+    ``@font-face`` 字体，避免不透明 origin 下 ``file://`` 子资源被 Chromium 拦截。
+    """
+    target_mw = mw
+    if target_mw is None:
+        try:
+            import aqt
+
+            target_mw = getattr(aqt, "mw", None)
+        except Exception:
+            target_mw = None
+    if target_mw is None:
+        return ""
+    try:
+        ms = getattr(target_mw, "mediaServer", None)
+        if ms is not None and hasattr(ms, "getPort"):
+            port = int(ms.getPort() or 0)
+            if port > 0:
+                loopback = ".".join(("127", "0", "0", "1"))
+                return f"http://{loopback}:{port}/"
+    except Exception:
+        pass
+    return ""
+
+
 def _path_from_file_uri(uri: str) -> str:
     parsed = urllib.parse.urlparse(uri)
     if parsed.scheme.lower() != "file":
@@ -66,13 +94,24 @@ def _to_file_uri(media_dir: str, rel_name: str) -> str:
         return f"file://{abs_path}"
 
 
-def resolve_media_img_src_for_webview(raw_html: str, media_dir: str) -> str:
+def _to_http_uri(http_base_url: str, rel_name: str) -> str:
+    base = str(http_base_url or "").strip().rstrip("/")
+    clean_name = rel_name[2:] if rel_name.startswith("./") else rel_name
+    clean_name = clean_name.lstrip("/")
+    quoted = urllib.parse.quote(clean_name, safe="/:@!$&'()*+,;=-._~")
+    return f"{base}/{quoted}" if base else clean_name
+
+
+def resolve_media_img_src_for_webview(
+    raw_html: str, media_dir: str, http_base_url: str = ""
+) -> str:
     """
     Rewrites relative `<img src="...">` attributes in `raw_html` to `file:///.../collection.media/...`
-    without altering Cloze syntax (`{{c1::...}}`) or `[sound:...]` tags.
+    (or local HTTP media server URL when `http_base_url` is provided) without altering Cloze syntax
+    (`{{c1::...}}`) or `[sound:...]` tags.
     Also rescues stale cross-machine `file://` URLs if `data-anki-media` exists in `media_dir`.
     """
-    if not raw_html or not media_dir:
+    if not raw_html or (not media_dir and not http_base_url):
         return raw_html or ""
 
     def _tag_replacer(tag_match):
@@ -93,18 +132,38 @@ def resolve_media_img_src_for_webview(raw_html: str, media_dir: str) -> str:
             if lower_src.startswith("file://"):
                 local_p = _path_from_file_uri(src_clean)
                 if local_p and Path(local_p).exists():
+                    if http_base_url and media_dir:
+                        try:
+                            rel_p = (
+                                Path(local_p)
+                                .resolve()
+                                .relative_to(Path(media_dir).resolve())
+                                .as_posix()
+                            )
+                            uri = _to_http_uri(http_base_url, rel_p)
+                            return f'{lead}{eq_part}{q}{html.escape(uri, quote=True)}{q}'
+                        except Exception:
+                            pass
                     return src_match.group(0)
                 media_m = DATA_ANKI_MEDIA_RE.search(tag)
-                if media_m:
+                if media_m and media_dir:
                     fallback_name = urllib.parse.unquote(html.unescape(media_m.group(2).strip()))
                     candidate = Path(media_dir) / fallback_name
                     if fallback_name and candidate.exists():
-                        uri = _to_file_uri(media_dir, fallback_name)
+                        uri = (
+                            _to_http_uri(http_base_url, fallback_name)
+                            if http_base_url
+                            else _to_file_uri(media_dir, fallback_name)
+                        )
                         return f'{lead}{eq_part}{q}{html.escape(uri, quote=True)}{q}'
                 return src_match.group(0)
 
             decoded_name = urllib.parse.unquote(src_clean)
-            uri = _to_file_uri(media_dir, decoded_name)
+            uri = (
+                _to_http_uri(http_base_url, decoded_name)
+                if http_base_url
+                else _to_file_uri(media_dir, decoded_name)
+            )
             return f'{lead}{eq_part}{q}{html.escape(uri, quote=True)}{q}'
 
         return IMG_SRC_ATTR_RE.sub(_attr_replacer, tag, count=1)
@@ -249,6 +308,35 @@ RUBY_RT_RE = re.compile(r"<rt\b[^>]*>[\s\S]*?</rt\s*>", flags=re.I)
 RUBY_RP_RE = re.compile(r"<rp\b[^>]*>[\s\S]*?</rp\s*>", flags=re.I)
 # MDX 词典字段内残留的索引标记（如 HSK1-6 `Từ Điển` 开头的 `` `1`爱`4` ``）
 MDX_INDEX_MARKER_RE = re.compile(r"`\d+`")
+
+# 模板自带的 <style> / <script> 块。沙盒渲染必须原样保留它们（那正是 Track B 要执行的
+# 模板脚本与样式表），但在做振假名/标记清洗时又不能把块里的内容当正文处理——
+# 否则 CSS 里的 `content: "山田[やまだ]"` 会被替换成 <ruby>、脚本里的字符串也会被改。
+# 统一做法：先把这些块换成占位符，处理完正文再原样拼回。
+PROTECTED_BLOCK_RE = re.compile(
+    r"(<script\b[^>]*>[\s\S]*?</script\s*>|<style\b[^>]*>[\s\S]*?</style\s*>)",
+    flags=re.I,
+)
+_PROTECTED_PLACEHOLDER = "\x00anki-studio-protected-block-%d\x00"
+
+
+def _protect_style_and_script_blocks(text: str) -> Tuple[str, List[str]]:
+    """把 ``<style>`` / ``<script>`` 块替换成占位符，返回 ``(masked_text, blocks)``。"""
+    if not text:
+        return text, []
+    blocks: List[str] = []
+
+    def _replace(match: "re.Match[str]") -> str:
+        blocks.append(match.group(0))
+        return _PROTECTED_PLACEHOLDER % (len(blocks) - 1)
+
+    return PROTECTED_BLOCK_RE.sub(_replace, text), blocks
+
+
+def _restore_style_and_script_blocks(text: str, blocks: List[str]) -> str:
+    for index, block in enumerate(blocks):
+        text = text.replace(_PROTECTED_PLACEHOLDER % index, block)
+    return text
 # N1-N5 蓝宝书倒计时空占位符 `<span class="timer" id="s2"...></span>`
 TIMER_SPAN_RE = re.compile(
     r'<div\b[^>]*>\s*<span\b[^>]*\bclass\s*=\s*["\']?timer\b[^>]*>[\s\S]*?</span\s*>\s*</div\s*>',
@@ -287,18 +375,36 @@ JLPT_VOCAB_POS_SCRIPT_RE = re.compile(
 )
 
 
-def convert_furigana_to_ruby(raw_html: str, strip_reading: bool = False) -> str:
-    """将字段内的 Anki 日语振假名语法 `` 漢字[かな]`` 转为 ``<ruby>漢字<rt>かな</rt></ruby>`` 或纯汉字，并清理内嵌 ``<style>`` 与 MDX 标记。"""
+def convert_furigana_to_ruby(
+    raw_html: str, strip_reading: bool = False, preserve_style_blocks: bool = False
+) -> str:
+    """将字段内的 Anki 日语振假名语法 `` 漢字[かな]`` 转为 ``<ruby>漢字<rt>かな</rt></ruby>`` 或纯汉字，并清理 MDX 标记。
+
+    ``preserve_style_blocks=False``（默认，供普通展示/编辑路径使用）会剥掉内嵌
+    ``<style>`` / ``<script>``——字段级的样式与脚本不该漏进插件界面。
+
+    ``preserve_style_blocks=True`` 供 Track B 沙盒路径使用：先把 ``<style>`` /
+    ``<script>`` 块提取成占位符，只对正文做振假名转换，最后原样拼回。**否则模板的
+    样式表会在这一步被整段删掉**——沙盒 iframe 里就只剩无样式裸文本，而且这段删除
+    是静默的，测试里只比对正文根本发现不了。
+    """
     if not raw_html:
         return ""
-    text = STYLE_BLOCK_RE.sub("", str(raw_html))
-    text = SCRIPT_BLOCK_RE.sub("", text)
+    text = str(raw_html)
+    protected_blocks: List[str] = []
+    if preserve_style_blocks:
+        text, protected_blocks = _protect_style_and_script_blocks(text)
+    else:
+        text = STYLE_BLOCK_RE.sub("", text)
+        text = SCRIPT_BLOCK_RE.sub("", text)
     text = MDX_INDEX_MARKER_RE.sub("", text)
     if "[" in text and "]" in text:
         if strip_reading:
             text = FURIGANA_BRACKET_RE.sub(r"\1", text)
         else:
             text = FURIGANA_BRACKET_RE.sub(r"<ruby>\1<rt>\2</rt></ruby>", text)
+    if protected_blocks:
+        text = _restore_style_and_script_blocks(text, protected_blocks)
     return text
 
 
@@ -552,9 +658,9 @@ def _read_media_css(media_dir: str, rel_name: str, cap: int = 262_144) -> str:
         return ""
 
 
-def _rewrite_css_urls(css_text: str, media_dir: str) -> str:
-    """把 ``url('_vocab_logo.png')`` 之类的相对路径改成 ``file:///.../collection.media/…``。"""
-    if not css_text or not media_dir:
+def _rewrite_css_urls(css_text: str, media_dir: str, http_base_url: str = "") -> str:
+    """把 ``url('_vocab_logo.png')`` 或 ``@font-face`` 的相对路径改成本地 HTTP 或 ``file://``。"""
+    if not css_text or (not media_dir and not http_base_url):
         return css_text
 
     def _repl(match):
@@ -562,7 +668,8 @@ def _rewrite_css_urls(css_text: str, media_dir: str) -> str:
         if not raw or raw.lower().startswith(("data:", "http://", "https://", "file://", "//")):
             return match.group(0)
         q = quote or '"'
-        return f"url({q}{_to_file_uri(media_dir, raw)}{q})"
+        uri = _to_http_uri(http_base_url, raw) if http_base_url else _to_file_uri(media_dir, raw)
+        return f"url({q}{uri}{q})"
 
     return CSS_URL_RE.sub(_repl, css_text)
 
@@ -663,7 +770,12 @@ def scope_card_css(
 
 
 @lru_cache(maxsize=32)
-def build_card_css(raw_css: str, media_dir: str, scope: str = f".{CARD_ROOT_CLASS}") -> str:
+def build_card_css(
+    raw_css: str,
+    media_dir: str,
+    scope: str = f".{CARD_ROOT_CLASS}",
+    http_base_url: str = "",
+) -> str:
     """模板 CSS → 可直接注入的、带作用域的样式表。
 
     ``@import`` 的目标（如柯林斯词典的 ``_collins_c.css``）会被展开并排到最前面，
@@ -680,14 +792,37 @@ def build_card_css(raw_css: str, media_dir: str, scope: str = f".{CARD_ROOT_CLAS
         if not imported:
             continue
         _sub_imports, sub_rest = _split_css_imports(extract_model_css_text(imported))
-        parts.append(_rewrite_css_urls(sub_rest, media_dir))
+        parts.append(_rewrite_css_urls(sub_rest, media_dir, http_base_url=http_base_url))
     _imports, rest = _split_css_imports(text)
-    parts.append(_rewrite_css_urls(rest, media_dir))
+    parts.append(_rewrite_css_urls(rest, media_dir, http_base_url=http_base_url))
 
     merged = "\n".join(p for p in parts if p and p.strip())
     if not merged.strip():
         return ""
     return scope_card_css(merged, scope)
+
+
+@lru_cache(maxsize=32)
+def build_sandbox_card_css(
+    raw_css: str, media_dir: str, http_base_url: str = ""
+) -> str:
+    """供 Track B 沙盒 iframe 使用的完整模板 CSS（保留原始选择器与 display:none）。"""
+    text = extract_model_css_text(raw_css)
+    if not text:
+        return ""
+
+    parts: list[str] = []
+    for name in CSS_IMPORT_RE.findall(text):
+        imported = _read_media_css(media_dir, name)
+        if not imported:
+            continue
+        _sub_imports, sub_rest = _split_css_imports(extract_model_css_text(imported))
+        parts.append(_rewrite_css_urls(sub_rest, media_dir, http_base_url=http_base_url))
+    _imports, rest = _split_css_imports(text)
+    parts.append(_rewrite_css_urls(rest, media_dir, http_base_url=http_base_url))
+
+    merged = "\n".join(p for p in parts if p and p.strip())
+    return merged.strip()
 
 
 def _split_css_imports(css_text: str) -> tuple[list[str], str]:
@@ -740,8 +875,26 @@ def should_replace_front_on_flip(
     return False
 
 
+def resolve_replace_front_on_flip(
+    card,
+    front_plain: str = "",
+    native_answer: str = "",
+    is_cloze: bool = False,
+    is_image_occlusion: bool = False,
+) -> bool:
+    """复习与搜索两个服务共用的 ``replaceFrontOnFlip`` 判定。
+
+    IO / Cloze 卡一律不整页替换：它们的“正面 / 背面”是同一张笔记的两种挖空视图，
+    隐藏上方题干会直接丢掉当前挖空编号对应的提问面。搜索接口以前漏发这个字段，
+    编辑器拿不到它就只能按普通卡处理，翻面预览会和复习界面不一致。
+    """
+    if is_cloze or is_image_occlusion:
+        return False
+    return should_replace_front_on_flip(card, front_plain, native_answer)
+
+
 def render_native_card_sides(
-    card, media_dir: str = "", strip_front_side: bool = True
+    card, media_dir: str = "", strip_front_side: bool = True, raw_output=None
 ) -> NativeRender:
     """用 Anki 自己的模板引擎渲染正反两面，返回 :class:`NativeRender`。
 
@@ -750,12 +903,14 @@ def render_native_card_sides(
     ``replaceFrontOnFlip`` 时传 ``strip_front_side=False``，由前端整页替换。
     """
     empty = NativeRender("", "", [], [], "")
-    if card is None:
+    if card is None and raw_output is None:
         return empty
-    try:
-        output = card.render_output()
-    except Exception:
-        return empty
+    output = raw_output
+    if output is None:
+        try:
+            output = card.render_output()
+        except Exception:
+            return empty
 
     try:
         question = sanitize_rendered_card_html(
@@ -798,6 +953,74 @@ def render_native_card_html(
     """只要背面：``(html, audio_files, css)``，见 :func:`render_native_card_sides`。"""
     sides = render_native_card_sides(card, media_dir)
     return sides.answer, sides.answer_audio, sides.css
+
+
+ANKI_PLAY_TAG_RE = re.compile(r"\[anki:play:([^\]]+)\]", flags=re.I)
+ANKI_TTS_TAG_RE = re.compile(r"\[anki:tts:[^\]]*\]", flags=re.I)
+
+
+def resolve_media_for_sandbox(
+    raw_html: str, media_dir: str = "", http_base_url: str = ""
+) -> str:
+    """为 Track B 沙盒 iframe 准备原始模板 HTML（保留 ``<script>``、内联事件与 ``{{hint}}``）。"""
+    if not raw_html:
+        return ""
+    text = resolve_media_img_src_for_webview(raw_html, media_dir, http_base_url=http_base_url)
+    text = ANKI_PLAY_TAG_RE.sub(
+        lambda m: (
+            f'<a href="#" class="soundLink replay-button" '
+            f'onclick="if(window.pycmd)window.pycmd(\x27play:{html.escape(m.group(1).strip())}\x27);return false;" '
+            f'style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;'
+            f'border-radius:999px;background:rgba(94,92,230,0.12);color:#5E5CE6;text-decoration:none;'
+            f'font-size:11px;margin:0 4px;vertical-align:middle;">▶</a>'
+        ),
+        text,
+    )
+    text = ANKI_TTS_TAG_RE.sub("", text)
+
+    # 沙盒 HTML 里的 <style> / <script> 必须原样保留（模板脚本与样式表是 Track B 的
+    # 核心），所以这里走 preserve_style_blocks=True：只转换正文里的振假名，块内容不动。
+    # 之前用「按块手工 split 再拼」的写法，漏掉任何一类块（例如嵌套或大小写变体）
+    # 都会让整张样式表被 convert_furigana_to_ruby 静默删掉。
+    text = convert_furigana_to_ruby(text, preserve_style_blocks=True)
+    return text.strip()
+
+
+class SandboxRender(NamedTuple):
+    """供 Track B 沙盒 iframe 渲染的正反面完整 HTML 与未裁剪模板样式表。"""
+
+    question: str
+    answer: str
+    css: str
+
+
+def render_sandbox_card_sides(
+    card, media_dir: str = "", http_base_url: str = "", raw_output=None
+) -> SandboxRender:
+    """使用 Anki 原生 ``card.render_output()`` 生成保留 ``<script>`` 与交互逻辑的沙盒 HTML。"""
+    empty = SandboxRender("", "", "")
+    if card is None and raw_output is None:
+        return empty
+    output = raw_output
+    if output is None:
+        try:
+            output = card.render_output()
+        except Exception:
+            return empty
+    try:
+        q_raw = _as_text(getattr(output, "question_text", ""))
+        a_raw = _as_text(getattr(output, "answer_text", ""))
+        raw_css = _as_text(getattr(output, "css", ""))
+        q_html = resolve_media_for_sandbox(q_raw, media_dir, http_base_url=http_base_url)
+        a_html = resolve_media_for_sandbox(a_raw, media_dir, http_base_url=http_base_url)
+        css_out = (
+            build_sandbox_card_css(raw_css, media_dir, http_base_url=http_base_url)
+            if raw_css
+            else ""
+        )
+        return SandboxRender(q_html, a_html, css_out)
+    except Exception:
+        return empty
 
 
 METADATA_FIELD_LOWER = {
@@ -875,6 +1098,100 @@ def pick_display_field(fields: Dict[str, str], rendered_front: str) -> str:
             return name
 
     return first_key
+
+
+_TEMPLATE_FIELD_TOKEN_RE = re.compile(r"\{\{([^{}]+)\}\}")
+_TEMPLATE_FIELD_PREFIX_RE = re.compile(
+    r"^(?:[#/^]|text:|type:|cloze:|hint:|tts:|furigana:)", flags=re.I
+)
+_TEMPLATE_SPECIAL_FIELDS = {
+    "frontside",
+    "tags",
+    "deck",
+    "subdeck",
+    "card",
+    "cardflag",
+    "type",
+    "notetype",
+}
+
+
+def card_template_dict(card) -> Dict[str, Any]:
+    """取这张卡**自己的**模板，而不是 note type 的第一个模板。
+
+    多模板卡型（日→中 / 中→日、正问 / 反问）的正面字段完全由 ``card.ord`` 指向的
+    模板决定；只看 ``fields[0]`` 或 ``tmpls[0]`` 都会把另一条模板的字段当成正面，
+    于是“多模板卡片”的正面渲染、整页翻面判定会串到另一条模板上。
+    """
+    if card is None:
+        return {}
+    try:
+        template = card.template() if hasattr(card, "template") else None
+        if isinstance(template, dict) and template:
+            return template
+    except Exception:
+        pass
+    try:
+        note = card.note() if hasattr(card, "note") else None
+        model = note.note_type() if (note is not None and hasattr(note, "note_type")) else None
+        if isinstance(model, dict):
+            tmpls = model.get("tmpls") or []
+            ord_idx = int(getattr(card, "ord", 0) or 0)
+            if 0 <= ord_idx < len(tmpls) and isinstance(tmpls[ord_idx], dict):
+                return tmpls[ord_idx]
+    except Exception:
+        pass
+    return {}
+
+
+def template_field_references(qfmt: str) -> List[str]:
+    """按出现顺序抽出模板正面 ``qfmt`` 引用到的字段名。
+
+    去掉 ``{{text:字段}}`` / ``{{type:字段}}`` / ``{{#条件}}`` / ``{{/条件}}`` 这些修饰，
+    过滤 ``FrontSide``、``Tags``、``Card`` 等特殊 token，保留真实的字段名。
+    """
+    refs: List[str] = []
+    for raw in _TEMPLATE_FIELD_TOKEN_RE.findall(qfmt or ""):
+        token = raw.strip()
+        if not token:
+            continue
+        token = _TEMPLATE_FIELD_PREFIX_RE.sub("", token).strip()
+        if not token or token.lower() in _TEMPLATE_SPECIAL_FIELDS:
+            continue
+        if token not in refs:
+            refs.append(token)
+    return refs
+
+
+def resolve_front_field_name(
+    fields: Dict[str, str], rendered_front: str, card=None
+) -> str:
+    """判定“这张卡当前模板的正面字段”，模板优先、内容比对兜底。
+
+    为什么不能只靠 :func:`pick_display_field`：它按“字段内容出现在渲染正面里”猜，
+    多模板卡型下两条模板共用的字段（例句、释义）会互相命中，猜到的未必是当前模板的
+    正面。模板的 ``qfmt`` 才是 Anki 判定正面的真实依据——按它引用的字段顺序取第一个
+    非空且确实出现在渲染结果里的字段，确定性强得多；模板不可用时再回落到内容比对。
+    """
+    if not fields:
+        return ""
+    if card is not None:
+        template = card_template_dict(card)
+        if template:
+            references = template_field_references(str(template.get("qfmt", "") or ""))
+            if references:
+                probe_front = plain_text_of(rendered_front)
+                for name in references:
+                    if name not in fields:
+                        continue
+                    if name.strip().lower() in METADATA_FIELD_LOWER:
+                        continue
+                    probe = plain_text_of(fields.get(name, ""))
+                    if not probe:
+                        continue
+                    if not probe_front or probe in probe_front:
+                        return name
+    return pick_display_field(fields, rendered_front)
 
 
 INLINE_FORMAT_TAG_RE = re.compile(

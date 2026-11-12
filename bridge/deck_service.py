@@ -14,7 +14,7 @@ import sys
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .media_utils import get_media_base_url, get_media_dir
+from .media_utils import get_media_base_url, get_media_dir, get_media_http_base_url
 from .vacation_service import effective_frozen_dates
 
 
@@ -202,6 +202,7 @@ class DeckService:
             "ankiVersion": anki_ver,
             "platformBadge": f"{os_name} · {anki_ver}",
             "mediaBaseUrl": get_media_base_url(get_media_dir(self.col)),
+            "mediaHttpBaseUrl": get_media_http_base_url(self.mw),
         }
 
     @staticmethod
@@ -368,6 +369,7 @@ class DeckService:
                     "language": cfg.get("language", "auto"),
                     "customNickname": cfg.get("custom_nickname", ""),
                     "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
+                    "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                     "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
                     "debugMode": bool(cfg.get("debug_mode", False)),
                 },
@@ -1766,6 +1768,7 @@ class DeckService:
                 "language": cfg.get("language", "auto"),
                 "customNickname": cfg.get("custom_nickname", ""),
                 "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
+                "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
                 "debugMode": bool(cfg.get("debug_mode", False)),
             },

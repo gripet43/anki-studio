@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .bridge.compat import collect_health, format_health_summary
 from .bridge.router import BridgeRouter
 
 ADDON_DIR = Path(__file__).resolve().parent
@@ -43,10 +44,14 @@ class AnkiModernHost:
         self._did_initial_expand: bool = bool(
             self.get_config().get("windowInitialExpandDone", False)
         )
+        # Populated once by `refresh_patch_health()` at the end of `initialize()`;
+        # exposed to the frontend through `action_get_patch_health`.
+        self.patch_health: Dict[str, Any] = {}
         self.router = BridgeRouter(
             toggle_native_callback=self.toggle_modern_ui,
             config_getter=self.get_config,
             config_writer=self.write_config,
+            health_getter=lambda: self.patch_health,
         )
 
     def get_config(self) -> Dict[str, Any]:
@@ -159,6 +164,11 @@ class AnkiModernHost:
 
         # 7. Suppress duplicate native Qt sync progress modal dialogs & tooltips while Modern UI is active
         self._patch_anki_dialogs()
+
+        # 8. Runtime compatibility self-check: every patch above is non-fatal on
+        #    failure, so record what actually applied before the user notices a
+        #    regression as "native popups are back".
+        self.refresh_patch_health(log=True)
 
     def _patch_preferences_action(self) -> None:
         """
@@ -307,6 +317,85 @@ class AnkiModernHost:
                 aqt.sync._anki_modern_sync_err_patched = True
         except Exception:
             pass
+
+    def _build_patch_health(self) -> Dict[str, Any]:
+        """Collects the runtime compatibility report without ever raising.
+
+        All native surfaces are resolved defensively: outside the Anki runtime
+        (unit tests / tooling) every `import aqt` below fails and the report
+        simply records "module unavailable" instead of crashing.
+        """
+        mw = None
+        gui_hooks = None
+        try:
+            from aqt import gui_hooks as _gui_hooks
+            from aqt import mw as _mw
+
+            gui_hooks = _gui_hooks
+            mw = _mw
+        except Exception:
+            pass
+
+        progress_manager = None
+        utils_module = None
+        sync_module = None
+        try:
+            from aqt.progress import ProgressManager as _ProgressManager
+
+            progress_manager = _ProgressManager
+        except Exception:
+            pass
+        try:
+            import aqt.utils as _utils
+
+            utils_module = _utils
+        except Exception:
+            pass
+        try:
+            import aqt.sync as _sync
+
+            sync_module = _sync
+        except Exception:
+            pass
+
+        return collect_health(
+            mw=mw,
+            progress_manager=progress_manager,
+            utils_module=utils_module,
+            sync_module=sync_module,
+            gui_hooks=gui_hooks,
+            host=self,
+        )
+
+    def refresh_patch_health(self, log: bool = False) -> Dict[str, Any]:
+        """Rebuilds ``self.patch_health`` and logs a diagnostic block when degraded.
+
+        A failed patch is deliberately non-fatal for the user, but it must not be
+        invisible: degraded state prints once at startup, healthy state prints
+        only in debug mode.
+        """
+        try:
+            report = self._build_patch_health()
+        except Exception as exc:  # pragma: no cover - defensive
+            report = {
+                "state": "unknown",
+                "ankiVersion": {},
+                "patches": [],
+                "hooks": [],
+                "summary": {"patches": [0, 0], "hooks": [0, 0]},
+                "webview": {"mounted": False, "visible": False},
+                "warnings": ["自检本身失败：%s" % (exc,)],
+            }
+        self.patch_health = report
+        if log:
+            try:
+                degraded = report.get("state") != "ok"
+                debug = bool(self.get_config().get("debug_mode", False))
+                if degraded or debug:
+                    print(format_health_summary(report))
+            except Exception:
+                pass
+        return report
 
     def _on_top_toolbar_init_links(self, links: List[str], toolbar: Any) -> None:
         """

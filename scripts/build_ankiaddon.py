@@ -43,6 +43,7 @@ PRIVATE_CONFIG_KEYS = {
     "custom_nickname",
     "safety_ticket",
     "last_sync_checked_map",
+    "sandbox_notetype_ids",
 }
 
 EXCLUDED_NAMES = {

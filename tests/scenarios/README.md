@@ -121,8 +121,13 @@ python3 verify_isolation.py --check      # 确认真实库未被改动
 
 ### 覆盖范围
 
-后端共 46 个 action：8 个是纯 UI 操作（窗口移动、剪贴板、原生导入导出）不适合无头测试，
-其余 **38 个业务接口已全部覆盖**（100%）。
+后端共 48 个 action：8 个是纯 UI 操作（窗口移动、剪贴板、播放音频、原生导入导出、原生界面切换）
+不适合无头测试，其余 40 个中 **38 个已被 `smoke.py` 覆盖**。当前未覆盖的 2 个：
+
+- `toggle_notetype_sandbox`：Track B 原生沙盒开关，需要断言 config 的 `sandbox_notetype_ids`
+  真的写回（属前端/配置交互，补一条即可）；
+- `get_patch_health`：运行时兼容性自检报告，脱离 Anki 的默认 router 返回空报告，断言价值主要在
+  `tests/test_patch_health.py`，smoke 里补一条「不抛异常」的连通性检查即可。
 
 补全覆盖时顺带确认的几个行为，已写成断言：
 

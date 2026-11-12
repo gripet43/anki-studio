@@ -19,11 +19,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .media_utils import (
     convert_furigana_to_ruby,
     get_media_dir,
-    pick_display_field,
     plain_text_of,
     render_native_card_sides,
     render_native_image_occlusion,
+    resolve_front_field_name,
     resolve_media_img_src_for_webview,
+    resolve_replace_front_on_flip,
 )
 
 
@@ -708,6 +709,14 @@ class SearchService:
             fields_dict = dict(note.items())
             flds = list(fields_dict.values())
             model_id = _notetype_id(note)
+            model = None
+            try:
+                model = note.note_type() if hasattr(note, "note_type") else None
+            except Exception:
+                model = None
+            is_cloze = bool(
+                isinstance(model, dict) and int(model.get("type", 0) or 0) == 1
+            )
             empty_title = "未命名" if lang == "zh-CN" else "Untitled"
 
             # Anki 原生 Image Occlusion 的第一个字段是 Occlusion（SVG 覆盖层），
@@ -728,7 +737,7 @@ class SearchService:
                 # 正面也不能盲取 flds[0]：eggrolls-JLPT10k 把它排在 NoteID 上，
                 # 列表里就成了一串 uuid。挑“模板正面真正显示的那个字段”。
                 front_key = (
-                    pick_display_field(fields_dict, native.question)
+                    resolve_front_field_name(fields_dict, native.question, card)
                     if native.question
                     else (next(iter(fields_dict), "") if fields_dict else "")
                 )
@@ -764,12 +773,24 @@ class SearchService:
                 back_clean = self._strip_html_for_summary(back_raw)
 
             show_front_ruby = "<ruby" in (native.question if native else "").lower()
+            use_native_q_in_search = bool(
+                not io_front
+                and native
+                and native.question
+                and front_clean
+                and (
+                    front_clean in plain_text_of(native.question)
+                    or front_clean.lstrip("～〜~- ").strip() in plain_text_of(native.question)
+                )
+                and "<" in native.question
+            )
+            front_html_source = native.question if use_native_q_in_search else front_raw
             front_html, front_audio = self._rewrite_media_and_audio(
-                front_raw,
+                front_html_source,
                 media_dir,
                 strip_furigana_reading=(not show_front_ruby and bool(native and native.question)),
             )
-            if native and native.question and not io_front:
+            if native and native.question and not io_front and not use_native_q_in_search:
                 hdr_m = re.search(
                     r'<div\b[^>]*\bclass\s*=\s*["\']?header["\']?[^>]*>([\s\S]*?)</div\s*>',
                     native.question,
@@ -811,6 +832,16 @@ class SearchService:
             # Bug #9 Fix: Accurately distinguish 'due' vs 'review' (future undue cards)
             card_status = self._determine_card_status(col, card)
 
+            # 与复习界面同源：编辑器/预览拿不到这个标志就只能按普通卡处理，
+            # 翻面时会在下方重复展示一次正面。Cloze / IO 卡由 helper 统一排除。
+            replace_front_on_flip = resolve_replace_front_on_flip(
+                card,
+                front_clean,
+                native.answer if native else "",
+                is_cloze=is_cloze,
+                is_image_occlusion=bool(io_front),
+            )
+
             return {
                 "id": str(card.id),
                 "noteId": str(note.id),
@@ -822,6 +853,7 @@ class SearchService:
                 "back": back_clean,
                 "frontHtml": front_html,
                 "backHtml": back_html,
+                "replaceFrontOnFlip": replace_front_on_flip,
                 "audioFiles": front_audio + [a for a in back_audio if a not in front_audio],
                 "fields": fields_dict,
                 "fieldOrder": list(fields_dict.keys()),

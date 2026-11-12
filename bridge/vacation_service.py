@@ -510,6 +510,35 @@ class VacationService:
 
     # ---- Anti-Avalanche Rescue (事后雪崩平摊与顺延) ----
 
+    @staticmethod
+    def _filter_schedulable_cids(col, cids: List[int]) -> Tuple[List[int], List[int]]:
+        """把调度器读不出来的坏卡摘出来，返回 ``(可改期 cids, 跳过 cids)``。
+
+        Anki 26 的 Rust 后端从数据库读取卡片时会校验字段范围：测试 ``edge`` 场景里
+        ``ivl``/``due`` 越界的卡会让 ``col.get_card()`` 直接抛
+        ``IntegralValueOutOfRange``。而 ``set_due_date(cids, ...)`` 内部也会重新读卡，
+        于是**一张坏卡就能让整批减负抛错**，用户看到的是「减负失败」，几十张正常卡
+        一张都没动。这里先把读不出来的卡摘掉；批量改期本身仍然走单次后端调用，
+        真出现 I/O 错误时依旧整体回滚并如实报失败（不能降级重试，否则部分已提交的
+        改期会被当成成功）。
+        """
+        ids = [int(cid) for cid in cids]
+        if not ids or not hasattr(col, "get_card"):
+            return ids, []
+        good: List[int] = []
+        skipped: List[int] = []
+        for cid in ids:
+            try:
+                card = col.get_card(cid)
+            except Exception:
+                skipped.append(cid)
+                continue
+            if card is None:
+                skipped.append(cid)
+                continue
+            good.append(cid)
+        return good, skipped
+
     def rescue_backlog(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Rescues overdue card backlogs:
@@ -542,6 +571,16 @@ class VacationService:
                     "message": "当前队列中没有积压的到期卡片，无需急救。",
                 }
 
+            # 先摘掉调度器读不出来的坏卡，避免一张坏卡让整批减负失败。
+            schedulable_cids, skipped_cids = self._filter_schedulable_cids(col, list(cids))
+            if not schedulable_cids:
+                return {
+                    "success": False,
+                    "count": 0,
+                    "error": "所有积压卡片都无法被调度器读取（数据损坏或极端值），未写入任何变更。",
+                }
+            cids = schedulable_cids
+
             # --- Card safety guard: capture before any write -----------------
             schedule_snapshot = capture_schedule(col, list(cids))
             receipt_id = f"rescue_{int(time.time())}"
@@ -562,15 +601,17 @@ class VacationService:
                 r = col.db.first("SELECT count(*) FROM cards")
                 total_before = int(r[0]) if r else 0
 
+            sched = getattr(col, "sched", None)
+            if sched is None or not hasattr(sched, "set_due_date"):
+                raise RuntimeError("当前 Anki 版本缺少 set_due_date 调度接口")
             if mode == "amortize":
                 range_expr = f"1-{days}" if days > 1 else "1"
                 # 原本此处还有一条裸 SQL 兜底（逐张 UPDATE cards SET due），已删除：
                 # 它不维护 usn/mod，会让改期结果无法同步到其他设备。详见本函数上方说明。
-                if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
-                    col.sched.set_due_date(list(cids), range_expr)
+                sched.set_due_date(list(cids), range_expr)
             else:
-                if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):
-                    col.sched.set_due_date(list(cids), str(days))
+                sched.set_due_date(list(cids), str(days))
+            rescheduled_cids = list(cids)
 
             _save_col_if_legacy(col)
 
@@ -601,7 +642,7 @@ class VacationService:
             card_samples = []
             weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
-            for idx, cid in enumerate(cids):
+            for idx, cid in enumerate(rescheduled_cids):
                 c_due = sched_today + 1
                 c_ivl = 0
                 c_did = 1
@@ -663,12 +704,14 @@ class VacationService:
                     "count": day_counts.get(d, 0),
                 })
 
-            per_day = math.ceil(len(cids) / days) if days > 0 else len(cids)
+            per_day = math.ceil(len(rescheduled_cids) / days) if days > 0 else len(rescheduled_cids)
             msg = (
-                f"已成功将 {len(cids)} 张积压卡片削峰平摊至未来 {days} 天，平均每天仅需复习约 {per_day} 张。"
+                f"已成功将 {len(rescheduled_cids)} 张积压卡片削峰平摊至未来 {days} 天，平均每天仅需复习约 {per_day} 张。"
                 if mode == "amortize"
-                else f"已成功将 {len(cids)} 张卡片整体顺延 {days} 天。"
+                else f"已成功将 {len(rescheduled_cids)} 张卡片整体顺延 {days} 天。"
             )
+            if skipped_cids:
+                msg += f"（另有 {len(skipped_cids)} 张卡片因极端调度值被跳过。）"
 
             undo_merged = end_undo_group(col, undo_target)
             physical_ok, physical_note = quick_integrity_check(col)
@@ -679,12 +722,13 @@ class VacationService:
                 "totalCardsBefore": total_before,
                 "totalCardsAfter": total_after,
                 "lostCards": max(0, total_before - total_after),
-                "rescheduledCount": len(cids),
+                "rescheduledCount": len(rescheduled_cids),
+                "skippedCount": len(skipped_cids),
                 "mode": mode,
                 "days": days,
                 "dayDistribution": day_distribution,
                 "cardSamples": card_samples,
-                "rescheduledCids": [str(c) for c in cids],
+                "rescheduledCids": [str(c) for c in rescheduled_cids],
                 "scheduleSnapshot": schedule_snapshot,
                 "safety": {
                     "ticketId": ticket["id"],
@@ -715,7 +759,7 @@ class VacationService:
 
             return {
                 "success": True,
-                "count": len(cids),
+                "count": len(rescheduled_cids),
                 "mode": mode,
                 "days": days,
                 "perDayEstimate": per_day,
