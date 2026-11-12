@@ -29,11 +29,14 @@
     - 首页牌组卡的掌握度百分比热区（刻意保留可点悬停范围，只把 `cursor-help` 换 `cursor-default`，`group/mastery` 悬停反馈不受影响）；
     - 复习界面标签栏的 `+N` 溢出芯片。
     - 复核：`grep -rn "cursor-help\|cursor: help" frontend/src` 返回 0 条。
-  - **2. 「进度减负」不再给整格铺 `--status-warning-soft` 底色**：
-    - **现象**：全新安装的 Windows 机器上，左下角「休假模式 | 进度减负」分段控件里右格是橙色实心块，看起来像「当前选中了进度减负」，与默认状态不符。
-    - **根因（不是 bug，是样式缺陷）**：该按钮和「休假模式」同处一个 `grid grid-cols-2` 分段容器。容器里某一格被**实心填充**，语义上就等于「这一项当前生效」——这与 `hasAvalanche`（`overdue_count >= 30 or total_due >= 60`，见 `bridge/vacation_service.py`）真正要表达的「你有积压，可以来减负」完全不是一回事。首页英雄区那颗同功能的「进度减负」胶囊用的是品牌色描边/浅染，两处语气本就不一致。用户重新导入合集后 `crt` 与今天的差值会让 `today` 直接跳到两百多天，39 张复习卡到期就足以触发 `overdue_count >= 30`，所以这个态很容易被撞上。
-    - **改法**：有积压时只染内容不铺底——图标与文字走 `text-[var(--brand-text)] font-semibold`，右侧那枚提示点由 `animate-pulse` 的琥珀色改为实心 `bg-[var(--brand)]`，与首页胶囊同一套品牌语气；无积压时保持原中性灰（`#9A9CA6` / `#5C5E66`，暗色悬停 `bg-white/[0.06]`）。两种状态都保留 `focus-visible:ring-[var(--brand)]` 键盘可达性。
-    - **验证**：用真实 `web/assets/index.css` 以 3× DPR 渲染「改前 / 改后·有积压 / 改后·无积压」三态对照，确认改后不再读作「选中态」，默认态零变化。
+  - **2. 「进度减负」不再给整格铺 `--status-warning-soft` 底色（触发条件是对的，改的只是呈现方式）**：
+    - **现象**：Windows 机器上左下角「休假模式 | 进度减负」分段控件里右格是一块橙色实心格，看起来像「当前选中了进度减负」。
+    - **前提澄清（重要，避免下一位助手误判为 bug）**：那台机器**当天未复习卡超过 200 张**，`total_due >= 60` 成立，`hasAvalanche` 为真是**正确行为**，数据层没有问题。本机合集实测为逾期 12 张 / 今天到期 27 张 / 新卡 2 张，`overdue` 与 `total_due` 都不到阈值，所以本机不亮——两台机器的差异来自数据，不是环境 bug。
+    - **真正的缺陷在呈现**：该按钮与「休假模式」同处一个 `grid grid-cols-2` 分段容器。容器里某一格被**实心填充**，语义上就等于「这一项当前生效」——而 `hasAvalanche` 表达的是「你积压很多，建议来减负」，是系统检测出的提醒，不是用户自己打开的开关。同一个容器里「休假模式」用实心绿底表示用户真的开启了它，两种含义挤在一套视觉语言里，歧义是必然的（这次就是它把用户引到「默认状态出错」的方向去了）。
+    - **改法**：只去掉那层会冒充「选中态」的底色，**保留警告色语义**（积压确实该报警，不该降级成品牌蓝）——有积压时图标与文字走琥珀色 + 实心琥珀圆点，无积压时保持原中性灰（`#9A9CA6` / `#5C5E66`）。
+    - **文字色分档的原因**：`--status-warning`（`#CC7A25`）不区分明暗，作为 11px 正文压在浅色底上只有 **3.04:1**（压在 `#FFFFFF` 上 3.29:1），低于小字号 4.5:1 门槛——这是原设计就存在的问题，去掉填充后底色变浅反而更明显。因此浅色用 `#9A5B12`（对 `#F5F6F8` **5.01:1**、对 `#FFFFFF` **5.41:1**）、深色用 `#D98A3C`（对 `#17171C` **6.51:1**）。圆点维持 `bg-[var(--status-warning)]`，1.5px 非文字元素不受该门槛约束。
+    - **提示点不再 `animate-pulse`**：积压是持续性状态（可能持续数周），常驻脉冲会长期占据周边视觉。若认为需要更强提醒，可单独把它加回来，与本改动无关。
+    - **验证**：用真实 `web/assets/index.css` 以 3× DPR 渲染「改前 / 改后·有积压 / 改后·无积压」× 明暗两套主题共 6 格对照，确认改后不再读作「选中态」、警告感仍在、默认态零变化。
 
 - **[WorkBuddy] 首页牌组卡配色改为「由主题色派生」，不再按位置轮流派发六个写死的色系**（新增 [`frontend/src/utils/deckPalette.ts`](frontend/src/utils/deckPalette.ts)，改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
   - **问题**：后端 `_build_decks_list` 里 `color_idx = len(decks_out) % len(accents)`，把 indigo / blue / emerald / amber / rose / purple 六个色系按牌组顺序轮流发下去；前端再由 `deckAccentToTheme` 把这六个名字映射到主题库里的 indigo / cyan / emerald / amber / rose / violet。**卡片颜色因此与用户选定的主题色完全无关**——选了「经典蓝」，第二张牌组仍是青的、第三张仍是绿的、第四张是橙的，看起来像一套彩虹配色，而不是「我的主题」。

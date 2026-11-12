@@ -383,16 +383,23 @@ export const Sidebar: React.FC = () => {
 
           {/* 2. 进度减负 (Backlog Relief)
               注意：这里**不能**给整格铺底色。它和「休假模式」同处一个分段容器，
-              一旦某一格被实心填充，就会被读成「这一项当前是选中/开启状态」，
-              而积压提示只是一个建议入口，不是开关。所以有积压时只染图标与文字，
-              与首页英雄区那颗同品牌色的「进度减负」胶囊保持同一套语气。 */}
+              一旦某一格被实心填充，就会被读成「这一项当前是选中/开启状态」——
+              实际上 hasAvalanche 表达的是「你积压很多，建议来减负」，是系统检测到的
+              提醒，不是用户自己打开的开关。已有用户把这块琥珀实心格误认成
+              「默认状态出错」，可见这个歧义是真实存在的。
+              所以有积压时只染图标、文字与提示点，保留「警告色」语义（积压确实
+              该报警），去掉的只是那层会冒充「选中态」的底色。
+              文字色分两档实色而非直接用 --status-warning：后者不分明暗，作为
+              11px 正文压在浅色底上只有 3.0:1，低于 4.5:1 门槛。 */}
           <button
             type="button"
             onClick={() => appActions.openIcuModal('rescue')}
             className={`py-1.5 px-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
               dashboard.backlog?.hasAvalanche
-                ? `font-semibold text-[var(--brand-text)] ${
-                    isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-white'
+                ? `font-semibold ${
+                    isDark
+                      ? 'text-[#D98A3C] hover:bg-white/[0.06]'
+                      : 'text-[#9A5B12] hover:bg-white'
                   }`
                 : `font-medium ${
                     isDark
@@ -418,7 +425,7 @@ export const Sidebar: React.FC = () => {
             </svg>
             <span className="truncate">{t('backlogRescueBtn')}</span>
             {dashboard.backlog?.hasAvalanche && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand)] shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)] shrink-0" />
             )}
           </button>
         </div>
