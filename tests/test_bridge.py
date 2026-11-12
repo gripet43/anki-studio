@@ -1925,13 +1925,91 @@ class BridgeRouterAuditTest(unittest.TestCase):
         from anki_modern_os.bridge.media_utils import render_native_card_html
 
         del card.render_output
-        self.assertEqual(render_native_card_html(object()), ("", []))
-        self.assertEqual(render_native_card_html(None), ("", []))
+        self.assertEqual(render_native_card_html(object()), ("", [], ""))
+        self.assertEqual(render_native_card_html(None), ("", [], ""))
         self.assertEqual(sanitize_rendered_card_html(""), "")
 
         # 降级后回落取 fields[1]，行为与修复前一致（至少不是空白页面）
         fallback = self._call("start_review", {"deckId": "1"})["data"]["cards"][0]
         self.assertIn("<b>分治</b>", fallback["backHtml"])
+
+    def test_29_review_back_injects_scoped_model_css(self):
+        """模板 CSS 必须跟模板 HTML 成对注入，否则背面就是一坨无样式纯文本。
+
+        回归护栏：v1.4.1 只搬了正文没搬样式，用户的卡包背面丢了 `.section` 色条、
+        `.extension` 灰块、词性小标签。注入时还要处理三件事：
+        1. 卡包 css 字段常是遗留 HTML 大杂烩（自带 `</style>`），必须先抽出纯 CSS；
+        2. 选择器必须收进 `#anki-native-card`，否则 `.card` / `.section` 会污染全站；
+        3. `@import` 的柯林斯样式表要就地展开，`url()` 要改写成 `file:///`。
+        """
+        from anki_modern_os.bridge.media_utils import (
+            build_card_css,
+            extract_model_css_text,
+            wrap_card_with_styles,
+        )
+
+        collins = self.temp_media + "/_collins_c.css"
+        Path(collins).write_text(".word_header_word{ font-size:30px }", encoding="utf-8")
+
+        soup = (
+            "</style>\n<!-- 英语单词模板-vocab配色 -->\n<style>\n"
+            "@import url('_collins_c.css');\n"
+            ".card { color:#686868; }\n"
+            ".section { background:#fff; }\n"
+            "body .x { color:red }\n"
+            "#ext_collins{ display:none }\n"
+            "#vocab{ background-image:url('_vocab_logo.png') }\n"
+            "@media (max-width:600px){ .extension{ font-size:14px } }\n"
+            "</style>\n<script>function toggle(e){}</script>"
+        )
+
+        # 1. 遗留 HTML 大杂烩 → 纯 CSS（`</style>` 与注释都不许留）
+        text = extract_model_css_text(soup)
+        self.assertNotIn("<style", text)
+        self.assertNotIn("</style", text)
+        self.assertNotIn("toggle", text)
+        self.assertIn(".card", text)
+
+        css = build_card_css(soup, self.temp_media)
+        # 2. 每条选择器都收进容器；body 前缀被替换成容器本身
+        self.assertIn("#anki-native-card .card", css)
+        self.assertIn("#anki-native-card .section", css)
+        self.assertIn("#anki-native-card .x", css)
+        self.assertNotIn("body .x", css)
+        # 3. @import 就地展开、url() 改成 file:///
+        self.assertIn("#anki-native-card .word_header_word", css)
+        self.assertIn("url('file://", css)
+        # 4. 靠脚本点开的折叠块直接展开，否则内容永远看不到
+        self.assertNotIn("display:none", css.replace(" ", ""))
+        self.assertNotIn("#ext_collins", css)
+        # 5. @media 里的规则同样要作用域化
+        self.assertIn("@media (max-width:600px)", css)
+        self.assertIn("#anki-native-card .extension", css)
+
+        # 6. 正文包进容器；缺 CSS 时不加壳（老卡包 / 渲染失败）
+        wrapped = wrap_card_with_styles("<div>x</div>", css)
+        self.assertTrue(wrapped.startswith("<style>"))
+        self.assertIn('<div id="anki-native-card"><div class="card">', wrapped)
+        self.assertEqual(wrap_card_with_styles("<div>x</div>", ""), "<div>x</div>")
+        self.assertEqual(build_card_css("", self.temp_media), "")
+
+        # 7. 整条链路：render_output 里的 css 会被作用域化后单独带出
+        class StubRenderOutput:
+            answer_text = '<div id="chinese" class="extension">vt.察觉</div>'
+            answer_av_tags = []
+            css = "</style><style>.card{color:#333}#ext_collins{display:none}</style>"
+
+        card = self.mock_col.get_card(201)
+        card.render_output = lambda browser=False: StubRenderOutput()
+        from anki_modern_os.bridge.media_utils import render_native_card_html
+
+        html, audio, page_css = render_native_card_html(card, self.temp_media)
+        self.assertIn("vt.察觉", html)
+        self.assertEqual(audio, [])
+        self.assertIn("#anki-native-card .card", page_css)
+        self.assertNotIn("display:none", page_css.replace(" ", ""))
+        self.assertNotIn("<style", page_css)
+        self.assertNotIn("</style", page_css)
 
 
 if __name__ == "__main__":

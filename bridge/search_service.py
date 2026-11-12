@@ -692,8 +692,11 @@ class SearchService:
                 back_clean = ""
             else:
                 front_raw = flds[0] if flds else empty_title
-                # 与复习界面同源：背面走 Anki 模板引擎，取 flds[1] 会丢掉拓展字段
-                native_back, native_audio = render_native_card_html(card)
+                # 与复习界面同源：背面走 Anki 模板引擎，取 flds[1] 会丢掉拓展字段。
+                # 列表里不注入模板 CSS——几十张卡各带一份 <style> 既浪费也会互相串味。
+                native_back, native_audio, _native_css = render_native_card_html(
+                    card, media_dir
+                )
                 back_raw = native_back or (flds[1] if len(flds) > 1 else "")
                 front_clean = self._strip_html_for_summary(front_raw) or empty_title
                 back_clean = self._strip_html_for_summary(back_raw)

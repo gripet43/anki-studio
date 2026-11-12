@@ -9,6 +9,7 @@ Anki relative filenames (`src="foo.png"`) before saving notes to SQLite.
 from __future__ import annotations
 
 import html
+from functools import lru_cache
 from pathlib import Path
 import re
 import urllib.parse
@@ -242,7 +243,8 @@ def sanitize_rendered_card_html(raw_html: str) -> str:
     1. ``<script>``：卡片脚本。``dangerouslySetInnerHTML`` 本来就不执行它，留着只是脏
        HTML；而真要执行，等于让第三方卡包在本插件的特权 WebView 里跑任意 JS，
        那个 WebView 手里握着 pycmd 桥。
-    2. ``<style>``：模板 CSS 统一在 :func:`render_native_card_html` 里说明为什么不注入。
+    2. ``<style>``：正文内联样式一律清掉。模板自己的样式表由
+       :func:`extract_model_css_text` 单独抽取、作用域化后注入，跟正文分两路走。
     3. ``{{hint:字段}}`` 脚手架：``<a class=hint>标签</a>`` 加一个
        ``<div class=hint style="display:none">内容</div>``，原本靠上面那段脚本点开。
        脚本不跑就没有展开入口，所以直接把内容露出来，标签丢掉。
@@ -284,8 +286,199 @@ def normalize_rendered_whitespace(raw_html: str) -> str:
     return MULTI_SPACE_RE.sub(" ", text).strip()
 
 
-def render_native_card_html(card) -> tuple[str, list[str]]:
-    """用 Anki 自己的模板引擎渲染答案面，返回 ``(html, audio_files)``。
+CSS_IMPORT_RE = re.compile(
+    r"@import\s+(?:url\(\s*)?[\"']?([^\"')\s;]+)[\"']?\s*\)?\s*;", flags=re.I
+)
+CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)([^'\")]+)\1\s*\)", flags=re.I)
+CSS_COMMENT_RE = re.compile(r"/\*[\s\S]*?\*/")
+CSS_TAG_RE = re.compile(r"</?[a-zA-Z][^>]*>")
+CSS_ROOT_SELECTOR_RE = re.compile(r"^(?:html|body|:root)\b", flags=re.I)
+CSS_DISPLAY_NONE_RE = re.compile(r"display\s*:\s*none\s*(?:!\s*important\s*)?;?", flags=re.I)
+CSS_AT_SCOPED = ("@media", "@supports", "@container", "@layer", "@document")
+CARD_ROOT_ID = "anki-native-card"
+
+
+def extract_model_css_text(raw_css: str) -> str:
+    """从模板 ``css`` 字段里抽出纯 CSS 文本。
+
+    第三方卡包（尤其 2016 年前后那批）把整段 HTML 塞在 css 字段里：``</style>``、
+    ``<style>``、``<!-- 注释 -->``、甚至一段 ``<script>``。原样插进 ``<style>`` 会让
+    样式表在第一个 ``</style>`` 处提前闭合，后面的片段变成页面上的可见乱码。
+    这里按 ``<style>`` 块取内容；没有标签时按纯 CSS 处理。
+    """
+    if not raw_css:
+        return ""
+    text = re.sub(r"<!--[\s\S]*?-->", "", raw_css)
+    blocks = re.findall(r"<style\b[^>]*>([\s\S]*?)</style\s*>", text, flags=re.I)
+    if blocks:
+        text = "\n".join(blocks)
+    text = SCRIPT_BLOCK_RE.sub("", text)
+    text = CSS_TAG_RE.sub("", text)
+    return CSS_COMMENT_RE.sub("", text).strip()
+
+
+def _read_media_css(media_dir: str, rel_name: str, cap: int = 262_144) -> str:
+    """读取 ``collection.media`` 里的样式表（``@import`` 目标），只展开一层。"""
+    if not media_dir or not rel_name:
+        return ""
+    clean = rel_name.split("?")[0].split("#")[0].strip().strip("'\"")
+    clean = clean[2:] if clean.startswith("./") else clean
+    if not clean or clean.lower().startswith(("http://", "https://", "//", "data:")):
+        return ""
+    try:
+        path = Path(media_dir) / clean
+        if not path.is_file() or path.stat().st_size > cap:
+            return ""
+        return path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def _rewrite_css_urls(css_text: str, media_dir: str) -> str:
+    """把 ``url('_vocab_logo.png')`` 之类的相对路径改成 ``file:///.../collection.media/…``。"""
+    if not css_text or not media_dir:
+        return css_text
+
+    def _repl(match):
+        quote, raw = match.group(1), match.group(2).strip()
+        if not raw or raw.lower().startswith(("data:", "http://", "https://", "file://", "//")):
+            return match.group(0)
+        q = quote or '"'
+        return f"url({q}{_to_file_uri(media_dir, raw)}{q})"
+
+    return CSS_URL_RE.sub(_repl, css_text)
+
+
+def _split_top_level(text: str, sep: str = ",") -> list[str]:
+    parts: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    for ch in text:
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth = max(0, depth - 1)
+        if ch == sep and depth == 0:
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    parts.append("".join(buf))
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _scope_selector_list(selectors: str, scope: str) -> str:
+    scoped: list[str] = []
+    for sel in _split_top_level(selectors):
+        root = CSS_ROOT_SELECTOR_RE.match(sel)
+        if root:
+            rest = sel[root.end():].strip()
+            scoped.append(f"{scope} {rest}" if rest else scope)
+        else:
+            scoped.append(f"{scope} {sel}")
+    return ", ".join(scoped) if scoped else scope
+
+
+def scope_card_css(
+    css_text: str, scope: str = f"#{CARD_ROOT_ID}", reveal_hidden: bool = True
+) -> str:
+    """把模板 CSS 的每条选择器都收进 ``scope`` 之下，避免污染整个插件界面。
+
+    只做一层花括号扫描：``@media`` / ``@supports`` 之类容器规则往里递归，
+    ``@keyframes`` / ``@font-face`` 原样保留（它们的作用域本来就是全局）。
+
+    ``reveal_hidden`` 会顺手删掉 ``display:none`` 声明。理由：模板里被 CSS 藏起来的
+    段落（``#ext_collins{{display:none}}`` 这种）本来靠 ``onclick="toggle('collins')"``
+    点开，而脚本在本插件的 WebView 里不执行、内联事件也已清掉——留着这条规则，用户
+    就永远看不到柯林斯解释。宁可比原生界面长一点，也不能让内容锁死在不可达状态。
+    """
+    if not css_text:
+        return ""
+
+    out: list[str] = []
+    buf: list[str] = []
+    i, n = 0, len(css_text)
+    while i < n:
+        ch = css_text[i]
+        if ch == "{":
+            prelude = "".join(buf).strip()
+            buf = []
+            depth = 1
+            i += 1
+            start = i
+            while i < n and depth:
+                if css_text[i] == "{":
+                    depth += 1
+                elif css_text[i] == "}":
+                    depth -= 1
+                i += 1
+            body = css_text[start : i - 1] if depth == 0 else css_text[start:]
+            if not prelude:
+                continue
+            if prelude.startswith("@"):
+                if prelude.lower().startswith(CSS_AT_SCOPED):
+                    out.append(
+                        f"{prelude}{{{scope_card_css(body, scope, reveal_hidden)}}}"
+                    )
+                else:
+                    out.append(f"{prelude}{{{body}}}")
+            else:
+                if reveal_hidden:
+                    body = CSS_DISPLAY_NONE_RE.sub("", body)
+                    if not body.strip():
+                        continue
+                out.append(f"{_scope_selector_list(prelude, scope)}{{{body}}}")
+            continue
+        if ch == "}":
+            buf = []
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
+
+    tail = "".join(buf).strip()
+    if tail.startswith("@"):
+        out.append(tail if tail.endswith(";") else f"{tail};")
+    return "\n".join(out)
+
+
+@lru_cache(maxsize=32)
+def build_card_css(raw_css: str, media_dir: str, scope: str = f"#{CARD_ROOT_ID}") -> str:
+    """模板 CSS → 可直接注入的、带作用域的样式表。
+
+    ``@import`` 的目标（如柯林斯词典的 ``_collins_c.css``）会被展开并排到最前面，
+    保持与 Anki 原生的层叠顺序一致——否则打开复习界面时那段样式要等文件加载才到，
+    会先闪一下无样式的内容。
+    """
+    text = extract_model_css_text(raw_css)
+    if not text:
+        return ""
+
+    parts: list[str] = []
+    for name in CSS_IMPORT_RE.findall(text):
+        imported = _read_media_css(media_dir, name)
+        if not imported:
+            continue
+        _sub_imports, sub_rest = _split_css_imports(extract_model_css_text(imported))
+        parts.append(_rewrite_css_urls(sub_rest, media_dir))
+    _imports, rest = _split_css_imports(text)
+    parts.append(_rewrite_css_urls(rest, media_dir))
+
+    merged = "\n".join(p for p in parts if p and p.strip())
+    if not merged.strip():
+        return ""
+    return scope_card_css(merged, scope)
+
+
+def _split_css_imports(css_text: str) -> tuple[list[str], str]:
+    names = CSS_IMPORT_RE.findall(css_text)
+    return names, CSS_IMPORT_RE.sub("", css_text)
+
+
+def render_native_card_html(
+    card, media_dir: str = ""
+) -> tuple[str, list[str], str]:
+    """用 Anki 自己的模板引擎渲染答案面，返回 ``(html, audio_files, css)``。
 
     为什么非走原生渲染不可：插件早期把 ``fields[1]`` 当背面正文，只要卡包不是
     “两个字段”的形态，多出来的释义、例句、词源……在背诵界面上就整段消失
@@ -298,20 +491,18 @@ def render_native_card_html(card) -> tuple[str, list[str]]:
     不变——拿 ``UVBasic-English`` 卡包 997 张卡逐个比对过，``browser`` 取 True/False
     输出完全一致。
 
-    模板 CSS **故意不注入**，两个原因：
-    1. 第三方卡包的 ``css`` 字段常是遗留 HTML 大杂烩（自带 ``</style>``、``<style>``、
-       ``<script>``、``html`` 注释），塞进 React 会直接撑破样式表，剩下的片段变成
-       可见的乱码文本。
-    2. 那套 CSS 是按白底设计的（``background-color:#fff``），落到本插件的深色主题里
-       就是一片刺眼白块，还会把 ``.card`` / ``.section`` 这类通用类名泄漏到全站。
-    正文结构保留，视觉交给插件自己的设计系统。
+    第三个返回值是**作用域化之后的模板 CSS**（见 :func:`build_card_css`），调用方
+    负责把它包成 ``<style>`` 并配上 ``#anki-native-card`` 容器。这不是可选项：
+    v1.4.1 一开始只搬了 HTML 没搬 CSS，结果用户的卡包背面变成一坨无样式的纯文本
+    （`.section` 的色条、`.extension` 的灰块、词性小标签全没了），而编辑器的预览
+    里样式是好的——因为那里有自己的排版。模板 HTML 和模板 CSS 必须成对出现。
     """
     if card is None:
-        return "", []
+        return "", [], ""
     try:
         output = card.render_output(browser=True)
     except Exception:
-        return "", []
+        return "", [], ""
 
     answer = sanitize_rendered_card_html(getattr(output, "answer_text", "") or "")
 
@@ -320,4 +511,22 @@ def render_native_card_html(card) -> tuple[str, list[str]]:
         name = str(getattr(tag, "filename", "") or "").strip()
         if name and name not in audio:
             audio.append(name)
-    return answer, audio
+
+    page_css = build_card_css(getattr(output, "css", "") or "", media_dir)
+    return answer, audio, page_css
+
+
+def wrap_card_with_styles(html_text: str, css_text: str) -> str:
+    """把正文包进 ``#anki-native-card`` 容器并挂上作用域样式表。
+
+    里层那个 ``class="card"`` 不能省：模板 CSS 基本都以 ``.card{{color / font}}``
+    打底，缺了它就只剩 Studio 深色主题的浅色文字，落到白底卡面上会看不清。
+    """
+    if not html_text:
+        return html_text or ""
+    if not css_text:
+        return html_text
+    return (
+        f"<style>{css_text}</style>"
+        f'<div id="{CARD_ROOT_ID}"><div class="card">{html_text}</div></div>'
+    )

@@ -22,6 +22,7 @@ from .media_utils import (
     render_native_card_html,
     render_native_image_occlusion,
     resolve_media_img_src_for_webview,
+    wrap_card_with_styles,
 )
 
 
@@ -512,8 +513,10 @@ class ReviewService:
             # 拓展字段（释义 / 例句 / 词源 / 柯林斯…）在背诵界面整段消失。
             # Cloze 与原生遮挡卡例外：它们的 frontAnswerHtml 已经负责补全/揭底，
             # 再叠一份完整答案会让同一句话在翻转时出现两次。
-            native_back, native_back_audio = (
-                ("", []) if (io_front or is_cloze) else render_native_card_html(card)
+            native_back, native_back_audio, native_back_css = (
+                ("", [], "")
+                if (io_front or is_cloze)
+                else render_native_card_html(card, media_dir)
             )
             if io_front:
                 front_raw, back_raw = io_front, io_back
@@ -534,6 +537,8 @@ class ReviewService:
             )
             # 原生渲染已经把 [sound:] 剥进 answer_av_tags，这里补回来
             back_audio = native_back_audio + [f for f in back_audio if f not in native_back_audio]
+            # 模板 HTML 与模板 CSS 必须成对出现：只搬 HTML 会让卡包背面变成无样式纯文本
+            back_rich = wrap_card_with_styles(back_rich, native_back_css)
 
             all_audio: List[str] = []
             for f in front_audio + back_audio:

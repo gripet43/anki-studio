@@ -15,6 +15,18 @@
 
 ## [Unreleased]
 
+## [v1.4.2] - 2026-11-12
+
+- **[WorkBuddy] 回到模板样式：正文搬了、样式没搬，卡包背面变成一坨无样式纯文本**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`tests/test_bridge.py`](tests/test_bridge.py)）：
+  - **1.4.1 只做对了一半**：字段回来了，但模板 CSS 完全没跟上。用户看到的是 `.section` 的标题色条、`.extension` 的灰底块、`#chinese a.pos_v` 的词性小标签、`#vocab`/`#collins` 的 logo 条全部消失，整张背面塌成一行行同字号文字。而编辑器预览里样式是好的——因为那里走的是插件自己的排版，掩盖了问题。
+  - **不能直接把 css 字段塞进 `<style>`**：这批 2016 年的卡包把整段 HTML 写进 css 字段（`</style>` + `<!-- 注释 -->` + `<style>` + 一段 `function toggle()` 的 `<script>`）。原样注入会撑破样式表，尾部片段变成页面上的可见乱码。新增 `extract_model_css_text`：按 `<style>` 块取内容、剥掉注释与残留标签，没有标签时按纯 CSS 处理。
+  - **`@import` 就地展开**：`@import url('_collins_c.css')` 指向 `collection.media`，插件的页面是 `file://` 加载的，相对路径解析不到媒体目录。改为读出该文件、展开到最前面再一起作用域化——顺带消除“先闪一下无样式柯林斯”的加载空窗。路径经 `_rewrite_css_urls` 统一改写为 `file:///…/collection.media/…`，`_vocab_logo.png` / `_collins_logo4.png` 两条背景图实测能正常加载。
+  - **作用域化**：`scope_card_css` 做一层花括号扫描，把每条选择器都收进 `#anki-native-card` 之下；`@media` / `@supports` 递归处理，`@keyframes` / `@font-face` 原样保留。`body` / `html` / `:root` 前缀直接替换成容器本身，于是 `body{font-size:…}` 变成容器的基准字号而不是全站。正文用 `wrap_card_with_styles` 包成 `#anki-native-card > .card`——里层那个 `class="card"` 不能省，模板 CSS 基本都以 `.card{color/font}` 打底，缺了它深色主题下就是浅色字压在白底卡面上。
+  - **`display:none` 一律删掉**：`#ext_collins{display:none}` 这类折叠块本来靠 `onclick="toggle('collins')"` 点开，而脚本不执行、内联事件也已清掉。留着重则内容永远不可达，所以宁可默认展开。这是**有意偏离原生行为**，等量替换的是“内容必须看得到”。
+  - **列表页不注入**：卡包库里一屏几十张卡各带一份 `<style>` 既浪费也会互相串味，`search_service` 只取正文。`build_card_css` 加了 `lru_cache`（同一 notetype 只算一次），整队列 100 张从 40 ms 涨到 121 ms 后回落到可接受区间。
+  - **验证方式**：从真实卡包生成 `backHtml`，套进模拟深色主题的容器，用无头 Chrome 出图逐项核对——白底 `#english` 标题块、`#chinese` 灰底块、真题块、Vocabulary.com 绿条、Collins 深蓝条与 ★ 星级全部还原，文字无白压白/黑压黑。产物临时图见 `~/Downloads/anki-studio-card-css-check.png`（不入库）。
+  - **新增 `test_29_review_back_injects_scoped_model_css`**：锁住「HTML 大杂烩抽纯 CSS / 选择器作用域 / body 前缀替换 / @import 展开 / url 改写 / display:none 清除 / @media 递归 / 包壳与空值降级」八件事。
+
 ## [v1.4.1] - 2026-11-12
 
 - **[WorkBuddy] 背诵界面背面只显示一行音标：背面正文改由 Anki 模板引擎渲染**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`tests/test_bridge.py`](tests/test_bridge.py)）：
