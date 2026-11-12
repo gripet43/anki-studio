@@ -498,6 +498,48 @@ class TestFrontSideHiddenContent(unittest.TestCase):
 
         render = render_native_card_sides(None, "", raw_output=FakeOutput())
         self.assertIn("display:none", render.question_css.replace(" ", ""))
+        self.assertIn(
+            ".anki-native-card-front",
+            render.question_css,
+            "正面样式表必须挂在独立作用域根上，才能和背面同时出现时互不覆盖",
+        )
+        self.assertNotIn(".anki-native-card-front", render.css)
         self.assertNotIn("display:none", render.css.replace(" ", ""))
         self.assertIn("display: none", render.question, "正面 hint 内容必须保持隐藏")
         self.assertNotIn("display: none", render.answer, "背面 hint 内容必须揭开")
+
+
+class TestSearchShipsFrontAndBackStyles(unittest.TestCase):
+    """搜索接口必须同时下发「正面样式（保留隐藏）」与「背面样式（揭开隐藏）」。"""
+
+    CSS_WITH_HIDDEN = TestFrontSideHiddenContent.CSS_WITH_HIDDEN
+
+    def test_serialize_library_card_fills_both_style_sinks(self):
+        from anki_modern_os.bridge.search_service import SearchService
+
+        note_type = {
+            "id": 1,
+            "name": "Collins",
+            "type": 0,
+            "tmpls": [{"qfmt": "{{Word}}", "afmt": "{{FrontSide}}<hr id=answer>{{Back}}"}],
+        }
+        note = FakeNote(note_type, {"Word": "perceive", "Back": "释义"})
+        template = note_type["tmpls"][0]
+        output = FakeRenderOutput(
+            "<div>perceive</div>", "<div>释义</div>", css=self.CSS_WITH_HIDDEN
+        )
+        card = FakeCardForSearch(note, template, output)
+        col = FakeCol(card, note, {"id": 1, "name": "考研英语真题生词"})
+        service = SearchService(col_getter=lambda: col)
+
+        back_sink, front_sink = {}, {}
+        item = service._serialize_library_card(
+            col, 8001, "", "zh-CN", back_sink, front_sink
+        )
+        self.assertIsNotNone(item)
+        self.assertIn("1", back_sink, "背面样式必须按卡型下发")
+        self.assertIn("1", front_sink, "正面样式必须按卡型下发")
+        self.assertIn(".anki-native-card-front", front_sink["1"])
+        self.assertNotIn(".anki-native-card-front", back_sink["1"])
+        self.assertIn("display:none", front_sink["1"].replace(" ", ""))
+        self.assertNotIn("display:none", back_sink["1"].replace(" ", ""))

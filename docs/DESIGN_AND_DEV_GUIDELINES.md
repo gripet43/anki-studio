@@ -224,6 +224,10 @@ sequenceDiagram
   await callAnki<DashboardData>('get_dashboard', { ... });
   ```
 - **路由分发**：Python 端由 [`bridge/router.py`](../bridge/router.py) 进行方法分发，所有公开 API 方法必须返回符合 JSON 规范的字典或基本类型，且显式捕获内部异常，严禁向前端抛出未格式化的 Python Traceback。
+- **卡面样式必须按面分离（正 / 反双作用域）**：卡包模板普遍用 `display:none` / `{{hint}}` 把详解、扩展例句、提示藏在正面、靠脚本或点击展开。因此：
+  - **正面**用 `reveal_hidden=False` 生成、作用域为 `.anki-native-card-front` 的 CSS，并保留 `{{hint}}` 的 `display:none`；
+  - **背面**用 `reveal_hidden=True`、作用域为 `.anki-native-card` 的 CSS，把隐藏内容揭开（WebView 不执行模板脚本，不揭开则永远不可达）；
+  - **任何新增卡面渲染面（复习 / 搜索结果 / Cmd+K 预览 / 编辑器）都必须按面取对应 CSS，禁止正反共用一份**；两面同屏时两个作用域互不覆盖。当前本机实测 36 个卡型里 10 个（约 25% 的卡）在正面使用了这类隐藏。
 - **运行时兼容性自检**：为了沉浸感而接管 Anki/Qt 私有接口（进度弹窗、tooltip、Preferences、同步错误）的每一处 patch 都自带 `try/except`，失败时**不会崩、但会静默降级**。因此 [`bridge/compat.py`](../bridge/compat.py) 在启动后汇总「Anki 版本是否达标 + 4 个补丁 + 8 个生命周期钩子」的生效状态，降级时在 Anki 控制台打印 `patch health` 报告，前端也可通过 IPC action `get_patch_health` 读取同一份结构化报告（含 `state: ok|degraded` 与逐条原因）。**新增 patch 或钩子时必须同步更新 `PATCH_SPECS` / `HOOK_SPECS`，否则自检会漏报。**
 
 ### 2. 三层防迷失安全网（Anti-Lost Safety Nets）
@@ -260,7 +264,7 @@ node tests/test_frontend_bundle.mjs
 # 3. 前端单元套件：纯逻辑 + 叶子组件渲染（58 项，见 tests/frontend/README.md）
 node tests/frontend/run.mjs
 
-# 4. Python 单测：桥接层、卡片安全、发布不变量、兼容性自检与通用修复（当前 102 项）
+# 4. Python 单测：桥接层、卡片安全、发布不变量、兼容性自检与通用修复（当前 103 项）
 python3 -m unittest discover -s tests -p "test_*.py"
 
 # 5. （改到业务逻辑时）隔离场景冒烟：11 个场景 / 692 项检查，不动真实数据

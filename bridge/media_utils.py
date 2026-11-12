@@ -622,6 +622,10 @@ CSS_TALL_MIN_HEIGHT_RE = re.compile(
 )
 CSS_AT_SCOPED = ("@media", "@supports", "@container", "@layer", "@document")
 CARD_ROOT_CLASS = "anki-native-card"
+# 正面专用作用域根：与背面同时出现在页面上（如 Cmd+K 同时预览两面）时，
+# 两份模板 CSS 的 display 规则互不干扰。必须与前端 CommandPaletteModal 的
+# NATIVE_CARD_FRONT_ROOT 保持一致。
+CARD_FRONT_ROOT_CLASS = "anki-native-card-front"
 
 
 def extract_model_css_text(raw_css: str) -> str:
@@ -941,7 +945,14 @@ def render_native_card_sides(
         # 同一份模板 CSS 出两份作用域化结果：背面揭开隐藏段落，正面保留隐藏。
         page_css = build_card_css(raw_css, media_dir) if raw_css else ""
         question_css = (
-            build_card_css(raw_css, media_dir, reveal_hidden=False) if raw_css else ""
+            build_card_css(
+                raw_css,
+                media_dir,
+                scope=f".{CARD_FRONT_ROOT_CLASS}",
+                reveal_hidden=False,
+            )
+            if raw_css
+            else ""
         )
     except Exception:
         return empty
@@ -1234,21 +1245,26 @@ def plain_text_of(raw_html: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(text)).strip()
 
 
-def wrap_card_with_styles(html_text: str, css_text: str) -> str:
-    """把正文包进 ``.anki-native-card`` 容器并挂上作用域样式表。
+def wrap_card_with_styles(html_text: str, css_text: str, front: bool = False) -> str:
+    """把正文包进卡包作用域容器并挂上作用域样式表。
 
     里层那个 ``class="card"`` 不能省：模板 CSS 基本都以 ``.card{{color / font}}``
     打底，缺了它就只剩 Studio 深色主题的浅色文字，落到白底卡面上会看不清。
+
+    ``front=True`` 时外层同时挂 ``anki-native-card-front``：正面的样式表是按这个
+    作用域生成的（保留模板的 ``display:none``），背面用默认的 ``.anki-native-card``
+    作用域（揭开隐藏内容）。两面同时出现在页面上时互不覆盖。
     """
     if not html_text:
         return html_text or ""
     if not css_text:
         return html_text
-    return f"<style>{css_text}</style>" + wrap_card_html(html_text)
+    return f"<style>{css_text}</style>" + wrap_card_html(html_text, front=front)
 
 
-def wrap_card_html(html_text: str) -> str:
+def wrap_card_html(html_text: str, front: bool = False) -> str:
     """只给正文套容器，不带样式表（样式由调用方在别处统一渲染一份）。"""
     if not html_text:
         return html_text or ""
-    return f'<div class="{CARD_ROOT_CLASS}"><div class="card">{html_text}</div></div>'
+    classes = f"{CARD_ROOT_CLASS} {CARD_FRONT_ROOT_CLASS}" if front else CARD_ROOT_CLASS
+    return f'<div class="{classes}"><div class="card">{html_text}</div></div>'

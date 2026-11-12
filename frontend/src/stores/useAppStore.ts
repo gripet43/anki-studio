@@ -145,14 +145,18 @@ export interface AppState {
   cmdKQuery: string;
   cmdKSelectedIndex: number;
   cmdKResults: LibraryCardItem[];
-  /** notetypeId → 作用域化模板 CSS，右侧预览靠它还原卡包原生样式。 */
+  /** notetypeId → 作用域化模板 CSS（背面：已揭开模板隐藏内容）。 */
   cmdKCardStyles: Record<string, string>;
+  /** notetypeId → 正面专用模板 CSS（保留模板 display:none，不提前揭底）。 */
+  cmdKFrontCardStyles: Record<string, string>;
   cmdKSearching: boolean;
 
   // Card Library & Faceted Filters + Backend Pagination
   libraryCards: LibraryCardItem[];
-  /** notetypeId → 作用域化模板 CSS，卡片库/编辑器预览靠它还原词库卡包样式。 */
+  /** notetypeId → 作用域化模板 CSS（背面：已揭开模板隐藏内容）。 */
   libraryCardStyles: Record<string, string>;
+  /** notetypeId → 正面专用模板 CSS（保留模板 display:none）。 */
+  libraryFrontCardStyles: Record<string, string>;
   libraryTotalCount: number;
   libraryFilteredCount: number;
   libraryFacetCounts: LibraryFacetCounts | null;
@@ -250,10 +254,12 @@ const initialState: AppState = {
   cmdKSelectedIndex: 0,
   cmdKResults: [],
   cmdKCardStyles: {},
+  cmdKFrontCardStyles: {},
   cmdKSearching: false,
 
   libraryCards: [],
   libraryCardStyles: {},
+  libraryFrontCardStyles: {},
   libraryTotalCount: 0,
   libraryFilteredCount: 0,
   libraryFacetCounts: null,
@@ -609,6 +615,7 @@ export const appActions = {
           cards: LibraryCardItem[];
           allTags: string[];
           cardStyles?: Record<string, string>;
+          cardFrontStyles?: Record<string, string>;
         }>('search_cards', {
           query: nextQuery,
           status: nextStatus,
@@ -633,6 +640,10 @@ export const appActions = {
             libraryHasMoreFromBackend: Boolean(res.hasMore),
             libraryAllTags: res.allTags || prev.libraryAllTags,
             libraryCardStyles: { ...prev.libraryCardStyles, ...(res.cardStyles || {}) },
+            libraryFrontCardStyles: {
+              ...prev.libraryFrontCardStyles,
+              ...(res.cardFrontStyles || {}),
+            },
             librarySearching: false,
           }));
         } else {
@@ -661,6 +672,7 @@ export const appActions = {
           hasMore: boolean;
           cards: LibraryCardItem[];
           cardStyles?: Record<string, string>;
+          cardFrontStyles?: Record<string, string>;
         }>('search_cards', {
           query: state.librarySearchQuery,
           status: state.filterStatus,
@@ -681,6 +693,10 @@ export const appActions = {
             libraryFilteredCount: res.filteredCount ?? prev.libraryFilteredCount,
             libraryHasMoreFromBackend: Boolean(res.hasMore),
             libraryCardStyles: { ...prev.libraryCardStyles, ...(res.cardStyles || {}) },
+            libraryFrontCardStyles: {
+              ...prev.libraryFrontCardStyles,
+              ...(res.cardFrontStyles || {}),
+            },
             librarySearching: false,
           }));
         } else {
@@ -720,6 +736,7 @@ export const appActions = {
           filteredCount: number;
           cards: LibraryCardItem[];
           cardStyles?: Record<string, string>;
+          cardFrontStyles?: Record<string, string>;
         }>('search_cards', {
           query: query.trim(),
           status: 'all',
@@ -735,6 +752,7 @@ export const appActions = {
           setAppState({
             cmdKResults: res.cards,
             cmdKCardStyles: res.cardStyles || {},
+            cmdKFrontCardStyles: res.cardFrontStyles || {},
             cmdKSearching: false,
           });
         } else {

@@ -128,6 +128,9 @@ class SearchService:
         # 每个卡型只留一份作用域化模板 CSS（Cmd+K 右侧预览要拿它还原卡包样式）。
         # 按卡带会把 200 条的搜索响应撑到几百 KB，而同一副牌里卡型通常只有一两种。
         card_styles: Dict[str, str] = {}
+        # 正面与背面各一份模板 CSS：正面保留 display:none（隐藏详解/提示），
+        # 背面揭开。Cmd+K 同时预览两面，因此必须按卡型各下发一份。
+        card_front_styles: Dict[str, str] = {}
         matched_index = 0
         has_more = False
         is_completed_query = (status == "completed")
@@ -140,7 +143,9 @@ class SearchService:
         all_matched_items: List[Dict[str, Any]] = []
 
         for cid in cids:
-            item = self._serialize_library_card(col, cid, media_dir, lang, card_styles)
+            item = self._serialize_library_card(
+                col, cid, media_dir, lang, card_styles, card_front_styles
+            )
             if item is None:
                 continue
             if is_completed_query:
@@ -228,6 +233,7 @@ class SearchService:
             "hasMore": has_more or (offset + len(cards_out) < total_filtered),
             "cards": cards_out,
             "cardStyles": card_styles,
+            "cardFrontStyles": card_front_styles,
             "allTags": all_tags[:150],
         }
 
@@ -700,6 +706,7 @@ class SearchService:
         media_dir: str = "",
         lang: str = "zh-CN",
         style_sink: Optional[Dict[str, str]] = None,
+        front_style_sink: Optional[Dict[str, str]] = None,
     ) -> Optional[Dict[str, Any]]:
         try:
             card = col.get_card(int(cid))
@@ -734,6 +741,8 @@ class SearchService:
                 native = render_native_card_sides(card, media_dir)
                 if native.css and style_sink is not None:
                     style_sink.setdefault(model_id, native.css)
+                if native.question_css and front_style_sink is not None:
+                    front_style_sink.setdefault(model_id, native.question_css)
                 # 正面也不能盲取 flds[0]：eggrolls-JLPT10k 把它排在 NoteID 上，
                 # 列表里就成了一串 uuid。挑“模板正面真正显示的那个字段”。
                 front_key = (

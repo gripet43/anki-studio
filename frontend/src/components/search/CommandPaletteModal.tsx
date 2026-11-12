@@ -11,6 +11,12 @@ import { getAccentScale } from '../../utils/themeTokens';
  * 改任一侧都要同步另一侧，否则注入的样式一条选择器都命中不了。
  */
 const NATIVE_CARD_ROOT = 'anki-native-card';
+/**
+ * 正面专用作用域根，必须和 bridge/media_utils.py 的 CARD_FRONT_ROOT_CLASS 一致。
+ * Cmd+K 会同时渲染正反两面：正面 CSS 保留模板 display:none，背面 CSS 揭开它，
+ * 两者作用域不同才不会互相覆盖。
+ */
+const NATIVE_CARD_FRONT_ROOT = 'anki-native-card-front';
 
 function extractCopyableText(htmlContent?: string, fallbackPlain?: string): string {
   const raw = (htmlContent || '').trim();
@@ -40,6 +46,7 @@ export const CommandPaletteModal: React.FC = () => {
     cmdKSelectedIndex,
     cmdKResults,
     cmdKCardStyles,
+    cmdKFrontCardStyles,
     cmdKSearching,
     libraryCards,
     libraryTotalCount,
@@ -72,6 +79,10 @@ export const CommandPaletteModal: React.FC = () => {
   const activeCardCss = activeCard?.notetypeId
     ? cmdKCardStyles[String(activeCard.notetypeId)] || ''
     : '';
+  // 正面用「保留 display:none」的那份，避免柯林斯详解/{{hint}} 内容在正面提前露出。
+  const activeCardFrontCss = activeCard?.notetypeId
+    ? cmdKFrontCardStyles[String(activeCard.notetypeId)] || activeCardCss
+    : '';
 
   /**
    * 有模板样式就按卡包原样渲染：外层挂作用域根、正文落进 `.card`。
@@ -80,13 +91,20 @@ export const CommandPaletteModal: React.FC = () => {
    * `fallbackClass` 只在没有模板样式时生效——有样式时必须让卡包自己决定字号、字重
    * 和颜色，否则插件的 15px/加粗会漏进去，把卡包排版撑得和 Anki 里不一样。
    */
-  const renderCardBody = (rawHtml: string | undefined, fallbackClass: string) => {
+  const renderCardBody = (
+    rawHtml: string | undefined,
+    fallbackClass: string,
+    side: 'front' | 'back' = 'back'
+  ) => {
     const inner = renderMathAndRichHtml(rawHtml);
-    if (!activeCardCss) {
+    const sideCss = side === 'front' ? activeCardFrontCss : activeCardCss;
+    if (!sideCss) {
       return <div className={fallbackClass} dangerouslySetInnerHTML={{ __html: inner }} />;
     }
+    const rootClass =
+      side === 'front' ? `${NATIVE_CARD_ROOT} ${NATIVE_CARD_FRONT_ROOT}` : NATIVE_CARD_ROOT;
     return (
-      <div className={NATIVE_CARD_ROOT}>
+      <div className={rootClass}>
         <div className="card" dangerouslySetInnerHTML={{ __html: inner }} />
       </div>
     );
@@ -540,6 +558,9 @@ export const CommandPaletteModal: React.FC = () => {
                   {activeCardCss ? (
                     <style dangerouslySetInnerHTML={{ __html: activeCardCss }} />
                   ) : null}
+                  {activeCardFrontCss && activeCardFrontCss !== activeCardCss ? (
+                    <style dangerouslySetInnerHTML={{ __html: activeCardFrontCss }} />
+                  ) : null}
                   <div className="space-y-3">
                     {/* Header: Deck Badge & Single Copy Button */}
                     <div className="flex items-center justify-between">
@@ -587,7 +608,8 @@ export const CommandPaletteModal: React.FC = () => {
                         <div className="select-text cursor-text">
                           {renderCardBody(
                             activeCard.frontHtml || activeCard.front,
-                            'text-[15px] font-semibold leading-relaxed break-words text-[#1D1D1F] dark:text-[#F4F4F6]'
+                            'text-[15px] font-semibold leading-relaxed break-words text-[#1D1D1F] dark:text-[#F4F4F6]',
+                            'front'
                           )}
                         </div>
                       </div>

@@ -149,7 +149,9 @@ export const CardEditorModal: React.FC = () => {
     envInfo,
     libraryAllTags,
     cmdKCardStyles,
+    cmdKFrontCardStyles,
     libraryCardStyles,
+    libraryFrontCardStyles,
   } = useAppStore();
 
   const isDark = theme === 'dark' || theme === 'oled';
@@ -245,6 +247,27 @@ export const CardEditorModal: React.FC = () => {
     if (!notetypeId) return '';
     return cmdKCardStyles[notetypeId] || libraryCardStyles[notetypeId] || '';
   }, [cmdKCardStyles, libraryCardStyles, editingCardData]);
+
+  // 正面单独一份：保留模板 display:none，避免柯林斯详解/{{hint}} 在预览正面提前露出。
+  const injectedFrontCardStyle = useMemo(() => {
+    const notetypeId = editingCardData?.notetypeId
+      ? String(editingCardData.notetypeId)
+      : '';
+    if (!notetypeId) return '';
+    return (
+      cmdKFrontCardStyles[notetypeId] ||
+      libraryFrontCardStyles[notetypeId] ||
+      cmdKCardStyles[notetypeId] ||
+      libraryCardStyles[notetypeId] ||
+      ''
+    );
+  }, [
+    cmdKFrontCardStyles,
+    libraryFrontCardStyles,
+    cmdKCardStyles,
+    libraryCardStyles,
+    editingCardData,
+  ]);
 
   // Fetch available Note Types from Anki collection when modal opens
   useEffect(() => {
@@ -513,8 +536,9 @@ export const CardEditorModal: React.FC = () => {
       .trim();
 
     const hasInjectedCardStyle = Boolean(injectedCardStyle.trim());
+    const hasInjectedFrontCardStyle = Boolean(injectedFrontCardStyle.trim());
     const hasBlockMarkup = /<(?:img|table|ul|ol|blockquote|pre|h[1-6])\b|anki-io-wrap/i.test(rawQ);
-    const questionSizeClass = hasInjectedCardStyle
+    const questionSizeClass = hasInjectedFrontCardStyle
       ? 'w-full text-start'
       : hasBlockMarkup
       ? 'text-[17px] leading-relaxed font-normal text-start w-full'
@@ -526,24 +550,30 @@ export const CardEditorModal: React.FC = () => {
 
     // 有模板样式时套上卡包自己的作用域容器：模板 CSS 一律以 `.card` 打底，
     // 少这一层就只剩插件的排版，等于样式注入了也一条都命中不了。
-    const wrapWithCardStyle = (html: string): string =>
-      hasInjectedCardStyle && html && !html.includes('anki-native-card')
-        ? `<div class="anki-native-card"><div class="card">${html}</div></div>`
-        : html;
+    // 正面/背面各用各的作用域根，两面同时出现时 display 规则不会互相覆盖。
+    const wrapWithCardStyle = (html: string, css: string, front: boolean): string => {
+      if (!css.trim() || !html || html.includes('anki-native-card')) return html;
+      const rootClass = front ? 'anki-native-card anki-native-card-front' : 'anki-native-card';
+      return `<div class="${rootClass}"><div class="card">${html}</div></div>`;
+    };
 
     const questionHtml = wrapWithCardStyle(
       renderMathAndRichHtml(
         rawQ,
         !previewFlipped,
         clozeOrdinals.length > 0 ? activePreviewClozeOrd : undefined
-      )
+      ),
+      injectedFrontCardStyle,
+      true
     );
     const answerHtml = wrapWithCardStyle(
       renderMathAndRichHtml(
         rawA,
         false,
         clozeOrdinals.length > 0 ? activePreviewClozeOrd : undefined
-      )
+      ),
+      injectedCardStyle,
+      false
     );
 
     const populatedExtras = Object.entries(additionalFields).filter(([fKey, val]) => {
@@ -575,6 +605,7 @@ export const CardEditorModal: React.FC = () => {
       answerHtml,
       populatedExtras,
       hasInjectedCardStyle,
+      hasInjectedFrontCardStyle,
     };
   }, [
     isEditMode,
@@ -588,6 +619,7 @@ export const CardEditorModal: React.FC = () => {
     activePreviewClozeOrd,
     additionalFields,
     injectedCardStyle,
+    injectedFrontCardStyle,
   ]);
 
   const handleSelectNotePreset = (presetId: NoteCreationPreset, customModel?: NoteTypeOption) => {
@@ -1602,28 +1634,38 @@ export const CardEditorModal: React.FC = () => {
                     const nativeReplace = Boolean((editingCardData as ReviewCardItem).replaceFrontOnFlip);
                     const rawFrontHtml = editingCardData.frontHtml || '';
                     const rawBackHtml = editingCardData.backHtml || '';
-                    const embeddedStyleMatch = /<style\b[^>]*>([\s\S]*?)<\/style\s*>/i.exec(rawBackHtml);
-                    // 复习卡的反面 HTML 自带 <style>（后端 wrap_card_with_styles 的产物）；
-                    // 卡片库 / Cmd+K 来的词库卡没有——模板 CSS 由 cardStyles 按卡型下发，
-                    // 这里按当前卡型取回并注入，否则预览会掉成无样式裸文本。
-                    const cardTemplateCss = embeddedStyleMatch ? '' : injectedCardStyle;
-                    const hasCardTemplateCss = Boolean(cardTemplateCss.trim());
-                    const wrapWithCardStyle = (html: string): string =>
-                      hasCardTemplateCss && html && !html.includes('anki-native-card')
-                        ? `<div class="anki-native-card"><div class="card">${html}</div></div>`
-                        : html;
+                    // 复习卡的正/反 HTML 自带对应的 <style>（后端 wrap_card_with_styles
+                    // 的产物，正面是 .anki-native-card-front、背面是 .anki-native-card）；
+                    // 卡片库 / Cmd+K 来的词库卡没有——后端按卡型下发 cardStyles（背面，揭开隐藏）
+                    // 与 cardFrontStyles（正面，保留 display:none），这里按面分别注入。
+                    const frontHasStyle = /<style\b[^>]*>[\s\S]*?<\/style\s*>/i.test(rawFrontHtml);
+                    const backHasStyle = /<style\b[^>]*>[\s\S]*?<\/style\s*>/i.test(rawBackHtml);
+                    const frontCssToInject = frontHasStyle
+                      ? ''
+                      : injectedFrontCardStyle || injectedCardStyle;
+                    const backCssToInject = backHasStyle ? '' : injectedCardStyle;
+                    const wrapWithCardStyle = (html: string, css: string, front: boolean): string => {
+                      if (!css.trim() || !html || html.includes('anki-native-card')) return html;
+                      const rootClass = front
+                        ? 'anki-native-card anki-native-card-front'
+                        : 'anki-native-card';
+                      return `<div class="${rootClass}"><div class="card">${html}</div></div>`;
+                    };
                     const nativeFrontHtml = resolveMediaInHtml(
-                      wrapWithCardStyle(rawFrontHtml),
+                      wrapWithCardStyle(rawFrontHtml, frontCssToInject, true),
                       effectiveMediaBaseUrl
                     );
                     const nativeBackHtml = resolveMediaInHtml(
-                      wrapWithCardStyle(rawBackHtml),
+                      wrapWithCardStyle(rawBackHtml, backCssToInject, false),
                       effectiveMediaBaseUrl
                     );
                     return (
                       <>
-                        {hasCardTemplateCss ? (
-                          <style dangerouslySetInnerHTML={{ __html: cardTemplateCss }} />
+                        {frontCssToInject ? (
+                          <style dangerouslySetInnerHTML={{ __html: frontCssToInject }} />
+                        ) : null}
+                        {backCssToInject && backCssToInject !== frontCssToInject ? (
+                          <style dangerouslySetInnerHTML={{ __html: backCssToInject }} />
                         ) : null}
                         {!(previewFlipped && nativeReplace) && (
                           <div
@@ -1651,7 +1693,11 @@ export const CardEditorModal: React.FC = () => {
                   })()
                 ) : (
                   <>
-                    {previewCardContent.hasInjectedCardStyle ? (
+                    {previewCardContent.hasInjectedFrontCardStyle ? (
+                      <style dangerouslySetInnerHTML={{ __html: injectedFrontCardStyle }} />
+                    ) : null}
+                    {previewCardContent.hasInjectedCardStyle &&
+                    injectedCardStyle !== injectedFrontCardStyle ? (
                       <style dangerouslySetInnerHTML={{ __html: injectedCardStyle }} />
                     ) : null}
                     {previewCardContent.rawQ.trim() ? (

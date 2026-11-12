@@ -661,8 +661,8 @@ class ReviewService:
                 strip_furigana_reading=False,
             )
             if use_native_question_html and native_back_css:
-                front_rich_q = wrap_card_with_styles(front_rich_q, native_front_css)
-                front_rich_a = wrap_card_with_styles(front_rich_a, native_front_css)
+                front_rich_q = wrap_card_with_styles(front_rich_q, native_front_css, front=True)
+                front_rich_a = wrap_card_with_styles(front_rich_a, native_front_css, front=True)
 
             replace_front_on_flip = resolve_replace_front_on_flip(
                 card,

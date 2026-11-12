@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+## [v1.4.10] - 2026-11-13
+
+- **[DeepSeek] 卡面正面 / 背面样式彻底分离：搜索预览与编辑器一并修复（通用问题，不是单卡包）**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`frontend/src/components/search/CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`docs/DESIGN_AND_DEV_GUIDELINES.md`](docs/DESIGN_AND_DEV_GUIDELINES.md)；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 1 项并强化既有断言）：
+  - **普遍性实测**：本机 collection 的 36 个卡型里 **10 个**（16,411 / 66,256 张卡，约 **25%**）在正面使用 `display:none` 或 `{{hint}}` 隐藏内容：JLPT10k（10,641）、双类型文法卡组（3,241）、UVBasic-English（997）、Ultimate Geography（978）、Cloze Overlapping（463）等。所以这是通用缺陷，不是柯林斯 / 考研英语某个卡包的问题。
+  - **修法（正反双作用域）**：`render_native_card_sides` 现在产出两份作用域 CSS——背面 `.anki-native-card`（`reveal_hidden=True`，揭开隐藏段落）与正面 `.anki-native-card-front`（`reveal_hidden=False`，保留 `display:none`）；`wrap_card_with_styles(..., front=True)` 的正面容器同时挂两个类。两面同屏（Cmd+K 预览）时 display 规则互不覆盖。
+  - **搜索 / 预览**：`search_cards` 新增 `cardFrontStyles`（按卡型去重）；`useAppStore` 新增 `cmdKFrontCardStyles` / `libraryFrontCardStyles`；Cmd+K 右侧预览与编辑器预览都改为按面选 CSS（正面保留隐藏、背面揭开）。
+  - **规则化**：DESIGN 手册新增红线——任何新增卡面渲染面都必须按面取样式，禁止正反共用一份 CSS。
+  - **验证**：真实 collection 上 UVBasic-English 正面 CSS 含 `.anki-native-card-front #ext_collins{display:none}` 且背面不含 `display:none`；Python 103 项、`tsc --noEmit`、前端单元 58 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.9 → 1.4.10。
+
 ## [v1.4.9] - 2026-11-13
 
 - **[DeepSeek] 词库卡（柯林斯等）正面不再摊开模板默认隐藏的内容**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 5 项断言）：
