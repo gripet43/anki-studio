@@ -1055,7 +1055,9 @@ ruby rt {
 
 .library-card-stats {
   display: flex;
+  flex: 1;
   align-items: center;
+  justify-content: space-between;
   gap: 14px;
   min-width: 0;
 }

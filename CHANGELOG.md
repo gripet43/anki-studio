@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+## [v1.4.53] - 2026-11-13
+
+- **[DeepSeek] Gallery 小卡底部「熟记度」改为右对齐**（改 [`frontend/src/index.css`](frontend/src/index.css)）：到期信息留在左侧、熟记度圆环和百分比推到卡片右侧边缘，底部信息形成「左到期 / 右熟记度」的对称结构；`.library-card-stats` 改为 `flex: 1 + space-between`。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.52 → 1.4.53。
+
 ## [v1.4.52] - 2026-11-13
 
 - **[DeepSeek] Gallery 小卡正面正文改为居中对齐**（改 [`frontend/src/index.css`](frontend/src/index.css)）：题目正文水平居中（配合已有的垂直居中），单行短题不会再缩在左上角；图片等内联内容也居中；背面答案仍保持左对齐以便阅读。同时包含 v1.4.51 的卡片高度收紧（背面答案 2 行、标签 1 行、整卡约 155–160px）。
