@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.41] - 2026-11-13
+
+- **[DeepSeek] 「答题按钮」设置升级为独立一级标签页「答题设置」**（改 [`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx) 及 16 种语言字典）：
+  - 设置侧边栏在「外观与语言」之后新增 **答题设置**（Answer）标签页，图标为四宫格；
+  - 原「外观 → 答题按钮」卡片移入该页，页面副标题为「答题时的按钮布局与相关偏好」；
+  - 16 种语言新增 `settingsTabAnswer` / `settingsAnswerTabSub`。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 130 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.40 → 1.4.41。
+
 ## [v1.4.40] - 2026-11-13
 
 - **[DeepSeek] 新增可选「原生四按钮」答题布局（默认仍为简洁双按钮）**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py) 及 16 种语言字典）：

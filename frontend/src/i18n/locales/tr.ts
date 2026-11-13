@@ -418,6 +418,8 @@ export const dict: TranslationTable = {
   settingsSyncTabSub: "AnkiWeb bulut eşitleme durumunu inceleyin veya anında eşitleme başlatın.",
   settingsTabAbout: "Hakkında",
   settingsTabAppearance: "Görünüm ve Dil",
+  settingsTabAnswer: "Yanıt",
+  settingsAnswerTabSub: "Cevap düğmeleri düzeni ve ilgili tercihler.",
   settingsTabMaintenance: "İçe/Dışa Aktar ve Bakım",
   settingsTabNative: "Klasik Mod",
   settingsTabShortcuts: "Kısayollar",

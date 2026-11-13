@@ -418,6 +418,8 @@ export const dict: TranslationTable = {
   settingsSyncTabSub: "Kiểm tra trạng thái đồng bộ đám mây AnkiWeb hoặc kích hoạt đồng bộ hai chiều ngay.",
   settingsTabAbout: "Giới thiệu",
   settingsTabAppearance: "Giao diện & Ngôn ngữ",
+  settingsTabAnswer: "Trả lời",
+  settingsAnswerTabSub: "Bố cục nút trả lời và tùy chọn ôn tập.",
   settingsTabMaintenance: "Nhập / Xuất & Bảo trì",
   settingsTabNative: "Chế độ gốc",
   settingsTabShortcuts: "Phím tắt",

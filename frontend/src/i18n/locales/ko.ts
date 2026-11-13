@@ -418,6 +418,8 @@ export const dict: TranslationTable = {
   settingsSyncTabSub: "현재 AnkiWeb 클라우드 동기화 상태를 확인하거나 즉시 양방향 동기화를 실행합니다.",
   settingsTabAbout: "정보",
   settingsTabAppearance: "테마 및 언어",
+  settingsTabAnswer: "답변 설정",
+  settingsAnswerTabSub: "답변 버튼 배치와 관련 환경설정.",
   settingsTabMaintenance: "가져오기/내보내기 및 점검",
   settingsTabNative: "기본 모드 전환",
   settingsTabShortcuts: "단축키",

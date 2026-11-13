@@ -418,6 +418,8 @@ export const dict: TranslationTable = {
   settingsSyncTabSub: "AnkiWeb クラウド同期のスナップショット確認や、手動での双方向同期を実行します。",
   settingsTabAbout: "情報",
   settingsTabAppearance: "外観と言語",
+  settingsTabAnswer: "回答設定",
+  settingsAnswerTabSub: "回答時のボタン配置と関連設定。",
   settingsTabMaintenance: "読込・書出・保守",
   settingsTabNative: "標準モード切替",
   settingsTabShortcuts: "ショートカット",

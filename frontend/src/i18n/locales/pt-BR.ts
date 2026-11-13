@@ -418,6 +418,8 @@ export const dict: TranslationTable = {
   settingsSyncTabSub: "Verifique o status de sincronização com o AnkiWeb ou inicie uma sincronização manual.",
   settingsTabAbout: "Sobre",
   settingsTabAppearance: "Aparência e idioma",
+  settingsTabAnswer: "Resposta",
+  settingsAnswerTabSub: "Disposição dos botões e preferências de revisão.",
   settingsTabMaintenance: "Importar / Manutenção",
   settingsTabNative: "Modo nativo",
   settingsTabShortcuts: "Atalhos",
