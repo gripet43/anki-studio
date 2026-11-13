@@ -1477,33 +1477,39 @@ export const LibraryView: React.FC = () => {
                       </div>
                     </header>
 
-                    {/* Content Section */}
-                    <div className="library-card-body">
-                      <h3
-                        className="library-card-title text-[#1D1D1F] dark:text-white select-text cursor-text"
-                        dangerouslySetInnerHTML={{
-                          __html: frontPreviewHtml,
-                        }}
-                      />
-                      <div
-                        className={`library-card-snippet transition-colors ${
-                          isDark
-                            ? 'bg-[#14151B]/75 border-[#252732] text-[#A1A1A6]'
-                            : 'bg-[#F7F8FA] border-[#ECEEF2] text-[#5C5F66]'
-                        }`}
-                      >
-                        {hasBackPreview ? (
-                          <div
-                            className="library-card-snippet-body select-text cursor-text"
+                    {/* Content Section — 正面常驻，hover 时翻到背面 */}
+                    <div className="library-card-body library-card-flip">
+                      <div className="library-card-flip-inner">
+                        <div className="library-card-flip-front">
+                          <h3
+                            className="library-card-title text-[#1D1D1F] dark:text-white select-text cursor-text"
                             dangerouslySetInnerHTML={{
-                              __html: backPreviewHtml,
+                              __html: frontPreviewHtml,
                             }}
                           />
-                        ) : (
-                          <p className="library-card-snippet-body opacity-50 italic select-none">
-                            {t('noBackContentPlaceholder')}
-                          </p>
-                        )}
+                        </div>
+                        <div className="library-card-flip-back">
+                          <div
+                            className={`library-card-snippet transition-colors ${
+                              isDark
+                                ? 'bg-[#14151B]/75 border-[#252732] text-[#A1A1A6]'
+                                : 'bg-[#F7F8FA] border-[#ECEEF2] text-[#5C5F66]'
+                            }`}
+                          >
+                            {hasBackPreview ? (
+                              <div
+                                className="library-card-snippet-body select-text cursor-text"
+                                dangerouslySetInnerHTML={{
+                                  __html: backPreviewHtml,
+                                }}
+                              />
+                            ) : (
+                              <p className="library-card-snippet-body opacity-50 italic select-none">
+                                {t('noBackContentPlaceholder')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
 

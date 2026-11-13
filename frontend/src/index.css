@@ -933,6 +933,51 @@ ruby rt {
   overflow: hidden;
 }
 
+/* Gallery 小卡：默认只显示正面，hover 时 3D 翻转露出背面。
+   正反两面放在同一个 grid cell 里，容器高度自动取两者最大值，避免翻转时跳高。 */
+.library-card-flip {
+  perspective: 1200px;
+}
+
+.library-card-flip-inner {
+  position: relative;
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 460ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.library-card:hover .library-card-flip-inner {
+  transform: rotateY(180deg);
+}
+
+.library-card-flip-front,
+.library-card-flip-back {
+  grid-area: 1 / 1;
+  min-width: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.library-card-flip-front {
+  align-self: start;
+}
+
+.library-card-flip-back {
+  transform: rotateY(180deg);
+  min-height: 100%;
+}
+
+.library-card-flip-back .library-card-snippet {
+  height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library-card-flip-inner {
+    transition: none;
+  }
+}
+
 .library-card-snippet {
   flex: 1 0 auto;
   min-width: 0;

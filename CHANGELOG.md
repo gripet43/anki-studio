@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+## [v1.4.46] - 2026-11-13
+
+- **[DeepSeek] 卡片库 Gallery 小卡：默认只显示正面，hover 翻转显示背面**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
+  - 小卡默认只渲染正面（题目），不再同时堆「正面 + 背面摘要」，降低小尺寸下的信息密度；
+  - 鼠标移到卡片上时，内容区做 460ms 的 3D 翻转动画露出背面摘要；移开翻回；
+  - 正反两面放在同一个 grid cell，容器高度自动取两者较大值，翻转不跳高；`prefers-reduced-motion` 下关闭动画；卡片头部/底部（牌组、标签、到期、编辑）不参与翻转；
+  - Table 视图与其他字段保持现状。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.45 → 1.4.46。
+
 ## [v1.4.45] - 2026-11-13
 
 - **[DeepSeek] 进度减负的活跃天数边界修正：5 天可正常计算，7 天改用线性插值的 75 分位**（改 [`bridge/deck_service.py`](bridge/deck_service.py)、[`tests/test_backlog_alert.py`](tests/test_backlog_alert.py)）：
