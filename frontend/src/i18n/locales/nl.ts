@@ -321,7 +321,7 @@ export const dict: TranslationTable = {
   notSyncedShort: "Niet gesync.",
   notePresetBasicDesc: "Vraag op voorkant, antwoord op achterkant (standaard)",
   notePresetBasicTitle: "Basis",
-  notePresetClozeDesc: "Verberg kernbegrippen met {{c1::...}} of afbeeldingsmaskers",
+  notePresetClozeDesc: "Verberg kernbegrippen met {{c1::...}}, ook op meerdere plekken",
   notePresetClozeTitle: "Invuloefening (Cloze)",
   notePresetReversedDesc: "Genereert automatisch zowel Voorkant→Achterkant als andersom",
   notePresetReversedTitle: "Basis + Omgekeerd",

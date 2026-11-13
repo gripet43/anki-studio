@@ -321,7 +321,7 @@ export const dict: TranslationTable = {
   notSyncedShort: "Chưa đồng bộ",
   notePresetBasicDesc: "Mặt trước hỏi, mặt sau đáp (Thẻ tiêu chuẩn)",
   notePresetBasicTitle: "Cơ bản",
-  notePresetClozeDesc: "Ẩn từ khóa bằng {{c1::...}} hoặc vẽ khung che ảnh",
+  notePresetClozeDesc: "Ẩn từ khóa bằng {{c1::...}}, hỗ trợ nhiều chỗ trống",
   notePresetClozeTitle: "Điền khuyết (Cloze)",
   notePresetReversedDesc: "Tự động tạo 2 thẻ hai chiều Trước→Sau và Sau→Trước",
   notePresetReversedTitle: "Hai chiều (Trước↔Sau)",

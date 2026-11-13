@@ -321,7 +321,7 @@ export const dict: TranslationTable = {
   notSyncedShort: "Не синхр.",
   notePresetBasicDesc: "Вопрос на лицевой стороне, ответ на обороте",
   notePresetBasicTitle: "Базовая",
-  notePresetClozeDesc: "Скрывайте ключевые термины через {{c1::...}} или маски на картинке",
+  notePresetClozeDesc: "Скрывайте ключевые термины через {{c1::...}}, в нескольких местах",
   notePresetClozeTitle: "С пропусками (Cloze)",
   notePresetReversedDesc: "Автоматически создаёт две карточки: «Лицо→Оборот» и «Оборот→Лицо»",
   notePresetReversedTitle: "Базовая + Обратная",

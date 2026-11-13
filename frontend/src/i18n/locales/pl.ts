@@ -321,7 +321,7 @@ export const dict: TranslationTable = {
   notSyncedShort: "Nie zsynchr.",
   notePresetBasicDesc: "Pytanie z przodu, odpowiedź z tyłu (karta standardowa)",
   notePresetBasicTitle: "Podstawowa",
-  notePresetClozeDesc: "Ukryj kluczowe pojęcia za pomocą {{c1::...}} lub maskowania obrazu",
+  notePresetClozeDesc: "Ukryj kluczowe pojęcia za pomocą {{c1::...}}, także w wielu miejscach",
   notePresetClozeTitle: "Z lukami (Cloze)",
   notePresetReversedDesc: "Automatycznie tworzy dwie karty: Przód→Tył oraz Tył→Przód",
   notePresetReversedTitle: "Podstawowa + Odwrócona",

@@ -1079,7 +1079,7 @@ assert(
     editorSrc.includes('isImageOcclusionNote(editingCardData)') &&
     editorSrc.includes("setEditorMode(readOnlyImageOcclusion ? 'preview' : 'edit')") &&
     editorSrc.includes('!readOnlyImageOcclusion && (') &&
-    editorSrc.includes('if (readOnlyImageOcclusion || !canSubmit || submitting) return;') &&
+    editorSrc.includes('if (readOnlyImageOcclusion || isIoModelSelected || !canSubmit || submitting) return;') &&
     editorSrc.includes("t('ioEditUnsupportedTitle')") &&
     editorSrc.includes("t('ioEditUnsupportedSub')") &&
     editorSrc.includes('if (readOnlyImageOcclusion) handleAttemptClose();') &&
@@ -1087,6 +1087,37 @@ assert(
     translationsSrc.includes('ioEditUnsupportedSub:') &&
     fs.existsSync(path.resolve(ADDON_ROOT, 'tests/frontend/specs/imageOcclusionPolicy.spec.ts')),
   'Item #45: 图片遮挡必须只读（新建/编辑入口全关、结构化判别、默认预览态、无保存按钮、提交兜底、16 语言提示）'
+);
+
+// Item #46: 卡型下拉不能把「Image Occlusion」漏出来，形成绕过只读策略的侧门。
+// 2026-11-13 用户截图实测：关掉遮挡编辑器后，get_note_types 仍把原生的
+// Image Occlusion 卡型（5 字段）带进「选择卡型」列表，选中它照样能建 IO 笔记。
+// 只过滤后端返回值还不够，提交侧还要有字段级兜底，防止残留选中项。
+const legacyClozeDescs = [
+  '支持多处挖空与图片遮挡',
+  'or draw Image Occlusion masks',
+  'ou oclusão de imagem',
+  'oder Bildabdeckung nutzen',
+  'ou occlusion d\'image',
+  'или маски на картинке',
+  '画像マスクを作成します',
+];
+const allDictText = [
+  translationsSrc,
+  ...EXPECTED_LOCALES.map((lang) =>
+    readText(path.join(LOCALE_DIR, `${lang}.ts`))
+  ),
+].join('\n');
+assert(
+  policySrc.includes('export function isImageOcclusionNoteType') &&
+    policySrc.includes('export function isImageOcclusionNoteFields') &&
+    editorSrc.includes('isImageOcclusionNoteType(m.name, m.fields)') &&
+    editorSrc.includes('const isIoModelSelected =') &&
+    editorSrc.includes('!isIoModelSelected &&') &&
+    editorSrc.includes('|| isIoModelSelected ||') &&
+    legacyClozeDescs.every((phrase) => !allDictText.includes(phrase)) &&
+    translationsSrc.includes('notePresetClozeDesc: "使用 {{c1::挖空词}} 将关键概念隐去，支持多处挖空"'),
+  'Item #46: 新建卡片的「选择卡型」下拉必须过滤 Image Occlusion 卡型（名字 + 字段双判），提交侧要有兜底，且 16 语言 Cloze 描述不得再承诺图片遮挡'
 );
 
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

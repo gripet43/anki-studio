@@ -321,7 +321,7 @@ export const dict: TranslationTable = {
   notSyncedShort: "미동기화",
   notePresetBasicDesc: "앞면 질문, 뒷면 정답 (가장 기본적인 표준 카드)",
   notePresetBasicTitle: "기본 카드",
-  notePresetClozeDesc: "{{c1::빈칸}} 구문으로 핵심어를 가리거나 이미지 가림막을 생성합니다",
+  notePresetClozeDesc: "{{c1::빈칸}} 구문으로 핵심어를 여러 곳에 숨길 수 있습니다",
   notePresetClozeTitle: "빈칸 뚫기 (Cloze)",
   notePresetReversedDesc: "'앞→뒤'와 '뒤→앞' 양방향 카드 2장을 자동 생성합니다",
   notePresetReversedTitle: "양방향 카드",

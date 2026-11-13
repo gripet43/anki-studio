@@ -9,6 +9,8 @@ import { getAccentScale } from '../../utils/themeTokens';
 import {
   IMAGE_OCCLUSION_AUTHORING_ENABLED,
   isImageOcclusionNote,
+  isImageOcclusionNoteFields,
+  isImageOcclusionNoteType,
 } from '../../utils/imageOcclusionPolicy';
 import {
   ImageOcclusionEditorModal,
@@ -291,7 +293,14 @@ export const CardEditorModal: React.FC = () => {
     callAnki<{ noteTypes?: NoteTypeOption[] }>('get_note_types', {})
       .then((res) => {
         if (res && Array.isArray(res.noteTypes)) {
-          setCustomNoteTypes(res.noteTypes);
+          // 关掉遮挡编辑后，原生的「Image Occlusion」卡型不能留在「选择卡型」下拉里。
+          // 它是 col.models.all() 带出来的普通卡型，选中它照样能建出一条 IO 笔记
+          // —— 等于从侧门绕过了策略常量（2026-11-13 用户截图发现）。
+          // 只过滤展示，不改后端返回值：后端那份清单还有别的调用方。
+          const visible = IMAGE_OCCLUSION_AUTHORING_ENABLED
+            ? res.noteTypes
+            : res.noteTypes.filter((m) => !isImageOcclusionNoteType(m.name, m.fields));
+          setCustomNoteTypes(visible);
         }
       })
       .catch(() => {});
@@ -783,13 +792,25 @@ export const CardEditorModal: React.FC = () => {
     ? (ioPayload.occlusions.match(/image-occlusion:rect:/g) || []).length
     : 0;
 
-  const canSubmit = !readOnlyImageOcclusion && (isMultiFieldEdit
+  // 兜底：即使某个入口漏了过滤（或状态里残留了旧的选中项），也不允许从
+  // 「选择卡型」这条路建出 IO 笔记。新建态下当前卡型的字段就是 front/back +
+  // additionalFields 三组拼起来的集合，IO 卡型必然同时含 Occlusion 与 Image。
+  const isIoModelSelected =
+    !isEditMode &&
+    !IMAGE_OCCLUSION_AUTHORING_ENABLED &&
+    isImageOcclusionNoteFields([
+      frontFieldName,
+      backFieldName,
+      ...Object.keys(additionalFields),
+    ]);
+
+  const canSubmit = !readOnlyImageOcclusion && !isIoModelSelected && (isMultiFieldEdit
     ? noteFieldOrder.some((k) => Boolean((allFieldsMap[k] || '').trim()))
     : (IMAGE_OCCLUSION_AUTHORING_ENABLED && Boolean(ioPayload?.occlusions)) || Boolean(front.trim()));
 
   const handleSubmit = async () => {
     // 双保险：即使某个快捷键/按钮漏了禁用，也绝不能把只读的遮挡卡写回去。
-    if (readOnlyImageOcclusion || !canSubmit || submitting) return;
+    if (readOnlyImageOcclusion || isIoModelSelected || !canSubmit || submitting) return;
     setSubmitting(true);
     applyFormatting('cloze');
 

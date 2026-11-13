@@ -321,7 +321,7 @@ export const dict: TranslationTable = {
   notSyncedShort: "Eşitlenmedi",
   notePresetBasicDesc: "Ön yüzde soru, arka yüzde cevap (Standart kart)",
   notePresetBasicTitle: "Temel",
-  notePresetClozeDesc: "Anahtar terimleri {{c1::...}} ile gizleyin veya görsel maskeleyin",
+  notePresetClozeDesc: "Anahtar terimleri {{c1::...}} ile gizleyin, birden çok boşluk desteklenir",
   notePresetClozeTitle: "Boşluk Doldurma (Cloze)",
   notePresetReversedDesc: "Hem Ön→Arka hem de Arka→Ön olmak üzere 2 kart oluşturur",
   notePresetReversedTitle: "Temel + Ters",

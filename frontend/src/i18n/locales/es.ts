@@ -321,7 +321,7 @@ export const dict: TranslationTable = {
   notSyncedShort: "Sin sincr.",
   notePresetBasicDesc: "Pregunta en el anverso, respuesta en el reverso",
   notePresetBasicTitle: "Básica",
-  notePresetClozeDesc: "Oculta términos clave con {{c1::...}} o máscaras de imagen",
+  notePresetClozeDesc: "Oculta términos clave con {{c1::...}}, en varios huecos",
   notePresetClozeTitle: "Texto con huecos (Cloze)",
   notePresetReversedDesc: "Genera automáticamente tarjetas Anverso→Reverso y Reverso→Anverso",
   notePresetReversedTitle: "Básica + Invertida",

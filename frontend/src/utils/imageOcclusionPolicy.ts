@@ -36,6 +36,41 @@ export interface ImageOcclusionNoteLike {
 /** 原生遮挡笔记的字段名（Anki 的 Image Occlusion 卡型固定 5 个字段）。 */
 const IO_FIELD_NAMES = ['occlusion', 'image'];
 
+/**
+ * 一组字段名是否属于原生 Image Occlusion 卡型。
+ *
+ * 共用给「笔记判别」和「卡型下拉过滤」两处，避免两边各写一套、漏掉一个入口。
+ */
+export function isImageOcclusionNoteFields(
+  fields: readonly (string | undefined | null)[] | null | undefined
+): boolean {
+  if (!fields || !Array.isArray(fields)) return false;
+  const keys = fields
+    .filter((f): f is string => typeof f === 'string')
+    .map((f) => f.trim().toLowerCase());
+  return IO_FIELD_NAMES.every((name) => keys.includes(name));
+}
+
+/**
+ * 判断「新建卡片 → 选择卡型」下拉里的一项是不是图片遮挡卡型。
+ *
+ * 两个信号任一命中即过滤掉：
+ *  1. 名字是 `Image Occlusion`（大小写/首尾空格不敏感）；
+ *  2. 字段同时含 `Occlusion` + `Image` —— 兼容 Anki 把内置卡型名本地化、
+ *     或用户自行克隆/改名过的情况。
+ *
+ * 只按名字匹配会在中文/日文界面漏掉；只按字段匹配则足够稳，因为 Anki 的
+ * Image Occlusion 卡型固定是这 5 个字段，普通卡型不会同时有这两个字段名。
+ */
+export function isImageOcclusionNoteType(
+  name: string | null | undefined,
+  fields: readonly string[] | null | undefined
+): boolean {
+  const normalized = String(name || '').trim().toLowerCase();
+  if (normalized === 'image occlusion' || normalized === 'image-occlusion') return true;
+  return isImageOcclusionNoteFields(fields);
+}
+
 const NATIVE_IO_COMMAND_RE = /image-occlusion:\w+:/i;
 const STUDIO_IO_WRAP_RE = /anki-io-wrap/i;
 
@@ -56,8 +91,7 @@ export function isImageOcclusionNote(
 
   const fields = note.fields;
   if (fields && typeof fields === 'object') {
-    const keys = Object.keys(fields).map((k) => k.trim().toLowerCase());
-    if (IO_FIELD_NAMES.every((name) => keys.includes(name))) return true;
+    if (isImageOcclusionNoteFields(Object.keys(fields))) return true;
     for (const value of Object.values(fields)) {
       if (typeof value === 'string' && NATIVE_IO_COMMAND_RE.test(value)) return true;
       if (typeof value === 'string' && STUDIO_IO_WRAP_RE.test(value)) return true;

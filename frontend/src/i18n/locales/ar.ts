@@ -321,7 +321,7 @@ export const dict: TranslationTable = {
   notSyncedShort: "غير متزامن",
   notePresetBasicDesc: "سؤال في الأمام وإجابة في الخلف (بطاقة قياسية)",
   notePresetBasicTitle: "أساسية",
-  notePresetClozeDesc: "إخفاء المصطلحات باستخدام {{c1::...}} أو حجب الصور",
+  notePresetClozeDesc: "إخفاء المصطلحات باستخدام {{c1::...}}، مع دعم عدة مواضع",
   notePresetClozeTitle: "ملء الفراغات (Cloze)",
   notePresetReversedDesc: "ينشئ تلقائياً بطاقتين بالاتجاهين الأمامي والخلفي",
   notePresetReversedTitle: "أساسية + معكوسة",

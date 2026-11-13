@@ -321,7 +321,7 @@ export const dict: TranslationTable = {
   notSyncedShort: "未同期",
   notePresetBasicDesc: "表面で質問し、裏面で解答を表示（標準カード）",
   notePresetBasicTitle: "基本カード",
-  notePresetClozeDesc: "{{c1::穴埋め}} で重要語句を隠すか、画像マスクを作成します",
+  notePresetClozeDesc: "{{c1::穴埋め}} で重要語句を複数箇所まとめて隠せます",
   notePresetClozeTitle: "穴埋め (Cloze)",
   notePresetReversedDesc: "「表→裏」と「裏→表」の2枚のカードを自動生成します（語彙学習に最適）",
   notePresetReversedTitle: "表裏反転カード",

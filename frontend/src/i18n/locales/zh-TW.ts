@@ -321,7 +321,7 @@ export const dict: TranslationTable = {
   notSyncedShort: "未同步",
   notePresetBasicDesc: "正面提問，背面揭曉答案（最常用標準卡）",
   notePresetBasicTitle: "基礎問答卡",
-  notePresetClozeDesc: "使用 {{c1::挖空詞}} 將關鍵概念隱去，支援多處挖空與圖片遮擋",
+  notePresetClozeDesc: "使用 {{c1::挖空詞}} 將關鍵概念隱去，支援多處挖空",
   notePresetClozeTitle: "Cloze 填空卡",
   notePresetReversedDesc: "自動產生「正→背」與「背→正」兩張互逆卡片，適合外語詞彙雙向記憶",
   notePresetReversedTitle: "正反雙向卡",

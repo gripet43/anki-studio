@@ -10,6 +10,8 @@ import { section, test, ok, equal } from '../harness';
 import {
   IMAGE_OCCLUSION_AUTHORING_ENABLED,
   isImageOcclusionNote,
+  isImageOcclusionNoteFields,
+  isImageOcclusionNoteType,
 } from '../../../frontend/src/utils/imageOcclusionPolicy';
 
 section('image occlusion · display-only policy');
@@ -70,4 +72,36 @@ test('字段名齐全但没有指令时仍按卡型判为遮挡（避免漏锁�
   ok(isImageOcclusionNote({
     fields: { Occlusion: '', Image: '' },
   }));
+});
+
+// ---- 卡型下拉过滤：2026-11-13 用户截图发现「Image Occlusion」还留在选择器里 ----
+section('image occlusion · note-type dropdown filter');
+
+const IO_FIELDS = ['Occlusion', 'Image', 'Header', 'Back Extra', 'Comments'];
+
+test('按卡型名识别（大小写与首尾空格不敏感）', () => {
+  ok(isImageOcclusionNoteType('Image Occlusion', IO_FIELDS));
+  ok(isImageOcclusionNoteType('  image occlusion  ', IO_FIELDS));
+  ok(isImageOcclusionNoteType('Image-Occlusion', []));
+});
+
+test('卡型名被本地化/改过时按字段名兜住', () => {
+  ok(isImageOcclusionNoteType('图像遮挡', IO_FIELDS));
+  ok(isImageOcclusionNoteType('マイ画像マスク', [' occlusion ', 'image', 'Header']));
+});
+
+test('普通卡型不能被过滤掉', () => {
+  equal(isImageOcclusionNoteType('Basic', ['Front', 'Back']), false);
+  equal(isImageOcclusionNoteType('Cloze', ['Text', 'Back Extra']), false);
+  equal(isImageOcclusionNoteType('Basic (optional reversed card)', ['Front', 'Back', 'Add Reverse']), false);
+  // 只出现其中一个字段不算 —— 自定义卡型可能恰好有个 Image 字段
+  equal(isImageOcclusionNoteType('自定义', ['Image', 'Caption']), false);
+  equal(isImageOcclusionNoteFields(['Occlusion']), false);
+  equal(isImageOcclusionNoteFields(null), false);
+});
+
+test('字段判别对 null / 空数组 / 非字符串安全', () => {
+  equal(isImageOcclusionNoteFields([]), false);
+  equal(isImageOcclusionNoteFields(undefined), false);
+  equal(isImageOcclusionNoteFields(['Occlusion', null, undefined, ' IMAGE ']), true);
 });
