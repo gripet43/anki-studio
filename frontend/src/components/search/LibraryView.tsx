@@ -1460,12 +1460,14 @@ export const LibraryView: React.FC = () => {
                             )}
                           </header>
 
-                          <h3
-                            className="library-card-title text-[#1D1D1F] dark:text-[#F2F3F7] select-text cursor-text"
-                            dangerouslySetInnerHTML={{
-                              __html: frontPreviewHtml,
-                            }}
-                          />
+                          <div className="library-card-title-wrap">
+                            <h3
+                              className="library-card-title text-[#1D1D1F] dark:text-[#F2F3F7] select-text cursor-text"
+                              dangerouslySetInnerHTML={{
+                                __html: frontPreviewHtml,
+                              }}
+                            />
+                          </div>
 
                           <footer className="library-card-foot">
                             <div className="library-card-stats">

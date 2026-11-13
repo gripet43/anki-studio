@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+## [v1.4.50] - 2026-11-13
+
+- **[DeepSeek] Gallery 小卡尺寸收紧：一屏更多列、正反面都裁剪、单行与三行更平衡**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
+  - **卡片变小**：网格最小列宽 254px → 230px、间距 16px → 14px，常见窗口下从 3 列回到 4 列；正面内边距收紧为 14/16/12，题目字号 14.5 → 14px。
+  - **文字不再溢出**：正反两面都加 `overflow: hidden`；题目与答案都做 3 行硬裁剪（66px / 64px 高度上限），带图片/表格的长题也不会顶穿卡片、压住底部信息。
+  - **单行与三行平衡**：题目放进 `flex: 1` 的居中容器，1 行题在标题区垂直居中，3 行题自然填满，不再出现「短短一行、下面一大片空白」。
+  - 背面答案由 4 行改 3 行，标签区最多 2 行，整体高度更紧凑。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.49 → 1.4.50。
+
 ## [v1.4.49] - 2026-11-13
 
 - **[DeepSeek] 匿名统计补强：记录国家/地区、时区偏移与真实界面语言，便于判断大陆用户**（改 [`bridge/analytics_service.py`](bridge/analytics_service.py)、[`bridge/router.py`](bridge/router.py)、[`scripts/analytics-worker/worker.js`](scripts/analytics-worker/worker.js)、[`scripts/analytics-worker/schema.sql`](scripts/analytics-worker/schema.sql)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts) 及 16 种语言隐私文案）：
