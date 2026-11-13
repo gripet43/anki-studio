@@ -390,6 +390,14 @@ export const ReviewerView: React.FC = () => {
     ? 'bg-[#121318]/95 border-white/[0.07] text-white'
     : 'bg-white/95 border-[#E5E5EA] text-[#1D1D1F] shadow-[-12px_0_36px_rgba(0,0,0,0.06)]';
 
+  // 组件卸载（返回首页 / 切页签 / 完成复习）时兜底停掉原生音频：
+  // 音频由 Anki 的 AVPlayer 播放，不随 React 组件销毁而停止。
+  useEffect(() => {
+    return () => {
+      appActions.stopAudio();
+    };
+  }, []);
+
   // ============== SESSION COMPLETE CELEBRATION SCREEN (Light & Dark Adapted) ==============
   if (isSessionComplete || !currentCard) {
     return (

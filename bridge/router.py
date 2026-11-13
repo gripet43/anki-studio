@@ -266,6 +266,9 @@ class BridgeRouter:
     def action_play_audio(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.review_service.play_audio(data)
 
+    def action_stop_audio(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.review_service.stop_audio(data)
+
     def action_undo(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.review_service.undo_last_action(data)
 

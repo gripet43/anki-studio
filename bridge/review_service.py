@@ -514,6 +514,33 @@ class ReviewService:
             "fileUrl": Path(full_path).as_uri() if os.path.isabs(full_path) else filename,
         }
 
+    def stop_audio(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Stops whatever ``aqt.sound`` is currently playing.
+
+        离开复习界面（或复习组件卸载）时必须调用：音频由 Anki 的 AVPlayer
+        播放，与前端界面生命周期无关，不显式停就会在首页继续响。
+        """
+        stopped = False
+        try:
+            import aqt.sound as sound
+
+            player = getattr(sound, "av_player", None)
+            if player is not None:
+                for method_name in ("stop_and_clear_queue", "stop"):
+                    method = getattr(player, method_name, None)
+                    if callable(method):
+                        method()
+                        stopped = True
+                        break
+            if not stopped:
+                fallback = getattr(sound, "stop", None)
+                if callable(fallback):
+                    fallback()
+                    stopped = True
+        except Exception:
+            pass
+        return {"stopped": stopped}
+
     def _get_media_dir(self, col) -> str:
         return get_media_dir(col)
 

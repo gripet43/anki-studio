@@ -1418,6 +1418,9 @@ export const appActions = {
   },
 
   setActiveTab(tab: NavTab) {
+    if (state.inReviewMode) {
+      appActions.stopAudio();
+    }
     setAppState({
       activeTab: tab,
       inReviewMode: false,
@@ -1791,6 +1794,7 @@ export const appActions = {
   },
 
   exitReview() {
+    appActions.stopAudio();
     setAppState({
       inReviewMode: false,
       isSessionComplete: false,
@@ -1840,6 +1844,14 @@ export const appActions = {
     }, 900);
   },
 
+  /** 停止 Anki 原生 AVPlayer 正在播放的音频（离开复习界面/切换卡片时调用）。 */
+  stopAudio() {
+    setAppState({ playingAudioFile: null });
+    if (isAnkiNativeEnv()) {
+      callAnki('stop_audio', {}).catch(() => {});
+    }
+  },
+
   revealNextHint() {
     setAppState((prev) => ({
       revealedHintsCount: prev.revealedHintsCount >= 3 ? 1 : prev.revealedHintsCount + 1,
@@ -1871,6 +1883,9 @@ export const appActions = {
   async answerCurrentCard(ease: 1 | 2 | 3 | 4) {
     const currentCard = state.reviewQueue[state.currentCardIndex];
     if (!currentCard) return;
+
+    // 翻到下一张前先停掉上一张可能还在播的音频（原生复习界面同样会停）
+    appActions.stopAudio();
 
     const realElapsedMs = Math.max(500, Math.min(60000, Date.now() - state.cardShownAtMs));
     const isPreview = Boolean(state.isPreviewSession || currentCard.isPreviewOnly);

@@ -682,3 +682,73 @@ class TestAllDecksNativeQueue(unittest.TestCase):
         result = svc.get_review_queue({"deckId": "all", "language": "zh-CN", "limit": 10})
         self.assertEqual([c["id"] for c in result["cards"]], ["101", "102", "201"])
         self.assertEqual(result["totalDue"], 3)
+
+
+class _StopAudioRecorder:
+    def __init__(self, with_stop_and_clear=True):
+        self.calls = []
+        if with_stop_and_clear:
+            self.stop_and_clear_queue = self._record_stop_and_clear
+
+    def _record_stop_and_clear(self):
+        self.calls.append("stop_and_clear_queue")
+
+    def stop(self):
+        self.calls.append("stop")
+
+
+class TestStopAudio(unittest.TestCase):
+    """离开复习界面必须停掉 Anki AVPlayer，否则音频会在首页继续响。"""
+
+    def _service(self):
+        from anki_modern_os.bridge.review_service import ReviewService
+
+        return ReviewService(
+            col_getter=lambda: None, mw_getter=lambda: None, lang_getter=lambda: "zh-CN"
+        )
+
+    def test_prefers_stop_and_clear_queue(self):
+        import types
+        from unittest import mock
+
+        recorder = _StopAudioRecorder()
+        sound = types.ModuleType("aqt.sound")
+        sound.av_player = recorder
+        aqt = types.ModuleType("aqt")
+        aqt.sound = sound
+        with mock.patch.dict(sys.modules, {"aqt": aqt, "aqt.sound": sound}):
+            result = self._service().stop_audio({})
+        self.assertTrue(result["stopped"])
+        self.assertEqual(recorder.calls, ["stop_and_clear_queue"])
+
+    def test_falls_back_to_player_stop(self):
+        import types
+        from unittest import mock
+
+        recorder = _StopAudioRecorder(with_stop_and_clear=False)
+        sound = types.ModuleType("aqt.sound")
+        sound.av_player = recorder
+        aqt = types.ModuleType("aqt")
+        aqt.sound = sound
+        with mock.patch.dict(sys.modules, {"aqt": aqt, "aqt.sound": sound}):
+            result = self._service().stop_audio({})
+        self.assertTrue(result["stopped"])
+        self.assertEqual(recorder.calls, ["stop"])
+
+    def test_returns_false_without_anki_runtime(self):
+        import types
+        from unittest import mock
+
+        empty = types.ModuleType("aqt.sound")
+        aqt = types.ModuleType("aqt")
+        aqt.sound = empty
+        with mock.patch.dict(sys.modules, {"aqt": aqt, "aqt.sound": empty}):
+            result = self._service().stop_audio({})
+        self.assertFalse(result["stopped"])
+        self.assertIsInstance(result, dict)
+
+    def test_router_exposes_stop_audio(self):
+        from anki_modern_os.bridge.router import BridgeRouter
+
+        router = BridgeRouter(col_getter=lambda: None, mw_getter=lambda: None)
+        self.assertIn("stopped", router.action_stop_audio({}))

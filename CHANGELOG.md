@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.19] - 2026-11-13
+
+- **[DeepSeek] 离开复习界面时停止音频播放**（改 [`bridge/review_service.py`](bridge/review_service.py)、[`bridge/router.py`](bridge/router.py)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 4 项回归）：
+  - **现象**：卡片正面/背面音频（较长时）播放中返回首页，声音继续播放。
+  - **根因**：音频由 Anki 的 `aqt.sound.av_player` 播放，与前端组件生命周期无关；退出复习只切换了界面，从未下发停止指令。
+  - **修法**：新增 `stop_audio` 后端 action（优先 `av_player.stop_and_clear_queue()`，回退 `av_player.stop()` / `aqt.sound.stop()`）；前端在 `exitReview()`、`setActiveTab()` 离开复习、答题切下一张时调用，并在 `ReviewerView` 卸载时兜底停止。
+  - **验证**：Python 115 项（新增 4 项停止音频回归）、`tsc --noEmit`、前端单元 63 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.18 → 1.4.19。
+
 ## [v1.4.18] - 2026-11-13
 
 - **[DeepSeek] 复习完成提示按会话范围区分：单牌组显示「当前牌组」，全牌组才显示「今日全部」**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx) 及 16 种语言字典）：
