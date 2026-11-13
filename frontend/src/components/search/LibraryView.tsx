@@ -29,6 +29,7 @@ export const LibraryView: React.FC = () => {
     libraryAllTags,
     librarySearching,
     libraryViewMode,
+    librarySelectionMode,
     librarySearchQuery,
     libraryVisibleCount,
     filterStatus,
@@ -472,6 +473,32 @@ export const LibraryView: React.FC = () => {
                 className="w-full bg-transparent focus:outline-none"
               />
             </div>
+
+            <button
+              type="button"
+              onClick={() => appActions.setLibrarySelectionMode(!librarySelectionMode)}
+              aria-pressed={librarySelectionMode}
+              className={`h-9 px-3.5 rounded-xl border text-[12px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
+                librarySelectionMode
+                  ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
+                  : `hover:border-[var(--brand-border)] ${cardSurface}`
+              }`}
+            >
+              <svg
+                className="w-3.5 h-3.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="3" y="4" width="18" height="16" rx="3" />
+                <path d="m8 12 2.5 2.5L16 9" />
+              </svg>
+              <span>{librarySelectionMode ? t('multiSelectDone') : t('multiSelectMode')}</span>
+            </button>
 
             <div
               className={`h-9 p-1 rounded-xl border flex items-center gap-1 ${
@@ -1317,13 +1344,12 @@ export const LibraryView: React.FC = () => {
                 const frontPreviewHtml = formatCardPreviewHtml(card.frontHtml || card.front);
                 const backPreviewHtml = formatCardPreviewHtml(card.backHtml || card.back);
                 const hasBackPreview = backPreviewHtml.trim().length > 0;
-                const anySelected = selectedCardIds.length > 0;
                 return (
                   <article
                     key={card.id}
                     onClick={(e) => {
                       if (window.getSelection()?.toString().trim()) return;
-                      if (anySelected || e.metaKey || e.ctrlKey) {
+                      if (librarySelectionMode || e.metaKey || e.ctrlKey) {
                         appActions.toggleCardSelection(card.id);
                       } else {
                         appActions.openCardEditor(card);
@@ -1399,16 +1425,17 @@ export const LibraryView: React.FC = () => {
                             </span>
                             {card.tags.length > 1 && (
                               <span
-                                className="text-[10px] text-[#8E8E93] font-medium cursor-default shrink-0"
+                                className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-black/[0.04] dark:bg-white/[0.07] text-[#6E6E73] dark:text-[#A1A1A6] cursor-default shrink-0"
                                 title={card.tags.map((tg) => `#${tg}`).join(' ')}
                               >
-                                +{card.tags.length - 1}
+                                {t('moreTagsLabel', { n: card.tags.length - 1 })}
                               </span>
                             )}
                           </div>
                         )}
 
-                        {/* Top-Right Selection Checkbox (>= 24x24px accessible hit target) */}
+                        {/* 勾选框只在「多选模式」下出现；平时点卡片就是打开编辑 */}
+                        {librarySelectionMode && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1417,11 +1444,7 @@ export const LibraryView: React.FC = () => {
                           }}
                           aria-pressed={isSelected}
                           aria-label={card.front}
-                          className={`-my-1 -me-1 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-opacity cursor-pointer focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 ${
-                            isSelected || anySelected
-                              ? 'opacity-100'
-                              : 'opacity-40 group-hover:opacity-100'
-                          }`}
+                          className="-my-1 -me-1 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1"
                         >
                           <span
                             className={`w-4.5 h-4.5 rounded-[5px] flex items-center justify-center transition-colors ${
@@ -1446,6 +1469,7 @@ export const LibraryView: React.FC = () => {
                             )}
                           </span>
                         </button>
+                        )}
                       </div>
                     </header>
 
@@ -1483,19 +1507,6 @@ export const LibraryView: React.FC = () => {
                     <footer className="library-card-footer border-black/[0.05] dark:border-white/[0.06] text-[11px]">
                       <div className="library-card-footer-meta text-[#8E8E93] text-[11px]">
                         <span className="library-card-due" title={card.dueText}>
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                              isSuspended
-                                ? 'bg-[var(--status-warning)]'
-                                : isBuried
-                                ? 'bg-[#8E8E93]'
-                                : card.status === 'due'
-                                ? 'bg-[var(--status-danger)]'
-                                : card.status === 'new'
-                                ? 'bg-[var(--status-info)]'
-                                : 'bg-[var(--status-success)]'
-                            }`}
-                          />
                           <span className="truncate">{card.dueText}</span>
                         </span>
                         <span
@@ -1568,7 +1579,9 @@ export const LibraryView: React.FC = () => {
                       isDark ? 'border-[#2A2C36] bg-white/[0.02]' : 'border-[#EFEFF4] bg-[#FAFAFC]'
                     }`}
                   >
-                    <th className="py-3 px-4 w-12">{t('selectColHeader')}</th>
+                    {librarySelectionMode && (
+                      <th className="py-3 px-4 w-12">{t('selectColHeader')}</th>
+                    )}
                     <th
                       onClick={() =>
                         appActions.searchLibraryDebounced({
@@ -1629,7 +1642,7 @@ export const LibraryView: React.FC = () => {
                       <tr
                         key={card.id}
                         onClick={(e) => {
-                          if (selectedCardIds.length > 0 || e.metaKey || e.ctrlKey) {
+                          if (librarySelectionMode || e.metaKey || e.ctrlKey) {
                             appActions.toggleCardSelection(card.id);
                           } else {
                             appActions.openCardEditor(card);
@@ -1640,17 +1653,19 @@ export const LibraryView: React.FC = () => {
                           isDark ? 'border-[#252730] hover:bg-white/5' : 'border-[#F4F4F8] hover:bg-[#F9F9FC]'
                         } ${isSelected ? 'bg-[var(--brand-soft)]' : ''}`}
                       >
-                        <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                          <label className="inline-flex items-center justify-center min-w-6 min-h-6 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => appActions.toggleCardSelection(card.id)}
-                              aria-label={card.front}
-                              className="rounded cursor-pointer w-4 h-4"
-                            />
-                          </label>
-                        </td>
+                        {librarySelectionMode && (
+                          <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                            <label className="inline-flex items-center justify-center min-w-6 min-h-6 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => appActions.toggleCardSelection(card.id)}
+                                aria-label={card.front}
+                                className="rounded cursor-pointer w-4 h-4"
+                              />
+                            </label>
+                          </td>
+                        )}
                         <td className="py-3 px-4 font-semibold">
                           <div
                             className="library-table-preview select-text cursor-text"
@@ -1700,7 +1715,12 @@ export const LibraryView: React.FC = () => {
                               </span>
                             ))}
                             {card.tags.length > 2 && (
-                              <span className="text-[10px] text-[#8E8E93]">+{card.tags.length - 2}</span>
+                              <span
+                                className="px-1.5 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.07] text-[#6E6E73] dark:text-[#A1A1A6]"
+                                title={card.tags.join(' ')}
+                              >
+                                {t('moreTagsLabel', { n: card.tags.length - 2 })}
+                              </span>
                             )}
                           </div>
                         </td>

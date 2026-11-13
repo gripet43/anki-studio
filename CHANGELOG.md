@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.23] - 2026-11-13
+
+- **[DeepSeek] 卡片库信息层级优化：多选模式化、标签计数说明、移除无含义状态点**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts) 及 16 种语言字典）：
+  - **勾选框改为「多选模式」**：卡片库工具栏新增「多选」按钮，默认不显示勾选框；开启后卡片（画廊 + 表格两种视图）才出现勾选框，卡片点击变为选择，再点「完成」退出并清空选择。表格视图的选择列也只在多选模式下出现。
+  - **标签计数不再用 `+5`**：首标签保留 `#tag` 样式，后续数量改为明确的「还有 5 个标签」小胶囊（悬停可看完整标签列表），表格视图同样处理，避免被误解为「加 5 个」。
+  - **移除左下角无语义绿点**：到期信息只保留文字「到期 445 天后」+「熟记度 98%」，不再用没有说明的颜色圆点；特殊状态（暂停/搁置/新卡）仍由顶部状态徽章表达。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 122 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.22 → 1.4.23。
+
 ## [v1.4.22] - 2026-11-13
 
 - **[DeepSeek] 支持脚本型选择题/刷题模板卡组：自动沙盒 + gData 兼容垫片**（改 [`bridge/review_service.py`](bridge/review_service.py)、[`frontend/src/components/reviewer/SandboxCardFrame.tsx`](frontend/src/components/reviewer/SandboxCardFrame.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 4 项回归）：

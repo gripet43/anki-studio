@@ -175,6 +175,8 @@ export interface AppState {
   filterDeckId: string;
   librarySortBy: LibrarySortOption;
   selectedCardIds: string[];
+  /** 卡片库「多选模式」：开启后才显示勾选框，默认关闭。 */
+  librarySelectionMode: boolean;
 
   // Toast Notification
   toastMessage: string | null;
@@ -279,6 +281,7 @@ const initialState: AppState = {
   filterDeckId: 'all',
   librarySortBy: 'default',
   selectedCardIds: [],
+  librarySelectionMode: false,
 
   toastMessage: null,
 };
@@ -1427,6 +1430,9 @@ export const appActions = {
       isSessionComplete: false,
       inlineEditing: false,
       inspectorOpen: false,
+      ...(tab !== 'library'
+        ? { librarySelectionMode: false, selectedCardIds: [] }
+        : {}),
     });
     if (tab === 'stats' && isAnkiNativeEnv()) {
       appActions.refreshStatistics();
@@ -2541,6 +2547,13 @@ export const appActions = {
           ? prev.selectedCardIds.filter((id) => id !== cardId)
           : [...prev.selectedCardIds, cardId],
       };
+    });
+  },
+
+  setLibrarySelectionMode(enabled: boolean) {
+    setAppState({
+      librarySelectionMode: enabled,
+      selectedCardIds: enabled ? state.selectedCardIds : [],
     });
   },
 
