@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.21] - 2026-11-13
+
+- **[DeepSeek] 重写「关于」页设计理念文案：从技术自夸改为用户视角的文艺表达**（改 16 种语言字典的 `settingsPhilosophyTitle` / `settingsPhilosophyBody`）：
+  - **旧文案**：「专注 90% 核心心流，零数据锁定」+ 罗列复习/制卡/检索/统计/减负并强调「100% 读写 Anki SQLite」，偏自我发挥、技术堆砌。
+  - **新文案（简体）**：「设计理念：把专注还给你」/「每天坐下来复习的那十几分钟，本该是安静的。我们收起多余的按钮和打断，只把卡片、进度和节奏留给你；内容始终存放在你自己的 Anki 里——来去自由，始终是你的。」
+  - 16 种语言同步意译，语气统一为「对用户说话」而不是「介绍自己」。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 118 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.20 → 1.4.21。
+
 ## [v1.4.20] - 2026-11-13
 
 - **[DeepSeek] 设置-关于完善：动态版本号、产品亮点、小红书与 GitHub 外链**（改 [`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts) 及 16 种语言字典；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 3 项回归）：
