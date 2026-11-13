@@ -647,6 +647,35 @@ class ReviewService:
     def _plain_text_summary(raw_html: str) -> str:
         return plain_text_of(raw_html)
 
+    @staticmethod
+    def _template_needs_script_shim(model) -> bool:
+        """模板脚本依赖配套插件注入的全局状态（目前已知为 gData）时返回 True。
+
+        这类模板把选项/答案放在隐藏 div 里，再用脚本生成可点击选项与判分；
+        脚本还依赖作者插件注入的 ``gData``。默认渲染会剥掉脚本，只剩题干；
+        沙盒里补一个兼容 gData 后原模板即可完整工作，所以自动走沙盒。
+        """
+        try:
+            parts = []
+            for tmpl in (model.get("tmpls") or []):
+                parts.append(str(tmpl.get("qfmt") or ""))
+                parts.append(str(tmpl.get("afmt") or ""))
+            blob = "".join(parts)
+        except Exception:
+            return False
+        lowered = blob.lower()
+        if "<script" not in lowered:
+            return False
+        # 选择题模板（gData 家族）与 Image Occlusion Enhanced：模板脚本负责生成
+        # 选项/遮罩；默认渲染剥掉脚本后只剩题干或隐藏 ID，必须走沙盒执行。
+        if "gdata" in lowered:
+            return True
+        if "image-occlusion" in lowered or "image_occlusion" in lowered:
+            return True
+        if "image occlusion" in str(model.get("name") or "").lower():
+            return True
+        return False
+
     def _serialize_review_card(
         self, col, cid: int, lang: str = "zh-CN", is_preview_only: bool = False
     ) -> Optional[Dict[str, Any]]:
@@ -872,6 +901,10 @@ class ReviewService:
                     card, media_dir, http_base_url=http_base_url, raw_output=raw_output
                 )
             )
+            needs_sandbox = bool(
+                self._template_needs_script_shim(model)
+                and (sandbox_render.question or sandbox_render.answer)
+            )
 
             return {
                 "id": str(card.id),
@@ -897,6 +930,7 @@ class ReviewService:
                 "sandboxFrontHtml": sandbox_render.question,
                 "sandboxBackHtml": sandbox_render.answer,
                 "sandboxCss": sandbox_render.css,
+                "needsSandbox": needs_sandbox,
                 "audioFiles": all_audio,
                 "fields": fields_dict,
                 "fieldOrder": field_keys,

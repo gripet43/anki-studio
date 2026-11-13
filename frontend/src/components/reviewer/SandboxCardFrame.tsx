@@ -65,6 +65,26 @@ export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
 ${cssText || ''}
 </style>
 <script>
+// 部分中文选择题/刷题模板（如「选择题模板（单选多选自动匹配）」）依赖作者配套
+// 插件注入的全局状态 gData；缺失时模板脚本会直接抛 ReferenceError，选项列表与
+// 判分全部失效。这里在沙盒里预置一个中性兼容对象，让这类模板可以独立运行。
+(function () {
+  if (typeof window.gData === 'undefined') {
+    window.gData = {
+      clickedValues: [],
+      correct: 0,
+      total: 0,
+      sum: 0,
+      score: 0,
+      clickNum: 0,
+      options: [],
+      correctanswer: [],
+      list: '',
+    };
+  }
+})();
+</script>
+<script>
 (function() {
   window.pycmd = function(cmd) {
     try {

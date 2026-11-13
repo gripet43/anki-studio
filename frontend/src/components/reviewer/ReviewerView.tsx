@@ -1038,8 +1038,9 @@ export const ReviewerView: React.FC = () => {
                 </div>
 
                 {Boolean(
-                  currentCard.notetypeId &&
-                    sandboxNoteTypeIds.includes(currentCard.notetypeId) &&
+                  (currentCard.needsSandbox ||
+                    (currentCard.notetypeId &&
+                      sandboxNoteTypeIds.includes(currentCard.notetypeId))) &&
                     (currentCard.sandboxFrontHtml || currentCard.sandboxBackHtml)
                 ) ? (
                   <div className="my-2">

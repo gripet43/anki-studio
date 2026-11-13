@@ -15,6 +15,18 @@
 
 ## [Unreleased]
 
+## [v1.4.22] - 2026-11-13
+
+- **[DeepSeek] 支持脚本型选择题/刷题模板卡组：自动沙盒 + gData 兼容垫片**（改 [`bridge/review_service.py`](bridge/review_service.py)、[`frontend/src/components/reviewer/SandboxCardFrame.tsx`](frontend/src/components/reviewer/SandboxCardFrame.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 4 项回归）：
+  - **现象**：新增的「（单/多）选择题模板」卡组在 Studio 里只显示题干，没有选项；原生 Anki 里选项正常。
+  - **根因**：这类模板（`选择题模板（单选多选自动匹配）`）把选项/答案藏在隐藏 div 里，用模板脚本生成可点击选项并判分，脚本还依赖作者配套插件注入的全局 `gData`。默认渲染出于安全会剥掉 `<script>`，所以只剩题干；沙盒模式虽然保留脚本，但缺少 `gData` 会直接抛 `ReferenceError`，选项同样不出现。
+  - **修法**：
+    1. 后端 `_template_needs_script_shim()` 自动识别「模板含脚本且依赖 gData / Image Occlusion 标记」的卡，序列化时标记 `needsSandbox`，前端无需手动开兼容模式即可走沙盒；
+    2. `SandboxCardFrame` 在模板脚本之前预置一个中性的 `window.gData` 兼容对象（`clickedValues/correct/total/sum/score/...`），原模板的选项生成、单选/多选、点击、判分、正确率统计与解析全部保留；
+    3. 顺带覆盖 **Image Occlusion Enhanced**（默认渲染只有一个隐藏 ID 的空白卡，现在自动沙盒执行遮罩脚本）。
+  - **验证**：在 Chromium 的 `sandbox="allow-scripts"` iframe 中实测原模板：生成 4 个选项、可点击、翻面后显示「正确答案 / 你的答案 / 得分 / 正确率 / 解析」；Python 122 项（新增 4 项自动沙盒识别回归）、`tsc --noEmit`、前端单元 63 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.21 → 1.4.22。
+  - **仍待覆盖的交互卡类型**（已排查，下一步处理）：`{{type:}}` 输入框被 sanitizer 移除；旧版 `Image Occlusion` 需要插件预处理；`Cloze (overlapping)` 的 `[[oc1::...]]` 标记需要插件展开；`\ce{}` 等 mhchem 进阶 LaTeX；外部 iframe / YouTube 等网络内容。
+
 ## [v1.4.21] - 2026-11-13
 
 - **[DeepSeek] 重写「关于」页设计理念文案：从技术自夸改为用户视角的文艺表达**（改 16 种语言字典的 `settingsPhilosophyTitle` / `settingsPhilosophyBody`）：

@@ -791,3 +791,44 @@ class TestAboutPanelBackend(unittest.TestCase):
             result = router.action_open_external_url({"url": bad})
             self.assertFalse(result["opened"], bad)
             self.assertIn("error", result)
+
+
+class TestScriptTemplateSandboxAutoDetect(unittest.TestCase):
+    """脚本模板要能自动走沙盒，而不是要求用户手动开兼容模式。
+
+    回归背景：中文选择题模板把选项/答案放在隐藏 div 里，用脚本生成可点击选项，
+    脚本还依赖作者配套插件注入的 gData；默认渲染剥掉脚本后只剩题干。
+    """
+
+    def _service(self):
+        from anki_modern_os.bridge.review_service import ReviewService
+
+        return ReviewService(
+            col_getter=lambda: None, mw_getter=lambda: None, lang_getter=lambda: "zh-CN"
+        )
+
+    @staticmethod
+    def _model(name, qfmt, afmt=""):
+        return {"name": name, "tmpls": [{"qfmt": qfmt, "afmt": afmt}]}
+
+    def test_gdata_choice_template_needs_sandbox(self):
+        model = self._model(
+            "选择题模板（单选多选自动匹配）",
+            '<ol id="optionList"></ol><script>gData.options = [];</script>',
+        )
+        self.assertTrue(self._service()._template_needs_script_shim(model))
+
+    def test_image_occlusion_enhanced_needs_sandbox(self):
+        model = self._model(
+            "Image Occlusion Enhanced",
+            '<div id="image-occlusion-canvas"></div><script>init();</script>',
+        )
+        self.assertTrue(self._service()._template_needs_script_shim(model))
+
+    def test_plain_script_template_is_not_auto_sandboxed(self):
+        model = self._model("Basic", "<div>{{Front}}</div><script>console.log(1)</script>")
+        self.assertFalse(self._service()._template_needs_script_shim(model))
+
+    def test_template_without_scripts_is_not_auto_sandboxed(self):
+        model = self._model("Basic", "<div>{{Front}}</div>")
+        self.assertFalse(self._service()._template_needs_script_shim(model))

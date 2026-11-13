@@ -432,6 +432,8 @@ export interface ReviewCardItem {
   sandboxFrontHtml?: string;
   sandboxBackHtml?: string;
   sandboxCss?: string;
+  /** 模板脚本依赖配套全局（如 gData）：后端自动标记，前端无需手动开兼容模式。 */
+  needsSandbox?: boolean;
   audioFiles?: string[];
   fields: Record<string, string>;
   fieldOrder?: string[];
