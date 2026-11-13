@@ -218,19 +218,75 @@ def normalize_media_html_for_storage(raw_html: str, media_dir: str) -> str:
 # Anki 原生 Image Occlusion
 # ---------------------------------------------------------------------------
 
-IO_CLOZE_RE = re.compile(r"\{\{c(\d+)::([\s\S]*?)\}\}", flags=re.S)
-IO_RECT_RE = re.compile(r"<rect\b([^>]*?)/?>", flags=re.I)
-IO_ATTR_RE = re.compile(r'([\w:-]+)\s*=\s*"([^"]*)"')
+# Anki 原生 Image Occlusion 的 Occlusion 字段是**文本指令**，不是 SVG：
+#
+#   {{c1::image-occlusion:rect:left=.0361:top=.8137:width=.2539:height=.0147:oi=1}}
+#
+# 坐标是相对底图的 0–1 小数。同一个 ordinal 可以重复出现多次，Anki 会把它们合并成
+# 一个 shapes 组（实测：同 ordinal ×3 → 1 个组 3 个 shape → 1 张卡）。这正好让
+# 「一张图 = 一张卡」在原生格式里成立，同时保留每一个遮罩。
+IO_SHAPE_RE = re.compile(r"\{\{c(\d+)::image-occlusion:([\w-]+):([^{}]*)\}\}", flags=re.I)
+
+# 遮罩外框 + 里面那个已经被 Anki 渲染过的挖空 span。
+# 卡片库与复习界面拿到的背面来自 ``card.render_output()``，字段里的
+# ``{{c1::label}}`` 在那一刻就被 Anki 换成了
+# ``<span class="cloze" data-ordinal="1">label</span>``（非当前 ord 的是
+# ``cloze-inactive``）。下游的遮罩正则只认 ``{{cN::}}`` 原始写法，于是
+# ``span.anki-io-rect`` 只剩 position:absolute 的空壳，标签文字以裸文本浮在图上——
+# 也就是用户看到的「翻面后图上飘着 c1/c2/c3」。这里先把它还原成原始写法。
+RENDERED_IO_RECT_RE = re.compile(
+    r'(<span\b[^>]*\bclass\s*=\s*["\'][^"\']*\banki-io-rect\b[^"\']*["\'][^>]*>)'
+    r'\s*<span\b([^>]*)>([\s\S]*?)</span>\s*'
+    r'(</span>)',
+    flags=re.I,
+)
+ORDINAL_ATTR_RE = re.compile(r'data-(?:ordinal|io-rect)\s*=\s*["\'](\d+)["\']', flags=re.I)
+
+
+def restore_rendered_io_rects(raw_html: str) -> str:
+    """把 Anki 渲染后的遮罩挖空 span 还原成 ``{{cN::label}}``。
+
+    只处理 ``span.anki-io-rect`` 里面的那一层，别处的 cloze 一律不动，
+    所以对普通挖空卡是彻底的空操作。已经是 ``{{cN::}}`` 原始写法的输入原样返回。
+    """
+    if not raw_html or "anki-io-rect" not in raw_html or "cloze" not in raw_html:
+        return raw_html
+
+    def _repl(m: re.Match) -> str:
+        outer_open, inner_attrs, label, outer_close = m.group(1), m.group(2), m.group(3), m.group(4)
+        if "cloze" not in inner_attrs.lower():
+            return m.group(0)
+        ord_m = ORDINAL_ATTR_RE.search(inner_attrs) or ORDINAL_ATTR_RE.search(outer_open)
+        num = ord_m.group(1) if ord_m else "1"
+        return f"{outer_open}{{{{c{num}::{label}}}}}{outer_close}"
+
+    return RENDERED_IO_RECT_RE.sub(_repl, raw_html)
+
+
+
+def _io_shape_props(raw: str) -> dict:
+    """``left=.1:top=.2:width=.08:height=.06:oi=1`` → dict。"""
+    props: dict = {}
+    for part in raw.split(":"):
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        props[key.strip().lower()] = value.strip()
+    return props
 
 
 def render_native_image_occlusion(note) -> tuple[str, str, str]:
     """把 Anki 原生 Image Occlusion 笔记转成插件自己的静态遮罩结构。
 
-    原生数据形如 ``Occlusion = {{c1::<svg …><rect …/></svg>}}`` 配 ``Image`` 字段。
-    Anki 官方界面把 SVG 转义进 ``data-cloze``，再交给
-    ``anki.imageOcclusion.setup()`` 画到 canvas；本插件的 WebView 不执行模板里的
-    script，所以这里直接把 rect 的 viewBox 坐标（0–100）当作百分比，生成
-    ``.anki-io-wrap`` + ``span.anki-io-rect``，复用既有的静态遮罩渲染链路。
+    原生 ``Occlusion`` 字段是 ``{{cN::image-occlusion:rect:left=…:top=…:width=…:height=…}}``
+    这样的文本指令，坐标是 0–1 小数。Anki 官方复习界面会用 ``anki.imageOcclusion.setup()``
+    把它画进 canvas，而本插件的 WebView 不执行模板里的 script，所以这里直接换算成百分比，
+    生成 ``.anki-io-wrap`` + ``span.anki-io-rect``，复用既有的静态遮罩渲染链路。
+
+    ``data-io-rect`` 与内层 ``{{cN::}}`` 都保留**原始 ordinal**（同一个组的多个遮罩共用
+    同一个 N），不要改写成「第几个遮罩」。下游 ``_resolve_rich_html_and_audio`` 靠
+    ``card.ord + 1`` 决定哪一组该露、哪一组该盖；一旦把组号抹成流水号，多组遮挡笔记的
+    两张卡就会显示成同一片区域。
 
     返回 ``(front, back, title)``；不是原生遮挡卡时返回三个空串。
     """
@@ -245,24 +301,27 @@ def render_native_image_occlusion(note) -> tuple[str, str, str]:
         return "", "", header
 
     spans = []
-    for cloze in IO_CLOZE_RE.finditer(occlusion):
-        num = cloze.group(1)
-        for rect in IO_RECT_RE.finditer(cloze.group(2)):
-            attrs = dict(IO_ATTR_RE.findall(rect.group(1)))
-            try:
-                x = float(attrs.get("x", 0))
-                y = float(attrs.get("y", 0))
-                width = float(attrs.get("width", 0))
-                height = float(attrs.get("height", 0))
-            except (TypeError, ValueError):
-                continue
-            if width <= 0 or height <= 0:
-                continue
-            spans.append(
-                f'<span class="anki-io-rect" data-io-rect="{num}" '
-                f'style="position:absolute;left:{x:.2f}%;top:{y:.2f}%;'
-                f'width:{width:.2f}%;height:{height:.2f}%;">{{{{c{num}::{num}}}}}</span>'
-            )
+    for token in IO_SHAPE_RE.finditer(occlusion):
+        num = token.group(1)
+        props = _io_shape_props(token.group(3))
+        try:
+            left = float(props.get("left", 0)) * 100
+            top = float(props.get("top", 0)) * 100
+            width = float(props.get("width", 0)) * 100
+            height = float(props.get("height", 0)) * 100
+        except (TypeError, ValueError):
+            continue
+        if width <= 0 or height <= 0:
+            continue
+        left = max(0.0, min(99.0, left))
+        top = max(0.0, min(99.0, top))
+        width = max(0.5, min(100.0 - left, width))
+        height = max(0.5, min(100.0 - top, height))
+        spans.append(
+            f'<span class="anki-io-rect" data-io-rect="{num}" '
+            f'style="position:absolute;left:{left:.2f}%;top:{top:.2f}%;'
+            f'width:{width:.2f}%;height:{height:.2f}%;">{{{{c{num}::{num}}}}}</span>'
+        )
 
     if not spans:
         return "", "", header

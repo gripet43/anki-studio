@@ -529,9 +529,14 @@ def run_native_io_checks(runner: ScenarioRunner) -> None:
             if not data:
                 raise AssertionError(f"cid {cid} 渲染失败")
             front = data.get("frontHtml") or ""
-            highlights.append(
-                tuple(re.findall(r'data-io-rect="(\d+)"[^>]*>\? #\d+', front))
-            )
+            # 先确认遮罩真的按 cloze_ord 解析过了。少了这一步，下面 findall 返回空元组
+            # 时只会看到「两张卡隐藏了相同区域：[(), ()]」这种毫无信息量的报错。
+            if "anki-io-rect-resolved" not in front:
+                raise AssertionError(f"cid {cid} 的遮罩未按 cloze_ord 解析：{front[:120]}")
+            own = tuple(re.findall(r'data-io-rect="(\d+)"[^>]*>\? #\d+', front))
+            if not own:
+                raise AssertionError(f"cid {cid} 没有任何被标记为答案的遮罩")
+            highlights.append(own)
         if len(set(highlights)) != len(highlights):
             raise AssertionError(f"同一笔记的多张卡隐藏了相同区域：{highlights}")
         runner.results.append(CheckResult(runner.key, "native-io:multi-cloze", True))

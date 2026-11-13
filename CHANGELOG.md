@@ -15,6 +15,20 @@
 
 ## [Unreleased]
 
+## [v1.5.1] - 2026-11-13
+
+- **[DeepSeek] 遮挡编辑器改为产出**原生 Image Occlusion 笔记**，并修掉翻面后遮罩标签裸露与卡片背面按钮悬空两个样式 bug**（改 [`bridge/edit_service.py`](bridge/edit_service.py)、[`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx`](frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/utils/mathRenderer.ts`](frontend/src/utils/mathRenderer.ts)、[`frontend/src/index.css`](frontend/src/index.css)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、14 个语种文件；新增 [`tests/frontend/specs/ioRects.spec.ts`](tests/frontend/specs/ioRects.spec.ts)）：
+  - **一、遮挡编辑器不再写 Cloze。** 旧实现把每个遮罩写成 `{{c1::}}`/`{{c2::}}`/`{{c3::}}` 塞进 Cloze 卡型的 `Text` 字段，而 Anki 的规则是**一个 ordinal 出一张卡**，于是「加一张遮挡卡」变成「三张卡」。现在 `quick_add` 检测到 `imageOcclusion` 载荷就走 `_quick_add_image_occlusion`：查（必要时创建）原生 `Image Occlusion` 卡型，用 `col.get_image_occlusion_fields()` 定位 `occlusions/image/header/back_extra` 四个字段，一条笔记只建一张卡。
+  - **二、遮罩指令格式换成 Anki 自己的。** 之前 `render_native_image_occlusion` 解析的是 `<svg><rect>`，**在真实卡包里从来没匹配上过**（手写的 SVG `Occlusion` 字符串 Anki 也不认，`get_image_occlusion_note().note.occlusions` 直接返回空）。正确写法是文本指令 `{{c1::image-occlusion:rect:left=.0361:top=.8137:width=.2539:height=.0147:oi=1}}`，坐标是相对底图的 **0–1 小数**。全部遮罩共用同一个 ordinal（实测 `c1` ×3 → 1 个 shapes 组、3 个 shape、**1 张卡**），这样画多少个框都只出一张卡，同时每个框都保留。
+  - **三、翻面后图上飘 `c1`/`c2`/`c3`。** `card.render_output()` 会先把 `{{c1::label}}` 就地重写成 `<span class="cloze" data-ordinal="1">label</span>`，Studio 的遮罩正则只认原始写法，于是挖空框退化成「有定位、没背景」的 span，标签文字裸露在图片上。新增 `restore_rendered_io_rects()`（Python）与 `restoreRenderedIoRects()`（TS）把这一层逆向还原成 `{{cN::label}}`；只处理 `span.anki-io-rect` 里面那一层，**对普通挖空卡是彻底的空操作**。同时背面按「答案面 = 图去掉遮罩」处理，不再盖一层琥珀色把用户想看的图挡住。
+  - **四、卡片背面「编辑 / …」浮在卡片中间。** `.library-card-answer` 是 `flex:1; max-height:42px`，撑不开也缩不下去；正面带 66px 标题区往往比背面高，卡片高度取两面较大者，多出来的高度无处可去，footer 就浮在正中、下面留一大片空白。`.library-card-foot-back` 加 `margin-top:auto` 顶到底部与正面对齐。
+  - **回归护栏**：Python 新增 `test_35`（锁「N 个遮罩 = 1 张卡」，并用递增 ordinal 反证会变 3 张，证明假集合的建卡规则与真 Anki 一致）；前端新增 `ioRects.spec.ts` 5 项（还原、幂等、缺 `data-ordinal` 时退回 `data-io-rect`、框外 cloze 不动、空输入安全）。前端套件 67 → **72 项**，Python 140 → **141 项**。
+  - **顺手修掉两处「测试在骗人」的地方**：
+    - `render_native_image_occlusion` 之前把每个遮罩重编号成 1/2/3。看着无害，实际把**组号抹平**了——下游按 `card.ord + 1` 决定露哪一组，多组遮挡笔记的两张卡会显示成同一片区域。现在 `data-io-rect` 与内层 `{{cN::}}` 一律保留原始 ordinal（同组多遮罩共用同一个号）。
+    - 场景生成器 [`tests/scenarios/builder.py`](tests/scenarios/builder.py) 还在造 `{{c1::<svg>…<rect/>…</svg>}}` 这种**根本不存在**的遮挡格式，等于整条 io-native 场景一直在测一个虚构输入。改成真实的 `image-occlusion:rect:` 指令串后，冒烟里那 3 项（`frontHtml` / `review` / `multi-cloze`）才真正开始验证。⚠️ **改了场景生成器必须 `./gate.sh --rebuild`**，否则复用旧 `.anki2` 会得到「改了没生效」的假绿或假红。
+    - 顺带给 `smoke.py` 的 `native-io:multi-cloze` 加了先决断言：遮罩没被按 `cloze_ord` 解析时直接报「未解析」，而不是只丢一个 `[(), ()]` 让人猜。
+  - **验证**：`tsc --noEmit`、前端单元 72 项、Bundle 审计、Python 141 项、场景冒烟 692/692 + 前端静态审计 8/8（`./gate.sh --rebuild`）、真实 collection 端到端（建卡 1 张 / Anki 解析 1 组 3 形 / 复习与卡片库两条读路径背景遮罩均为 0）/ 无头 Chrome 复现浅深两套图比对，全绿。版本 1.5.0 → 1.5.1。
+
 ## [v1.5.0] - 2026-11-13
 
 - **[WorkBuddy] 版本号收敛：v1.4.7–v1.4.66 的 60 个补丁版本合并为 1.5.0**（改 [`manifest.json`](manifest.json)、[`CHANGELOG.md`](CHANGELOG.md)、[`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)）：

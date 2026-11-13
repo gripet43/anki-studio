@@ -183,6 +183,39 @@ function formatLatexExpression(expr: string, isDisplayMode: boolean): string {
   return `<span class="${wrapperClass}">${s}</span>`;
 }
 
+/**
+ * Restores the cloze placeholder Anki rendered inside `.anki-io-rect` back to
+ * its raw `{{cN::label}}` form.
+ *
+ * Why this exists: card library / reviewer surfaces receive `backHtml` produced
+ * by `card.render_output()`, where `{{c1::label}}` has already been rewritten
+ * into `<span class="cloze" data-ordinal="1">label</span>` (or `cloze-inactive`
+ * for non-target ordinals). The occlusion regex below only understands the raw
+ * form, so without this pass the mask keeps its absolute positioning but loses
+ * its background/border — leaving the bare label text (`c1`, `c2`, …) floating
+ * over the image. Only spans already sitting inside `.anki-io-rect` are touched,
+ * so ordinary cloze cards are unaffected.
+ */
+export function restoreRenderedIoRects(rawHtml: string | undefined | null): string {
+  if (!rawHtml) return '';
+  const html = String(rawHtml);
+  if (!html.includes('anki-io-rect') || !html.includes('cloze')) return html;
+
+  const renderedRectRe =
+    /(<span\b[^>]*\bclass\s*=\s*["'][^"']*\banki-io-rect\b[^"']*["'][^>]*)>\s*<span\b([^>]*)>([\s\S]*?)<\/span>\s*(<\/span>)/gi;
+  const ordinalRe = /data-(?:ordinal|io-rect)\s*=\s*["'](\d+)["']/i;
+
+  return html.replace(
+    renderedRectRe,
+    (_full: string, outerOpen: string, innerAttrs: string, label: string, outerClose: string) => {
+      if (!innerAttrs || !/cloze/i.test(innerAttrs)) return _full;
+      const ordMatch = ordinalRe.exec(innerAttrs) || ordinalRe.exec(outerOpen);
+      const num = ordMatch ? ordMatch[1] : '1';
+      return `${outerOpen}{{c${num}::${label}}}${outerClose}`;
+    }
+  );
+}
+
 export function renderMathAndRichHtml(
   rawHtml: string | undefined | null,
   maskClozeAsQuestion = false,
@@ -212,6 +245,7 @@ export function renderMathAndRichHtml(
 
   // Format Image Occlusion rectangles (<span class="anki-io-rect" ...>{{c1::...}}</span>)
   if (html.includes('anki-io-rect')) {
+    html = restoreRenderedIoRects(html);
     const ioRegex =
       /<span\b([^>]*?\bclass\s*=\s*["'][^"']*\banki-io-rect\b[^"']*["'][^>]*)>\s*\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}\s*<\/span>/gi;
     const styleAttrRegex = /\bstyle\s*=\s*(["'])(.*?)\1/i;

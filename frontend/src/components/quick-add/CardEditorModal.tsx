@@ -6,7 +6,11 @@ import { appActions, LibraryCardItem, ReviewCardItem, setAppState, showToast, us
 import { renderMathAndRichHtml } from '../../utils/mathRenderer';
 import { extractMediaBaseUrlFromHtml, resolveMediaInHtml } from '../../utils/mediaUrl';
 import { getAccentScale } from '../../utils/themeTokens';
-import { ImageOcclusionEditorModal } from './ImageOcclusionEditorModal';
+import {
+  ImageOcclusionEditorModal,
+  NativeOcclusionPayload,
+  buildImageOcclusionHtml,
+} from './ImageOcclusionEditorModal';
 import { TowerWysiwygEditor } from './TowerWysiwygEditor';
 
 const FRONT_ALIASES = [
@@ -195,6 +199,9 @@ export const CardEditorModal: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   const [ioEditorOpen, setIoEditorOpen] = useState(false);
+  // 遮挡编辑器产出的原生 Image Occlusion 载荷；有值时正面正文改用摘要展示，
+  // 提交时走 quick_add_card 的原生 IO 分支（1 张笔记 = 1 张卡）。
+  const [ioPayload, setIoPayload] = useState<NativeOcclusionPayload | null>(null);
 
   // Interactive Card Preview State ('edit' vs 'preview')
   const [editorMode, setEditorMode] = useState<'edit' | 'preview'>('edit');
@@ -747,9 +754,16 @@ export const CardEditorModal: React.FC = () => {
     }
   };
 
+  // 摘要里显示真实遮罩数。occlusions 是 Anki 原生指令串，一个遮罩 = 一个
+  // `image-occlusion:rect:` 片段；卡数恒为 1 —— 同一 ordinal 的全部遮罩共用一个
+  // 挖空组，Anki 只出一张卡（实测，见 edit_service._quick_add_image_occlusion）。
+  const ioMaskCount = ioPayload
+    ? (ioPayload.occlusions.match(/image-occlusion:rect:/g) || []).length
+    : 0;
+
   const canSubmit = isMultiFieldEdit
     ? noteFieldOrder.some((k) => Boolean((allFieldsMap[k] || '').trim()))
-    : Boolean(front.trim());
+    : Boolean(ioPayload?.occlusions) || Boolean(front.trim());
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
@@ -772,6 +786,19 @@ export const CardEditorModal: React.FC = () => {
           }
           mergedFields[frontFieldName] = front.trim();
           mergedFields[backFieldName] = back.trim();
+        }
+
+        // 原生 Image Occlusion 笔记的 Occlusion/Image 是结构化字段，不能把编辑器里的
+        // 文本直接塞回去（那会把 SVG 覆盖层写成一段 HTML）。按字段名精确回填。
+        if (ioPayload) {
+          const keyOf = (name: string) =>
+            Object.keys(mergedFields).find((k) => k.trim().toLowerCase() === name);
+          const occlKey = keyOf('occlusion');
+          const imgKey = keyOf('image');
+          const headerKey = keyOf('header');
+          if (occlKey) mergedFields[occlKey] = ioPayload.occlusions;
+          if (imgKey) mergedFields[imgKey] = ioPayload.image;
+          if (headerKey) mergedFields[headerKey] = ioPayload.header;
         }
 
         const formattedFront = (mergedFields[frontFieldName] ?? front).trim();
@@ -807,6 +834,10 @@ export const CardEditorModal: React.FC = () => {
           modelId: customModelId,
           createReverseCard: selectedPreset === 'reversed',
           fields: Object.keys(extraClean).length > 0 ? extraClean : undefined,
+          // 有遮挡载荷时后端走原生 Image Occlusion 分支，front/back 不参与建卡。
+          imageOcclusion: ioPayload
+            ? { ...ioPayload, backExtra: formattedBack }
+            : undefined,
         });
 
         setAppState({ quickAddOpen: false });
@@ -1248,6 +1279,44 @@ export const CardEditorModal: React.FC = () => {
             ) : (
               <>
                 {/* Front WYSIWYG Box (Tower Editor — with Image Occlusion integrated in toolbar row) */}
+                {ioPayload ? (
+                  /* 遮挡模式：正面不再是自由文本，而是对已生成遮挡的摘要。
+                     直接展示一张原生 Image Occlusion 笔记的承诺：整图 1 张卡。 */
+                  <div className={`rounded-xl border p-3.5 space-y-2.5 ${inputBg} ${cardBorder}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[12px] font-semibold flex items-center gap-2">
+                        <span>{t('ioButtonLabel')}</span>
+                        <span className="px-1.5 py-0.5 rounded-md bg-[var(--brand-soft)] text-[var(--brand-text)] text-[10px] font-semibold">
+                          {t('ioNativeBadge')}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setIoEditorOpen(true)}
+                          className="text-[11px] font-semibold text-[var(--brand-text)] hover:underline cursor-pointer"
+                        >
+                          {t('ioReeditBtn')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIoPayload(null)}
+                          className="text-[11px] font-semibold text-[var(--status-danger)] hover:underline cursor-pointer"
+                        >
+                          {t('ioRemoveBtn')}
+                        </button>
+                      </div>
+                    </div>
+                    {ioPayload.header ? (
+                      <div className="text-[12px] text-[#6E6E73] dark:text-[#A0A2B2] break-words">
+                        {ioPayload.header}
+                      </div>
+                    ) : null}
+                    <div className="text-[11px] text-[#8E8E93]">
+                      {t('ioMasksCountSummary', { rects: ioMaskCount, cards: 1 })}
+                    </div>
+                  </div>
+                ) : (
                 <TowerWysiwygEditor
                   label={`${frontFieldName} (${t('cardFrontLabel')})`}
                   badge={t('requiredBadge')}
@@ -1264,6 +1333,7 @@ export const CardEditorModal: React.FC = () => {
                   onOpenImageOcclusion={() => setIoEditorOpen(true)}
                   hasImageOcclusion={front.includes('anki-io-wrap')}
                 />
+                )}
 
                 {/* Back WYSIWYG Box (Tower Editor) */}
                 <TowerWysiwygEditor
@@ -1880,16 +1950,16 @@ export const CardEditorModal: React.FC = () => {
         {/* Visual Image Occlusion Studio Modal */}
         <ImageOcclusionEditorModal
           open={ioEditorOpen}
-          initialFrontHtml={front}
+          initialFrontHtml={ioPayload ? ioPayload.previewHtml : front}
           isDark={isDark}
           brandHex={brandHex}
           mediaBaseUrl={effectiveMediaBaseUrl}
           onSaveImageFile={appActions.pasteImageFromClipboard}
           onClose={() => setIoEditorOpen(false)}
-          onApply={(generatedHtml, rectCount) => {
-            setFront(resolveMediaInHtml(generatedHtml, effectiveMediaBaseUrl));
+          onApply={(payload, cardCount) => {
+            setIoPayload(payload);
             setIoEditorOpen(false);
-            showToast(t('ioApplyBtn', { cards: rectCount }));
+            showToast(t('ioApplyBtn', { cards: cardCount }));
           }}
         />
       </div>

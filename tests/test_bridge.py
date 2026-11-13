@@ -22,6 +22,7 @@ Covers:
 import base64
 import datetime
 import json
+import re
 import sqlite3
 import tempfile
 import time
@@ -126,17 +127,18 @@ class MockDB:
 
 
 class MockNote:
-    def __init__(self, nid, fields_map, tags, is_cloze=False, cids=None):
+    def __init__(self, nid, fields_map, tags, is_cloze=False, cids=None, type_name=None):
         self.id = nid
         self._fields = dict(fields_map)
         self.tags = list(tags)
         self._is_cloze = is_cloze
+        self._type_name = type_name
         self._cids = cids or [201]
 
     def note_type(self):
         return {
             "id": 2 if self._is_cloze else 1,
-            "name": "Cloze" if self._is_cloze else "Basic",
+            "name": self._type_name or ("Cloze" if self._is_cloze else "Basic"),
             "type": 1 if self._is_cloze else 0,
         }
 
@@ -235,6 +237,7 @@ class MockCol:
             201: MockCard(201, self._note_101, queue=2, ctype=2, due=10, ivl=25),
             202: MockCard(202, self._note_102, queue=2, ctype=2, due=25, ivl=15),
         }
+        self._io_note = None
         self.undone = False
         self.renamed_decks = {}
         self.deleted_decks = []
@@ -329,6 +332,18 @@ class MockCol:
                 return [
                     {"id": 1, "name": "Basic", "type": 0, "flds": [{"name": "正面"}, {"name": "释义"}]},
                     {"id": 2, "name": "Cloze", "type": 1, "flds": [{"name": "Text"}, {"name": "Back Extra"}]},
+                    {
+                        "id": 3,
+                        "name": "Image Occlusion",
+                        "type": 1,
+                        "flds": [
+                            {"name": "Occlusion"},
+                            {"name": "Image"},
+                            {"name": "Header"},
+                            {"name": "Back Extra"},
+                            {"name": "Comments"},
+                        ],
+                    },
                 ]
 
             @staticmethod
@@ -373,12 +388,36 @@ class MockCol:
         return self._note_101
 
     def new_note(self, model):
+        if model.get("name") == "Image Occlusion":
+            # 原生遮挡卡型的字段名不是 Cloze 的 Text/Back Extra，必须按 flds 建。
+            names = [f["name"] for f in model.get("flds", [])]
+            return MockNote(107, {n: "" for n in names}, [], is_cloze=True, type_name="Image Occlusion")
         if model.get("type") == 1:
             return MockNote(106, {"Text": "", "Back Extra": ""}, [], is_cloze=True)
         return MockNote(103, {"正面": "", "释义": ""}, [])
 
     def add_note(self, note, did):
+        if note.note_type().get("name") == "Image Occlusion":
+            # 复刻 Anki 的真实建卡规则：**一个 ordinal 出一张卡**，同一 ordinal 的多个
+            # 遮罩合并成一个 shapes 组。断言卡片数就是断言这一点，防止有人把遮罩写成
+            # 递增的 c1/c2/c3（那会一框一卡）。
+            occl = note["Occlusion"] if "Occlusion" in note else ""
+            ordinals = {m.group(1) for m in re.finditer(r"\{\{c(\d+)::", occl)}
+            note._cids = [301 + i for i in range(max(1, len(ordinals)))]
+            self._io_note = note
+            return note.id
         self._note_101 = note
+        return note.id
+
+    @staticmethod
+    def get_image_occlusion_fields(mid):
+        class _IOFields:
+            occlusions = 0
+            image = 1
+            header = 2
+            back_extra = 3
+
+        return _IOFields()
 
     def update_note(self, note):
         if note.id == 105:
@@ -1646,20 +1685,22 @@ class BridgeRouterAuditTest(unittest.TestCase):
 
 
     def test_22_native_image_occlusion_renders_static_masks(self):
-        """原生 Image Occlusion 必须转成静态遮罩，而不是把 SVG 当正文直出。
+        """原生 Image Occlusion 必须转成静态遮罩，而不是把指令当正文直出。
 
         回归护栏：search / review 原先都取 ``fields[0]`` 当正文，而原生遮挡卡的
-        第一个字段是 Occlusion（SVG 覆盖层），底图在 Image 字段。结果是用户只看到
-        几个黑矩形、图片完全丢失。修复后统一走 ``render_native_image_occlusion``。
+        第一个字段是 Occlusion（遮挡指令），底图在 Image 字段。修复后统一走
+        ``render_native_image_occlusion``。
+
+        字段格式以 Anki 自己写出来的为准（AnkiWeb 原生遮挡卡包实测）：
+        ``{{c1::image-occlusion:rect:left=.0361:top=.8137:width=.2539:height=.0147:oi=1}}``
+        —— 坐标是 0–1 小数，不是 SVG 的 0–100 viewBox。
         """
         from bridge.media_utils import render_native_image_occlusion
 
         note = {
             "Image": '<img src="io_01.png">',
             "Occlusion": (
-                '{{c1::<svg width="100%" height="100%" viewBox="0 0 100 100">'
-                '<rect x="10" y="20" width="30" height="15" fill="rgba(0,0,0,0.5)" />'
-                "</svg>}}"
+                "{{c1::image-occlusion:rect:left=0.1:top=0.2:width=0.3:height=0.15:oi=1}}"
             ),
             "Header": "遮挡标题",
         }
@@ -1667,22 +1708,53 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertIn("anki-io-wrap", front)
         self.assertIn('src="io_01.png"', front)
         self.assertIn("anki-io-rect", front)
+        # 0–1 小数乘以 100 变成百分比
         self.assertIn("left:10.00%", front)
         self.assertIn("top:20.00%", front)
         self.assertIn("width:30.00%", front)
         self.assertIn("height:15.00%", front)
-        # 原始 SVG 不应再出现在正文里
-        self.assertNotIn("<svg", front)
+        # 原始指令不应再出现在正文里
+        self.assertNotIn("image-occlusion:", front)
         self.assertEqual(back, '<img src="io_01.png">')
         self.assertEqual(title, "遮挡标题")
 
         # 尺寸为 0 的矩形要丢弃，否则会生成看不见也点不到的遮罩
         zero = dict(note)
-        zero["Occlusion"] = '{{c1::<svg><rect x="0" y="0" width="0" height="10" /></svg>}}'
+        zero["Occlusion"] = "{{c1::image-occlusion:rect:left=0:top=0:width=0:height=0.1:oi=1}}"
         self.assertEqual(render_native_image_occlusion(zero)[0], "")
 
         # 非遮挡笔记必须返回空三元组，调用方据此回落
         self.assertEqual(render_native_image_occlusion({"Front": "x"}), ("", "", ""))
+
+        # 同一 ordinal 下的多个遮罩：data-io-rect 必须保留**组号**（都是 1），不能抹成
+        # 1/2/3 的流水号。下游按 card.ord + 1 决定露哪一组，组号被抹平的话，多组遮挡
+        # 笔记的两张卡会显示同一片区域。
+        same_group = dict(note)
+        same_group["Occlusion"] = "".join(
+            f"{{{{c1::image-occlusion:rect:left={i / 10}:top={i / 10}:"
+            f"width=0.1:height=0.1:oi=1}}}}"
+            for i in (1, 2, 3)
+        )
+        front_same = render_native_image_occlusion(same_group)[0]
+        self.assertEqual(
+            re.findall(r'data-io-rect="(\d+)"', front_same), ["1", "1", "1"]
+        )
+        self.assertEqual(
+            re.findall(r"\{\{c(\d+)::", front_same), ["1", "1", "1"]
+        )
+
+        # 两组遮挡（c1 两块 + c2 一块）→ 组号 1/1/2，两组各成一张卡
+        two_groups = dict(note)
+        two_groups["Occlusion"] = (
+            "{{c1::image-occlusion:rect:left=0.1:top=0.1:width=0.1:height=0.1:oi=1}}"
+            "{{c1::image-occlusion:rect:left=0.3:top=0.3:width=0.1:height=0.1:oi=1}}"
+            "{{c2::image-occlusion:rect:left=0.5:top=0.5:width=0.1:height=0.1:oi=1}}"
+        )
+        front_two = render_native_image_occlusion(two_groups)[0]
+        self.assertEqual(
+            re.findall(r'data-io-rect="(\d+)"', front_two), ["1", "1", "2"]
+        )
+
 
     def test_23_sync_no_changes_checked_timestamp_and_requires_login(self):
         """Anki NO_CHANGES leaves col.ls unchanged; verified check timestamp must merge cleanly."""
@@ -2397,6 +2469,87 @@ class BridgeRouterAuditTest(unittest.TestCase):
         t2 = self._call("toggle_notetype_sandbox", {"notetypeId": "1", "enabled": False})["data"]
         self.assertFalse(t2["enabled"])
         self.assertNotIn("1", t2["sandboxNoteTypeIds"])
+
+    def test_35_occlusion_editor_writes_native_io_note_with_exactly_one_card(self):
+        """遮挡编辑器 → 原生 IO 笔记，且「N 个遮罩 = 1 张卡」。
+
+        这条规则反直觉但必须锁住：Anki 里 **一个 ordinal 出一张卡**，同一个 ordinal
+        重复出现会被合并成一个 shapes 组。所以 occlusions 必须全部写 ``c1``。用户报的
+        「我只加了一张遮挡卡，怎么冒出三张」就是按遮罩递增写 ``c1``/``c2``/``c3`` 造成
+        的。任何一次重构若把它改回递增，这条测试会立刻红。
+        """
+        masks = "".join(
+            f"{{{{c1::image-occlusion:rect:left={left}:top={top}:"
+            "width=0.1:height=0.1:oi=1}}}}"
+            for left, top in (("0.10", "0.20"), ("0.30", "0.40"), ("0.50", "0.60"))
+        )
+        payload = {
+            "occlusions": masks,
+            "image": '<img src="paste_1.jpg">',
+            "header": "遮挡标题",
+            "mode": "hide-all",
+            "previewHtml": "<div class='anki-io-wrap'></div>",
+            "backExtra": "背面补充",
+        }
+        res = self._call(
+            "quick_add",
+            {
+                "deckId": "1",
+                "front": "",  # 原生遮挡笔记没有自由正文，front 为空也必须能建
+                "back": "",
+                "tags": ["遮挡"],
+                "imageOcclusion": payload,
+            },
+        )
+        self.assertEqual(res["status"], "success", res.get("message"))
+        data = res["data"]
+        self.assertTrue(data["created"])
+        self.assertTrue(data["imageOcclusion"])
+        # ① 一张笔记、一张卡 —— 三个遮罩不额外产卡
+        self.assertEqual(data["createdCount"], 1)
+        self.assertEqual(len(data["cardIds"]), 1)
+
+        note = self.mock_col._io_note
+        self.assertIsNotNone(note, "did not go through the Image Occlusion branch")
+        self.assertEqual(note.note_type()["name"], "Image Occlusion")
+        # ② 三个遮罩全部落进 Occlusion 字段，且共用一个 ordinal
+        self.assertEqual(note["Occlusion"].count("image-occlusion:rect:"), 3)
+        self.assertEqual(set(re.findall(r"\{\{c(\d+)::", note["Occlusion"])), {"1"})
+        # 用户手写的 0–1 小数坐标要原样保留（不要被当成 0–100 百分比再除一次）
+        self.assertIn("left=0.10:top=0.20", note["Occlusion"])
+        # ③ 底图 / 标题 / 补充说明落进各自字段
+        self.assertEqual(note["Image"], '<img src="paste_1.jpg">')
+        self.assertEqual(note["Header"], "遮挡标题")
+        self.assertEqual(note["Back Extra"], "背面补充")
+        self.assertEqual(note.tags, ["遮挡"])
+
+        # ④ 反证：把同一个 payload 改成递增 ordinal，就必须变成三张卡。
+        #    这既证明假 Anki 的建卡规则与真实 Anki 一致，也说明上面「1 张」不是
+        #    因为假集合写死返回 1。
+        seq_masks = "".join(
+            f"{{{{c{ordinal}::image-occlusion:rect:left=0.{ordinal}0:top=0.{ordinal}0:"
+            "width=0.1:height=0.1:oi=1}}}}"
+            for ordinal in (1, 2, 3)
+        )
+        seq = self._call(
+            "quick_add",
+            {
+                "deckId": "1",
+                "imageOcclusion": {**payload, "occlusions": seq_masks},
+            },
+        )
+        self.assertEqual(seq["status"], "success", seq.get("message"))
+        self.assertEqual(seq["data"]["createdCount"], 3)
+
+        # ⑤ 缺底图或缺遮罩必须报错，不能静默建出一张看不见的遮挡卡
+        for broken in (
+            {"occlusions": masks, "image": ""},
+            {"occlusions": "", "image": '<img src="x.jpg">'},
+        ):
+            bad = self._call(
+                "quick_add", {"deckId": "1", "imageOcclusion": broken}
+            )
+            self.assertEqual(bad["status"], "error")
 
 
 if __name__ == "__main__":

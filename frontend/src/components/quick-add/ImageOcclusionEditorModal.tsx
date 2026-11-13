@@ -16,6 +16,22 @@ export interface OcclusionRect {
 
 export type OcclusionMode = 'hide-all' | 'hide-one';
 
+/**
+ * 原生 Image Occlusion 笔记的载荷。
+ *
+ * `occlusions` 是 Anki 的 Occlusion 字段原文。原生遮挡卡型仍是 Cloze 基数的卡型，
+ * 一个 ordinal 出一张卡；把全部遮罩都写成 `{{c1::…}}`，Anki 会把它们合并成一个
+ * shapes 组，于是「一张图 = 一张卡」，不会因为多画几个遮罩就多冒出几张卡。
+ */
+export interface NativeOcclusionPayload {
+  occlusions: string;
+  image: string;
+  header: string;
+  mode: OcclusionMode;
+  /** 同一批遮罩的 `.anki-io-wrap` 预览 HTML，用于「重新编辑」时无损还原矩形。 */
+  previewHtml: string;
+}
+
 interface ImageOcclusionEditorModalProps {
   open: boolean;
   initialFrontHtml: string;
@@ -24,7 +40,7 @@ interface ImageOcclusionEditorModalProps {
   mediaBaseUrl?: string;
   onSaveImageFile: (file: File) => Promise<string | null>;
   onClose: () => void;
-  onApply: (generatedHtml: string, rectCount: number) => void;
+  onApply: (payload: NativeOcclusionPayload, cardCount: number) => void;
 }
 
 /**
@@ -136,6 +152,61 @@ export function buildImageOcclusionHtml(params: {
     return `<div>${cleanTitle}</div><div style="margin-top:8px;">${ioBlock}</div>`;
   }
   return ioBlock;
+}
+
+/** 把 imgSrc 收敛成 collection.media 里的裸文件名，Anki 的 <img src> 只认这个。 */
+function resolveMediaName(imgSrc: string, mediaFilename?: string): string {
+  const direct = (mediaFilename || '').trim();
+  if (direct) return direct;
+  const raw = (imgSrc || '').trim();
+  if (!raw) return '';
+  const noQuery = raw.split(/[?#]/)[0];
+  const seg = noQuery.split('/').pop() || '';
+  return /^[^\\]+\.\w{1,8}$/.test(seg) ? seg : '';
+}
+
+/**
+ * 生成 Anki 原生 Image Occlusion 的字段内容。
+ *
+ * 形状与 Anki 自己写出来的一致：
+ * `{{c1::image-occlusion:rect:left=.1:top=.2:width=.08:height=.06:oi=1}}`，
+ * 坐标是相对底图的 0–1 小数（见 AnkiWeb 上的原生遮挡卡包），Image 字段是一张
+ * `<img src="文件名">`。全部遮罩共用 ordinal 1，因此恒定只出 1 张卡。
+ */
+export function buildNativeOcclusion(params: {
+  titleText: string;
+  imgSrc: string;
+  mediaFilename?: string;
+  mode: OcclusionMode;
+  rects: OcclusionRect[];
+}): NativeOcclusionPayload {
+  const { titleText, imgSrc, mediaFilename, mode, rects } = params;
+
+  const mediaName = resolveMediaName(imgSrc, mediaFilename);
+
+  // Anki 原生的 Occlusion 指令，坐标是 0–1 小数（不是 0–100）。
+  // 全部遮罩共用 c1：实测同 ordinal 重复 N 次会被 Anki 合并成「1 个组 N 个 shape」，
+  // 于是 1 张笔记 = 1 张卡，同时每个遮罩都还在。
+  const occlusions = rects
+    .map((r) => {
+      const l = Math.max(0, Math.min(0.99, r.leftPct / 100));
+      const t = Math.max(0, Math.min(0.99, r.topPct / 100));
+      const w = Math.max(0.005, Math.min(1 - l, r.widthPct / 100));
+      const h = Math.max(0.005, Math.min(1 - t, r.heightPct / 100));
+      return (
+        `{{c1::image-occlusion:rect:left=${l.toFixed(4)}:top=${t.toFixed(4)}` +
+        `:width=${w.toFixed(4)}:height=${h.toFixed(4)}:oi=1}}`
+      );
+    })
+    .join('');
+
+  return {
+    occlusions,
+    image: mediaName ? `<img src="${mediaName}">` : '',
+    header: titleText.trim(),
+    mode,
+    previewHtml: buildImageOcclusionHtml({ titleText, imgSrc, mediaFilename, mode, rects }),
+  };
 }
 
 export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps> = ({
@@ -347,7 +418,8 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
   };
 
   const selectedRect = rects.find((r) => r.id === selectedRectId) || null;
-  const distinctCardCount = new Set(rects.map((r) => r.clozeIndex)).size;
+  // 原生遮挡卡型：整张图不管画多少遮罩，都只出 1 张卡（全部遮罩放在同一个挖空组里）。
+  const nativeCardCount = rects.length > 0 ? 1 : 0;
 
   const updateSelectedRectCloze = (newClozeIdx: number) => {
     if (!selectedRectId) return;
@@ -359,14 +431,14 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
 
   const handleConfirmApply = () => {
     if (!imgSrc || rects.length === 0) return;
-    const htmlOut = buildImageOcclusionHtml({
+    const payload = buildNativeOcclusion({
       titleText,
       imgSrc,
       mediaFilename,
       mode,
       rects,
     });
-    onApply(htmlOut, distinctCardCount);
+    onApply(payload, nativeCardCount);
   };
 
   const surfaceClass = isDark
@@ -684,7 +756,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
           <div className="text-[12px] text-[#8E8E93]">
             {rects.length > 0 ? (
               <span>
-                {t('ioMasksCountSummary', { rects: rects.length, cards: distinctCardCount })}
+                {t('ioMasksCountSummary', { rects: rects.length, cards: nativeCardCount })}
               </span>
             ) : (
               <span>{t('ioDrawAtLeastOneHint')}</span>
@@ -706,7 +778,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
               style={{ backgroundColor: brandHex }}
               className="btn-primary !h-9 !px-5 !text-[12px] disabled:opacity-45"
             >
-              {t('ioApplyBtn', { cards: distinctCardCount })}
+              {t('ioApplyBtn', { cards: nativeCardCount })}
             </button>
           </div>
         </footer>

@@ -189,23 +189,28 @@ def _make_occlusion_html(
     )
 
 
-def _make_io_svg(rng: random.Random, n_rects: int) -> str:
-    """生成 Anki 原生 Image Occlusion 的 SVG 覆盖层。
+def _make_io_occlusion(rng: random.Random, ordinal: int, n_rects: int) -> str:
+    """生成 Anki 原生 Image Occlusion 的遮挡指令。
 
-    真实格式是 ``{{c1::<svg>…<rect/>…</svg>}}``：Anki 渲染时把 SVG 整体转义进
-    ``<span class="cloze" data-cloze="…">``，再由 ``anki.imageOcclusion.setup()``
-    读出来画到 canvas 上。
+    ``Occlusion`` 字段是**文本指令，不是 SVG**：::
+
+        {{c1::image-occlusion:rect:left=.0361:top=.8137:width=.2539:height=.0147:oi=1}}
+
+    坐标是相对底图的 0–1 小数（不是 0–100 的 viewBox 百分比）。同一个 ordinal 可以
+    重复出现，Anki 会把它们合并成一个 shapes 组：**一个组 = 一张卡**。所以造多卡
+    笔记要递增 ordinal，造单卡多遮罩要复用同一个 ordinal。
     """
-    rects = "".join(
-        f'<rect x="{rng.randint(5, 70)}" y="{rng.randint(5, 70)}" '
-        f'width="{rng.randint(10, 25)}" height="{rng.randint(8, 20)}" '
-        f'fill="rgba(0,0,0,0.5)" />'
-        for _ in range(n_rects)
-    )
-    return (
-        '<svg width="100%" height="100%" viewBox="0 0 100 100" '
-        f'preserveAspectRatio="none">{rects}</svg>'
-    )
+    parts = []
+    for _ in range(n_rects):
+        left = rng.randint(5, 65) / 100
+        top = rng.randint(5, 65) / 100
+        width = rng.randint(10, 25) / 100
+        height = rng.randint(8, 20) / 100
+        parts.append(
+            f"{{{{c{ordinal}::image-occlusion:rect:left={left:.4f}:top={top:.4f}:"
+            f"width={width:.4f}:height={height:.4f}:oi=1}}}}"
+        )
+    return "".join(parts)
 
 
 def _make_fields(
@@ -232,7 +237,7 @@ def _make_fields(
         # 不同卡必须只隐藏自己那一片区域，而不是全部。
         n_clozes = rng.randint(1, 2)
         parts = [
-            f"{{{{c{k + 1}::{_make_io_svg(rng, rng.randint(1, 2))}}}}}"
+            _make_io_occlusion(rng, k + 1, rng.randint(1, 2))
             for k in range(n_clozes)
         ]
         return {

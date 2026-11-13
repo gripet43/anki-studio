@@ -1140,6 +1140,11 @@ ruby rt {
 }
 
 .library-card-foot-back {
+  /* 翻面后正面往往比背面高（正面有 66px 标题区），卡片高度取两面较大者。
+     背面答案区是 flex:1 + max-height:42px，撑不开也缩不下去，多出来的高度无处可去，
+     于是「编辑 / …」这排按钮会浮在卡片正中间、下面留一大片空白。
+     margin-top:auto 把 footer 顶到卡片底部，和正面的 footer 对齐。 */
+  margin-top: auto;
   border-top: 1px solid var(--border-subtle, #eceff3);
   padding-top: 8px;
 }

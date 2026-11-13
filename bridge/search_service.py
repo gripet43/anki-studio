@@ -25,6 +25,7 @@ from .media_utils import (
     resolve_front_field_name,
     resolve_media_img_src_for_webview,
     resolve_replace_front_on_flip,
+    restore_rendered_io_rects,
 )
 
 
@@ -812,7 +813,9 @@ class SearchService:
                             f'<div class="text-[12px] font-medium text-[#8E8E93] mb-1">'
                             f"{html.escape(hdr_plain)}</div>{front_html}"
                         )
-            back_html, back_audio = self._rewrite_media_and_audio(back_raw, media_dir)
+            back_html, back_audio = self._rewrite_media_and_audio(
+                back_raw, media_dir, reveal_io_masks=True
+            )
             # 模板渲染已经把 [sound:] 剥进 answer_av_tags，这里补回来
             answer_audio = native.answer_audio if native else []
             question_audio = native.question_audio if native else []
@@ -913,7 +916,12 @@ class SearchService:
         return render_native_image_occlusion(note)
 
     @staticmethod
-    def _rewrite_media_and_audio(raw: str, media_dir: str, strip_furigana_reading: bool = False):
+    def _rewrite_media_and_audio(
+        raw: str,
+        media_dir: str,
+        strip_furigana_reading: bool = False,
+        reveal_io_masks: bool = False,
+    ):
         if not raw:
             return "", []
         audios: List[str] = []
@@ -929,18 +937,27 @@ class SearchService:
         if media_dir:
             s = resolve_media_img_src_for_webview(s, media_dir)
         if "anki-io-rect" in s:
-            s = re.sub(
-                r'<span\b([^>]*?\bclass\s*=\s*["\'][^"\']*\banki-io-rect\b[^"\']*["\'][^>]*)>\s*\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}\s*</span>',
-                lambda m: (
-                    f'<span{m.group(1).rstrip()[:-1]};background:rgba(245,158,11,0.78);border:1.5px solid #FFFFFF;'
-                    f'border-radius:4px;display:flex;align-items:center;justify-content:center;color:#FFFFFF;'
-                    f'font-size:9px;font-weight:700;line-height:1;">#{m.group(2)}</span>'
-                    if m.group(1).rstrip().endswith(('"', "'"))
-                    else f'<span{m.group(1)}>#{m.group(2)}</span>'
-                ),
-                s,
+            s = restore_rendered_io_rects(s)
+            io_rect_re = re.compile(
+                r'<span\b([^>]*?\bclass\s*=\s*["\'][^"\']*\banki-io-rect\b[^"\']*["\'][^>]*)>\s*'
+                r"\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}\s*</span>",
                 flags=re.I,
             )
+            if reveal_io_masks:
+                # 背面是答案面：原生遮挡卡的答案就是「图去掉遮罩」，再盖一层琥珀色
+                # 反而把用户想看的图挡住了。这里直接摘掉遮罩框，露出底图。
+                s = io_rect_re.sub("", s)
+            else:
+                s = io_rect_re.sub(
+                    lambda m: (
+                        f'<span{m.group(1).rstrip()[:-1]};background:rgba(245,158,11,0.78);border:1.5px solid #FFFFFF;'
+                        f'border-radius:4px;display:flex;align-items:center;justify-content:center;color:#FFFFFF;'
+                        f'font-size:9px;font-weight:700;line-height:1;">#{m.group(2)}</span>'
+                        if m.group(1).rstrip().endswith(('"', "'"))
+                        else f'<span{m.group(1)}>#{m.group(2)}</span>'
+                    ),
+                    s,
+                )
         s = CLOZE_RE.sub(lambda m: f'<span class="text-[#5E5CE6] font-semibold">{m.group(2)}</span>', s)
         return s.strip(), audios
 

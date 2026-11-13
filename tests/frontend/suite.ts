@@ -17,6 +17,7 @@ import './specs/mediaUrl.spec';
 import './specs/translations.spec';
 import './specs/render.spec';
 import './specs/mathRenderer.spec';
+import './specs/ioRects.spec';
 import './specs/domTarget.spec';
 
 import { report } from './harness';

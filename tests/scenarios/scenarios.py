@@ -186,8 +186,9 @@ SCENARIOS: dict[str, ScenarioSpec] = {
         key="io-native",
         title="Anki 原生图片遮挡",
         description=(
-            "30 条内置 Image Occlusion 笔记，Occlusion 字段为 {{c1::<svg>…</svg>}}，"
-            "依赖 canvas + anki.imageOcclusion.setup() 渲染。用于暴露插件对官方遮挡卡的支持缺口。"
+            "30 条内置 Image Occlusion 笔记，Occlusion 字段为 "
+            "{{c1::image-occlusion:rect:left=…:width=…:oi=1}} 文本指令（0–1 小数坐标），"
+            "官方靠 canvas + anki.imageOcclusion.setup() 渲染。用于暴露插件对官方遮挡卡的支持缺口。"
         ),
         total_cards=30,
         decks=(DeckSpec("原生遮挡"),),

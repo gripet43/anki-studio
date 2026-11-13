@@ -30,6 +30,7 @@ from .media_utils import (
     resolve_front_field_name,
     resolve_media_img_src_for_webview,
     resolve_replace_front_on_flip,
+    restore_rendered_io_rects,
     wrap_card_with_styles,
 )
 
@@ -575,6 +576,8 @@ class ReviewService:
         if media_dir:
             processed = resolve_media_img_src_for_webview(processed, media_dir)
 
+        if "anki-io-rect" in processed:
+            processed = restore_rendered_io_rects(processed)
         if "anki-io-rect" in processed and IO_RECT_SPAN_RE.search(processed):
             target_idx = str(max(1, cloze_ord))
             io_mode = "hide-one" if 'data-io-mode="hide-one"' in processed else "hide-all"

@@ -2504,6 +2504,15 @@ export const appActions = {
     modelId?: string;
     createReverseCard?: boolean;
     fields?: Record<string, string>;
+    /** 图片遮挡：交给后端写 Anki 原生 Image Occlusion 笔记（1 张笔记 = 1 张卡）。 */
+    imageOcclusion?: {
+      occlusions: string;
+      image: string;
+      header: string;
+      mode: string;
+      previewHtml: string;
+      backExtra?: string;
+    };
   }) {
     let createdCardId = `card-${Date.now()}`;
     let createdNoteId = `note-${Date.now()}`;
@@ -2526,17 +2535,19 @@ export const appActions = {
       } catch {}
     }
 
-    const isCloze = payload.front.includes('{{c1::') || payload.back.includes('{{c1::');
+    // 遮挡卡没有自由正文，预览卡片用固定标题占位，免得预览里出现一张空白卡。
+    const mockFront = payload.front || (payload.imageOcclusion ? tState('ioButtonLabel') : '');
+    const isCloze = mockFront.includes('{{c1::') || payload.back.includes('{{c1::');
     const effectiveTags = payload.tags;
     const newLibCard: LibraryCardItem = {
       id: createdCardId,
       noteId: createdNoteId,
       deckId: targetDeckId,
       deckName: targetDeckName,
-      front: payload.front,
-      back: payload.back || (isCloze ? payload.front : ''),
-      frontHtml: payload.front,
-      backHtml: payload.back || payload.front,
+      front: mockFront,
+      back: payload.back || (isCloze ? mockFront : ''),
+      frontHtml: mockFront,
+      backHtml: payload.back || mockFront,
       fields: payload.fields || (isCloze
         ? { Text: payload.front, 'Back Extra': payload.back }
         : { 正面: payload.front, 释义: payload.back }),

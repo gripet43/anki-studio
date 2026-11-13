@@ -333,6 +333,101 @@ class EditService:
             "matchedPreview": matched_preview,
         }
 
+    @staticmethod
+    def _resolve_target_deck(col, deck_id_raw, deck_name: str) -> int:
+        target_did = 1
+        if deck_id_raw and str(deck_id_raw).isdigit():
+            deck_obj = col.decks.get(int(deck_id_raw), default=False)
+            if deck_obj:
+                target_did = int(deck_obj["id"])
+        if target_did == 1 and deck_name:
+            out = col.decks.add_normal_deck_with_name(deck_name)
+            target_did = int(out.id)
+        return target_did
+
+    @staticmethod
+    def _resolve_image_occlusion_model(col):
+        """找到（必要时创建）Anki 原生 Image Occlusion 卡型。"""
+        def _find():
+            for m in col.models.all() or []:
+                if str(m.get("name", "")).strip().lower() == "image occlusion":
+                    return m
+            return None
+
+        model = _find()
+        if model is not None:
+            return model
+        try:
+            col.add_image_occlusion_notetype()
+        except Exception:
+            pass
+        return _find()
+
+    def _quick_add_image_occlusion(
+        self,
+        col,
+        payload: Dict[str, Any],
+        tags: List[str],
+        deck_id_raw,
+        deck_name: str,
+        media_dir: str,
+    ) -> Dict[str, Any]:
+        """把遮挡编辑器的结果写成 Anki 原生 Image Occlusion 笔记。
+
+        Occlusion 字段是 Anki 自己的文本指令，坐标取 0–1 小数：
+
+            {{c1::image-occlusion:rect:left=.1:top=.2:width=.08:height=.06:oi=1}}
+
+        同一个 ordinal 重复出现时，Anki 会把它们合并成一个 shapes 组。所以全部遮罩都写
+        ``c1``：一张笔记 = 一个遮罩组 = **1 张卡**，画多少遮罩都不会多冒出卡来；若按遮罩
+        递增写 ``c1``/``c2``/``c3``，一个 ordinal 一张卡，就又变回三张（Anki 实测）。
+        """
+        occlusions = str(payload.get("occlusions", "") or "").strip()
+        image_html = str(payload.get("image", "") or "").strip()
+        if not occlusions or not image_html:
+            raise ValueError("Image occlusion payload requires both occlusions and image")
+
+        header = str(payload.get("header", "") or "").strip()
+        back_extra = str(payload.get("backExtra", "") or "").strip()
+
+        model = self._resolve_image_occlusion_model(col)
+        if model is None:
+            raise ValueError("Image Occlusion notetype is unavailable in this collection")
+
+        target_did = self._resolve_target_deck(col, deck_id_raw, deck_name)
+
+        note = col.new_note(model)
+        names = list(note.keys())
+        try:
+            idx = col.get_image_occlusion_fields(int(model["id"]))
+            field_map = {
+                int(idx.occlusions): occlusions,
+                int(idx.image): image_html,
+                int(idx.header): header,
+                int(idx.back_extra): back_extra,
+            }
+        except Exception:
+            # 老版本 Anki 没有这个查询接口时按原生卡型的固定字段顺序兜底。
+            field_map = {0: occlusions, 1: image_html, 2: header, 3: back_extra}
+
+        for field_idx, value in field_map.items():
+            if 0 <= field_idx < len(names):
+                note[names[field_idx]] = normalize_media_html_for_storage(value, media_dir)
+        note.tags = list(tags)
+
+        col.add_note(note, target_did)
+        cids = [str(cid) for cid in note.card_ids()]
+        return {
+            "created": True,
+            "createdCount": len(cids),
+            "noteId": str(note.id),
+            "reverseNoteId": None,
+            "cardIds": cids,
+            "cardId": cids[0] if cids else str(note.id),
+            "deckId": str(target_did),
+            "imageOcclusion": True,
+        }
+
     def quick_add_card(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Creates a new note & card from the Quick Add Drawer (supports model selection, reverse cards, and type-answer)."""
         front = str(data.get("front", "")).strip()
@@ -344,9 +439,6 @@ class EditService:
         requested_model_name = str(data.get("modelName", "") or "").strip()
         create_reverse = bool(data.get("createReverseCard", False))
 
-        if not front:
-            raise ValueError("Card front content cannot be empty")
-
         col = self.col
         if col is None:
             # Never mint a fake timestamp ID: the note does not exist in Anki and
@@ -354,17 +446,21 @@ class EditService:
             return {"created": False, "error": "Collection unavailable"}
 
         media_dir = get_media_dir(col)
+
+        # 图片遮挡走原生 IO 卡型，不经过 Cloze 分支（否则一个遮罩出一张卡）。
+        io_payload = data.get("imageOcclusion")
+        if isinstance(io_payload, dict):
+            return self._quick_add_image_occlusion(
+                col, io_payload, tags, deck_id_raw, deck_name, media_dir
+            )
+
+        if not front:
+            raise ValueError("Card front content cannot be empty")
+
         front = normalize_media_html_for_storage(front, media_dir)
         back = normalize_media_html_for_storage(back, media_dir)
 
-        target_did = 1
-        if deck_id_raw and str(deck_id_raw).isdigit():
-            deck_obj = col.decks.get(int(deck_id_raw), default=False)
-            if deck_obj:
-                target_did = int(deck_obj["id"])
-        if target_did == 1 and deck_name:
-            out = col.decks.add_normal_deck_with_name(deck_name)
-            target_did = int(out.id)
+        target_did = self._resolve_target_deck(col, deck_id_raw, deck_name)
 
         is_cloze = bool(re.search(r"\{\{c\d+::", front) or re.search(r"\{\{c\d+::", back))
         all_models = col.models.all() if hasattr(col.models, "all") else []
