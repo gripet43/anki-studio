@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+## [v1.4.47] - 2026-11-13
+
+- **[DeepSeek] Gallery 小卡翻转动画放慢并改为对称缓动**（改 [`frontend/src/index.css`](frontend/src/index.css)）：460ms 的快速翻转变慢为 **780ms**，缓动由偏「快出慢停」的 `cubic-bezier(0.22, 1, 0.36, 1)` 改为更从容的对称缓动 `cubic-bezier(0.65, 0.05, 0.36, 1)`（EaseInOutCubic 风格），翻转起始与收尾都更柔和；`prefers-reduced-motion` 仍直接切换。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.46 → 1.4.47。
+
 ## [v1.4.46] - 2026-11-13
 
 - **[DeepSeek] 卡片库 Gallery 小卡：默认只显示正面，hover 翻转显示背面**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
