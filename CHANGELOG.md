@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.38] - 2026-11-13
+
+- **[DeepSeek] 首页牌组学习按钮：今日任务完成后置灰并显示「明日再来」**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx) 及 16 种语言字典）：
+  - 当牌组的待复习 + 新卡数都为 0（今日限额已学完）时，「学习」按钮变为灰色禁用态，文案改为「明日再来」，悬停提示同步；
+  - 整张牌组卡片的点击也一并禁用（保留「查看」按钮），并去掉禁用卡片的 hover 抬升/描边，避免误导为可点；
+  - 16 种语言新增 `studyTomorrow`。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 130 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.37 → 1.4.38。
+
 ## [v1.4.37] - 2026-11-13
 
 - **[DeepSeek] 修复休假弹窗底部按钮换行/溢出，并统一休假与进度减负弹窗尺寸**（改 [`frontend/src/components/vacation/VacationModal.tsx`](frontend/src/components/vacation/VacationModal.tsx)、[`frontend/src/components/vacation/IcuRescueModal.tsx`](frontend/src/components/vacation/IcuRescueModal.tsx)）：

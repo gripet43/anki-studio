@@ -1075,11 +1075,14 @@ export const DashboardView: React.FC = () => {
                     { label: stageLabels[1] || '', value: breakdown.review, color: deckScale.heatmap[2] },
                     { label: stageLabels[2] || '', value: breakdown.learning + breakdown.new, color: deckScale.heatmap[1] },
                   ];
+                  const deckHasWork = (deck.dueNew || 0) + (deck.dueReview || 0) > 0;
                   const hintOpen = masteryHintId === deck.id;
                   return (
                     <article
                       key={deck.id}
-                      onClick={() => appActions.startReview(deck.id)}
+                      onClick={() => {
+                        if (deckHasWork) appActions.startReview(deck.id);
+                      }}
                       style={{
                         '--deck-brand': deckScale.brand,
                         '--deck-brand-hover': deckScale.brandHover,
@@ -1088,7 +1091,7 @@ export const DashboardView: React.FC = () => {
                         '--deck-brand-text': deckScale.brandText,
                         '--deck-border': deckScale.brandBorder,
                       } as React.CSSProperties}
-                      className={`deck-card group relative flex cursor-pointer flex-col rounded-2xl border px-6 py-5.5 transition-[transform,border-color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:border-[var(--deck-border)] focus-within:border-[var(--deck-border)] ${cardSurface} ${hintOpen ? 'z-30' : ''} ${
+                      className={`deck-card group relative flex flex-col rounded-2xl border px-6 py-5.5 transition-[transform,border-color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-out)] focus-within:border-[var(--deck-border)] ${deckHasWork ? 'cursor-pointer hover:-translate-y-0.5 hover:border-[var(--deck-border)]' : 'cursor-default'} ${cardSurface} ${hintOpen ? 'z-30' : ''} ${
                         syncJustFinished ? 'animate-sync-reveal delay-stagger-2' : ''
                       }`}
                     >
@@ -1182,17 +1185,18 @@ export const DashboardView: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            title={t('studyDeckBtn')}
+                            title={deckHasWork ? t('studyDeckBtn') : t('studyTomorrow')}
+                            disabled={!deckHasWork}
                             onClick={(e) => {
                               e.stopPropagation();
-                              appActions.startReview(deck.id);
+                              if (deckHasWork) appActions.startReview(deck.id);
                             }}
-                            className="btn-primary deck-study-btn !h-7 !rounded-lg !px-3 !text-[11px]"
+                            className="btn-primary deck-study-btn !h-7 !rounded-lg !px-3 !text-[11px] whitespace-nowrap disabled:cursor-not-allowed disabled:!bg-black/[0.05] disabled:!text-[#8E8E93] disabled:shadow-none dark:disabled:!bg-white/[0.08] dark:disabled:!text-[#A1A1A6]"
                           >
                             <svg className="h-3 w-3 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden="true">
                               <polygon points="6 4 20 12 6 20 6 4" />
                             </svg>
-                            <span>{t('studyDeckBtn')}</span>
+                            <span>{deckHasWork ? t('studyDeckBtn') : t('studyTomorrow')}</span>
                           </button>
                         </div>
                       </div>

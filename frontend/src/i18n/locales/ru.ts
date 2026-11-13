@@ -487,6 +487,7 @@ export const dict: TranslationTable = {
   streakSub: "Рекорд {longest} дн.",
   streakTitle: "Серия дней",
   studyDeckBtn: "Учить",
+  studyTomorrow: "Завтра снова",
   studyRhythmToolsAria: "Инструменты защиты ритма обучения",
   subDecksCount: " · {n} подколод",
   subdeckBadge: "Подколода",
