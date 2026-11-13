@@ -15,6 +15,19 @@
 
 ## [Unreleased]
 
+## [v1.4.52] - 2026-11-13
+
+- **[DeepSeek] Gallery 小卡正面正文改为居中对齐**（改 [`frontend/src/index.css`](frontend/src/index.css)）：题目正文水平居中（配合已有的垂直居中），单行短题不会再缩在左上角；图片等内联内容也居中；背面答案仍保持左对齐以便阅读。同时包含 v1.4.51 的卡片高度收紧（背面答案 2 行、标签 1 行、整卡约 155–160px）。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.51 → 1.4.52。
+
+## [v1.4.51] - 2026-11-13
+
+- **[DeepSeek] Gallery 小卡继续收紧：背面不再把整卡撑高**（改 [`frontend/src/index.css`](frontend/src/index.css)）：
+  - 卡片高度此前由背面（答案 3 行 + 标签 2 行 + 分隔线）决定，约 190px；现在背面答案 2 行（42px）、标签 1 行（20px），内边距与间距同步收紧，整卡约 155–160px；
+  - 正面仍为题目保留 3 行（66px）高度并垂直居中，1 行与 3 行题目的留白更接近；
+  - 网格间距 14 → 12px，一屏可容纳更多卡片。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.50 → 1.4.51。
+
 ## [v1.4.50] - 2026-11-13
 
 - **[DeepSeek] Gallery 小卡尺寸收紧：一屏更多列、正反面都裁剪、单行与三行更平衡**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
