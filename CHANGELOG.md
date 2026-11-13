@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+## [v1.4.27] - 2026-11-13
+
+- **[DeepSeek] 学习小贴士与「共 N 个牌组」拉开间距**（改 [`frontend/src/components/dashboard/DashboardTipLine.tsx`](frontend/src/components/dashboard/DashboardTipLine.tsx)）：给提示行加 `ms-2.5`（约 10px）左侧外边距，与牌组计数从约 10px 拉开到约 20px，避免挤在一起；其余布局不变。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 122 项、打包全绿。版本 1.4.26 → 1.4.27。
+
 ## [v1.4.26] - 2026-11-13
 
 - **[DeepSeek] 学习小贴士改版：移到「我的牌组」标题行、Hero 恢复原样、悬停才出操作**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/components/dashboard/DashboardTipLine.tsx`](frontend/src/components/dashboard/DashboardTipLine.tsx)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`bridge/router.py`](bridge/router.py) 及 16 种语言字典）：

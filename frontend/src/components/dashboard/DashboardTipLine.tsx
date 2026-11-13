@@ -44,7 +44,7 @@ export const DashboardTipLine: React.FC = () => {
 
   return (
     <div
-      className="group/tip flex items-center gap-1.5 min-w-0 max-w-[620px] flex-1 self-center"
+      className="group/tip flex items-center gap-1.5 min-w-0 max-w-[620px] flex-1 self-center ms-2.5"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
