@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.54] - 2026-11-13
+
+- **[DeepSeek] 去掉 Gallery 背面那层「白色蒙层」**（改 [`frontend/src/index.css`](frontend/src/index.css)）：
+  - 背面此前叠了 `color-mix(… 55%, transparent)` 的半透明浅色背景，翻过来时像盖了一层白纱；改为完全透明，正反面共用同一张卡面；
+  - 给翻面容器加 15px 圆角，让 hover 时的反光层按卡片圆角裁切，避免方角反光外溢；
+  - 翻面动画与布局不变。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.53 → 1.4.54。
+
 ## [v1.4.53] - 2026-11-13
 
 - **[DeepSeek] Gallery 小卡底部「熟记度」改为右对齐**（改 [`frontend/src/index.css`](frontend/src/index.css)）：到期信息留在左侧、熟记度圆环和百分比推到卡片右侧边缘，底部信息形成「左到期 / 右熟记度」的对称结构；`.library-card-stats` 改为 `flex: 1 + space-between`。

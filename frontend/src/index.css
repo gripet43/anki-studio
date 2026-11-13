@@ -956,6 +956,7 @@ ruby rt {
   gap: 8px;
   min-width: 0;
   padding: 12px 14px 10px;
+  border-radius: 15px;
   overflow: hidden;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
@@ -967,7 +968,7 @@ ruby rt {
 
 .library-card-face-back {
   transform: rotateY(180deg);
-  background: color-mix(in srgb, var(--bg-subtle, #f7f8fa) 55%, transparent);
+  background: transparent;
 }
 
 /* 翻转时掠过一道很淡的光，模拟纸面反光 */
