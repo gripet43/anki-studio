@@ -1195,9 +1195,10 @@ ruby rt {
   border: 0;
   border-radius: 8px;
   background: none;
-  color: var(--text-secondary, #475569);
+  color: var(--text-primary, #0f172a);
   font: inherit;
   font-size: 12px;
+  font-weight: 500;
   text-align: start;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -1210,6 +1211,7 @@ ruby rt {
 
 .library-card-menu-item.danger {
   color: var(--status-danger, #dc2626);
+  font-weight: 600;
 }
 
 .library-card-menu-item.danger:hover {
@@ -1223,10 +1225,16 @@ ruby rt {
   border: 1px solid var(--border-subtle, #e5e5ea);
   border-radius: 8px;
   background: transparent;
-  color: inherit;
+  color: var(--text-primary, #0f172a);
   font: inherit;
   font-size: 12px;
+  font-weight: 500;
   outline: none;
+}
+
+.library-card-menu-tag-input::placeholder {
+  color: var(--text-secondary, #475569);
+  opacity: 0.9;
 }
 
 .library-card-menu-tag-input:focus {

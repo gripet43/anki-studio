@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+## [v1.4.62] - 2026-11-13
+
+- **[DeepSeek] 提高 Gallery「更多操作」菜单文字对比度**（改 [`frontend/src/index.css`](frontend/src/index.css)）：菜单项由 secondary 色改为主文字色、字重 500；「删除」用更深的 danger 色 + 600 字重；标签输入框文字同色，placeholder 提高不透明度。深色模式下自动跟随主题。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.61 → 1.4.62。
+
 ## [v1.4.61] - 2026-11-13
 
 - **[DeepSeek] Gallery 卡片交互修正：卡片本身不再进编辑、标签可筛选、正文纯文本**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
