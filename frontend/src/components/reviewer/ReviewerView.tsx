@@ -1392,8 +1392,10 @@ export const ReviewerView: React.FC = () => {
             >
               {formatShortcut(
                 isCardFlipped
-                  ? `Option (1 ${t('rateAgain')} / 2 ${t('rateHard')} / 3 ${t('rateGood')} / 4 ${t('rateEasy')}) · Cmd+1~7 · Cmd Z`
-                  : `Space / Enter ${t('showAnswerBtn')} · Cmd+1~7 · R · Cmd Z`,
+                  ? answerButtonMode === 'four'
+                    ? `1 ${t('rateAgain')} · 2 ${t('rateHard')} · 3 ${t('rateGood')} · 4 ${t('rateEasy')} · Space/Enter ${t('rateGood')} · Backspace ${t('undoBtnShort')} · Cmd+1~7`
+                    : `1 ${t('rateAgain')} · 2/3/Enter/Space ${t('rateGood')} · Opt 1~4 · Backspace ${t('undoBtnShort')} · Cmd+1~7`
+                  : `Space / Enter ${t('showAnswerBtn')} · Backspace ${t('undoBtnShort')} · Cmd+1~7 · R`,
                 platform
               )}
             </button>

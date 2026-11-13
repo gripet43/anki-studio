@@ -708,31 +708,41 @@ export const SettingsModal: React.FC = () => {
                       {t('navStudy')}
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[12px]">
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
+                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
                         <span className={subText}>{t('showAnswerBtn')} / {t('rateGood')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">Space / Enter / 2</kbd>
+                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold text-end">
+                          Space / Enter
+                        </kbd>
                       </div>
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('rateAgain')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">1</kbd>
+                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
+                        <span className={subText}>{t('answerButtonsBinary')}</span>
+                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold text-end">
+                          1 {t('rateAgain')} · 2/3 {t('rateGood')} · 4 {t('rateEasy')}
+                        </kbd>
                       </div>
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('rateHard')} / {t('rateGood')} / {t('rateEasy')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">
+                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
+                        <span className={subText}>{t('answerButtonsFour')}</span>
+                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold text-end">
+                          1 {t('rateAgain')} · 2 {t('rateHard')} · 3 {t('rateGood')} · 4 {t('rateEasy')}
+                        </kbd>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
+                        <span className={subText}>{t('answerButtonsFour')} · {formatShortcut('Opt', envInfo.platform)}</span>
+                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold text-end">
                           {formatShortcut('Opt + 1~4', envInfo.platform)}
                         </kbd>
                       </div>
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
+                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
                         <span className={subText}>{t('undoBtnShort')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">
-                          {formatShortcut('Cmd + Z', envInfo.platform)}
+                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold text-end">
+                          Backspace / {formatShortcut('Cmd + Z', envInfo.platform)}
                         </kbd>
                       </div>
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
+                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
                         <span className={subText}>{t('pronounceBtn')}</span>
                         <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">R</kbd>
                       </div>
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
+                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
                         <span className={subText}>{t('editCardTitle')}</span>
                         <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">E</kbd>
                       </div>

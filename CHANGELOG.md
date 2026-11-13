@@ -15,6 +15,16 @@
 
 ## [Unreleased]
 
+## [v1.4.43] - 2026-11-13
+
+- **[DeepSeek] 同步更新设置里的快捷键速查表与复习界面提示**（改 [`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)）：
+  - 速查表按两种答题模式分别列出：简洁双按钮（1 重来 · 2/3 良好 · 4 简单）与原生四按钮（1/2/3/4 = 重来/困难/良好/简单）；
+  - 补充「Space / Enter：正面显示答案、背面良好」语义；
+  - 撤销键更新为 **Backspace / Cmd+Z**（之前只写了 Cmd+Z）；
+  - 保留「按住 Opt 临时四按钮」说明；
+  - 复习界面底部快捷键提示也随当前答题模式动态变化，并加上 Backspace。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 130 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.42 → 1.4.43。
+
 ## [v1.4.42] - 2026-11-13
 
 - **[DeepSeek] 对照 Anki 原生快捷键校准复习键位：空格、四按钮模式、Backspace 撤销**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)）：
