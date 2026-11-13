@@ -152,6 +152,68 @@ class ReviewService:
             "cards": [c for c in cards_out if c is not None],
         }
 
+    def _native_queued_cids_all_decks(self, col, limit: int) -> Optional[List[int]]:
+        """跨顶层牌组合并 Anki 原生队列（首页「开始今日学习」使用）。
+
+        每个顶层牌组单独调用 ``get_queued_cards()``：每日新卡/复习上限、学习步
+        （learn ahead）、兄弟卡埋没都由 Anki 自己判定；合并时按牌组树顺序并去重。
+        队列为空是有效结果（今日学完），API 不可用才返回 ``None``。
+        """
+        try:
+            tree = col.sched.deck_due_tree()
+        except Exception:
+            return None
+        if getattr(col.sched, "get_queued_cards", None) is None:
+            return None
+
+        def subtree_pending(node) -> int:
+            total = (
+                int(getattr(node, "new_count", 0) or 0)
+                + int(getattr(node, "learn_count", 0) or 0)
+                + int(getattr(node, "review_count", 0) or 0)
+            )
+            for child in getattr(node, "children", []) or []:
+                total += subtree_pending(child)
+            return total
+
+        try:
+            original_deck = int((col.decks.current() or {}).get("id") or 0)
+        except Exception:
+            original_deck = 0
+
+        cids: List[int] = []
+        seen = set()
+        try:
+            for node in getattr(tree, "children", []) or []:
+                if len(cids) >= limit:
+                    break
+                did = int(getattr(node, "deck_id", 0) or 0)
+                if not did or subtree_pending(node) <= 0:
+                    continue
+                try:
+                    col.decks.select(did)
+                    queued = col.sched.get_queued_cards(
+                        fetch_limit=max(1, limit - len(cids))
+                    )
+                except Exception:
+                    continue
+                for entry in list(getattr(queued, "cards", []) or []):
+                    card = getattr(entry, "card", None)
+                    cid = getattr(card, "id", None) if card is not None else None
+                    if cid is None or int(cid) in seen:
+                        continue
+                    seen.add(int(cid))
+                    cids.append(int(cid))
+                    if len(cids) >= limit:
+                        break
+        finally:
+            if original_deck:
+                try:
+                    col.decks.select(original_deck)
+                except Exception:
+                    pass
+        return cids
+
     def _native_queued_cids(
         self, col, deck_id, limit: int
     ) -> Optional[List[int]]:
@@ -162,6 +224,13 @@ class ReviewService:
         - 返回 ``[]``：调度器可用且队列确实为空（例如今日新卡配额已用完）。
           **必须尊重它，不能回落**，否则会重新无视每日上限。
         """
+        # deckId == "all"：首页「开始今日学习」的全局会话。Anki 的
+        # get_queued_cards() 只针对「当前选中牌组」，所以按顶层牌组逐个取原生队列再
+        # 合并——这样每日限额、学习步（learn ahead）、兄弟卡埋没全都由调度器决定，
+        # 首页显示的总数与实际能学的张数才一致（否则会出现「首页 360、会话 20」）。
+        if deck_id is not None and str(deck_id) == "all":
+            return self._native_queued_cids_all_decks(col, limit)
+
         # 只有显式指定了数字 deckId 才走原生队列：Anki 的 get_queued_cards()
         # 永远针对「当前选中牌组」，而不带 deckId 的旧调用语义是「整个集合」。
         # 两者混用会让无 deckId 的调用悄悄丢掉其他牌组的卡，故直接回落旧逻辑。

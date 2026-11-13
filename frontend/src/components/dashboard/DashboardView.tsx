@@ -823,7 +823,7 @@ export const DashboardView: React.FC = () => {
                   <>
                     <button
                       type="button"
-                      onClick={() => appActions.startReview(decks[0]?.id)}
+                      onClick={() => appActions.startReview('all')}
                       style={{ backgroundColor: brandHex }}
                       className={`btn-primary !h-10 !px-5 !rounded-xl !text-[13px] font-semibold flex items-center gap-2 whitespace-nowrap shadow-[0_4px_12px_rgba(var(--brand-rgb),0.24)] ${
                         syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''

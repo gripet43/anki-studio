@@ -79,6 +79,8 @@ export interface AppState {
   inReviewMode: boolean;
   isSessionComplete: boolean;
   isPreviewSession: boolean;
+  /** 本次复习会话的范围：具体 deckId 或 'all'（首页「开始今日学习」）。 */
+  reviewScopeDeckId: string;
   activeDeckId: string | null;
   cmdKOpen: boolean;
   quickAddOpen: boolean;
@@ -188,6 +190,7 @@ const initialState: AppState = {
   inReviewMode: false,
   isSessionComplete: false,
   isPreviewSession: false,
+  reviewScopeDeckId: '',
   activeDeckId: null,
   cmdKOpen: false,
   quickAddOpen: false,
@@ -1600,6 +1603,7 @@ export const appActions = {
     const targetDeckId = deckId || state.activeDeckId || state.decks[0]?.id || '';
     setAppState({
       activeDeckId: targetDeckId,
+      reviewScopeDeckId: targetDeckId || 'all',
       inReviewMode: true,
       isSessionComplete: false,
       isPreviewSession: includePreview,
@@ -1842,6 +1846,28 @@ export const appActions = {
     }));
   },
 
+  /**
+   * 当前队列快照用完后，重新向 Anki 调度器要一次队列。
+   *
+   * 刚答完的新卡/复习卡还处在 1m / 10m 学习步里，`get_queued_cards()` 的
+   * learn-ahead 会把它们放回队列（原生 Anki 也是这么继续的）。只有调度器
+   * 真的返回空，才允许显示「今日已完成」。
+   */
+  async continueReviewSession(): Promise<ReviewCardItem[] | null> {
+    if (!isAnkiNativeEnv()) return null;
+    const scope = getAppState().reviewScopeDeckId || 'all';
+    try {
+      const res = await callAnki<{ cards: ReviewCardItem[] }>('start_review', {
+        deckId: scope,
+        includePreviewWhenEmpty: false,
+      });
+      const cards = res?.cards || [];
+      return cards.length > 0 ? cards : null;
+    } catch {
+      return null;
+    }
+  },
+
   async answerCurrentCard(ease: 1 | 2 | 3 | 4) {
     const currentCard = state.reviewQueue[state.currentCardIndex];
     if (!currentCard) return;
@@ -1861,8 +1887,9 @@ export const appActions = {
       wasSessionComplete: state.isSessionComplete,
     };
 
+    let answerPromise: Promise<unknown> | null = null;
     if (isAnkiNativeEnv() && !isPreview && /^\d+$/.test(currentCard.id)) {
-      callAnki('answer_card', {
+      answerPromise = callAnki('answer_card', {
         cardId: currentCard.id,
         ease,
         elapsedMs: realElapsedMs,
@@ -1884,6 +1911,13 @@ export const appActions = {
     }
 
     const isLastCard = state.currentCardIndex + 1 >= nextQueue.length;
+
+    // 最后一张答完先等它落库，再问调度器是否还有可学的卡（含学习步内的卡）。
+    let continuation: ReviewCardItem[] | null = null;
+    if (isLastCard && !isPreview) {
+      if (answerPromise) await answerPromise;
+      continuation = await appActions.continueReviewSession();
+    }
 
     const shouldDecrementDue = !isPreview && ease > 1;
     const nextDueNew = shouldDecrementDue && isNewCard
@@ -1914,10 +1948,14 @@ export const appActions = {
 
     setAppState((prev) => ({
       undoStack: [...prev.undoStack, snapshot],
-      reviewQueue: nextQueue,
+      reviewQueue: continuation ?? nextQueue,
       decks: updatedDecks,
-      currentCardIndex: isLastCard ? prev.currentCardIndex : prev.currentCardIndex + 1,
-      isSessionComplete: isLastCard,
+      currentCardIndex: continuation
+        ? 0
+        : isLastCard
+        ? prev.currentCardIndex
+        : prev.currentCardIndex + 1,
+      isSessionComplete: continuation ? false : isLastCard,
       isCardFlipped: false,
       cardShownAtMs: Date.now(),
       revealedHintsCount: 2,
@@ -2283,10 +2321,13 @@ export const appActions = {
   },
 
   openQuickAdd(defaultDeckId?: string) {
+    // 'all' 是复习会话的全局作用域，不是真实牌组 id，不能塞给制卡器默认牌组
+    const fallbackDeckId =
+      state.activeDeckId && state.activeDeckId !== 'all' ? state.activeDeckId : null;
     setAppState({
       quickAddOpen: true,
       editingCardData: null,
-      activeDeckId: defaultDeckId || state.activeDeckId,
+      activeDeckId: defaultDeckId || fallbackDeckId,
     });
   },
 

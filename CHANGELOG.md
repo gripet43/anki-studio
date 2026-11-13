@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.16] - 2026-11-13
+
+- **[DeepSeek] 修复复习会话「首页 360 张却只学 20 张就显示今日完成」+ 学习步卡片丢失**（改 [`bridge/review_service.py`](bridge/review_service.py)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 5 项回归）：
+  - **根因 1（首页与会话口径不一致）**：首页「开始今日学习」之前只启动 `decks[0]`（第一个牌组）的会话，而首页数字是全部牌组汇总，于是出现「首页 360 张、会话只有 20 张」。
+  - **根因 2（学习步卡片被丢掉）**：会话队列是启动时的一次性快照；答完最后一张就直接判「今日完成」，但刚答完的卡还处在 1m / 10m 学习步，Anki 的 learn-ahead 会把它们放回调度器队列（原生界面会继续考）——我们没再问调度器，于是误报完成，首页也看不到待复习的 17 张。
+  - **修法**：`get_review_queue(deckId="all")` 跨全部顶层牌组逐个取 Anki 原生队列（每日限额、learn ahead、兄弟卡埋没都交给调度器）并合并去重，取完恢复原来的当前牌组；首页「开始今日学习」改传 `'all'`；队列耗尽时先等 `answer_card` 落库，再调用 `start_review` 重新取队列——有卡就续上（`isSessionComplete=false`），只有调度器真的返回空才显示「今日已完成」。
+  - **验证**：真实集合副本上「全部牌组」队列 = 各顶层牌组 pending 之和（42 = Default 18 + 错题 24）；全新集合上答完唯一新卡（Good → 10 分钟学习步）后重新取队列仍返回该卡，不再误判完成。Python 111 项（新增 5 项聚合队列断言）、`tsc --noEmit`、前端单元 63 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.15 → 1.4.16。
+
 ## [v1.4.15] - 2026-11-13
 
 - **[DeepSeek] 首页牌组区入口文案「全部牌组管理」精简为「牌组管理」**（改 [`frontend/src/i18n/translations.ts`](frontend/src/i18n/translations.ts)、[`frontend/src/i18n/locales/zh-TW.ts`](frontend/src/i18n/locales/zh-TW.ts)）：该入口只是切换到牌组页签，没有「全部 / 部分」的筛选语义；其他语言（Manage Decks / デッキ管理 …）本来就没有这层冗余，简繁中文对齐。

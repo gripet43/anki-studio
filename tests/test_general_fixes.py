@@ -584,3 +584,101 @@ class TestSandboxMediaSettings(unittest.TestCase):
         self.assertIn("QWebEngineSettings", source)
         self.assertIn("LocalContentCanAccessRemoteUrls", source)
         self.assertIn("LocalContentCanAccessFileUrls", source)
+
+
+class _FakeQueueEntry:
+    def __init__(self, cid):
+        self.card = type("Card", (), {"id": cid})()
+
+
+class _FakeQueuedCards:
+    def __init__(self, cids):
+        self.cards = [_FakeQueueEntry(cid) for cid in cids]
+
+
+class _FakeDeckNode:
+    def __init__(self, deck_id, pending, children=()):
+        self.deck_id = deck_id
+        self.name = "deck-%s" % deck_id
+        self.new_count = 0
+        self.learn_count = 0
+        self.review_count = pending
+        self.children = list(children)
+
+
+class _FakeAllDecksCol:
+    """模拟跨顶层牌组取原生队列所需的 col.sched / col.decks 接口。"""
+
+    def __init__(self, nodes, queues):
+        self._queues = {int(k): list(v) for k, v in queues.items()}
+        self._current = 1
+        self.selected = []
+        self.sched = type("Sched", (), {})()
+        self.sched.deck_due_tree = lambda: type("Tree", (), {"children": list(nodes)})()
+        self.sched.get_queued_cards = self._get_queued
+        self.decks = type("Decks", (), {})()
+        self.decks.select = self._select
+        self.decks.current = lambda: {"id": self._current}
+
+    def _select(self, did):
+        self._current = int(did)
+        self.selected.append(self._current)
+
+    def _get_queued(self, fetch_limit=1):
+        return _FakeQueuedCards(self._queues.get(self._current, [])[: max(1, fetch_limit)])
+
+
+class TestAllDecksNativeQueue(unittest.TestCase):
+    """首页「开始今日学习」必须跨全部顶层牌组取原生队列，与首页数字同口径。"""
+
+    def _service(self, col=None):
+        from anki_modern_os.bridge.review_service import ReviewService
+
+        return ReviewService(
+            col_getter=lambda: col, mw_getter=lambda: None, lang_getter=lambda: "zh-CN"
+        )
+
+    def test_merges_top_level_decks_in_order(self):
+        col = _FakeAllDecksCol(
+            [_FakeDeckNode(10, 3), _FakeDeckNode(20, 2)],
+            {10: [101, 102, 103], 20: [201, 202]},
+        )
+        svc = self._service()
+        self.assertEqual(svc._native_queued_cids(col, "all", 100), [101, 102, 103, 201, 202])
+        self.assertEqual(col.selected[-1], 1, "取完队列后必须恢复原来的当前牌组")
+        self.assertEqual(col._current, 1)
+
+    def test_respects_limit_and_dedupes(self):
+        col = _FakeAllDecksCol(
+            [_FakeDeckNode(10, 3), _FakeDeckNode(20, 2)],
+            {10: [101, 102, 103], 20: [102, 201]},
+        )
+        svc = self._service()
+        self.assertEqual(svc._native_queued_cids(col, "all", 3), [101, 102, 103])
+        self.assertEqual(svc._native_queued_cids(col, "all", 100), [101, 102, 103, 201])
+
+    def test_skips_decks_without_pending_cards(self):
+        col = _FakeAllDecksCol(
+            [_FakeDeckNode(10, 0), _FakeDeckNode(20, 1)],
+            {10: [101], 20: [201]},
+        )
+        svc = self._service()
+        self.assertEqual(svc._native_queued_cids(col, "all", 100), [201])
+        self.assertNotIn(10, col.selected)
+
+    def test_returns_none_when_queue_api_missing(self):
+        col = _FakeAllDecksCol([_FakeDeckNode(10, 1)], {10: [101]})
+        del col.sched.get_queued_cards
+        svc = self._service()
+        self.assertIsNone(svc._native_queued_cids(col, "all", 100))
+
+    def test_get_review_queue_all_uses_aggregated_native_order(self):
+        col = _FakeAllDecksCol(
+            [_FakeDeckNode(10, 2), _FakeDeckNode(20, 1)],
+            {10: [101, 102], 20: [201]},
+        )
+        svc = self._service(col)
+        svc._serialize_review_card = lambda col, cid, lang, preview: {"id": str(cid)}
+        result = svc.get_review_queue({"deckId": "all", "language": "zh-CN", "limit": 10})
+        self.assertEqual([c["id"] for c in result["cards"]], ["101", "102", "201"])
+        self.assertEqual(result["totalDue"], 3)
