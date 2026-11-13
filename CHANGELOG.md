@@ -15,6 +15,13 @@
 
 ## [Unreleased]
 
+## [v1.4.25] - 2026-11-13
+
+- **[DeepSeek] 设置-外观文案精简：「品牌强调色 (Accent Color)」→「主题色」，「官方推荐」→「推荐」**（改 16 种语言字典的 `settingsThemeColorTitle` / `officialBrandBadge`）：
+  - 「品牌强调色」偏营销术语，且括号英文与旁边的语言/主题风格不一致；「官方推荐」中的「官方」对独立插件而言也不准确，且徽章只是首选项提示，改为中性的「推荐」。
+  - 16 种语言同步：英文 `Theme Color` / `Recommended`，其余语言对应意译。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 122 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.24 → 1.4.25。
+
 ## [v1.4.24] - 2026-11-13
 
 - **[DeepSeek] 首页 Hero 底部新增「学习小贴士」轮播（不新增独立卡片）**（新增 [`frontend/src/components/dashboard/DashboardTipBar.tsx`](frontend/src/components/dashboard/DashboardTipBar.tsx)、[`frontend/src/content/learningTips.ts`](frontend/src/content/learningTips.ts)，改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx) 及 16 种语言字典）：
