@@ -1159,6 +1159,25 @@ ruby rt {
   color: var(--brand-text);
 }
 
+/* 多选模式下只做选择，不做翻面，避免误触/分心 */
+.library-card.library-card--no-flip .library-card-flip-inner,
+.library-card.library-card--no-flip:hover .library-card-flip-inner {
+  transform: none;
+  transition: none;
+}
+
+.library-card.library-card--no-flip .library-card-face::after {
+  display: none;
+}
+
+.library-card.library-card--no-flip .library-card-face-front {
+  opacity: 1;
+}
+
+.library-card.library-card--no-flip .library-card-face-back {
+  opacity: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .library-card-flip-inner {
     transition: none;

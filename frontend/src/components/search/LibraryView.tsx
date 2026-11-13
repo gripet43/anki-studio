@@ -1367,6 +1367,8 @@ export const LibraryView: React.FC = () => {
                     }}
                     onDoubleClick={() => appActions.openCardEditor(card)}
                     className={`library-card group relative rounded-2xl transition-[background-color,border-color,box-shadow,transform] duration-200 cursor-pointer select-none border ${
+                      librarySelectionMode ? 'library-card--no-flip' : ''
+                    } ${
                       isSelected
                         ? 'bg-[var(--brand-surface)] border-[var(--brand)] ring-2 ring-[var(--brand)]/35 shadow-md'
                         : isDark

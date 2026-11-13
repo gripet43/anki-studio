@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+## [v1.4.55] - 2026-11-13
+
+- **[DeepSeek] 多选模式下关闭 Gallery 卡片翻转**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：进入多选模式后卡片不再响应 hover 翻面与反光，始终展示正面，方便连续点选；退出多选后恢复正常翻转。多选模式下的 hover 抬升/勾选框不受影响。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.54 → 1.4.55。
+
 ## [v1.4.54] - 2026-11-13
 
 - **[DeepSeek] 去掉 Gallery 背面那层「白色蒙层」**（改 [`frontend/src/index.css`](frontend/src/index.css)）：
