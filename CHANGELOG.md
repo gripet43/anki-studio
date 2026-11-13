@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.39] - 2026-11-13
+
+- **[DeepSeek] 首页 Hero 主按钮与牌组卡保持一致：今日学完后变灰显示「明日再来」**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)）：
+  - 之前今日任务清空时，Hero 主按钮会直接换成「自定义学习」，与牌组卡新增的「明日再来」状态不一致；
+  - 现在清空状态下主按钮为灰色禁用的「明日再来」（check 图标），「自定义学习」与「浏览卡片库」保留为次级按钮；
+  - 仍保留完成态的其他入口（低能量 / 进度减负等在各自条件下显示）。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 130 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.38 → 1.4.39。
+
 ## [v1.4.38] - 2026-11-13
 
 - **[DeepSeek] 首页牌组学习按钮：今日任务完成后置灰并显示「明日再来」**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx) 及 16 种语言字典）：

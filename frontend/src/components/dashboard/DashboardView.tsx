@@ -897,13 +897,23 @@ export const DashboardView: React.FC = () => {
                   <>
                     <button
                       type="button"
+                      disabled
+                      className="btn-primary !h-10 !px-5 !rounded-xl !text-[13px] flex items-center gap-1.5 whitespace-nowrap disabled:cursor-not-allowed disabled:!bg-black/[0.05] disabled:!text-[#8E8E93] disabled:shadow-none dark:disabled:!bg-white/[0.08] dark:disabled:!text-[#A1A1A6]"
+                    >
+                      <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="m8 12 2.5 2.5L16 9" />
+                      </svg>
+                      <span>{t('studyTomorrow')}</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => appActions.openCustomStudyModal('mistakes')}
-                      style={{ backgroundColor: brandHex }}
-                      className={`btn-primary !h-10 !px-5 !rounded-xl !text-[13px] flex items-center gap-1.5 whitespace-nowrap ${
+                      className={`btn-secondary !h-10 !px-4 !rounded-xl !text-[13px] font-medium bg-[var(--bg-card)]/90 text-[var(--text-primary)] hover:text-[var(--brand-text)] flex items-center gap-1.5 whitespace-nowrap shadow-2xs ${
                         syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
                       }`}
                     >
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <svg className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <line x1="4" y1="6" x2="20" y2="6" />
                         <circle cx="9" cy="6" r="2" />
                         <line x1="4" y1="12" x2="20" y2="12" />
