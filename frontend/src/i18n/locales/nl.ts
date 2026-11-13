@@ -158,6 +158,7 @@ export const dict: TranslationTable = {
   dueReviewPill: "Herhalen {n}",
   duplicateDetectedBanner: "Duplicaat gevonden: {n} bestaande kaart(en) hebben dezelfde voorkant",
   editBtnShort: "Bewerken",
+  moreCardActions: "Meer acties",
   editCardTitle: "Kaart bewerken",
   editInCardEditorBtn: "Openen in kaarteditor",
   editingFieldTag: "{field} · Bewerken",

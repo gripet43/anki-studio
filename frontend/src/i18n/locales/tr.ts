@@ -158,6 +158,7 @@ export const dict: TranslationTable = {
   dueReviewPill: "Tekrar {n}",
   duplicateDetectedBanner: "Yinelenen kart: Aynı ön yüz metnine sahip {n} kart mevcut",
   editBtnShort: "Düzenle",
+  moreCardActions: "Diğer işlemler",
   editCardTitle: "Kartı Düzenle",
   editInCardEditorBtn: "Kart Düzenleyicide Aç",
   editingFieldTag: "{field} · Düzenleniyor",

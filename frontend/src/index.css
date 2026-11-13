@@ -1159,6 +1159,67 @@ ruby rt {
   color: var(--brand-text);
 }
 
+/* 背面「更多操作」菜单 */
+.library-card-menu {
+  position: absolute;
+  z-index: 40;
+  inset-inline-end: 10px;
+  bottom: 44px;
+  width: 176px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle, #e5e5ea);
+  background: var(--bg-card, #ffffff);
+  box-shadow: 0 14px 34px -16px rgba(15, 23, 42, 0.28);
+}
+
+.library-card-menu-item {
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-secondary, #475569);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.library-card-menu-item:hover {
+  background: var(--bg-subtle, #f5f6f8);
+  color: var(--text-primary, #0f172a);
+}
+
+.library-card-menu-item.danger {
+  color: var(--status-danger, #dc2626);
+}
+
+.library-card-menu-item.danger:hover {
+  background: var(--status-danger-soft, #fee2e2);
+}
+
+.library-card-menu-tag-input {
+  height: 28px;
+  width: 100%;
+  padding: 0 8px;
+  border: 1px solid var(--border-subtle, #e5e5ea);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.library-card-menu-tag-input:focus {
+  border-color: var(--brand, #1f6feb);
+}
+
 /* 多选模式下只做选择，不做翻面，避免误触/分心 */
 .library-card.library-card--no-flip .library-card-flip-inner,
 .library-card.library-card--no-flip:hover .library-card-flip-inner {

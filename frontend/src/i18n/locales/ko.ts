@@ -158,6 +158,7 @@ export const dict: TranslationTable = {
   dueReviewPill: "복습 {n}",
   duplicateDetectedBanner: "중복 감지: 동일한 앞면 텍스트를 가진 카드가 {n}장 있습니다",
   editBtnShort: "편집",
+  moreCardActions: "추가 작업",
   editCardTitle: "카드 편집",
   editInCardEditorBtn: "카드 편집기에서 열기",
   editingFieldTag: "{field} · 편집 중",

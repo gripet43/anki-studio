@@ -70,6 +70,9 @@ export const LibraryView: React.FC = () => {
   const [activeBatchModal, setActiveBatchModal] = useState<
     'none' | 'addTag' | 'removeTag' | 'findReplace' | 'moveDeck' | 'setFlag' | 'confirmDelete'
   >('none');
+  const [cardMenuId, setCardMenuId] = useState<string | null>(null);
+  const [cardMenuTagDraft, setCardMenuTagDraft] = useState('');
+  const [cardMenuDeleteConfirmId, setCardMenuDeleteConfirmId] = useState<string | null>(null);
   const [batchTagInput, setBatchTagInput] = useState('');
   const [batchRemoveTagInput, setBatchRemoveTagInput] = useState('');
   const [batchFindText, setBatchFindText] = useState('');
@@ -1366,6 +1369,7 @@ export const LibraryView: React.FC = () => {
                       }
                     }}
                     onDoubleClick={() => appActions.openCardEditor(card)}
+                    onMouseLeave={() => setCardMenuId(null)}
                     className={`library-card group relative rounded-2xl transition-[background-color,border-color,box-shadow,transform] duration-200 cursor-pointer select-none border ${
                       librarySelectionMode ? 'library-card--no-flip' : ''
                     } ${
@@ -1591,11 +1595,110 @@ export const LibraryView: React.FC = () => {
                                 </svg>
                                 <span>{t('editBtnShort')}</span>
                               </button>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCardMenuDeleteConfirmId(null);
+                                  setCardMenuTagDraft('');
+                                  setCardMenuId((prev) => (prev === card.id ? null : card.id));
+                                }}
+                                aria-label={t('moreCardActions')}
+                                title={t('moreCardActions')}
+                                className="library-card-edit-btn"
+                              >
+                                <svg
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="currentColor"
+                                  aria-hidden="true"
+                                >
+                                  <circle cx="5" cy="12" r="1.6" />
+                                  <circle cx="12" cy="12" r="1.6" />
+                                  <circle cx="19" cy="12" r="1.6" />
+                                </svg>
+                              </button>
                             </div>
                           </footer>
                         </div>
                       </div>
                     </div>
+
+                    {cardMenuId === card.id && (
+                      <div
+                        className="library-card-menu"
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="text"
+                          value={cardMenuTagDraft}
+                          onChange={(e) => setCardMenuTagDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && cardMenuTagDraft.trim()) {
+                              appActions.executeBatchAction(
+                                'addTag',
+                                { tag: cardMenuTagDraft.trim() },
+                                [card.id]
+                              );
+                              setCardMenuTagDraft('');
+                              setCardMenuId(null);
+                            }
+                          }}
+                          placeholder={t('batchAddTag')}
+                          className="library-card-menu-tag-input"
+                        />
+                        <button
+                          type="button"
+                          className="library-card-menu-item"
+                          onClick={() => {
+                            appActions.executeBatchAction(
+                              card.suspended ? 'unsuspend' : 'suspend',
+                              undefined,
+                              [card.id]
+                            );
+                            setCardMenuId(null);
+                          }}
+                        >
+                          {card.suspended ? t('batchUnsuspend') : t('batchSuspend')}
+                        </button>
+                        <button
+                          type="button"
+                          className="library-card-menu-item"
+                          onClick={() => {
+                            appActions.executeBatchAction(
+                              card.buried || card.status === 'buried' ? 'unbury' : 'bury',
+                              undefined,
+                              [card.id]
+                            );
+                            setCardMenuId(null);
+                          }}
+                        >
+                          {card.buried || card.status === 'buried'
+                            ? t('batchUnbury')
+                            : t('batchBury')}
+                        </button>
+                        <button
+                          type="button"
+                          className="library-card-menu-item danger"
+                          onClick={() => {
+                            if (cardMenuDeleteConfirmId === card.id) {
+                              appActions.executeBatchAction('delete', undefined, [card.id]);
+                              setCardMenuId(null);
+                              setCardMenuDeleteConfirmId(null);
+                            } else {
+                              setCardMenuDeleteConfirmId(card.id);
+                            }
+                          }}
+                        >
+                          {cardMenuDeleteConfirmId === card.id
+                            ? t('confirm')
+                            : t('batchDelete')}
+                        </button>
+                      </div>
+                    )}
                   </article>
                 );
               })}

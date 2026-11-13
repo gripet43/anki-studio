@@ -158,6 +158,7 @@ export const dict: TranslationTable = {
   dueReviewPill: "復習 {n}",
   duplicateDetectedBanner: "重複検出：同じ表面テキストを持つカードが {n} 枚存在します",
   editBtnShort: "編集",
+  moreCardActions: "その他の操作",
   editCardTitle: "カード編集",
   editInCardEditorBtn: "カードエディタで開く",
   editingFieldTag: "{field} · 編集中",

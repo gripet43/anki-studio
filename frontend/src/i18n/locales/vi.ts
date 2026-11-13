@@ -158,6 +158,7 @@ export const dict: TranslationTable = {
   dueReviewPill: "Ôn tập {n}",
   duplicateDetectedBanner: "Phát hiện trùng lặp: Đã có {n} thẻ cùng nội dung mặt trước",
   editBtnShort: "Sửa",
+  moreCardActions: "Thao tác khác",
   editCardTitle: "Chỉnh sửa thẻ",
   editInCardEditorBtn: "Mở trong trình sửa thẻ",
   editingFieldTag: "{field} · Đang sửa",

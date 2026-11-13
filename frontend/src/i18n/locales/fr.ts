@@ -158,6 +158,7 @@ export const dict: TranslationTable = {
   dueReviewPill: "À revoir {n}",
   duplicateDetectedBanner: "Doublon détecté : {n} carte(s) partagent déjà ce recto",
   editBtnShort: "Modifier",
+  moreCardActions: "Plus d’actions",
   editCardTitle: "Modifier la carte",
   editInCardEditorBtn: "Ouvrir dans l'éditeur de carte",
   editingFieldTag: "{field} · Modification",

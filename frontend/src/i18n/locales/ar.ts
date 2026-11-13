@@ -158,6 +158,7 @@ export const dict: TranslationTable = {
   dueReviewPill: "مراجعة {n}",
   duplicateDetectedBanner: "تم اكتشاف تكرار: توجد {n} بطاقة بنفس النص الأمامي",
   editBtnShort: "تعديل",
+  moreCardActions: "إجراءات أخرى",
   editCardTitle: "تعديل البطاقة",
   editInCardEditorBtn: "فتح في محرر البطاقات",
   editingFieldTag: "{field} · قيد التعديل",

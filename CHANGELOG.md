@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.56] - 2026-11-13
+
+- **[DeepSeek] Gallery 背面新增「更多操作」菜单**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/index.css`](frontend/src/index.css) 及 16 种语言字典）：
+  - 背面底部「编辑」右侧新增 `…` 按钮，点开菜单支持：**添加标签**（输入后回车）、**暂停 / 恢复**、**搁置 / 取消搁置**、**删除**（二次确认）；
+  - 菜单操作走现有 `batch_action` 通道，但只作用于当前卡片，不需要先进入多选模式；`executeBatchAction` 新增可选的显式 cardIds 参数；
+  - 菜单打开时移开鼠标会自动收回，避免残留。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.55 → 1.4.56。
+
 ## [v1.4.55] - 2026-11-13
 
 - **[DeepSeek] 多选模式下关闭 Gallery 卡片翻转**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：进入多选模式后卡片不再响应 hover 翻面与反光，始终展示正面，方便连续点选；退出多选后恢复正常翻转。多选模式下的 hover 抬升/勾选框不受影响。

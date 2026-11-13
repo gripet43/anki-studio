@@ -2621,9 +2621,10 @@ export const appActions = {
       replaceText?: string;
       fieldScope?: 'all' | 'front' | 'back';
       ignoreCase?: boolean;
-    }
+    },
+    overrideIds?: string[]
   ) {
-    const ids = state.selectedCardIds;
+    const ids = overrideIds && overrideIds.length > 0 ? overrideIds : state.selectedCardIds;
     if (ids.length === 0) return;
 
     if (isAnkiNativeEnv()) {

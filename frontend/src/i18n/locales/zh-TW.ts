@@ -158,6 +158,7 @@ export const dict: TranslationTable = {
   dueReviewPill: "待複習 {n}",
   duplicateDetectedBanner: "偵測到牌組庫中已有 {n} 張相同正面詞條的卡片",
   editBtnShort: "編輯",
+  moreCardActions: "更多操作",
   editCardTitle: "編輯卡片",
   editInCardEditorBtn: "在編輯器中開啟",
   editingFieldTag: "{field} · 編輯中",
