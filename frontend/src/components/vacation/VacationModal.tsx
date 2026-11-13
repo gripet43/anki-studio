@@ -142,7 +142,7 @@ export const VacationModal: React.FC = () => {
     >
       <div
         data-state={presence.state}
-        className={`w-full max-w-[500px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.32)] overflow-hidden ui-modal-panel flex flex-col max-h-[85vh] ${modalBg}`}
+        className={`w-full max-w-[560px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.32)] overflow-hidden ui-modal-panel flex flex-col max-h-[86vh] ${modalBg}`}
       >
         {/* Header Bar with Integrated Segmented Switcher */}
         <header className="flex items-center justify-between px-5 py-4 border-b border-black/5 dark:border-white/8 shrink-0">
@@ -553,16 +553,16 @@ export const VacationModal: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <footer className="flex items-center justify-between gap-3 px-5 py-3.5 border-t border-black/5 dark:border-white/8 bg-black/[0.015] dark:bg-white/[0.015] shrink-0">
-          <span className="text-[11px] text-[#8E8E93]">
+        <footer className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-t border-black/5 dark:border-white/8 bg-black/[0.015] dark:bg-white/[0.015] shrink-0">
+          <span className="text-[11px] text-[#8E8E93] leading-relaxed min-w-0 flex-1 basis-[220px]">
             {isAlreadyActive ? t('vacationFooterActiveHint') : t('vacationFooterSetupHint')}
           </span>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center justify-end gap-2.5 shrink-0 ms-auto">
             <button
               type="button"
               onClick={() => appActions.closeVacationModal()}
-              className="btn-secondary !h-9 !px-4 !text-[12px]"
+              className="btn-secondary !h-9 !px-4 !text-[12px] whitespace-nowrap shrink-0"
               disabled={isSubmitting}
             >
               {isAlreadyActive ? t('close') : t('cancel')}
@@ -574,7 +574,7 @@ export const VacationModal: React.FC = () => {
                 onClick={handleStartVacation}
                 disabled={isSubmitting}
                 style={{ backgroundColor: brandHex }}
-                className="btn-primary !h-9 !px-5 !text-[12px]"
+                className="btn-primary !h-9 !px-5 !text-[12px] whitespace-nowrap shrink-0"
               >
                 {isSubmitting
                   ? t('processingText')

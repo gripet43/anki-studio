@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.37] - 2026-11-13
+
+- **[DeepSeek] 修复休假弹窗底部按钮换行/溢出，并统一休假与进度减负弹窗尺寸**（改 [`frontend/src/components/vacation/VacationModal.tsx`](frontend/src/components/vacation/VacationModal.tsx)、[`frontend/src/components/vacation/IcuRescueModal.tsx`](frontend/src/components/vacation/IcuRescueModal.tsx)）：
+  - **按钮换行**：底部「取消」被挤成竖排两行、主按钮「开启休假保护（3 天）」换行并溢出卡片圆角；给两个按钮加 `whitespace-nowrap shrink-0`，footer 改为 `flex-wrap`，底部说明文字 `min-w-0 flex-1` 可正常换行，按钮始终单行、靠右。
+  - **尺寸不一致**：休假弹窗 `max-w-[500px]` / `max-h-[85vh]`，进度减负是 `560px` / `86vh`；统一为 `560px` / `86vh`，两个弹窗切换时不再跳大小。
+  - 进度减负弹窗底部按钮同步加 `whitespace-nowrap shrink-0`，防止同类问题。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 130 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.36 → 1.4.37。
+
 ## [v1.4.36] - 2026-11-13
 
 - **[DeepSeek] 修复卡片库「筛选命中有 N 张、列表却为空」的假空态**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)）：

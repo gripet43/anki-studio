@@ -584,7 +584,7 @@ export const IcuRescueModal: React.FC = () => {
             <button
               type="button"
               onClick={() => appActions.closeIcuModal()}
-              className="btn-secondary !h-9 !px-4 !text-[12px]"
+              className="btn-secondary !h-9 !px-4 !text-[12px] whitespace-nowrap shrink-0"
             >
               {t('close')}
             </button>
@@ -595,7 +595,7 @@ export const IcuRescueModal: React.FC = () => {
                 onClick={handleExecuteRescue}
                 disabled={isSubmitting || totalDue === 0}
                 style={{ backgroundColor: brandHex }}
-                className="btn-primary !h-9 !px-5 !text-[12px]"
+                className="btn-primary !h-9 !px-5 !text-[12px] whitespace-nowrap shrink-0"
               >
                 {isSubmitting ? t('processingText') : `${t('executeRescueBtn')} (${days}d)`}
               </button>
