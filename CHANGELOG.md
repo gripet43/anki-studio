@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.45] - 2026-11-13
+
+- **[DeepSeek] 进度减负的活跃天数边界修正：5 天可正常计算，7 天改用线性插值的 75 分位**（改 [`bridge/deck_service.py`](bridge/deck_service.py)、[`tests/test_backlog_alert.py`](tests/test_backlog_alert.py)）：
+  - 确认活跃天数 ≥ 5 时会正常计算日容量；恰好 5 个活跃日时容量取排序后的第 4/5 个值（80 张的例子里就是 80）。
+  - 发现 7 个活跃日的边界问题：原先 `round(0.75 × 6) = 4`（银行家舍入）取到第 5 个值，实际是约 71 分位（90），比真正的 75 分位（95）偏低，会让提示变得过于敏感；改为线性插值的 75 分位。
+  - 新增 2 项边界回归（5 天、7 天各一），总测试 140 项。
+  - **验证**：Python 140 项、`tsc --noEmit`、前端单元 63 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.44 → 1.4.45。
+
 ## [v1.4.44] - 2026-11-13
 
 - **[DeepSeek] 进度减负提示改为「相对用户自己复习量」的动态标准，并统一首页胶囊与侧边栏圆点**（改 [`bridge/deck_service.py`](bridge/deck_service.py)、[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)；新增 [`tests/test_backlog_alert.py`](tests/test_backlog_alert.py) 8 项回归）：

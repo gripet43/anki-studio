@@ -141,7 +141,12 @@ def compute_backlog_alert(
     active_days = len(counts)
     capacity = 0
     if active_days >= 5:
-        capacity = counts[min(active_days - 1, int(round(0.75 * (active_days - 1))))]
+        # 75 分位（线性插值）：5/6/7 个活跃日都能得到稳定且不过激的日容量。
+        pos = 0.75 * (active_days - 1)
+        lo = int(pos)
+        hi = min(active_days - 1, lo + 1)
+        value = counts[lo] + (counts[hi] - counts[lo]) * (pos - lo)
+        capacity = max(1, int(round(value)))
     capacity = max(1, int(capacity or 0))
     backlog_days = round(overdue_count / capacity, 2) if active_days >= 5 else 0.0
     load_ratio = round(total_due / capacity, 2) if active_days >= 5 else 0.0

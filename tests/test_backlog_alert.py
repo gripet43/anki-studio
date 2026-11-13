@@ -50,6 +50,18 @@ class TestBacklogAlert(unittest.TestCase):
         self.assertEqual(heavy["suggestedDays"], 14)
         self.assertGreater(heavy["suggestedDays"], light["suggestedDays"])
 
+    def test_five_active_days_still_works(self):
+        # 最近 7 天里活跃 5 天：容量取 4/5 位置，能正常判断
+        alert = compute_backlog_alert([40, 60, 70, 80, 90], 160, 0)
+        self.assertEqual(alert["typicalDaily"], 80)
+        self.assertAlmostEqual(alert["backlogDays"], 2.0)
+        self.assertTrue(alert["hasAvalanche"])
+
+    def test_seven_active_days_use_interpolated_75th_percentile(self):
+        # 5 天是 80，7 天线性插值后应为 95（而不是原来的 90）
+        alert = compute_backlog_alert([50, 60, 70, 80, 90, 100, 110], 0, 0)
+        self.assertEqual(alert["typicalDaily"], 95)
+
     def test_percentile_uses_active_days_only_and_handles_zeros(self):
         alert = compute_backlog_alert([0, 0, 100, 0, 100, 100, 0, 100, 100], 200, 0)
         self.assertEqual(alert["typicalDaily"], 100)
