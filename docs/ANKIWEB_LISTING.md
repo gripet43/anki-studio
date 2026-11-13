@@ -1,4 +1,4 @@
-# AnkiWeb 上架资料（v1.4.34）
+# AnkiWeb 上架资料（v1.4.35）
 
 > 上传入口：<https://ankiweb.net/shared/addons> → Upload
 > 表单只有五个字段：Title、Tags、Support Page、Branches、Description。
@@ -109,7 +109,10 @@ Anki Studio turns Anki's main window into a desktop-grade workspace, while stayi
 - **Rich-text card editor** — Cloze, image occlusion, tables, math
 - **16 interface languages**, with Cmd/Ctrl shortcuts that adapt to your OS
 - **Three ways back to native Anki** — hotkey, menu, toolbar button
-- **No network requests.** All writes go through Anki's official API, so AnkiWeb sync stays intact.
+- **Card library & search** — filter by status, difficulty, flag, tag or deck; batch edit, suspend, bury, move or delete in multi-select mode
+- **Script-card compatibility** — multiple-choice templates, Image Occlusion and other template-driven cards render in a sandboxed compatibility mode
+- **Learning tips** — a quiet daily principle beside your decks, about making and reviewing cards
+- **Privacy-first.** Card contents, deck names, tags and search queries never leave your device. Optional anonymous usage counts (launches, daily activity, session-size buckets, feature usage) can be turned off in Settings; all writes go through Anki's official API, so AnkiWeb sync stays intact.
 
 **Requires Anki 26.09.4 or later.** MIT licensed. Source & issue tracker: https://github.com/gripet43/anki-studio
 
@@ -127,7 +130,10 @@ Anki Studio 把 Anki 主窗口变成桌面级沉浸式工作区，同时与 Anki
 - **富文本制卡** — 挖空、图片遮挡、表格、公式
 - **16 种界面语言**，快捷键自动适配 Cmd / Ctrl
 - **三重返回原生界面** — 快捷键、菜单、工具栏按钮
-- **不发任何网络请求**，写操作全部走 Anki 官方 API，同步不受影响
+- **卡片库与检索** — 按状态、难度、旗帜、标签或牌组筛选；多选模式下批量编辑、暂停、搁置、移动或删除
+- **脚本型卡组兼容** — 选择题模板、图片遮挡等依赖模板脚本的卡片，自动在沙盒兼容模式中渲染
+- **学习小贴士** — 牌组旁每日轮播一条制卡与复习原则
+- **隐私优先。** 卡片内容、牌组名、标签与搜索词永远不会离开你的设备。可选的匿名使用计数（启动、日活、复习张数区间、功能使用）可在设置中关闭；所有写操作仍走 Anki 官方 API，AnkiWeb 同步不受影响。
 
 **需要 Anki 26.09.4 及以上。** MIT 许可，源码与问题反馈见上方链接。
 
@@ -143,7 +149,10 @@ Anki Studio 把 Anki 主視窗變成桌面級沉浸式工作區，同時與 Anki
 - **富文字製卡** — 挖空、圖片遮擋、表格、公式
 - **16 種介面語言**，快速鍵自動適配 Cmd / Ctrl
 - **三重返回原生介面** — 快速鍵、選單、工具列按鈕
-- **不發任何網路請求**，寫入操作全部走 Anki 官方 API，同步不受影響
+- **卡片庫與檢索** — 依狀態、難度、旗標、標籤或牌組篩選；在多選模式下批次編輯、暫停、擱置、移動或刪除
+- **腳本型牌組相容** — 選擇題模板、圖片遮擋等依賴模板腳本的卡片，自動在沙盒相容模式中渲染
+- **學習小提示** — 牌組旁每日輪播一則製卡與複習原則
+- **隱私優先。** 卡片內容、牌組名、標籤與搜尋詞永遠不會離開你的裝置。可選的匿名使用計數（啟動、日活、複習張數區間、功能使用）可在設定中關閉；所有寫入操作仍走 Anki 官方 API，AnkiWeb 同步不受影響。
 
 **需要 Anki 26.09.4 以上。** MIT 授權，原始碼與問題回報見上方連結。
 
@@ -159,7 +168,10 @@ Anki Studio は Anki のメインウィンドウをデスクトップ級のワ�
 - **リッチテキストエディタ** — 穴埋め、画像隠し、表、数式
 - **16 言語の UI**、ショートカットは Cmd / Ctrl を自動判別
 - **ネイティブ Anki に戻る手段が 3 つ** — ホットキー、メニュー、ツールバー
-- **ネットワーク通信は一切なし**。書き込みはすべて Anki 公式 API 経由で、同期に影響しません
+- **カードライブラリと検索** — 状態・難易度・フラグ・タグ・デッキで絞り込み、複数選択で一括編集・一時停止・保留・移動・削除
+- **スクリプト型カード互換** — 選択式テンプレートや Image Occlusion など、テンプレートスクリプトに依存するカードをサンドボックス互換モードで描画
+- **学習のヒント** — デッキの横に、カード作成と復習の原則を毎日ひとつ
+- **プライバシー優先。** カード内容・デッキ名・タグ・検索語が端末外に出ることはありません。任意の匿名利用カウント（起動・日次アクティブ・復習枚数帯・機能利用）は設定でオフにできます。書き込みはすべて Anki 公式 API 経由で、同期に影響しません。
 
 **Anki 26.09.4 以降が必要です。** MIT ライセンス。
 
@@ -175,7 +187,10 @@ Anki Studio는 Anki의 메인 창을 데스크톱급 작업 공간으로 바꿉�
 - **리치 텍스트 편집기** — 빈칸, 이미지 가리기, 표, 수식
 - **16개 언어 UI**, 단축키는 Cmd / Ctrl 자동 적용
 - **네이티브 Anki로 돌아가는 세 가지 경로** — 단축키, 메뉴, 툴바 버튼
-- **네트워크 요청 없음**. 모든 쓰기는 Anki 공식 API를 사용하므로 동기화에 영향이 없습니다
+- **카드 라이브러리와 검색** — 상태·난이도·플래그·태그·덱으로 필터링하고, 다중 선택으로 일괄 편집·일시 중지·묻기·이동·삭제
+- **스크립트 카드 호환** — 선택형 템플릿, Image Occlusion 등 템플릿 스크립트에 의존하는 카드를 샌드박스 호환 모드로 렌더링
+- **학습 팁** — 덱 옆에서 카드 제작과 복습 원칙을 매일 하나씩
+- **프라이버시 우선.** 카드 내용, 덱 이름, 태그, 검색어는 기기를 떠나지 않습니다. 선택적 익명 사용 카운트(실행, 일일 활성, 복습 장수 구간, 기능 사용)는 설정에서 끌 수 있습니다. 모든 쓰기는 Anki 공식 API를 사용하므로 동기화에 영향이 없습니다.
 
 **Anki 26.09.4 이상 필요.** MIT 라이선스.
 
@@ -191,7 +206,10 @@ Anki Studio verwandelt das Hauptfenster von Anki in einen Arbeitsbereich im Desk
 - **Rich-Text-Editor** — Lücke, Bild-Ausblendung, Tabellen, Formeln
 - **16 Oberflächensprachen**, Cmd/Ctrl wird automatisch angepasst
 - **Drei Wege zurück zum nativen Anki** — Hotkey, Menü, Werkzeugleiste
-- **Keine Netzwerkanfragen.** Alle Schreibvorgänge laufen über Ankis offizielle API, die Synchronisierung bleibt intakt.
+- **Kartenbibliothek & Suche** — filtern nach Status, Schwierigkeit, Flag, Tag oder Stapel; im Mehrfachauswahl-Modus bearbeiten, aussetzen, zurückstellen, verschieben oder löschen
+- **Kompatibilität mit Skript-Karten** — Auswahlvorlagen, Image Occlusion und andere templategesteuerte Karten werden in einem isolierten Kompatibilitätsmodus gerendert
+- **Lerntipps** — täglich ein ruhiger Grundsatz zum Kartenmachen und Wiederholen neben deinen Stapeln
+- **Datenschutz zuerst.** Karteninhalte, Stapelnamen, Tags und Suchbegriffe verlassen dein Gerät nie. Optionale anonyme Nutzungszähler (Starts, tägliche Aktivität, Kartenbereiche, Funktionsnutzung) lassen sich in den Einstellungen abschalten; alle Schreibvorgänge laufen über Ankis offizielle API, die Synchronisierung bleibt intakt.
 
 **Erfordert Anki 26.09.4 oder neuer.** MIT-Lizenz.
 
@@ -207,7 +225,10 @@ Anki Studio transforme la fenêtre principale d'Anki en espace de travail de bur
 - **Éditeur de cartes enrichi** — texte à trous, masquage d'image, tableaux, formules
 - **16 langues d'interface**, raccourcis Cmd/Ctrl adaptés automatiquement
 - **Trois retours vers Anki natif** — raccourci, menu, barre d'outils
-- **Aucune requête réseau.** Toutes les écritures passent par l'API officielle d'Anki ; la synchronisation reste intacte.
+- **Bibliothèque et recherche de cartes** — filtrer par statut, difficulté, drapeau, étiquette ou paquet ; en mode sélection multiple, modifier, suspendre, reporter, déplacer ou supprimer
+- **Compatibilité des cartes à script** — les modèles à choix multiple, Image Occlusion et autres cartes pilotées par script s'affichent dans un mode compatibilité isolé
+- **Conseils d'étude** — chaque jour un principe discret sur la création et la révision des cartes, à côté de vos paquets
+- **Priorité à la vie privée.** Le contenu des cartes, les noms de paquets, les étiquettes et les recherches ne quittent jamais votre appareil. Des compteurs d'usage anonymes optionnels (lancements, activité quotidienne, tranches de cartes, usage des fonctions) peuvent être désactivés dans les réglages ; toutes les écritures passent par l'API officielle d'Anki, la synchronisation reste intacte.
 
 **Nécessite Anki 26.09.4 ou supérieur.** Licence MIT.
 
@@ -223,7 +244,10 @@ Anki Studio convierte la ventana principal de Anki en un espacio de trabajo de e
 - **Editor de tarjetas enriquecido** — hueco, ocultación de imagen, tablas, fórmulas
 - **16 idiomas de interfaz**, con atajos Cmd/Ctrl automáticos
 - **Tres formas de volver a Anki nativo** — atajo, menú y botón de la barra
-- **Sin peticiones de red.** Todas las escrituras usan la API oficial de Anki; la sincronización no se ve afectada.
+- **Biblioteca y búsqueda de tarjetas** — filtra por estado, dificultad, bandera, etiqueta o mazo; en modo multiselección, edita, suspende, entierra, mueve o elimina en lote
+- **Compatibilidad con tarjetas con script** — las plantillas de opción múltiple, Image Occlusion y otras tarjetas basadas en scripts se muestran en un modo de compatibilidad aislado
+- **Consejos de estudio** — cada día un principio discreto sobre crear y repasar tarjetas, junto a tus mazos
+- **Privacidad primero.** El contenido de las tarjetas, los nombres de mazos, las etiquetas y las búsquedas nunca salen de tu dispositivo. Los contadores de uso anónimos opcionales (inicios, actividad diaria, tramos de tarjetas, uso de funciones) se pueden desactivar en Ajustes; todas las escrituras usan la API oficial de Anki, así que la sincronización no se ve afectada.
 
 **Requiere Anki 26.09.4 o superior.** Licencia MIT.
 
@@ -239,7 +263,10 @@ Anki Studio trasforma la finestra principale di Anki in uno spazio di lavoro des
 - **Editor di carte avanzato** — cloze, occultamento immagine, tabelle, formule
 - **16 lingue dell'interfaccia**, scorciatoie Cmd/Ctrl automatiche
 - **Tre modi per tornare ad Anki nativo** — scorciatoia, menu, barra degli strumenti
-- **Nessuna richiesta di rete.** Tutte le scritture passano dall'API ufficiale di Anki; la sincronizzazione resta intatta.
+- **Libreria e ricerca delle carte** — filtra per stato, difficoltà, bandiera, tag o mazzo; in modalità selezione multipla modifica, sospendi, rimanda, sposta o elimina
+- **Compatibilità con carte a script** — i modelli a scelta multipla, Image Occlusion e altre carte basate su script vengono visualizzati in una modalità compatibilità isolata
+- **Consigli di studio** — ogni giorno un principio discreto su come creare e ripassare le carte, accanto ai tuoi mazzi
+- **Privacy prima.** Il contenuto delle carte, i nomi dei mazzi, i tag e le ricerche non lasciano mai il tuo dispositivo. I conteggi d'uso anonimi opzionali (avvii, attività giornaliera, fasce di carte, uso delle funzioni) possono essere disattivati nelle impostazioni; tutte le scritture passano dall'API ufficiale di Anki, la sincronizzazione resta intatta.
 
 **Richiede Anki 26.09.4 o successivo.** Licenza MIT.
 
@@ -255,7 +282,10 @@ O Anki Studio transforma a janela principal do Anki em um espaço de trabalho de
 - **Editor de cartões avançado** — cloze, oclusão de imagem, tabelas, fórmulas
 - **16 idiomas de interface**, com atalhos Cmd/Ctrl automáticos
 - **Três formas de voltar ao Anki nativo** — atalho, menu e botão da barra
-- **Nenhuma requisição de rede.** Todas as gravações usam a API oficial do Anki; a sincronização continua intacta.
+- **Biblioteca e busca de cartões** — filtre por status, dificuldade, bandeira, etiqueta ou baralho; no modo de seleção múltipla, edite, suspenda, enterre, mova ou exclua em lote
+- **Compatibilidade com cartões com script** — modelos de múltipla escolha, Image Occlusion e outros cartões baseados em scripts são exibidos em um modo de compatibilidade isolado
+- **Dicas de estudo** — todos os dias um princípio discreto sobre criar e revisar cartões, ao lado dos seus baralhos
+- **Privacidade em primeiro lugar.** O conteúdo dos cartões, nomes de baralhos, etiquetas e buscas nunca saem do seu dispositivo. Contagens de uso anônimas opcionais (inícios, atividade diária, faixas de cartões, uso de recursos) podem ser desativadas nas configurações; todas as gravações usam a API oficial do Anki, então a sincronização continua intacta.
 
 **Requer Anki 26.09.4 ou superior.** Licença MIT.
 
@@ -271,7 +301,10 @@ Anki Studio превращает главное окно Anki в полноце�
 - **Редактор карт** — пропуск, скрытие части изображения, таблицы, формулы
 - **16 языков интерфейса**, горячие клавиши Cmd/Ctrl подстраиваются автоматически
 - **Три способа вернуться в нативный Anki** — горячая клавиша, меню, кнопка на панели
-- **Никаких сетевых запросов.** Все записи идут через официальный API Anki, синхронизация не страдает.
+- **Библиотека и поиск карточек** — фильтр по статусу, сложности, флагу, тегу или колоде; в режиме множественного выбора — пакетное редактирование, приостановка, откладывание, перемещение и удаление
+- **Совместимость со скриптовыми карточками** — шаблоны с выбором ответа, Image Occlusion и другие карточки на скриптах отображаются в изолированном режиме совместимости
+- **Советы по учёбе** — каждый день один короткий принцип о создании и повторении карточек рядом с вашими колодами
+- **Приватность прежде всего.** Содержимое карточек, названия колод, теги и поисковые запросы никогда не покидают устройство. Необязательные анонимные счётчики (запуски, дневная активность, диапазоны карточек, использование функций) отключаются в настройках; все записи идут через официальный API Anki, синхронизация не страдает.
 
 **Требуется Anki 26.09.4 или новее.** Лицензия MIT.
 
@@ -287,7 +320,10 @@ Anki Studio verandert het hoofdvenster van Anki in een desktop-werkruimte, volle
 - **Rich-text kaarteditor** — invuloefening, afbeelding verbergen, tabellen, formules
 - **16 interfacetalen**, sneltoetsen passen Cmd/Ctrl automatisch aan
 - **Drie manieren terug naar native Anki** — sneltoets, menu, werkbalkknop
-- **Geen netwerkverzoeken.** Alle schrijfacties lopen via Anki's officiële API; synchronisatie blijft intact.
+- **Kaartenbibliotheek en zoeken** — filter op status, moeilijkheid, vlag, tag of set; bewerk, pauzeer, begraaf, verplaats of verwijder in bulk in de selectiemodus
+- **Compatibiliteit met scriptkaarten** — meerkeuzesjablonen, Image Occlusion en andere scriptgestuurde kaarten worden in een geïsoleerde compatibiliteitsmodus weergegeven
+- **Leertips** — elke dag een rustig principe over kaarten maken en herhalen naast je sets
+- **Privacy voorop.** Kaartinhoud, setnamen, tags en zoekopdrachten verlaten je apparaat nooit. Optionele anonieme gebruiks tellingen (starts, dagelijkse activiteit, kaartbereiken, functiegebruik) zijn uit te schakelen in de instellingen; alle schrijfacties lopen via Anki's officiële API, synchronisatie blijft intact.
 
 **Vereist Anki 26.09.4 of nieuwer.** MIT-licentie.
 
@@ -303,7 +339,10 @@ Anki Studio zamienia główne okno Anki w pulpit klasy desktop, zachowując peł
 - **Edytor kart z formatowaniem** — luka, zasłanianie obrazu, tabele, wzory
 - **16 języków interfejsu**, skróty Cmd/Ctrl dopasowują się automatycznie
 - **Trzy drogi powrotu do natywnego Anki** — skrót, menu, przycisk paska
-- **Brak zapytań sieciowych.** Wszystkie zapisy idą przez oficjalne API Anki, synchronizacja pozostaje nienaruszona.
+- **Biblioteka i wyszukiwanie kart** — filtruj według statusu, trudności, flagi, tagu lub talii; w trybie wielokrotnego wyboru edytuj, zawieś, odłóż, przenieś lub usuń zbiorczo
+- **Zgodność z kartami skryptowymi** — szablony wielokrotnego wyboru, Image Occlusion i inne karty oparte na skryptach są renderowane w izolowanym trybie zgodności
+- **Wskazówki do nauki** — codziennie jedna spokojna zasada tworzenia i powtórek obok twoich talii
+- **Prywatność przede wszystkim.** Treść kart, nazwy talii, tagi i zapytania nigdy nie opuszczają urządzenia. Opcjonalne anonimowe liczniki użycia (uruchomienia, dzienna aktywność, przedziały kart, użycie funkcji) można wyłączyć w ustawieniach; wszystkie zapisy idą przez oficjalne API Anki, synchronizacja pozostaje nienaruszona.
 
 **Wymaga Anki 26.09.4 lub nowszego.** Licencja MIT.
 
@@ -319,7 +358,10 @@ Anki Studio, Anki'nin ana penceresini masaüstü düzeyinde bir çalışma alan�
 - **Zengin metin kart editörü** — boşluk doldurma, görsel maskeleme, tablolar, formüller
 - **16 arayüz dili**, Cmd/Ctrl kısayolları otomatik uyarlanır
 - **Yerel Anki'ye üç dönüş yolu** — kısayol, menü, araç çubuğu düğmesi
-- **Hiçbir ağ isteği yok.** Tüm yazma işlemleri Anki'nin resmî API'sini kullanır; senkronizasyon bozulmaz.
+- **Kart kitaplığı ve arama** — duruma, zorluğa, bayrağa, etikete veya desteye göre filtreleyin; çoklu seçimde toplu düzenleyin, askıya alın, gömün, taşıyın veya silin
+- **Betik kart uyumluluğu** — çoktan seçmeli şablonlar, Image Occlusion ve betiğe dayalı diğer kartlar izole uyumluluk modunda gösterilir
+- **Öğrenme ipuçları** — destelerinizin yanında her gün kart oluşturma ve tekrar ilkelerinden biri
+- **Önce gizlilik.** Kart içerikleri, deste adları, etiketler ve aramalar cihazınızdan asla çıkmaz. İsteğe bağlı anonim kullanım sayaçları (açılışlar, günlük etkinlik, kart aralıkları, özellik kullanımı) ayarlardan kapatılabilir; tüm yazma işlemleri Anki'nin resmî API'sini kullanır, senkronizasyon bozulmaz.
 
 **Anki 26.09.4 veya üzeri gerekir.** MIT lisansı.
 
@@ -335,7 +377,10 @@ Anki Studio biến cửa sổ chính của Anki thành không gian làm việc c
 - **Trình soạn thẻ định dạng phong phú** — điền khuyết, che ảnh, bảng, công thức
 - **16 ngôn ngữ giao diện**, phím tắt tự đổi Cmd / Ctrl
 - **Ba cách quay về Anki gốc** — phím tắt, menu, nút trên thanh công cụ
-- **Không gửi bất kỳ yêu cầu mạng nào.** Mọi thao tác ghi đều qua API chính thức của Anki, đồng bộ không bị ảnh hưởng.
+- **Thư viện và tìm kiếm thẻ** — lọc theo trạng thái, độ khó, cờ, thẻ tag hoặc bộ thẻ; ở chế độ chọn nhiều, sửa, tạm dừng, hoãn, di chuyển hoặc xóa hàng loạt
+- **Tương thích thẻ dùng script** — mẫu trắc nghiệm, Image Occlusion và các thẻ phụ thuộc script khác được hiển thị trong chế độ tương thích cách ly
+- **Mẹo học tập** — mỗi ngày một nguyên tắc nhỏ về tạo và ôn thẻ, ngay cạnh bộ thẻ của bạn
+- **Ưu tiên quyền riêng tư.** Nội dung thẻ, tên bộ thẻ, thẻ tag và từ khóa tìm kiếm không bao giờ rời khỏi thiết bị. Số đếm sử dụng ẩn danh tùy chọn (lần mở, hoạt động hằng ngày, khoảng số thẻ, lượt dùng tính năng) có thể tắt trong Cài đặt; mọi thao tác ghi đều qua API chính thức của Anki, đồng bộ không bị ảnh hưởng.
 
 **Yêu cầu Anki 26.09.4 trở lên.** Giấy phép MIT.
 
@@ -351,7 +396,10 @@ Anki Studio biến cửa sổ chính của Anki thành không gian làm việc c
 - **محرر بطاقات غني** — ملء الفراغ، إخفاء أجزاء الصورة، جداول، معادلات
 - **16 لغة واجهة**، مع تكييف اختصارات Cmd / Ctrl تلقائيًا
 - **ثلاث طرق للعودة إلى Anki الأصلي** — اختصار، قائمة، زر شريط الأدوات
-- **لا طلبات شبكة إطلاقًا.** تُكتب كل التغييرات عبر واجهة Anki الرسمية، فتبقى المزامنة سليمة.
+- **مكتبة البطاقات والبحث** — تصفية حسب الحالة أو الصعوبة أو العلامة أو الوسم أو الرزمة؛ وفي وضع التحديد المتعدد عدّل أو علّق أو ادفن أو انقل أو احذف دفعةً واحدة
+- **توافق بطاقات السكربت** — قوالب الاختيار من متعدد وImage Occlusion وغيرها من البطاقات المعتمدة على السكربت تُعرض في وضع توافق معزول
+- **نصائح التعلم** — كل يوم مبدأ واحد هادئ عن إنشاء البطاقات ومراجعتها بجانب رزمك
+- **الخصوصية أولًا.** محتوى البطاقات وأسماء الرزم والوسوم وعبارات البحث لا تغادر جهازك أبدًا. يمكن إيقاف عدادات الاستخدام المجهولة الاختيارية (التشغيل، النشاط اليومي، نطاقات البطاقات، استخدام الميزات) من الإعدادات؛ وكل عمليات الكتابة تمر عبر واجهة Anki الرسمية، فتبقى المزامنة سليمة.
 
 **يتطلب Anki 26.09.4 أو أحدث.** رخصة MIT.
 ```

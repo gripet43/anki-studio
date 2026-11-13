@@ -95,7 +95,7 @@ GIF 只有 256 色，画质上有几个已经踩过并写在脚本 docstring 里
 | 操作系统 | macOS、Windows、Linux（三端均已适配平台快捷键与路径） |
 | 数据安全 | 全部写操作走 Anki 官方 API（`col.update_card` / `col.sched.*`），由 Anki 维护 `mod` / `usn`，不直接改写合集数据库文件 |
 | 运行时自检 | 启动时校验 Anki 版本、4 个原生界面补丁与 8 个生命周期钩子；任一失效会在控制台打印 `patch health` 报告，也可通过 `get_patch_health` 读取 |
-| 网络 | 插件本身**不发任何网络请求**，同步仍由 Anki 原生完成 |
+| 网络 | 同步仍由 Anki 原生完成；可选的匿名使用统计只上报计数（不含卡片内容），可在设置中关闭 |
 
 > 为什么下限写死在一个具体版本：Anki 的兼容判断是 `int_version() < min_point_version`，
 > 而 `int_version()` 是 `YYMMDD` 整数（26.9.4 → `260904`）。写一个小数字（例如 `26`）

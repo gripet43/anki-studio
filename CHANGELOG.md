@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.35] - 2026-11-13
+
+- **[DeepSeek] 更新 AnkiWeb 上架描述：移除「不发网络请求」旧声明，补新功能（16 种语言同步）**（改 [`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)、[`README.md`](README.md)）：
+  - **修正事实性声明**：`No network requests` / 「不发任何网络请求」已不成立（新增了可选匿名统计），改为「隐私优先」说明——卡片内容、牌组名、标签与搜索词永不上传；匿名使用计数可在设置中关闭；写操作仍走 Anki 官方 API，AnkiWeb 同步不受影响。
+  - **补充新功能**：卡片库与检索（多选批量编辑/暂停/搁置/移动/删除）、脚本型卡组兼容（选择题模板 / Image Occlusion 沙盒渲染）、学习小贴士（牌组旁每日原则）。
+  - 英文 + 15 种语言段落全部同步，列表头版本号更新为 v1.4.35。
+  - **验证**：文档改动；`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 130 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.34 → 1.4.35。
+
 ## [v1.4.34] - 2026-11-13
 
 - **[DeepSeek] 匿名统计端点正式上线：Cloudflare Worker + D1 部署完成**（改 [`bridge/analytics_service.py`](bridge/analytics_service.py)、[`config.md`](config.md)、[`scripts/analytics-worker/README.md`](scripts/analytics-worker/README.md)）：
