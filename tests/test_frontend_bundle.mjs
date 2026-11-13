@@ -29,51 +29,41 @@ const WEB_JS = path.resolve(ADDON_ROOT, 'web/assets/index.js');
 const WEB_CSS = path.resolve(ADDON_ROOT, 'web/assets/index.css');
 const ANKIADDON_FILE = path.resolve(ADDON_ROOT, 'anki_modern_os.ankiaddon');
 
-const initPy = fs.readFileSync(path.resolve(ADDON_ROOT, '__init__.py'), 'utf-8');
-const storeSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/stores/useAppStore.ts'),
-  'utf-8'
-);
-const reviewerSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/reviewer/ReviewerView.tsx'),
-  'utf-8'
-);
-const librarySrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/search/LibraryView.tsx'),
-  'utf-8'
-);
-const cmdKSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/search/CommandPaletteModal.tsx'),
-  'utf-8'
-);
-const dashboardSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/dashboard/DashboardView.tsx'),
-  'utf-8'
-);
-const syncPillSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/dashboard/SyncStatusPill.tsx'),
-  'utf-8'
-);
-const sidebarSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/layout/Sidebar.tsx'),
-  'utf-8'
-);
-const settingsSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/settings/SettingsModal.tsx'),
-  'utf-8'
-);
-const translationsSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/i18n/translations.ts'),
-  'utf-8'
-);
-const editorSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/CardEditorModal.tsx'),
-  'utf-8'
-);
-const appSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/App.tsx'),
-  'utf-8'
-);
+/**
+ * 按 LF 读取文本文件。
+ *
+ * Windows 版 Git 默认 `core.autocrlf=true`，会把工作区换行转成 CRLF；而本套断言
+ * 大量依赖 '\n' 做字典边界与按行解析 —— 行尾一旦多出 '\r'，`parseFlatDict()`
+ * 的正则 `(.*)$` 就匹配不上，字典解析出 0 条，Item #33 直接红（2026-11-13
+ * Windows 验版实测）。这里统一归一化，让校验结果与平台、与 Git 行尾配置无关。
+ */
+function readText(file) {
+  return fs.readFileSync(file, 'utf-8').replace(/\r\n?/g, '\n');
+}
+
+const initPy = readText(path.resolve(ADDON_ROOT, '__init__.py'));
+const storeSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/stores/useAppStore.ts'));
+const reviewerSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/reviewer/ReviewerView.tsx'));
+const librarySrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/search/LibraryView.tsx'));
+const cmdKSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/search/CommandPaletteModal.tsx'));
+const dashboardSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/dashboard/DashboardView.tsx'));
+const syncPillSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/dashboard/SyncStatusPill.tsx'));
+const sidebarSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/layout/Sidebar.tsx'));
+const settingsSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/settings/SettingsModal.tsx'));
+const translationsSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/i18n/translations.ts'));
+const editorSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/CardEditorModal.tsx'));
+const appSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/App.tsx'));
 
 function assert(condition, msg) {
   if (!condition) {
@@ -183,14 +173,10 @@ assert(
 );
 
 // Item #13: Redesigned Vacation Mode & Backlog Relief (3-tier hierarchy, semantic <details>/<summary>, inline confirmation, zero blocking window.confirm)
-const vacationSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/vacation/VacationModal.tsx'),
-  'utf-8'
-);
-const icuSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/vacation/IcuRescueModal.tsx'),
-  'utf-8'
-);
+const vacationSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/vacation/VacationModal.tsx'));
+const icuSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/vacation/IcuRescueModal.tsx'));
 assert(
   vacationSrc.includes('<details') &&
     vacationSrc.includes('confirmAction') &&
@@ -204,11 +190,9 @@ assert(
 );
 
 // Item #15: Parity with Anki's official statistics (Answer Buttons, True Retention, Daily Load)
-const deckSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'bridge/deck_service.py'), 'utf-8');
-const statsViewSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/stats/StatsView.tsx'),
-  'utf-8'
-);
+const deckSrc = readText(path.resolve(ADDON_ROOT, 'bridge/deck_service.py'));
+const statsViewSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/stats/StatsView.tsx'));
 assert(
   deckSrc.includes('answerButtons') &&
     deckSrc.includes('trueRetention') &&
@@ -221,16 +205,14 @@ assert(
 );
 
 // Item #16: Full-audit guardrails — read paths stay read-only, failures are honest
-const vacationServiceSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'bridge/vacation_service.py'), 'utf-8');
-const reviewSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'bridge/review_service.py'), 'utf-8');
-const searchSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'bridge/search_service.py'), 'utf-8');
-const editSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'bridge/edit_service.py'), 'utf-8');
-const pycmdSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'frontend/src/bridge/pycmd.ts'), 'utf-8');
-const buildSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'scripts/build_ankiaddon.py'), 'utf-8');
-const icuSrc2 = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/vacation/IcuRescueModal.tsx'),
-  'utf-8'
-);
+const vacationServiceSrc = readText(path.resolve(ADDON_ROOT, 'bridge/vacation_service.py'));
+const reviewSrc = readText(path.resolve(ADDON_ROOT, 'bridge/review_service.py'));
+const searchSrc = readText(path.resolve(ADDON_ROOT, 'bridge/search_service.py'));
+const editSrc = readText(path.resolve(ADDON_ROOT, 'bridge/edit_service.py'));
+const pycmdSrc = readText(path.resolve(ADDON_ROOT, 'frontend/src/bridge/pycmd.ts'));
+const buildSrc = readText(path.resolve(ADDON_ROOT, 'scripts/build_ankiaddon.py'));
+const icuSrc2 = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/vacation/IcuRescueModal.tsx'));
 assert(
   !vacationServiceSrc.includes('self._write_config({"last_rescue_receipt": receipt})') &&
     vacationServiceSrc.includes('is:due is:review') &&
@@ -251,8 +233,8 @@ assert(
 );
 
 // Item #17: Card-safety harness must remain wired into the test suite
-const safetyHarnessSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'tests/safety_harness.py'), 'utf-8');
-const safetyTestSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'tests/test_card_safety.py'), 'utf-8');
+const safetyHarnessSrc = readText(path.resolve(ADDON_ROOT, 'tests/safety_harness.py'));
+const safetyTestSrc = readText(path.resolve(ADDON_ROOT, 'tests/test_card_safety.py'));
 assert(
   safetyHarnessSrc.includes(':memory:') &&
     safetyHarnessSrc.includes('CARD_BUSINESS_COLUMNS') &&
@@ -275,9 +257,11 @@ assert(
 );
 
 // Item #19: Round-3 industrial verification and the recovery notice must stay wired
-const round3Src = fs.readFileSync(path.resolve(ADDON_ROOT, 'tests/test_card_safety_round3.py'), 'utf-8');
+const round3Src = readText(path.resolve(ADDON_ROOT, 'tests/test_card_safety_round3.py'));
 assert(
-  round3Src.includes('signal.SIGKILL') &&
+  // 崩溃恢复用例必须还在：检查 _hard_kill_self（POSIX 走 SIGKILL、Windows 走
+  // os._exit），不再钉死 signal.SIGKILL —— 那个常量在 Windows 上不存在。
+  round3Src.includes('_hard_kill_self') &&
     round3Src.includes('PRAGMA integrity_check') &&
     round3Src.includes('injected mid-batch I/O failure') &&
     round3Src.includes('HAS_HYPOTHESIS') &&
@@ -288,14 +272,10 @@ assert(
 );
 
 // Item #20: Deck Options (FSRS Presets), 7-Color Flags, and Custom Study / Mistake Drills
-const decksViewSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/decks/DecksView.tsx'),
-  'utf-8'
-);
-const customStudyModalSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/study/CustomStudyModal.tsx'),
-  'utf-8'
-);
+const decksViewSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/decks/DecksView.tsx'));
+const customStudyModalSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/study/CustomStudyModal.tsx'));
 assert(
   deckSrc.includes('get_deck_options') &&
     deckSrc.includes('save_deck_options') &&
@@ -313,14 +293,10 @@ assert(
 );
 
 // Item #21: Image Occlusion Studio & Import/Export + System Maintenance Tools
-const ioModalSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx'),
-  'utf-8'
-);
-const mathRendererSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/utils/mathRenderer.ts'),
-  'utf-8'
-);
+const ioModalSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx'));
+const mathRendererSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/mathRenderer.ts'));
 assert(
   ioModalSrc.includes('buildImageOcclusionHtml') &&
     ioModalSrc.includes('parseExistingImageOcclusion') &&
@@ -425,22 +401,14 @@ assert(
 );
 
 // Item #25: Resolve relative collection.media <img> filenames inside CardEditorModal, TowerWysiwygEditor & ImageOcclusionEditorModal
-const mediaUrlSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/utils/mediaUrl.ts'),
-  'utf-8'
-);
-const wysiwygSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/TowerWysiwygEditor.tsx'),
-  'utf-8'
-);
-const deckSvcSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'bridge/deck_service.py'),
-  'utf-8'
-);
-const editSvcSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'bridge/edit_service.py'),
-  'utf-8'
-);
+const mediaUrlSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/mediaUrl.ts'));
+const wysiwygSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/TowerWysiwygEditor.tsx'));
+const deckSvcSrc = readText(
+  path.resolve(ADDON_ROOT, 'bridge/deck_service.py'));
+const editSvcSrc = readText(
+  path.resolve(ADDON_ROOT, 'bridge/edit_service.py'));
 assert(
   deckSvcSrc.includes('"mediaBaseUrl"') &&
     editSvcSrc.includes('normalize_media_html_for_storage') &&
@@ -463,10 +431,8 @@ assert(
 );
 
 // Item #27: Sync Status Pill & Settings Sync Card must follow Scheme B (no permanent glowing green dot; factual snapshot time; Intl.RelativeTimeFormat + WCAG 1.4.13 Escape dismiss)
-const syncStateIconSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/common/SyncStateIcon.tsx'),
-  'utf-8'
-);
+const syncStateIconSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/common/SyncStateIcon.tsx'));
 assert(
   syncStateIconSrc.includes("'snapshot'") &&
     syncStateIconSrc.includes("'unsynced'") &&
@@ -486,13 +452,11 @@ assert(
 );
 
 // Item #28: Immediate Sync completion lifecycle must preserve verified timestamps even when Anki NO_CHANGES leaves col.ls unchanged
-const item28HostSrc = fs.readFileSync(path.resolve(ADDON_ROOT, '__init__.py'), 'utf-8');
-const item28RouterSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'bridge/router.py'), 'utf-8');
-const item28AppSrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'frontend/src/App.tsx'), 'utf-8');
-const item28StoreSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/stores/useAppStore.ts'),
-  'utf-8'
-);
+const item28HostSrc = readText(path.resolve(ADDON_ROOT, '__init__.py'));
+const item28RouterSrc = readText(path.resolve(ADDON_ROOT, 'bridge/router.py'));
+const item28AppSrc = readText(path.resolve(ADDON_ROOT, 'frontend/src/App.tsx'));
+const item28StoreSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/stores/useAppStore.ts'));
 assert(
   item28HostSrc.includes('handle_sync_error') &&
     item28HostSrc.includes('last_sync_checked_map') &&
@@ -513,14 +477,10 @@ assert(
 );
 
 // Item #29: Library Card UI Optimization (subgrid, container queries, multi-block clamp separation, footer & accessibility fixes)
-const item29MathRendererSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/utils/mathRenderer.ts'),
-  'utf-8'
-);
-const item29IndexCssSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/index.css'),
-  'utf-8'
-);
+const item29MathRendererSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/mathRenderer.ts'));
+const item29IndexCssSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/index.css'));
 assert(
   item29MathRendererSrc.includes('export function formatCardPreviewHtml') &&
     item29IndexCssSrc.includes('.library-card-flip-inner') &&
@@ -543,14 +503,10 @@ assert(
 );
 
 // Item #32: DOM 事件 target 防御 — .closest() 只允许出现在 domTarget helper 中
-const domTargetSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/utils/domTarget.ts'),
-  'utf-8'
-);
-const windowDragSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/utils/windowDrag.ts'),
-  'utf-8'
-);
+const domTargetSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/domTarget.ts'));
+const windowDragSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/windowDrag.ts'));
 assert(
   domTargetSrc.includes("typeof (target as Element).closest !== 'function'") &&
     domTargetSrc.includes('isContentEditable') &&
@@ -573,10 +529,8 @@ assert(
 );
 
 // Item #31: 16-Language i18n System aligned with official Anki desktop languages
-const designSystemSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/design-system/DesignSystemView.tsx'),
-  'utf-8'
-);
+const designSystemSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/design-system/DesignSystemView.tsx'));
 assert(
   deckSrc.includes('SUPPORTED_LANG_CODES') &&
     deckSrc.includes('normalize_language_code') &&
@@ -680,7 +634,7 @@ for (const lang of EXPECTED_LOCALES) {
   compareDict(
     lang,
     parseFlatDict(
-      fs.readFileSync(file, 'utf-8'),
+      readText(file),
       'export const dict: TranslationTable = {',
       '\n};'
     )
@@ -692,7 +646,7 @@ assert(
 );
 
 // 越南语是拉丁字母语言，混进汉字说明翻译时保留了中文词，界面会直接露馅
-const viSrc = fs.readFileSync(path.join(LOCALE_DIR, 'vi.ts'), 'utf-8');
+const viSrc = readText(path.join(LOCALE_DIR, 'vi.ts'));
 const viCjkLines = viSrc.split('\n').filter((l) => /[\u4e00-\u9fff]/.test(l));
 assert(
   viCjkLines.length === 0,
@@ -700,9 +654,9 @@ assert(
 );
 
 // Item #34: Windows 验版报告 8 项修复守卫
-const smokePySrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'tests/scenarios/smoke.py'), 'utf-8');
-const runPySrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'tests/scenarios/run.py'), 'utf-8');
-const pathsPySrc = fs.readFileSync(path.resolve(ADDON_ROOT, 'tests/scenarios/paths.py'), 'utf-8');
+const smokePySrc = readText(path.resolve(ADDON_ROOT, 'tests/scenarios/smoke.py'));
+const runPySrc = readText(path.resolve(ADDON_ROOT, 'tests/scenarios/run.py'));
+const pathsPySrc = readText(path.resolve(ADDON_ROOT, 'tests/scenarios/paths.py'));
 assert(
   runPySrc.includes("'_global'") &&
     runPySrc.includes('"firstRun": False') &&
@@ -722,8 +676,8 @@ assert(
   'Item #34: Windows QA fixes (prefs21.db _global row, smoke.py col.db lock reuse, window sizing, ApplicationShortcut, Ctrl+P settings, responsive hero/analytics, and deprecated API guards) must remain in place'
 );
 
-const jsBundle = fs.readFileSync(WEB_JS, 'utf-8');
-const cssBundle = fs.readFileSync(WEB_CSS, 'utf-8');
+const jsBundle = readText(WEB_JS);
+const cssBundle = readText(WEB_CSS);
 assert(
   jsBundle.length > 100000 &&
     cssBundle.length > 10000 &&
@@ -734,10 +688,8 @@ assert(
 );
 
 // Item #35: 动效体系整体补齐门禁 —— 校验构建产物 CSS 包含全部核心动效类、令牌与无障碍降级，且源码中任意 animate-* 类均在产物 CSS 中真实存在
-const frontendPkgSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/package.json'),
-  'utf-8'
-);
+const frontendPkgSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/package.json'));
 assert(
   !frontendPkgSrc.includes('framer-motion'),
   'Item #35: frontend/package.json must not include unused framer-motion dependency'
@@ -775,7 +727,7 @@ function collectTsxFiles(dirPath, acc = []) {
 const tsxFiles = collectTsxFiles(path.resolve(ADDON_ROOT, 'frontend/src'));
 const usedAnimateClasses = new Set();
 for (const file of tsxFiles) {
-  const content = fs.readFileSync(file, 'utf-8');
+  const content = readText(file);
   const matches = content.match(/\banimate-[a-zA-Z0-9_-]+/g) || [];
   for (const cls of matches) {
     usedAnimateClasses.add(cls);
@@ -793,10 +745,8 @@ for (const cls of usedAnimateClasses) {
 }
 
 // Item #36: Dashboard visual hierarchy — semantic surfaces, content-aware grids, and reduced visual noise
-const dashboardCssSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/index.css'),
-  'utf-8'
-);
+const dashboardCssSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/index.css'));
 assert(
   dashboardSrc.includes('dashboard-shell') &&
     dashboardSrc.includes('dashboard-header') &&
@@ -833,14 +783,10 @@ assert(
 );
 
 // Item #37: 卡片库排序层级 + 同步云图标 + 顶栏角标移除 + 编辑器 Esc 作用域 + 火焰暖光晕
-const syncIconSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/common/SyncStateIcon.tsx'),
-  'utf-8'
-);
-const flameSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/dashboard/StreakFlameBackdrop.tsx'),
-  'utf-8'
-);
+const syncIconSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/common/SyncStateIcon.tsx'));
+const flameSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/dashboard/StreakFlameBackdrop.tsx'));
 
 // 排序是「交叉维度」：必须在筛选胶囊组之外、靠右、且自身不是描边胶囊。
 const sortBlockStart = librarySrc.indexOf('ref={sortDropdownRef}');
@@ -926,7 +872,7 @@ assert(
 // 与用户选的主题色完全无关 —— 选「经典蓝」，第二张牌组仍是青的、第三张仍是绿的。
 const deckPalettePath = path.resolve(ADDON_ROOT, 'frontend/src/utils/deckPalette.ts');
 assert(fs.existsSync(deckPalettePath), 'Item #39: 找不到 frontend/src/utils/deckPalette.ts');
-const deckPaletteSrc = fs.readFileSync(deckPalettePath, 'utf-8');
+const deckPaletteSrc = readText(deckPalettePath);
 
 assert(
   dashboardSrc.includes('buildDeckScales') && !dashboardSrc.includes('deckAccentToTheme'),
@@ -972,7 +918,7 @@ const i18nFiles = [
 
 const hardcodedCmdSites = [];
 for (const file of i18nFiles) {
-  fs.readFileSync(file, 'utf-8')
+  readText(file)
     .split('\n')
     .forEach((line, idx) => {
       const m = line.match(/^\s*([A-Za-z0-9_]+):\s*"((?:[^"\\]|\\.)*)"/);
@@ -994,7 +940,7 @@ assert(
 const SHORTCUT_PARAM_KEYS = ['editorFrontPlaceholder', 'ioEmptyCanvasTitle'];
 const unparameterized = [];
 for (const file of i18nFiles) {
-  const src = fs.readFileSync(file, 'utf-8');
+  const src = readText(file);
   for (const key of SHORTCUT_PARAM_KEYS) {
     const m = src.match(new RegExp(`^\\s*${key}:\\s*"([^"]*)"`, 'm'));
     if (!m) continue; // 该语言包未覆盖此键，由 TranslationTable 类型在编译期兜底
@@ -1014,14 +960,10 @@ assert(
 );
 
 // 光有占位符不够，调用点必须真的把参数传进去，否则界面上会直接显示 `{shortcut}`。
-const cardEditorSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/CardEditorModal.tsx'),
-  'utf-8'
-);
-const ioEditorSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx'),
-  'utf-8'
-);
+const cardEditorSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/CardEditorModal.tsx'));
+const ioEditorSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx'));
 
 const frontPlaceholderCalls = (
   cardEditorSrc.match(/t\('editorFrontPlaceholder',\s*\{\s*shortcut:/g) || []
@@ -1048,10 +990,8 @@ assert(
 );
 
 // Item #41: 8 大热门第三方 APKG 卡包在学习、搜索与编辑模式下的兼容性守卫
-const mediaUtilsPySrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'bridge/media_utils.py'),
-  'utf-8'
-);
+const mediaUtilsPySrc = readText(
+  path.resolve(ADDON_ROOT, 'bridge/media_utils.py'));
 assert(
   mediaUtilsPySrc.includes('def strip_front_side_from_answer') &&
     mediaUtilsPySrc.includes('def convert_furigana_to_ruby') &&
@@ -1071,10 +1011,8 @@ assert(
 );
 
 // Item #42: 复习器 `<style>` 块防 `<br/>` 破坏守卫 + Track B 原生沙盒模式（SandboxCardFrame + mediasrv HTTP）
-const sandboxFrameSrc = fs.readFileSync(
-  path.resolve(ADDON_ROOT, 'frontend/src/components/reviewer/SandboxCardFrame.tsx'),
-  'utf-8'
-);
+const sandboxFrameSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/reviewer/SandboxCardFrame.tsx'));
 const sandboxCodeNoComments = sandboxFrameSrc.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 assert(
   mathRendererSrc.includes('preservedStyleBlocks') &&

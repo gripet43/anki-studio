@@ -64,15 +64,35 @@ EXCLUDED_NAMES = {
 }
 
 
+def _npm_executable() -> str:
+    """定位 npm 可执行文件，跨三平台。
+
+    Windows 上 npm 的真实文件是 ``npm.cmd``。``subprocess.run(["npm", ...])``
+    不走 shell，不会按 PATHEXT 展开，于是直接 ``FileNotFoundError [WinError 2]``
+    —— 干净 clone 在 Windows 上打不出包，就是这一行造成的（2026-11-13 实测）。
+    ``shutil.which`` 在 Windows 会按 PATHEXT 依次尝试 .COM/.EXE/.BAT/.CMD，
+    POSIX 则直接返回 PATH 里的绝对路径，两边都能拿到可执行入口。
+    """
+    found = shutil.which("npm")
+    if found:
+        return found
+    fallback = "npm.cmd" if os.name == "nt" else "npm"
+    print(f"[build_ankiaddon] WARNING: npm 不在 PATH 中，尝试直接调用 {fallback}")
+    return fallback
+
+
 def run_frontend_build() -> None:
     if not (FRONTEND_DIR / "package.json").exists():
         return
     env = os.environ.copy()
+    # 补上 Homebrew / 系统路径（macOS 上用 GUI 启动的进程常缺失）；
+    # 拼接符必须走 os.pathsep，Windows 是 ';' 不是 ':'。
     extra_paths = ["/opt/homebrew/bin", "/usr/local/bin"]
-    env["PATH"] = ":".join(extra_paths) + ":" + env.get("PATH", "")
-    print("[build_ankiaddon] Running Vite production build...")
+    env["PATH"] = os.pathsep.join(extra_paths + [env.get("PATH", "")])
+    npm = _npm_executable()
+    print(f"[build_ankiaddon] Running Vite production build via {npm}...")
     subprocess.run(
-        ["npm", "run", "build"],
+        [npm, "run", "build"],
         cwd=str(FRONTEND_DIR),
         env=env,
         check=True,

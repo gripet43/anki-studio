@@ -31,12 +31,9 @@ import unittest
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
 
-HERE = Path(__file__).resolve().parent
-ADDON_ROOT = HERE.parent
-if str(HERE) not in sys.path:
-    sys.path.insert(0, str(HERE))
-if str(ADDON_ROOT.parent) not in sys.path:
-    sys.path.insert(0, str(ADDON_ROOT.parent))
+from _addon_bootstrap import ADDON_ROOT, ensure_importable  # noqa: E402
+
+ensure_importable()
 
 import safety_harness  # noqa: E402
 from safety_harness import SafetyEnv, compare, notes_fingerprint  # noqa: E402
@@ -48,6 +45,25 @@ try:
     HAS_HYPOTHESIS = True
 except ImportError:  # standard-library fallback is always active
     HAS_HYPOTHESIS = False
+
+#: Windows 的 ``signal`` 模块**没有** ``SIGKILL``（CPython 只在 POSIX 上定义它），
+#: 直接 ``signal.SIGKILL`` 会在 Windows 抛 ``AttributeError``。用 getattr 探一下。
+_SIGKILL = getattr(signal, "SIGKILL", None)
+
+
+def _hard_kill_self() -> None:
+    """立即终止当前进程，不给任何清理代码执行的机会（模拟断电）。
+
+    POSIX 用真正的 ``SIGKILL``；Windows 没有这个信号，退回 ``os._exit``——它同样
+    跳过 ``finally`` / ``atexit`` / 缓冲区刷新，对本用例要验的「事务已提交、
+    ticket 还停在 pending」这个中间态没有区别。
+
+    不用 ``sys.exit`` / ``raise``：那两个是「优雅退出」，``finally`` 会把 ticket
+    收尾掉，用例就测不到崩溃恢复了。
+    """
+    if _SIGKILL is not None:
+        os.kill(os.getpid(), _SIGKILL)
+    os._exit(1)
 
 
 def _crash_child(db_path: str, cfg_path: str) -> None:
@@ -61,7 +77,7 @@ def _crash_child(db_path: str, cfg_path: str) -> None:
 
     def kill_on_done(writer, ticket, state):
         if state == "done":
-            os.kill(os.getpid(), signal.SIGKILL)
+            _hard_kill_self()
         return original(writer, ticket, state)
 
     vs.finish_ticket = kill_on_done
@@ -171,8 +187,17 @@ class CardSafetyRound3Test(unittest.TestCase):
                 child.kill()
                 child.join()
                 self.fail("crash child did not terminate")
-            self.assertEqual(child.exitcode, -signal.SIGKILL,
-                             "child must be killed, not exit cleanly")
+            # POSIX 上子进程被 SIGKILL 拿走，exitcode 是 -SIGKILL；Windows 没有
+            # 这个信号，走 os._exit(1)，只能断言「不是正常退出」。真正的语义保底
+            # 在下面两条：ticket 仍是 pending、rescue_history 有快照 —— 只有子进程
+            # 真的跑完了那笔操作、又在收尾前硬停，才会同时成立。
+            if _SIGKILL is not None:
+                self.assertEqual(child.exitcode, -_SIGKILL,
+                                 "child must be killed, not exit cleanly")
+            else:
+                self.assertNotEqual(child.exitcode, 0,
+                                    "child must not exit cleanly")
+
 
             # Physical integrity after an ungraceful kill.
             conn = sqlite3.connect(db_path)

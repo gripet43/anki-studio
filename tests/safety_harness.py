@@ -23,9 +23,9 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-ADDON_ROOT = Path(__file__).resolve().parent.parent
-if str(ADDON_ROOT.parent) not in sys.path:
-    sys.path.insert(0, str(ADDON_ROOT.parent))
+from _addon_bootstrap import ADDON_ROOT, ensure_importable  # noqa: E402
+
+ensure_importable()
 
 from anki_modern_os.bridge.router import BridgeRouter  # noqa: E402
 

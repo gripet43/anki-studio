@@ -20,8 +20,9 @@ import sys
 import unittest
 from pathlib import Path
 
-ADDON_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ADDON_ROOT.parent))
+from _addon_bootstrap import ADDON_ROOT, ensure_importable  # noqa: E402
+
+ensure_importable()
 
 from anki_modern_os.bridge.compat import (  # noqa: E402
     HOOK_SPECS,
