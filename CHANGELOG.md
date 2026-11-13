@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+## [v1.4.65] - 2026-11-13
+
+- **[DeepSeek] 复盘 Windows `closest is not a function`：抽防御 helper + 补前端单测 + 静态守卫**（新增 [`frontend/src/utils/domTarget.ts`](frontend/src/utils/domTarget.ts)、[`tests/frontend/specs/domTarget.spec.ts`](tests/frontend/specs/domTarget.spec.ts)；改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/utils/windowDrag.ts`](frontend/src/utils/windowDrag.ts)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - **根因复盘**：原代码写的是 `target?.closest(...)`，可选链只防 `null/undefined`，不防「target 是 document/文本节点」；再加上 `as HTMLElement` 类型断言把 TS 的提醒绕了过去。Windows/WebView 在页面未聚焦时 `event.target` 会是 `document`，于是抛 `TypeError`；报错经压缩后变量名变成 `He`，进一步增加了定位成本。
+  - **修法**：把「target 是不是带 closest 的 Element」抽成 `getClosestFromTarget()` / `isTypingTarget()` 两个纯函数，复习键盘处理与窗口拖拽统一走 helper，不再各写一遍类型判断。
+  - **测试补盲**：前端单测新增 4 项 `domTarget` 用例（document / 文本节点 / null / 正常 Element / contentEditable），套件从 63 → **67 项**；Bundle 审计新增 Item #32：禁止在 helper 之外直接调用 `.closest(`，防止同类问题回流。
+  - 说明：这类「真实浏览器事件 target 差异」无法靠 Node 纯逻辑测试完全覆盖，仍需真机验证；但已把最容易出错的判断收拢到一个可测函数里。
+  - **验证**：`tsc --noEmit`、前端单元 67 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.64 → 1.4.65。
+
 ## [v1.4.64] - 2026-11-13
 
 - **[DeepSeek] 修复 Windows 下 `xxx.closest is not a function` 报错**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/utils/windowDrag.ts`](frontend/src/utils/windowDrag.ts)）：

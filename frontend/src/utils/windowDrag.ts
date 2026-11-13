@@ -1,5 +1,6 @@
 import React from 'react';
 import { appActions } from '../stores/useAppStore';
+import { getClosestFromTarget } from './domTarget';
 
 /**
  * Handles window dragging from custom web titlebars / drag regions across macOS / desktop.
@@ -10,13 +11,7 @@ export function startWindowDrag(e: React.MouseEvent) {
   if (e.button !== 0) return;
 
   // Do not initiate drag if user interacted with a button, link, input, or explicit no-drag area
-  const target = e.target as HTMLElement | null;
-  // 某些 Windows / WebView 场景下 event.target 可能是 document（没有 closest）
-  if (
-    target &&
-    typeof target.closest === 'function' &&
-    target.closest('button, input, textarea, select, a, [data-no-drag]')
-  ) {
+  if (getClosestFromTarget(e.target, 'button, input, textarea, select, a, [data-no-drag]')) {
     return;
   }
 
@@ -86,13 +81,7 @@ export function startWindowDrag(e: React.MouseEvent) {
  * Double-click on window titlebar / drag area to maximize or restore (standard macOS behavior)
  */
 export function handleWindowDoubleClick(e: React.MouseEvent) {
-  const target = e.target as HTMLElement | null;
-  // 某些 Windows / WebView 场景下 event.target 可能是 document（没有 closest）
-  if (
-    target &&
-    typeof target.closest === 'function' &&
-    target.closest('button, input, textarea, select, a, [data-no-drag]')
-  ) {
+  if (getClosestFromTarget(e.target, 'button, input, textarea, select, a, [data-no-drag]')) {
     return;
   }
   appActions.toggleMaximize();

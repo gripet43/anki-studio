@@ -542,6 +542,23 @@ assert(
   'Item #29: LibraryView cards must keep flip faces, delayed hover animation + sheen, front/back content separation, and accessible targets'
 );
 
+// Item #32: DOM 事件 target 防御 — .closest() 只允许出现在 domTarget helper 中
+const domTargetSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/domTarget.ts'),
+  'utf-8'
+);
+const windowDragSrc = fs.readFileSync(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/windowDrag.ts'),
+  'utf-8'
+);
+assert(
+  domTargetSrc.includes("typeof (target as Element).closest !== 'function'") &&
+    domTargetSrc.includes('isContentEditable') &&
+    !reviewerSrc.includes('.closest(') &&
+    !windowDragSrc.includes('.closest('),
+  'Item #32: event.target must go through domTarget helpers; no direct .closest() calls outside the defensive helper'
+);
+
 // Item #30: Hook 顺序守卫 —— 任何顶层提前 return 之后都不允许再出现 Hook 调用
 const reviewerHookNames = ['useState(', 'useEffect(', 'useMemo(', 'useRef(', 'useCallback('];
 const reviewerLastHookIdx = Math.max(
