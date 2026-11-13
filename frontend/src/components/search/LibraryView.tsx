@@ -1370,17 +1370,16 @@ export const LibraryView: React.FC = () => {
                 return (
                   <article
                     key={card.id}
-                    onClick={(e) => {
+                    onClick={() => {
                       if (window.getSelection()?.toString().trim()) return;
-                      if (librarySelectionMode || e.metaKey || e.ctrlKey) {
+                      if (librarySelectionMode) {
                         appActions.toggleCardSelection(card.id);
-                      } else {
-                        appActions.openCardEditor(card);
                       }
                     }}
-                    onDoubleClick={() => appActions.openCardEditor(card)}
                     onMouseLeave={() => setCardMenuId(null)}
-                    className={`library-card group relative transition-transform duration-200 cursor-pointer select-none ${
+                    className={`library-card group relative transition-transform duration-200 select-none ${
+                      librarySelectionMode ? 'cursor-pointer' : 'cursor-default'
+                    } ${
                       isSelected ? 'library-card--selected' : ''
                     } ${librarySelectionMode ? 'library-card--no-flip' : ''} ${
                       hasFrontMedia ? 'library-card--media' : ''
@@ -1568,7 +1567,18 @@ export const LibraryView: React.FC = () => {
                           {card.tags.length > 0 && (
                             <div className="library-card-tags">
                               {card.tags.map((tg) => (
-                                <span key={tg}>#{tg}</span>
+                                <button
+                                  key={tg}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    appActions.searchLibraryDebounced({ tag: tg });
+                                  }}
+                                  title={`#${tg}`}
+                                  className="library-card-tag"
+                                >
+                                  #{tg}
+                                </button>
                               ))}
                             </div>
                           )}

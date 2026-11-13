@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+## [v1.4.61] - 2026-11-13
+
+- **[DeepSeek] Gallery 卡片交互修正：卡片本身不再进编辑、标签可筛选、正文纯文本**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
+  - 整卡点击/双击不再打开编辑器（多选模式下点击仍是选择），进入编辑统一走背面的「编辑」按钮，避免 hover 翻面后误点；
+  - 背面标签改为可点击的筛选入口：hover 时变品牌色、上浮 1px + 下划线，点击即按该标签筛选卡片库；
+  - 正文里的链接按纯文本处理（颜色继承、无下划线、`pointer-events: none`），不会被误点跳转；
+  - 卡片光标随模式变化（多选 pointer / 普通 default）。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.60 → 1.4.61。
+
 ## [v1.4.60] - 2026-11-13
 
 - **[DeepSeek] Gallery 改为整张卡片翻转**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：

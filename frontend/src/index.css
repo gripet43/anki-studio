@@ -1121,8 +1121,22 @@ ruby rt {
   overflow: hidden;
 }
 
-.library-card-tags span {
+.library-card-tag {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
   white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s, transform 0.15s;
+}
+
+.library-card-tag:hover {
+  color: var(--brand-text);
+  transform: translateY(-1px);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .library-card-foot-back {
@@ -1459,4 +1473,13 @@ ruby rt {
 
 .library-card--media .library-card-title .anki-io-wrap img {
   max-height: 100%;
+}
+
+/* Gallery 正文按纯文本处理：链接不可点、不显示下划线/颜色 */
+.library-card-title a,
+.library-card-answer a {
+  color: inherit;
+  text-decoration: none;
+  pointer-events: none;
+  cursor: default;
 }
