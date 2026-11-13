@@ -968,7 +968,6 @@ ruby rt {
 
 .library-card-face-back {
   transform: rotateY(180deg);
-  background: transparent;
 }
 
 /* 翻转时掠过一道很淡的光，模拟纸面反光 */

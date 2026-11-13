@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.60] - 2026-11-13
+
+- **[DeepSeek] Gallery 改为整张卡片翻转**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
+  - 之前卡面（背景/边框/阴影）留在外层 article，翻转的只是内部内容，视觉上像「内容在框里翻」；
+  - 现在把卡面样式移到正反两个 face 上，翻转时整张卡片（含背景、圆角、边框、阴影、hover 抬升）一起转动，贴近参考稿的效果；
+  - 选中态 ring、深色/浅色主题、hover 阴影同步跟随 face；多选模式禁翻、媒体卡视窗等行为不变。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.59 → 1.4.60。
+
 ## [v1.4.59] - 2026-11-13
 
 - **[DeepSeek] 侧边栏牌组树的折叠三角放大**（改 [`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)）：原来用 10px 的 `▸ / ▾` 字符，太细小；改为 12px 的矢量 chevron，折叠状态旋转 90°，点击热区扩到 20×20，并有 hover 背景反馈；无子牌组的圆点占位同步对齐，保证牌组名整齐。附带 `aria-expanded` 状态。

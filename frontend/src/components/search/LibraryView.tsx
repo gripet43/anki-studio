@@ -1351,6 +1351,13 @@ export const LibraryView: React.FC = () => {
                 const frontPreviewHtml = formatCardPreviewHtml(card.frontHtml || card.front);
                 const backPreviewHtml = formatCardPreviewHtml(card.backHtml || card.back);
                 const hasBackPreview = backPreviewHtml.trim().length > 0;
+                const faceSurface = `rounded-2xl border transition-[background-color,border-color,box-shadow] duration-200 ${
+                  isSelected
+                    ? 'bg-[var(--brand-surface)] border-[var(--brand)] ring-2 ring-[var(--brand)]/35 shadow-md'
+                    : isDark
+                    ? 'bg-[#1A1B21] border-[#2A2C36] shadow-[0_1px_3px_rgba(0,0,0,0.02)] group-hover:border-[var(--brand-border)] group-hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]'
+                    : 'bg-white border-[#EAECEF] shadow-[0_1px_3px_rgba(0,0,0,0.02)] group-hover:border-[var(--brand-border)] group-hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)]'
+                }`;
                 const hasFrontMedia = /<(img|svg|video|canvas|iframe)\b|anki-io-wrap|background-image/i.test(
                   frontPreviewHtml || ''
                 );
@@ -1373,21 +1380,16 @@ export const LibraryView: React.FC = () => {
                     }}
                     onDoubleClick={() => appActions.openCardEditor(card)}
                     onMouseLeave={() => setCardMenuId(null)}
-                    className={`library-card group relative rounded-2xl transition-[background-color,border-color,box-shadow,transform] duration-200 cursor-pointer select-none border ${
-                      librarySelectionMode ? 'library-card--no-flip' : ''
-                    } ${hasFrontMedia ? 'library-card--media' : ''
-                    } ${
-                      isSelected
-                        ? 'bg-[var(--brand-surface)] border-[var(--brand)] ring-2 ring-[var(--brand)]/35 shadow-md'
-                        : isDark
-                        ? 'bg-[#1A1B21] border-[#2A2C36] hover:border-[var(--brand-border)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)] motion-safe:hover:-translate-y-0.5'
-                        : 'bg-white border-[#EAECEF] hover:border-[var(--brand-border)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] motion-safe:hover:-translate-y-0.5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]'
-                    }`}
+                    className={`library-card group relative transition-transform duration-200 cursor-pointer select-none ${
+                      isSelected ? 'library-card--selected' : ''
+                    } ${librarySelectionMode ? 'library-card--no-flip' : ''} ${
+                      hasFrontMedia ? 'library-card--media' : ''
+                    } motion-safe:hover:-translate-y-0.5`}
                   >
                     <div className="library-card-flip">
                       <div className="library-card-flip-inner">
                         {/* ===== 正面：只放题目 + 到期 / 熟记度 ===== */}
-                        <div className="library-card-face library-card-face-front">
+                        <div className={`library-card-face library-card-face-front ${faceSurface}`}>
                           <header className="library-card-header">
                             <div className="library-card-head-left">
                               <span
@@ -1547,7 +1549,7 @@ export const LibraryView: React.FC = () => {
                         </div>
 
                         {/* ===== 背面：答案 + 完整标签 + 操作 ===== */}
-                        <div className="library-card-face library-card-face-back">
+                        <div className={`library-card-face library-card-face-back ${faceSurface}`}>
                           <div className="library-card-label">{t('cardBackLabel')}</div>
 
                           {hasBackPreview ? (
