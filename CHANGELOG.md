@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+## [v1.4.63] - 2026-11-13
+
+- **[DeepSeek] Gallery 卡片增加错峰进入动画**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：打开卡片库或切换筛选时，卡片按索引依次淡入并轻微上浮（每张延迟 28ms、最多叠加 12 张；动画 260ms，`cubic-bezier(0.22,1,0.36,1)`）。使用 `animation-fill-mode: backwards`，动画结束后不影响 hover 抬升与翻面；`prefers-reduced-motion` 下不播动画。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.62 → 1.4.63。
+
 ## [v1.4.62] - 2026-11-13
 
 - **[DeepSeek] 提高 Gallery「更多操作」菜单文字对比度**（改 [`frontend/src/index.css`](frontend/src/index.css)）：菜单项由 secondary 色改为主文字色、字重 500；「删除」用更深的 danger 色 + 600 字重；标签输入框文字同色，placeholder 提高不透明度。深色模式下自动跟随主题。

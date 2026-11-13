@@ -1,8 +1,8 @@
 {
   "name": "Anki Studio",
   "package": "anki_modern_os",
-  "version": "1.4.62",
-  "human_version": "1.4.62",
+  "version": "1.4.63",
+  "human_version": "1.4.63",
   "author": "Zhang Yao & Anki Studio Team",
   "homepage": "https://github.com/gripet43/anki-studio",
   "min_point_version": 260904,

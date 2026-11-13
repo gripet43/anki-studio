@@ -1341,7 +1341,7 @@ export const LibraryView: React.FC = () => {
         ) : libraryViewMode === 'gallery' ? (
           <>
             <div className="library-card-grid">
-              {visibleCards.map((card) => {
+              {visibleCards.map((card, cardIndex) => {
                 const isSelected = selectedCardIds.includes(card.id);
                 const isSuspended = card.suspended || card.status === 'suspended';
                 const isBuried = card.buried || card.status === 'buried';
@@ -1377,7 +1377,8 @@ export const LibraryView: React.FC = () => {
                       }
                     }}
                     onMouseLeave={() => setCardMenuId(null)}
-                    className={`library-card group relative transition-transform duration-200 select-none ${
+                    style={{ animationDelay: `${Math.min(cardIndex, 12) * 28}ms` }}
+                    className={`library-card library-card-enter group relative transition-transform duration-200 select-none ${
                       librarySelectionMode ? 'cursor-pointer' : 'cursor-default'
                     } ${
                       isSelected ? 'library-card--selected' : ''

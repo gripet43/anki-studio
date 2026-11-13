@@ -1491,3 +1491,25 @@ ruby rt {
   pointer-events: none;
   cursor: default;
 }
+
+/* Gallery 卡片进入：错峰淡入 + 轻微上浮（fill 用 backwards，结束后不影响 hover transform） */
+@keyframes library-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.library-card-enter {
+  animation: library-card-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library-card-enter {
+    animation: none;
+  }
+}
