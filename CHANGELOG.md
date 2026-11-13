@@ -15,6 +15,21 @@
 
 ## [Unreleased]
 
+## [v1.5.0] - 2026-11-13
+
+- **[WorkBuddy] 版本号收敛：v1.4.7–v1.4.66 的 60 个补丁版本合并为 1.5.0**（改 [`manifest.json`](manifest.json)、[`CHANGELOG.md`](CHANGELOG.md)、[`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)）：
+  - **为什么合并**：一天之内连打 60 个 patch 版本，语义化版本已经退化成流水号。AnkiWeb 只认 `mod` 时间戳、发布不受影响，但版本号是给人看的——「1.4.37 引入的」这种定位方式一旦失效，回滚和排查都失去锚点。这批改动同属一个主题（沙盒渲染 + 复习器 + 卡片库 + 测试体系），够格作为一个 minor。
+  - **处理方式**：**不删除历史**。下面 v1.4.66 及更早的各条原样保留，作为逐次改动的施工记录；1.5.0 只是给这一段一个可引用的版本名。后续再发版从 1.5.1 继续，不再逐个补丁跳号。
+  - **本批内容概览**（细节见下方各条）：
+    - **架构**：脚本型卡组沙盒渲染（`SandboxCardFrame` + `127.0.0.1:<mediasrv 端口>` 本地媒体 + `pycmd` 垫片与白名单 + `ResizeObserver` 高度回传），模板含脚本且依赖 `gData` / IO 标记时自动走沙盒；真实卡组验版扩到 18 个 AnkiWeb 热门 `.apkg`。
+    - **复习**：队列跟随原生 v3 调度器顺序、可选原生四按钮布局、快捷键按原生校准、会话跨批累计与续学、切卡停止音频、单牌组/全牌组的完成文案区分。
+    - **卡片库**：Gallery 3D 翻面卡、多选批量操作、背面更多操作菜单、标签可筛选、卡片不再整卡进编辑、正文纯文本摘要。
+    - **编辑器**：≥3 字段按真实 `fieldOrder` 平铺并折叠空字段、「预览」按钮文案、挖空/高亮的空壳清理、遮挡编辑器快捷键按平台注入。
+    - **首页与设置**：学习小贴士多条轮播、今日进度圆环说明、进度减负按复习量动态计算、今日学完置灰、新增「答题设置」页、关于页动态版本与外链。
+    - **隐私**：可选匿名使用统计（默认开启、设置内可关、AnkiWeb 描述已披露），数据仅含安装哈希、事件名、版本/OS/Anki 版本/界面语言、时区偏移与国家，不含任何卡片内容、牌组名、标签、搜索词。
+    - **工程**：新增前端 TS 单测套件（67 项）、`tests/apkg` 真卡组验版与 `known_issues` 降级机制、`bridge/compat.py` 把 monkey-patch 是否生效变成可检查事实、隔离测试环境与一键门禁、打包后自动复制到 `~/Downloads` 并打印 SHA-256。
+    - **修复**：`mathRenderer` 在 `<style>` 块内插 `<br/>` 导致整张样式表被 Chromium 丢弃、`@charset` 作用域失效、公式里的 HTML 实体变字面量、Windows 下 `event.target` 非 `Element` 调 `closest` 抛错。
+
 ## [v1.4.66] - 2026-11-13
 
 - **[DeepSeek] Windows 验版流程补上「前端事件 target」这一类覆盖**（新增 [`tests/scenarios/frontend_audit.py`](tests/scenarios/frontend_audit.py)；改 [`tests/WINDOWS_HANDOFF.md`](tests/WINDOWS_HANDOFF.md)、[`tests/scenarios/gate.sh`](tests/scenarios/gate.sh)、[`tests/scenarios/README.md`](tests/scenarios/README.md)、[`README.md`](README.md)）：
