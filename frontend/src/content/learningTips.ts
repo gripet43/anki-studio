@@ -26,8 +26,8 @@ export const LEARNING_TIPS: LearningTip[] = [
     id: 'keep-cards-short',
     category: { zh: '制卡原则', en: 'Card Making' },
     text: {
-      zh: '20–80 字、10 秒内能答完；长知识点拆成几张。',
-      en: '20–80 words, answerable in 10 seconds; split big topics into several cards.',
+      zh: '20–80 字、10 秒内能答完，长知识点拆成几张。',
+      en: '20–80 words, answerable in 10 seconds — split big topics into several cards.',
     },
   },
   {
@@ -58,7 +58,7 @@ export const LEARNING_TIPS: LearningTip[] = [
     id: 'fewer-honest-reviews',
     category: { zh: '复习习惯', en: 'Review Habits' },
     text: {
-      zh: '宁可今天少刷几张，也别含糊地点「记得」；状态不好时，暂停比硬撑划算。',
+      zh: '宁可今天少刷几张，也别含糊地点「记得」，状态不好时暂停比硬撑划算。',
       en: 'Fewer honest reviews beat rushed ones — when you’re not okay, pausing beats pushing through.',
     },
   },
@@ -91,14 +91,14 @@ export const LEARNING_TIPS: LearningTip[] = [
     category: { zh: '知识体系', en: 'Knowledge System' },
     text: {
       zh: '卡片负责记住「点」，笔记/导图负责连成「线」——两者一起用才成体系。',
-      en: 'Cards hold the dots; notes and mind maps connect them — use both to build a real system.',
+      en: 'Cards hold the dots. Notes and mind maps connect them — use both to build a real system.',
     },
   },
   {
     id: 'minimum-information',
     category: { zh: '卡片质量', en: 'Card Quality' },
     text: {
-      zh: '一张卡只问一个点；答案里出现「和」，就该拆成两张。',
+      zh: '一张卡只问一个点，答案里出现「和」就该拆成两张。',
       en: 'One card, one point — if the answer contains “and”, split it into two cards.',
     },
   },
@@ -114,7 +114,7 @@ export const LEARNING_TIPS: LearningTip[] = [
     id: 'why-not-what',
     category: { zh: '卡片质量', en: 'Card Quality' },
     text: {
-      zh: '少问「是什么」，多问「为什么 / 如果……会怎样」；能解释因果的卡记得更牢。',
+      zh: '少问「是什么」，多问「为什么 / 如果……会怎样」，能解释因果的卡记得更牢。',
       en: 'Ask “why” and “what if” more than “what” — cards that explain cause and effect stick better.',
     },
   },
@@ -130,7 +130,7 @@ export const LEARNING_TIPS: LearningTip[] = [
     id: 'retrieval-first',
     category: { zh: '记忆科学', en: 'Memory Science' },
     text: {
-      zh: '先合上书回忆，再翻卡；想不起来的那几秒，才是记忆真正变牢的时候。',
+      zh: '先合上书回忆，再翻卡，想不起来的那几秒才是记忆真正变牢的时候。',
       en: 'Recall before you flip: those few seconds of struggle are where memory actually gets stronger.',
     },
   },
@@ -138,7 +138,7 @@ export const LEARNING_TIPS: LearningTip[] = [
     id: 'desirable-difficulty',
     category: { zh: '记忆科学', en: 'Memory Science' },
     text: {
-      zh: '稍微吃力是好事；如果一张卡每次都是一眼就会，它可能不值得留在库里。',
+      zh: '稍微吃力是好事，如果一张卡每次都是一眼就会，它可能不值得留在库里。',
       en: 'A little struggle is healthy — a card that’s always effortless probably doesn’t need to stay in your deck.',
     },
   },
@@ -155,22 +155,22 @@ export const LEARNING_TIPS: LearningTip[] = [
     category: { zh: '卡片质量', en: 'Card Quality' },
     text: {
       zh: '删掉永远答不对和一眼就会的卡，留好卡比留多卡重要。',
-      en: 'Drop the never-right and the always-easy; good cards beat many cards.',
+      en: 'Drop the never-right and the always-easy — good cards beat many cards.',
     },
   },
   {
     id: 'own-words',
     category: { zh: '制卡原则', en: 'Card Making' },
     text: {
-      zh: '照抄原句记住的是句子；用自己的话复述，才是理解。',
-      en: 'Copying a sentence remembers the words; saying it in your own words remembers the idea.',
+      zh: '照抄原句记住的是句子，用自己的话复述才是理解。',
+      en: 'Copying a sentence remembers the words — saying it in your own words remembers the idea.',
     },
   },
   {
     id: 'worth-remembering',
     category: { zh: '复习习惯', en: 'Review Habits' },
     text: {
-      zh: '只把值得记十年的内容做成卡；卡片库不是收藏夹。',
+      zh: '只把值得记十年的内容做成卡，卡片库不是收藏夹。',
       en: 'Only card what’s worth remembering for a decade — a library is not a scrapbook.',
     },
   },

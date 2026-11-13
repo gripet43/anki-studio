@@ -1,4 +1,4 @@
-# AnkiWeb 上架资料（v1.4.31）
+# AnkiWeb 上架资料（v1.4.32）
 
 > 上传入口：<https://ankiweb.net/shared/addons> → Upload
 > 表单只有五个字段：Title、Tags、Support Page、Branches、Description。

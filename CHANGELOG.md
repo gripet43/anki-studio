@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.32] - 2026-11-13
+
+- **[DeepSeek] 学习小贴士去分号：改用逗号连接，句子更轻**（改 [`frontend/src/content/learningTips.ts`](frontend/src/content/learningTips.ts)）：
+  - 分号会让一句话看起来像两个复杂分句；审计 20 条后共改写 12 处（中文 8 条、英文 4 条），能逗号连接的就逗号连接，需要分层的改用句号或破折号。
+  - 示例：`20–80 字、10 秒内能答完；长知识点拆成几张。` → `20–80 字、10 秒内能答完，长知识点拆成几张。`；`稍微吃力是好事；如果一张卡每次都是一眼就会…` → 逗号连接。
+  - 语义不变，中英文同步。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 122 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.31 → 1.4.32。
+
 ## [v1.4.31] - 2026-11-13
 
 - **[DeepSeek] 修复学习小贴士 hover 后图标不消失、自动轮播中断**（改 [`frontend/src/components/dashboard/DashboardTipLine.tsx`](frontend/src/components/dashboard/DashboardTipLine.tsx)）：
