@@ -44,6 +44,7 @@ export const SettingsModal: React.FC = () => {
     envInfo,
     showShortcutHints,
     tipsHiddenOn,
+    analyticsEnabled,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(settingsInitialTab || 'appearance');
@@ -1095,6 +1096,32 @@ export const SettingsModal: React.FC = () => {
                     </span>
                   </button>
                 ))}
+              </div>
+
+              {/* Privacy & Analytics Card */}
+              <div className={`rounded-xl border p-4 flex items-center justify-between gap-4 ${cardSurface}`}>
+                <div className="space-y-1">
+                  <div className="text-[13px] font-semibold">{t('settingsAnalyticsTitle')}</div>
+                  <div className={`text-[11px] ${subText} leading-relaxed`}>
+                    {t('settingsAnalyticsSub')}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={analyticsEnabled}
+                  onClick={() => appActions.updatePreferences({ analyticsEnabled: !analyticsEnabled })}
+                  style={analyticsEnabled ? { backgroundColor: currentScale.brand } : undefined}
+                  className={`w-12 h-6.5 shrink-0 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${
+                    analyticsEnabled ? '' : isDark ? 'bg-[#3A3A48]' : 'bg-[#E5E5EA]'
+                  }`}
+                >
+                  <div
+                    className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                      analyticsEnabled ? 'translate-x-5.5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
 
               {/* Philosophy Card */}

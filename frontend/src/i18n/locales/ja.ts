@@ -372,6 +372,8 @@ export const dict: TranslationTable = {
   aboutXiaohongshu: "小紅書（RED）",
   aboutGithub: "GitHub ソースとフィードバック",
   settingsAboutSub: "ネイティブAnkiデータベースおよびFSRSアルゴリズムと100%互換のモダン学習環境。",
+  settingsAnalyticsTitle: "匿名の利用統計",
+  settingsAnalyticsSub: "起動・日次アクティブ・復習枚数帯・機能利用の匿名カウントのみ送信します。カード内容・デッキ名・検索語は含みません。いつでもオフにできます。",
   settingsAppearanceSub: "表示言語・テーマ・アクセントカラーをカスタマイズします。設定は自動保存されます。",
   settingsCheatsheetTitle: "キーボードショートカット一覧",
   settingsCheckDbBtn: "データベースをチェック",

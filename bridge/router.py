@@ -15,6 +15,7 @@ import traceback
 import urllib.parse
 from typing import Any, Callable, Dict, Optional
 
+from .analytics_service import AnalyticsService
 from .deck_service import DeckService
 from .edit_service import EditService
 from .review_service import ReviewService
@@ -75,6 +76,9 @@ class BridgeRouter:
             self._get_col, self._get_mw, self._get_config, self._write_config
         )
         self.deck_service.vacation_service = self.vacation_service
+        self.analytics_service = AnalyticsService(
+            self._get_config, self._write_config, self._get_mw
+        )
 
     def handle_pycmd(self, command: str) -> Optional[str]:
         """
@@ -236,6 +240,8 @@ class BridgeRouter:
             patch["sandbox_notetype_ids"] = [str(x) for x in data["sandboxNoteTypeIds"] if str(x).strip()]
         if "showShortcutHints" in data:
             patch["show_shortcut_hints"] = bool(data["showShortcutHints"])
+        if "analyticsEnabled" in data:
+            patch["analytics_enabled"] = bool(data["analyticsEnabled"])
         if "tipsHiddenOn" in data:
             hidden_on = str(data["tipsHiddenOn"] or "").strip()
             if hidden_on:
@@ -258,6 +264,7 @@ class BridgeRouter:
                 "sandboxNoteTypeIds": [str(x) for x in (saved.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(saved.get("show_shortcut_hints", False)),
                 "tipsHiddenOn": str(saved.get("dashboard_tips_hidden_on") or ""),
+                "analyticsEnabled": bool(saved.get("analytics_enabled", True)),
             },
         }
 
@@ -321,6 +328,25 @@ class BridgeRouter:
 
     def action_stop_audio(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.review_service.stop_audio(data)
+
+    # ---- Anonymous Usage Analytics ----
+
+    def action_analytics_start(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            return self.analytics_service.start()
+        except Exception:
+            return {"started": False}
+
+    def action_analytics_track(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            event = str((data or {}).get("event") or "")
+            if event == "review_session":
+                return {"tracked": self.analytics_service.track_review_session(int(data.get("cards") or 0))}
+            if event == "feature_use":
+                return {"tracked": self.analytics_service.track_feature(str(data.get("feature") or ""))}
+            return {"tracked": False}
+        except Exception:
+            return {"tracked": False}
 
     def action_undo(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.review_service.undo_last_action(data)

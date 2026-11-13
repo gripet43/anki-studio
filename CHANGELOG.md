@@ -15,6 +15,16 @@
 
 ## [Unreleased]
 
+## [v1.4.33] - 2026-11-13
+
+- **[DeepSeek] 新增可选匿名使用统计（默认开启、可关闭）+ Cloudflare Worker 端点代码**（新增 [`bridge/analytics_service.py`](bridge/analytics_service.py)、[`scripts/analytics-worker/`](scripts/analytics-worker/)、[`tests/test_analytics_service.py`](tests/test_analytics_service.py)，改 [`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx) 及 16 种语言字典）：
+  - **采集**：启动、日活、复习会话张数区间（1–20 / 21–50 / 51–100 / 100+）、功能使用计数（快速制卡 / 卡片库搜索 / 休假 / 进度减负）；附版本、系统、Anki 版本、界面语言、随机安装 ID 的 SHA-256 哈希。
+  - **不采集**：卡片内容、牌组名、标签、搜索词、文件路径、AnkiWeb 账号；IP 不写入数据库；数据保留 90 天。
+  - **隐私与开关**：设置 → 关于新增「匿名使用统计」开关（默认开启），关闭后前端不再发送、后端也不再入队；`analytics_endpoint` 为空时**完全不会发出任何请求**（默认状态，直到部署端点）。
+  - **端点**：`scripts/analytics-worker/` 提供 Cloudflare Worker + D1 的 `worker.js`、建表 SQL、wrangler 配置和 5 分钟部署说明；建议绑定自定义域名（`*.workers.dev` 在大陆不稳定）。接口协议简单，可平移到阿里云/腾讯云函数。
+  - **文档**：`config.md` 增加统计配置说明；README 增加「隐私与匿名统计」章节（明确「卡片内容永不上传」）。
+  - **验证**：Python 129 项（新增 7 项统计服务回归）、`tsc --noEmit`、前端单元 63 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.32 → 1.4.33。
+
 ## [v1.4.32] - 2026-11-13
 
 - **[DeepSeek] 学习小贴士去分号：改用逗号连接，句子更轻**（改 [`frontend/src/content/learningTips.ts`](frontend/src/content/learningTips.ts)）：

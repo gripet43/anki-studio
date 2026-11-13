@@ -116,6 +116,8 @@ export interface AppState {
   showShortcutHints: boolean;
   /** 首页牌组标题旁的学习小贴士「今天不再显示」日期（YYYY-MM-DD）。 */
   tipsHiddenOn: string;
+  /** 匿名使用统计开关（只上报匿名计数，不含卡片内容）。 */
+  analyticsEnabled: boolean;
   envInfo: EnvInfo;
 
   // Dashboard, Decks & Statistics
@@ -227,6 +229,7 @@ const initialState: AppState = {
   customNickname: '',
   showShortcutHints: false,
   tipsHiddenOn: '',
+  analyticsEnabled: true,
   envInfo: {
     platform: initialPlatform,
     osName: initialPlatform === 'mac' ? 'macOS' : initialPlatform === 'win' ? 'Windows' : 'Linux',
@@ -327,6 +330,15 @@ const LIBRARY_PAGE_SIZE = 200;
 
 let coldStartInProgress = false;
 let coldStartStartTs = 0;
+let analyticsStarted = false;
+
+function trackAnalytics(
+  event: 'review_session' | 'feature_use',
+  payload: Record<string, unknown>
+) {
+  if (!isAnkiNativeEnv() || !state.analyticsEnabled) return;
+  callAnki('analytics_track', { event, ...payload }).catch(() => {});
+}
 
 interface NativeSyncFinishResult {
   ok: boolean;
@@ -428,6 +440,10 @@ export const appActions = {
       );
 
       coldStartInProgress = false;
+      if (!analyticsStarted && isAnkiNativeEnv()) {
+        analyticsStarted = true;
+        callAnki('analytics_start', {}).catch(() => {});
+      }
 
       const hasBackendSyncTs = typeof dash?.syncedAt === 'number';
       const backendSyncTs = hasBackendSyncTs ? (dash!.syncedAt as number) : 0;
@@ -463,6 +479,7 @@ export const appActions = {
           : state.sandboxNoteTypeIds,
         showShortcutHints: prefs?.showShortcutHints !== undefined ? prefs.showShortcutHints : state.showShortcutHints,
         tipsHiddenOn: prefs?.tipsHiddenOn !== undefined ? prefs.tipsHiddenOn : state.tipsHiddenOn,
+        analyticsEnabled: prefs?.analyticsEnabled !== undefined ? prefs.analyticsEnabled : state.analyticsEnabled,
         debugModeUnlocked: Boolean(prefs?.debugMode) || state.debugModeUnlocked,
         envInfo: dash?.envInfo || state.envInfo,
         lastSyncedTimestamp: genuineSyncTs,
@@ -558,6 +575,7 @@ export const appActions = {
     collapsedDeckIds?: string[];
     showShortcutHints?: boolean;
     tipsHiddenOn?: string;
+    analyticsEnabled?: boolean;
   }) {
     const nextLangPref = patch.language !== undefined ? patch.language : state.languagePref;
     const nextResolvedLang = resolveLanguage(nextLangPref, state.dashboard.language);
@@ -570,6 +588,7 @@ export const appActions = {
       ...(patch.collapsedDeckIds ? { collapsedDeckIds: patch.collapsedDeckIds } : {}),
       ...(patch.showShortcutHints !== undefined ? { showShortcutHints: patch.showShortcutHints } : {}),
       ...(patch.tipsHiddenOn !== undefined ? { tipsHiddenOn: patch.tipsHiddenOn } : {}),
+      ...(patch.analyticsEnabled !== undefined ? { analyticsEnabled: patch.analyticsEnabled } : {}),
     });
 
     if (isAnkiNativeEnv()) {
@@ -591,6 +610,7 @@ export const appActions = {
     deckId?: string;
     sortBy?: LibrarySortOption;
   }) {
+    trackAnalytics('feature_use', { feature: 'library_search' });
     const nextQuery = overrides?.query !== undefined ? overrides.query : state.librarySearchQuery;
     const nextStatus = overrides?.status !== undefined ? overrides.status : state.filterStatus;
     const nextDifficulty =
@@ -1292,6 +1312,7 @@ export const appActions = {
       await appActions.refreshDashboard(false);
       setAppState({ vacationModalOpen: false, isLoading: false });
       appActions.syncCollection();
+      trackAnalytics('feature_use', { feature: 'vacation' });
       showToast(`${tState('vacationActiveBadge')} (${params.days} ${tState('daysUnit')})`);
       return res;
     } catch (err: any) {
@@ -1363,6 +1384,7 @@ export const appActions = {
 
       await appActions.initFromAnki(false);
       appActions.syncCollection();
+      trackAnalytics('feature_use', { feature: 'relief' });
 
       showToast(res?.message || tState('backlogModalTitle'));
       return res || { success: true, message: tState('backlogModalTitle') };
@@ -1945,6 +1967,9 @@ export const appActions = {
       if (answerPromise) await answerPromise;
       continuation = await appActions.continueReviewSession();
     }
+    if (isLastCard && !isPreview && !continuation) {
+      trackAnalytics('review_session', { cards: state.sessionStudiedCount + 1 });
+    }
 
     const shouldDecrementDue = !isPreview && ease > 1;
     const nextDueNew = shouldDecrementDue && isNewCard
@@ -2489,6 +2514,7 @@ export const appActions = {
         if (res?.cardId) createdCardId = res.cardId;
         if (res?.noteId) createdNoteId = res.noteId;
         await appActions.initFromAnki(false);
+        trackAnalytics('feature_use', { feature: 'quick_add' });
         showToast(tState('addToDeckBtn', { deck: targetDeckName }));
         return;
       } catch {}

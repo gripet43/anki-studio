@@ -338,6 +338,8 @@ export interface UserPreferences {
   showShortcutHints?: boolean;
   /** 首页学习小贴士「今天不再显示」的日期（YYYY-MM-DD，持久化到 config）。 */
   tipsHiddenOn?: string;
+  /** 匿名使用统计开关（默认开启，可关闭）。 */
+  analyticsEnabled?: boolean;
 }
 
 export interface SafetyWarning {

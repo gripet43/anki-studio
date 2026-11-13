@@ -1,0 +1,15 @@
+name = "anki-studio-analytics"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "anki-studio-analytics"
+database_id = "REPLACE_WITH_YOUR_D1_ID"
+
+[triggers]
+crons = ["0 3 * * *"]
+
+# 部署后把自定义域名绑定到 Worker（大陆访问比 *.workers.dev 稳定）：
+#   wrangler routes add stats.example.com/*
+# 然后把 https://stats.example.com/v1/events 填进插件 config.json 的 analytics_endpoint。

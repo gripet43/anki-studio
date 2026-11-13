@@ -372,6 +372,8 @@ export const dict: TranslationTable = {
   aboutXiaohongshu: "Xiaohongshu (RED)",
   aboutGithub: "GitHub kaynak ve sorunlar",
   settingsAboutSub: "Yerel Anki koleksiyonları ve FSRS ile %100 uyumlu modern masaüstü öğrenme alanı.",
+  settingsAnalyticsTitle: "Anonim kullanım istatistikleri",
+  settingsAnalyticsSub: "Yalnızca anonim sayımlar gönderilir (açılışlar, günlük etkinlik, kart aralıkları, özellik kullanımı); kart içeriği, deste adları veya arama sorguları asla gönderilmez. İstediğiniz zaman kapatabilirsiniz.",
   settingsAppearanceSub: "Arayüz dilini, tema modunu ve vurgu renklerini özelleştirin.",
   settingsCheatsheetTitle: "Klavye Kısayolları Rehberi",
   settingsCheckDbBtn: "Veritabanını Denetle",

@@ -372,6 +372,8 @@ export const dict: TranslationTable = {
   aboutXiaohongshu: "小紅書主頁",
   aboutGithub: "GitHub 原始碼與回饋",
   settingsAboutSub: "專為高效長期記憶打造的現代桌面學習系統，100% 相容 Anki 原生資料庫與 FSRS 演算法。",
+  settingsAnalyticsTitle: "匿名使用統計",
+  settingsAnalyticsSub: "只上報匿名計數（啟動、日活、複習張數區間、功能使用），不含卡片內容、牌組名或搜尋詞；可隨時關閉。",
   settingsAppearanceSub: "定製介面語言、主題模式與全域強調色，所有偏好自動持久化至本機外掛配置。",
   settingsCheatsheetTitle: "全域與複習快捷鍵一覽",
   settingsCheckDbBtn: "執行資料庫檢查",

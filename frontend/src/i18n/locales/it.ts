@@ -372,6 +372,8 @@ export const dict: TranslationTable = {
   aboutXiaohongshu: "Xiaohongshu (RED)",
   aboutGithub: "Codice e issue su GitHub",
   settingsAboutSub: "Uno spazio di studio moderno 100% compatibile con le collezioni native Anki e FSRS.",
+  settingsAnalyticsTitle: "Statistiche d’uso anonime",
+  settingsAnalyticsSub: "Inviamo solo conteggi anonimi (avvii, attività giornaliera, fasce di carte, uso delle funzioni) — mai contenuti delle carte, nomi dei mazzi o ricerche. Disattivabile in qualsiasi momento.",
   settingsAppearanceSub: "Personalizza lingua dell'interfaccia, tema e colore di accento.",
   settingsCheatsheetTitle: "Riferimento scorciatoie da tastiera",
   settingsCheckDbBtn: "Controlla database",

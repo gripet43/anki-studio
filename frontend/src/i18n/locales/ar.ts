@@ -372,6 +372,8 @@ export const dict: TranslationTable = {
   aboutXiaohongshu: "Xiaohongshu (RED)",
   aboutGithub: "الكود والمشكلات على GitHub",
   settingsAboutSub: "بيئة تعلم حديثة متوافقة بنسبة 100% مع قواعد بيانات Anki الأصلية وخوارزمية FSRS.",
+  settingsAnalyticsTitle: "إحصاءات استخدام مجهولة",
+  settingsAnalyticsSub: "نرسل عدادات مجهولة فقط (مرات التشغيل، النشاط اليومي، نطاقات البطاقات، استخدام الميزات) — دون محتوى البطاقات أو أسماء الرزم أو عبارات البحث. يمكن إيقافها في أي وقت.",
   settingsAppearanceSub: "تخصيص لغة الواجهة ووضع المظهر ولون التمييز مع الحفظ التلقائي.",
   settingsCheatsheetTitle: "دليل اختصارات لوحة المفاتيح",
   settingsCheckDbBtn: "فحص قاعدة البيانات",

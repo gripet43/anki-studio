@@ -372,6 +372,8 @@ export const dict: TranslationTable = {
   aboutXiaohongshu: "샤오홍슈(RED)",
   aboutGithub: "GitHub 소스 및 이슈",
   settingsAboutSub: "네이티브 Anki 데이터베이스 및 FSRS 알고리즘과 100% 호환되는 모던 데스크톱 학습 환경.",
+  settingsAnalyticsTitle: "익명 사용 통계",
+  settingsAnalyticsSub: "실행, 일일 활성, 복습 장수 구간, 기능 사용의 익명 카운트만 전송합니다. 카드 내용, 덱 이름, 검색어는 포함하지 않으며 언제든 끌 수 있습니다.",
   settingsAppearanceSub: "인터페이스 언어, 테마 모드 및 강조색을 설정합니다. 모든 변경사항은 자동 저장됩니다.",
   settingsCheatsheetTitle: "키보드 단축키 안내",
   settingsCheckDbBtn: "데이터베이스 점검 실행",

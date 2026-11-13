@@ -30,6 +30,20 @@
 - `sandbox_notetype_ids`：启用了「原生沙盒兼容模式」的卡型 ID 数组。在复习界面按卡型
   切换后由界面自动维护，用于让个别模板在隔离 iframe 中渲染；一般不需要手动修改。
 
+## 匿名使用统计（可选）
+
+- `analytics_enabled`：`true` / `false`（默认 `true`）
+  是否上报匿名使用计数。只包含：启动、日活、复习会话张数区间、功能使用计数，
+  以及版本 / 系统 / Anki 版本 / 界面语言 / 一个随机安装 ID 的哈希。
+  **不包含**卡片内容、牌组名、标签、搜索词或任何 AnkiWeb 账号信息。可在
+  设置 → 关于中随时关闭。
+- `analytics_endpoint`：默认空字符串
+  统计接收地址。为空时插件**完全不会发出任何请求**。部署
+  `scripts/analytics-worker/`（Cloudflare Worker + D1）后填入
+  `https://stats.example.com/v1/events`；也可以换大陆云函数，协议保持一致。
+- `analytics_install_id` / `analytics_queue` / `analytics_marks`：
+  运行时自动维护（随机安装 ID、失败重试队列、每日去重标记），无需手动修改。
+
 ## 开发者选项
 
 - `debug_mode`：`true` / `false`
