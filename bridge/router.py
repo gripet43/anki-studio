@@ -8,6 +8,7 @@ Supports preferences persistence (`get_preferences`, `save_preferences`), image 
 
 from __future__ import annotations
 
+import datetime
 import json
 import time
 import traceback
@@ -215,7 +216,7 @@ class BridgeRouter:
             "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
             "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
             "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
-            "tipsDismissed": bool(cfg.get("dashboard_tips_dismissed", False)),
+            "tipsHiddenOn": self._tips_hidden_on(cfg),
             "envInfo": self.deck_service._resolve_platform_and_version(),
         }
 
@@ -235,8 +236,14 @@ class BridgeRouter:
             patch["sandbox_notetype_ids"] = [str(x) for x in data["sandboxNoteTypeIds"] if str(x).strip()]
         if "showShortcutHints" in data:
             patch["show_shortcut_hints"] = bool(data["showShortcutHints"])
-        if "tipsDismissed" in data:
-            patch["dashboard_tips_dismissed"] = bool(data["tipsDismissed"])
+        if "tipsHiddenOn" in data:
+            hidden_on = str(data["tipsHiddenOn"] or "").strip()
+            if hidden_on:
+                try:
+                    datetime.date.fromisoformat(hidden_on)
+                except ValueError:
+                    hidden_on = ""
+            patch["dashboard_tips_hidden_on"] = hidden_on
 
         saved = self._write_config(patch)
         return {
@@ -250,9 +257,20 @@ class BridgeRouter:
                 "collapsedDeckIds": saved.get("collapsed_deck_ids", []),
                 "sandboxNoteTypeIds": [str(x) for x in (saved.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(saved.get("show_shortcut_hints", False)),
-                "tipsDismissed": bool(saved.get("dashboard_tips_dismissed", False)),
+                "tipsHiddenOn": str(saved.get("dashboard_tips_hidden_on") or ""),
             },
         }
+
+    @staticmethod
+    def _tips_hidden_on(cfg: Dict[str, Any]) -> str:
+        """首页小贴士的「今天不再显示」日期（YYYY-MM-DD）。
+
+        兼容 1.4.24 的永久收起开关：若旧字段为 true 且没有新日期，视为今天已隐藏。
+        """
+        hidden_on = str(cfg.get("dashboard_tips_hidden_on") or "").strip()
+        if not hidden_on and cfg.get("dashboard_tips_dismissed"):
+            hidden_on = datetime.date.today().isoformat()
+        return hidden_on
 
     def action_toggle_notetype_sandbox(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Toggles per-NoteType Track B Sandbox Compatibility Mode and persists in config."""

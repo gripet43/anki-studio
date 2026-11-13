@@ -336,8 +336,8 @@ export interface UserPreferences {
   sandboxNoteTypeIds?: string[];
   debugMode?: boolean;
   showShortcutHints?: boolean;
-  /** 首页学习小贴士是否已收起（持久化到 config）。 */
-  tipsDismissed?: boolean;
+  /** 首页学习小贴士「今天不再显示」的日期（YYYY-MM-DD，持久化到 config）。 */
+  tipsHiddenOn?: string;
 }
 
 export interface SafetyWarning {

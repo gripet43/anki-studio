@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+## [v1.4.26] - 2026-11-13
+
+- **[DeepSeek] 学习小贴士改版：移到「我的牌组」标题行、Hero 恢复原样、悬停才出操作**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/components/dashboard/DashboardTipLine.tsx`](frontend/src/components/dashboard/DashboardTipLine.tsx)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`bridge/router.py`](bridge/router.py) 及 16 种语言字典）：
+  - **位置**：Hero 卡片恢复原来的横排布局，不再内嵌提示；提示行移到「我的牌组 / 共 N 个牌组」右侧，与牌组管理同一行，安静地待着。
+  - **精简**：删掉分类标签（「制卡原则」）和 `2/10` 页码，只剩一个灯泡图标 + 一句灰字，过长自动省略，悬停可看全文。
+  - **悬停操作**：鼠标移到这行字上（或键盘聚焦）时，行尾才淡入两个小图标——「换一条」与「今天不再显示」；「换一条」用 160ms 淡出淡入切换，鼠标移开自动恢复轮播。
+  - **今天不再显示**：只隐藏当天，明天自动恢复（config 持久化日期 `dashboard_tips_hidden_on`）；设置 → 外观的开关同步为「今天显示/隐藏」语义。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 122 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.25 → 1.4.26。
+
 ## [v1.4.25] - 2026-11-13
 
 - **[DeepSeek] 设置-外观文案精简：「品牌强调色 (Accent Color)」→「主题色」，「官方推荐」→「推荐」**（改 16 种语言字典的 `settingsThemeColorTitle` / `officialBrandBadge`）：

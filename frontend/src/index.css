@@ -1084,25 +1084,3 @@ ruby rt {
     margin-inline-start: auto;
   }
 }
-
-
-@keyframes dashboard-tip-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.tip-fade-in {
-  animation: dashboard-tip-fade-in 320ms ease-out both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tip-fade-in {
-    animation: none;
-  }
-}

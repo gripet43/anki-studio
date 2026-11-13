@@ -114,8 +114,8 @@ export interface AppState {
   resolvedLang: ResolvedLanguage;
   customNickname: string;
   showShortcutHints: boolean;
-  /** 首页 Hero 底部的学习小贴士是否已收起。 */
-  tipsDismissed: boolean;
+  /** 首页牌组标题旁的学习小贴士「今天不再显示」日期（YYYY-MM-DD）。 */
+  tipsHiddenOn: string;
   envInfo: EnvInfo;
 
   // Dashboard, Decks & Statistics
@@ -226,7 +226,7 @@ const initialState: AppState = {
   resolvedLang: initialLang,
   customNickname: '',
   showShortcutHints: false,
-  tipsDismissed: false,
+  tipsHiddenOn: '',
   envInfo: {
     platform: initialPlatform,
     osName: initialPlatform === 'mac' ? 'macOS' : initialPlatform === 'win' ? 'Windows' : 'Linux',
@@ -462,7 +462,7 @@ export const appActions = {
           ? prefs.sandboxNoteTypeIds.map((id) => String(id))
           : state.sandboxNoteTypeIds,
         showShortcutHints: prefs?.showShortcutHints !== undefined ? prefs.showShortcutHints : state.showShortcutHints,
-        tipsDismissed: prefs?.tipsDismissed !== undefined ? prefs.tipsDismissed : state.tipsDismissed,
+        tipsHiddenOn: prefs?.tipsHiddenOn !== undefined ? prefs.tipsHiddenOn : state.tipsHiddenOn,
         debugModeUnlocked: Boolean(prefs?.debugMode) || state.debugModeUnlocked,
         envInfo: dash?.envInfo || state.envInfo,
         lastSyncedTimestamp: genuineSyncTs,
@@ -557,7 +557,7 @@ export const appActions = {
     customNickname?: string;
     collapsedDeckIds?: string[];
     showShortcutHints?: boolean;
-    tipsDismissed?: boolean;
+    tipsHiddenOn?: string;
   }) {
     const nextLangPref = patch.language !== undefined ? patch.language : state.languagePref;
     const nextResolvedLang = resolveLanguage(nextLangPref, state.dashboard.language);
@@ -569,7 +569,7 @@ export const appActions = {
       ...(patch.customNickname !== undefined ? { customNickname: patch.customNickname } : {}),
       ...(patch.collapsedDeckIds ? { collapsedDeckIds: patch.collapsedDeckIds } : {}),
       ...(patch.showShortcutHints !== undefined ? { showShortcutHints: patch.showShortcutHints } : {}),
-      ...(patch.tipsDismissed !== undefined ? { tipsDismissed: patch.tipsDismissed } : {}),
+      ...(patch.tipsHiddenOn !== undefined ? { tipsHiddenOn: patch.tipsHiddenOn } : {}),
     });
 
     if (isAnkiNativeEnv()) {
