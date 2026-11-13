@@ -259,7 +259,12 @@ export const ReviewerView: React.FC = () => {
 
       if (e.key === ' ') {
         e.preventDefault();
-        appActions.flipCard();
+        // 原生 Anki：空格在正面显示答案，在背面等于「良好」。
+        if (isCardFlipped) {
+          appActions.answerCurrentCard(3);
+        } else {
+          appActions.flipCard();
+        }
         return;
       }
 
@@ -270,6 +275,12 @@ export const ReviewerView: React.FC = () => {
       }
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        appActions.undoLastReview();
+        return;
+      }
+
+      if (e.key === 'Backspace' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         appActions.undoLastReview();
         return;
@@ -307,7 +318,7 @@ export const ReviewerView: React.FC = () => {
         return;
       }
 
-      if (optionKeyHeld || e.altKey) {
+      if (answerButtonMode === 'four' || optionKeyHeld || e.altKey) {
         if (e.key === '1') {
           e.preventDefault();
           appActions.answerCurrentCard(1);
@@ -353,6 +364,7 @@ export const ReviewerView: React.FC = () => {
     fieldsDraft,
     activeFieldKey,
     optionKeyHeld,
+    answerButtonMode,
     isCardFlipped,
     isSessionComplete,
     currentCard,

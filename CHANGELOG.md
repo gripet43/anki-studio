@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+## [v1.4.42] - 2026-11-13
+
+- **[DeepSeek] 对照 Anki 原生快捷键校准复习键位：空格、四按钮模式、Backspace 撤销**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)）：
+  - **空格**：原生 Anki 是「正面显示答案 / 背面给良好」；Studio 之前无论正反面都执行翻面（背面按空格会把卡翻回正面）。现在背面空格 = 良好，与原生一致。
+  - **四按钮模式快捷键**：之前切到「原生四按钮」只是视觉变化，键位仍走双按钮映射（2 = 良好）；现在四按钮模式下严格 1 = 重来 / 2 = 困难 / 3 = 良好 / 4 = 简单，与原生完全一致。
+  - **Backspace 撤销**：补上原生习惯的 Backspace 撤销（原仅 Cmd/Ctrl+Z）。
+  - 默认双按钮模式仍保留 1 = 重来、2/3/Enter = 良好、4 = 简单，减少误触难度按钮；按住 Option 仍是临时原生 1–4。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 130 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.41 → 1.4.42。
+
 ## [v1.4.41] - 2026-11-13
 
 - **[DeepSeek] 「答题按钮」设置升级为独立一级标签页「答题设置」**（改 [`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx) 及 16 种语言字典）：
