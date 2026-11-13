@@ -94,6 +94,86 @@ export const LEARNING_TIPS: LearningTip[] = [
       en: 'Cards hold the dots; notes and mind maps connect them — use both to build a real system.',
     },
   },
+  {
+    id: 'minimum-information',
+    category: { zh: '卡片质量', en: 'Card Quality' },
+    text: {
+      zh: '一张卡只问一个点；答案里出现「和」，就该拆成两张。',
+      en: 'One card, one point — if the answer contains “and”, split it into two cards.',
+    },
+  },
+  {
+    id: 'enough-context',
+    category: { zh: '卡片质量', en: 'Card Quality' },
+    text: {
+      zh: '几个月后再看也能认出在问什么——题干缺上下文，就补一句来源或场景。',
+      en: 'Make sure you still know what’s being asked months later — add a source or scene to a bare prompt.',
+    },
+  },
+  {
+    id: 'why-not-what',
+    category: { zh: '卡片质量', en: 'Card Quality' },
+    text: {
+      zh: '少问「是什么」，多问「为什么 / 如果……会怎样」；能解释因果的卡记得更牢。',
+      en: 'Ask “why” and “what if” more than “what” — cards that explain cause and effect stick better.',
+    },
+  },
+  {
+    id: 'cloze-first',
+    category: { zh: '制卡原则', en: 'Card Making' },
+    text: {
+      zh: '优先用填空：挖掉关键词，比整句背诵更省力，也更接近真实回忆。',
+      en: 'Prefer cloze deletions: hiding the key word beats memorising whole sentences, and mirrors real recall.',
+    },
+  },
+  {
+    id: 'retrieval-first',
+    category: { zh: '记忆科学', en: 'Memory Science' },
+    text: {
+      zh: '先合上书回忆，再翻卡；想不起来的那几秒，才是记忆真正变牢的时候。',
+      en: 'Recall before you flip: those few seconds of struggle are where memory actually gets stronger.',
+    },
+  },
+  {
+    id: 'desirable-difficulty',
+    category: { zh: '记忆科学', en: 'Memory Science' },
+    text: {
+      zh: '稍微吃力是好事；如果一张卡每次都是一眼就会，它可能不值得留在库里。',
+      en: 'A little struggle is healthy — a card that’s always effortless probably doesn’t need to stay in your deck.',
+    },
+  },
+  {
+    id: 'sleep-consolidation',
+    category: { zh: '记忆科学', en: 'Memory Science' },
+    text: {
+      zh: '睡前过一遍当天最难的几张卡，睡眠会帮你把它们再巩固一遍。',
+      en: 'Review your hardest cards before bed — sleep quietly consolidates them overnight.',
+    },
+  },
+  {
+    id: 'prune-the-library',
+    category: { zh: '卡片质量', en: 'Card Quality' },
+    text: {
+      zh: '定期清理卡片库：删掉永远答不对和一眼就会的卡，留好卡比留多卡重要。',
+      en: 'Prune the library now and then: drop the never-right and the always-easy — good cards beat many cards.',
+    },
+  },
+  {
+    id: 'own-words',
+    category: { zh: '制卡原则', en: 'Card Making' },
+    text: {
+      zh: '用自己的话写卡面：照抄原句记住的是句子，复述出来的才是理解。',
+      en: 'Write cards in your own words — copying a sentence remembers the words, not the idea.',
+    },
+  },
+  {
+    id: 'worth-remembering',
+    category: { zh: '复习习惯', en: 'Review Habits' },
+    text: {
+      zh: '只把值得记十年的内容做成卡；卡片库不是收藏夹。',
+      en: 'Only card what’s worth remembering for a decade — a library is not a scrapbook.',
+    },
+  },
 ];
 
 export function resolveTipLocale(lang: string): TipLocale {

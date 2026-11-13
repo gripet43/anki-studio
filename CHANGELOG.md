@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.28] - 2026-11-13
+
+- **[DeepSeek] 学习小贴士扩充到 20 条 + 与牌组计数再拉开 10px**（改 [`frontend/src/content/learningTips.ts`](frontend/src/content/learningTips.ts)、[`frontend/src/components/dashboard/DashboardTipLine.tsx`](frontend/src/components/dashboard/DashboardTipLine.tsx)）：
+  - **新增 10 条**（调研 SuperMemo「20 条知识构建规则」、FSRS 文档、检索练习 / 合意困难 / 睡眠巩固相关研究后去重筛选）：最小信息原则（一卡一点）、题干要留够上下文、多问「为什么 / 如果……」、填空优先于整句背诵、先回忆再翻卡、接受合意困难、睡前巩固最难的卡、定期清理卡片库、用自己的话写卡面、只记值得记十年的内容。
+  - **仍坚持内容质量**：第三方工具广告、与 Studio 无关的软件推荐不放入；每条控制在一行内（约 20–40 字），保持轮播轻盈。
+  - **间距**：提示行左边距从 `ms-2.5` 增至 `ms-5`（再 +10px），与「共 N 个牌组」拉开距离。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 122 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.27 → 1.4.28。
+
 ## [v1.4.27] - 2026-11-13
 
 - **[DeepSeek] 学习小贴士与「共 N 个牌组」拉开间距**（改 [`frontend/src/components/dashboard/DashboardTipLine.tsx`](frontend/src/components/dashboard/DashboardTipLine.tsx)）：给提示行加 `ms-2.5`（约 10px）左侧外边距，与牌组计数从约 10px 拉开到约 20px，避免挤在一起；其余布局不变。
