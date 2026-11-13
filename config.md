@@ -37,10 +37,10 @@
   以及版本 / 系统 / Anki 版本 / 界面语言 / 一个随机安装 ID 的哈希。
   **不包含**卡片内容、牌组名、标签、搜索词或任何 AnkiWeb 账号信息。可在
   设置 → 关于中随时关闭。
-- `analytics_endpoint`：默认空字符串
-  统计接收地址。为空时插件**完全不会发出任何请求**。部署
-  `scripts/analytics-worker/`（Cloudflare Worker + D1）后填入
-  `https://stats.example.com/v1/events`；也可以换大陆云函数，协议保持一致。
+- `analytics_endpoint`：默认内置官方端点
+  （`https://anki-studio-analytics.congtoubyby.workers.dev/v1/events`）。
+  设为空字符串会**完全停止上报**；也可以换成自己的 Cloudflare Worker 或
+  大陆云函数，协议保持一致（见 `scripts/analytics-worker/`）。
 - `analytics_install_id` / `analytics_queue` / `analytics_marks`：
   运行时自动维护（随机安装 ID、失败重试队列、每日去重标记），无需手动修改。
 

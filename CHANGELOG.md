@@ -15,6 +15,16 @@
 
 ## [Unreleased]
 
+## [v1.4.34] - 2026-11-13
+
+- **[DeepSeek] 匿名统计端点正式上线：Cloudflare Worker + D1 部署完成**（改 [`bridge/analytics_service.py`](bridge/analytics_service.py)、[`config.md`](config.md)、[`scripts/analytics-worker/README.md`](scripts/analytics-worker/README.md)）：
+  - 在 Cloudflare 创建 **D1 数据库**（APAC 区域）并部署 Worker：`https://anki-studio-analytics.congtoubyby.workers.dev/v1/events`，已写入 `DEFAULT_ENDPOINT`，重启后即开始收数；
+  - 实测：`POST /v1/events` 返回 `200 {"ok":true,"stored":1}`，D1 查询确认落库；从当前网络请求耗时约 0.7s；
+  - 修复 flush 竞态：首轮上报期间新入队的事件会残留到下一次启动，改为按内容移除已发送事件并循环最多 3 轮，队列最终清空；
+  - `config.md` / worker README 更新为「默认内置官方端点，设为空字符串则完全停止上报」；
+  - 说明：当前使用 `*.workers.dev` 域名，大陆目前实测可达；后续绑自定义域名会更稳。统计默认开启，设置 → 关于可关闭。
+  - **验证**：Python 129 项、`tsc --noEmit`、前端单元 63 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.33 → 1.4.34。
+
 ## [v1.4.33] - 2026-11-13
 
 - **[DeepSeek] 新增可选匿名使用统计（默认开启、可关闭）+ Cloudflare Worker 端点代码**（新增 [`bridge/analytics_service.py`](bridge/analytics_service.py)、[`scripts/analytics-worker/`](scripts/analytics-worker/)、[`tests/test_analytics_service.py`](tests/test_analytics_service.py)，改 [`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx) 及 16 种语言字典）：

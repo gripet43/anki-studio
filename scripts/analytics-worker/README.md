@@ -30,7 +30,8 @@ wrangler routes add stats.example.com/*
 { "analytics_endpoint": "https://stats.example.com/v1/events" }
 ```
 
-`analytics_endpoint` 为空时插件**完全不会发出任何请求**（默认状态）。
+官方部署实例：`https://anki-studio-analytics.congtoubyby.workers.dev/v1/events`（已内置为默认端点）。
+`analytics_endpoint` 设为空字符串时插件**完全不会发出任何请求**。
 
 ## 验证
 

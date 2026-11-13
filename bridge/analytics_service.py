@@ -30,7 +30,7 @@ import uuid
 from typing import Any, Callable, Dict, List, Optional
 
 # 部署 Worker 后填写，例如 https://stats.example.com/v1/events
-DEFAULT_ENDPOINT = ""
+DEFAULT_ENDPOINT = "https://anki-studio-analytics.congtoubyby.workers.dev/v1/events"
 
 MAX_QUEUE = 100
 REQUEST_TIMEOUT = 6
@@ -71,7 +71,11 @@ class AnalyticsService:
 
     def endpoint(self) -> str:
         cfg = self._cfg()
-        return str(cfg.get("analytics_endpoint") or DEFAULT_ENDPOINT or "").strip()
+        raw = cfg.get("analytics_endpoint")
+        # 未配置时用内置官方端点；显式设为空字符串表示「完全停止上报」。
+        if raw is None:
+            return DEFAULT_ENDPOINT
+        return str(raw).strip()
 
     def enabled(self) -> bool:
         cfg = self._cfg()
@@ -220,19 +224,22 @@ class AnalyticsService:
 
     def _flush_worker(self) -> None:
         try:
-            self._flush_sync()
+            # 两三个事件可能在第一次 flush 期间入队，循环几轮发完再退出。
+            for _ in range(3):
+                if not self._flush_sync():
+                    break
         finally:
             with self._lock:
                 self._flushing = False
 
-    def _flush_sync(self) -> None:
+    def _flush_sync(self) -> bool:
         cfg = self._cfg()
         queue = cfg.get("analytics_queue")
         if not isinstance(queue, list) or not queue:
-            return
+            return False
         endpoint = self.endpoint()
         if not endpoint:
-            return
+            return False
         body = json.dumps({"schema": 1, "events": queue[:MAX_QUEUE]}).encode("utf-8")
         request = urllib.request.Request(
             endpoint,
@@ -246,15 +253,16 @@ class AnalyticsService:
         try:
             with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
                 if not (200 <= int(getattr(response, "status", 200)) < 300):
-                    return
+                    return False
         except Exception:
-            return
-        # 成功后只移除已经发出去的那些事件，保留 flush 期间新入队的。
+            return False
+        # 成功后按内容移除已发送的事件，保留 flush 期间新入队的。
         latest = self._cfg()
         current = latest.get("analytics_queue")
         current = current if isinstance(current, list) else []
-        remaining = current[len(queue):]
+        remaining = [event for event in current if event not in queue]
         try:
             self._write_config({"analytics_queue": remaining[-MAX_QUEUE:]})
         except Exception:
             pass
+        return bool(remaining)

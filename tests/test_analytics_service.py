@@ -27,10 +27,16 @@ class TestAnalyticsService(unittest.TestCase):
         return svc, cfg
 
     def test_endpoint_empty_is_noop(self):
-        svc, cfg = self._service()
+        # 显式把端点设为空字符串 = 完全停止上报（默认内置官方端点）
+        svc, cfg = self._service({"analytics_endpoint": ""})
         self.assertFalse(svc.enabled())
         self.assertFalse(svc.track("app_open"))
         self.assertNotIn("analytics_queue", cfg)
+
+    def test_builtin_endpoint_is_configured(self):
+        svc, _cfg = self._service()
+        self.assertTrue(svc.enabled())
+        self.assertTrue(svc.endpoint().startswith("https://"))
 
     def test_track_app_open_queues_anonymous_event(self):
         svc, cfg = self._service(
