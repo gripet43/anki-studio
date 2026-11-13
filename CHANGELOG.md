@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.36] - 2026-11-13
+
+- **[DeepSeek] 修复卡片库「筛选命中有 N 张、列表却为空」的假空态**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)）：
+  - **现象**：选中一个含子牌组的牌组（如 `0 Zivilprozessrecht`）后，顶部显示「1,057 张符合条件」，下方却提示「当前筛选条件下暂无卡片」。
+  - **根因**：后端已用 Anki 搜索语法按 `deck:` 过滤（包含子牌组），前端又按 `card.deckId === filterDeckId` 精确匹配做了一遍本地过滤——子牌组里的卡片 deckId 是子牌组 ID，于是全部被前端滤掉，而计数仍来自后端，形成「有数字、无列表」。
+  - **修法**：原生环境下直接信任后端返回的 `libraryCards`（后端已经应用状态/难度/旗帜/标签/牌组/搜索词等全部条件并按需排序）；仅 demo / 网页环境保留本地兜底过滤。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 130 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.35 → 1.4.36。
+
 ## [v1.4.35] - 2026-11-13
 
 - **[DeepSeek] 更新 AnkiWeb 上架描述：移除「不发网络请求」旧声明，补新功能（16 种语言同步）**（改 [`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)、[`README.md`](README.md)）：

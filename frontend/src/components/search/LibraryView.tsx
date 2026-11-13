@@ -234,6 +234,10 @@ export const LibraryView: React.FC = () => {
   }, [decks, deckSearchInput]);
 
   const filteredCards = useMemo(() => {
+    // 原生环境下后端已用 Anki 搜索语法按同一组条件过滤（deck: 会包含子牌组），
+    // 前端再按 card.deckId 精确匹配会把子牌组卡片全部滤掉，出现
+    // 「1,057 张符合条件」但列表为空的假空态；只有 demo/网页环境才需要本地兜底。
+    if (isAnkiNativeEnv()) return libraryCards;
     const base = libraryCards.filter((card) => {
       if (librarySearchQuery.trim()) {
         const q = librarySearchQuery.toLowerCase();
