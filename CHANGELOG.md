@@ -15,6 +15,13 @@
 
 ## [Unreleased]
 
+## [v1.4.18] - 2026-11-13
+
+- **[DeepSeek] 复习完成提示按会话范围区分：单牌组显示「当前牌组」，全牌组才显示「今日全部」**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx) 及 16 种语言字典）：
+  - **现象**：只复习完一个牌组时，完成弹窗写「恭喜完成今日牌组复习！」，容易被理解成「今日所有牌组都学完了」。
+  - **修法**：按 `reviewScopeDeckId` 区分——单牌组会话用新文案「恭喜完成当前牌组复习！」/「当前牌组所有到期卡片均已完成 FSRS 间隔重算…」；只有首页「开始今日学习」（scope = `'all'`）才用「恭喜完成今日全部复习！」。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 111 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.17 → 1.4.18。
+
 ## [v1.4.17] - 2026-11-13
 
 - **[DeepSeek] 复习会话按批续学：进度跨批累计 + 「本批完成，继续下一批」提示**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts) 及 16 种语言字典）：

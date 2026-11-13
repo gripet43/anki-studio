@@ -77,6 +77,8 @@ export const dict: TranslationTable = {
   confirm: "確認",
   confirmBatchDeletePrompt: "確認永久刪除所選的 {n} 張卡片嗎？",
   congratsSub: "所有到期卡片均已完成 FSRS 間隔重算，記憶穩定度持續提升",
+  congratsDeckTitle: "恭喜完成目前牌組複習！",
+  congratsDeckSub: "目前牌組所有到期卡片均已完成 FSRS 間隔重算，記憶穩定度持續提升",
   congratsTitle: "恭喜完成今日牌組複習！",
   copiedBadge: "已複製",
   copyBackBtn: "複製背面",

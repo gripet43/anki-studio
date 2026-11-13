@@ -77,6 +77,8 @@ export const dict: TranslationTable = {
   confirm: "Подтвердить",
   confirmBatchDeletePrompt: "Навсегда удалить выбранные карточки ({n})?",
   congratsSub: "Для всех карточек пересчитаны интервалы FSRS",
+  congratsDeckTitle: "Повторение этой колоды завершено!",
+  congratsDeckSub: "Все карты этой колоды с наступившим сроком пересчитаны по FSRS.",
   congratsTitle: "Все карточки на сегодня повторены!",
   copiedBadge: "Скопировано",
   copyBackBtn: "Копировать оборот",

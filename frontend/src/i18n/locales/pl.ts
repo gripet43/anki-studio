@@ -77,6 +77,8 @@ export const dict: TranslationTable = {
   confirm: "Potwierdź",
   confirmBatchDeletePrompt: "Czy na pewno trwale usunąć wybrane karty ({n})?",
   congratsSub: "Wszystkie karty zostały przeplanowane przez algorytm FSRS",
+  congratsDeckTitle: "Powtórka tej talii ukończona!",
+  congratsDeckSub: "Wszystkie karty do powtórki w tej talii zostały przeliczone przez FSRS.",
   congratsTitle: "Wszystkie karty na dziś powtórzone!",
   copiedBadge: "Skopiowano",
   copyBackBtn: "Kopiuj tył",

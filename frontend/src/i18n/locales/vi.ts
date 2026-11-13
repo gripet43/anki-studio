@@ -77,6 +77,8 @@ export const dict: TranslationTable = {
   confirm: "Xác nhận",
   confirmBatchDeletePrompt: "Xóa vĩnh viễn {n} thẻ đã chọn?",
   congratsSub: "Mọi thẻ đến hạn đều đã được tính toán lại khoảng cách FSRS",
+  congratsDeckTitle: "Đã hoàn thành ôn tập bộ thẻ này!",
+  congratsDeckSub: "Tất cả thẻ đến hạn trong bộ thẻ này đã được FSRS lên lịch lại.",
   congratsTitle: "Đã hoàn thành toàn bộ thẻ đến hạn hôm nay!",
   copiedBadge: "Đã sao chép",
   copyBackBtn: "Chép mặt sau",

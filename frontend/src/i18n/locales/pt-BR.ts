@@ -77,6 +77,8 @@ export const dict: TranslationTable = {
   confirm: "Confirmar",
   confirmBatchDeletePrompt: "Excluir permanentemente {n} cartões selecionados?",
   congratsSub: "Todos os cartões pendentes foram reagendados pelo FSRS",
+  congratsDeckTitle: "Revisão deste baralho concluída!",
+  congratsDeckSub: "Todos os cartões vencidos deste baralho foram reagendados pelo FSRS.",
   congratsTitle: "Todos os cartões pendentes concluídos!",
   copiedBadge: "Copiado",
   copyBackBtn: "Copiar verso",

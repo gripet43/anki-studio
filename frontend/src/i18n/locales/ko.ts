@@ -77,6 +77,8 @@ export const dict: TranslationTable = {
   confirm: "확인",
   confirmBatchDeletePrompt: "선택한 카드 {n}장을 영구 삭제하시겠습니까?",
   congratsSub: "이 덱의 모든 예정 카드가 FSRS로 재조정되었습니다",
+  congratsDeckTitle: "현재 덱 복습 완료!",
+  congratsDeckSub: "이 덱의 기한이 된 카드는 모두 FSRS로 재계산되었습니다.",
   congratsTitle: "오늘의 덱 복습을 완료했습니다!",
   copiedBadge: "복사됨",
   copyBackBtn: "뒷면 복사",

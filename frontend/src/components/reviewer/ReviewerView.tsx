@@ -30,6 +30,7 @@ export const ReviewerView: React.FC = () => {
     envInfo,
     showShortcutHints,
     activeDeckId,
+    reviewScopeDeckId,
     sandboxNoteTypeIds,
   } = useAppStore();
 
@@ -431,9 +432,11 @@ export const ReviewerView: React.FC = () => {
 
             <div>
               <h2 className="text-[26px] font-bold tracking-tight">
-                {t('congratsTitle')}
+                {reviewScopeDeckId === 'all' ? t('congratsTitle') : t('congratsDeckTitle')}
               </h2>
-              <p className="text-[13px] text-[#8E8E98] mt-1.5">{t('congratsSub')}</p>
+              <p className="text-[13px] text-[#8E8E98] mt-1.5">
+                {reviewScopeDeckId === 'all' ? t('congratsSub') : t('congratsDeckSub')}
+              </p>
             </div>
 
             <div className="grid grid-cols-3 gap-3 pt-2">

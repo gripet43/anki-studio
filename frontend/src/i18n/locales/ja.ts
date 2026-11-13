@@ -77,6 +77,8 @@ export const dict: TranslationTable = {
   confirm: "確認",
   confirmBatchDeletePrompt: "選択した {n} 枚のカードを完全に削除しますか？",
   congratsSub: "すべての期限カードが FSRS によって再スケジュールされました",
+  congratsDeckTitle: "現在のデッキの復習が完了しました！",
+  congratsDeckSub: "このデッキの期限が来たカードはすべて FSRS で再計算されました。",
   congratsTitle: "今日の復習が完了しました！",
   copiedBadge: "コピー済",
   copyBackBtn: "裏面をコピー",

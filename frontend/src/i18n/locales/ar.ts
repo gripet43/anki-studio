@@ -77,6 +77,8 @@ export const dict: TranslationTable = {
   confirm: "تأكيد",
   confirmBatchDeletePrompt: "هل تريد حذف {n} بطاقة محددة نهائياً؟",
   congratsSub: "تمت إعادة جدولة جميع البطاقات المستحقة بواسطة FSRS",
+  congratsDeckTitle: "اكتملت مراجعة هذه الرزمة!",
+  congratsDeckSub: "أعيدت جدولة جميع البطاقات المستحقة في هذه الرزمة بواسطة FSRS.",
   congratsTitle: "اكتملت جميع البطاقات المستحقة لهذا اليوم!",
   copiedBadge: "تم النسخ",
   copyBackBtn: "نسخ الخلفية",

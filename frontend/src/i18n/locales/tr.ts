@@ -77,6 +77,8 @@ export const dict: TranslationTable = {
   confirm: "Onayla",
   confirmBatchDeletePrompt: "Seçili {n} kart kalıcı olarak silinsin mi?",
   congratsSub: "Vadesi gelen tüm kartlar FSRS ile yeniden planlandı",
+  congratsDeckTitle: "Bu deste tekrarı tamamlandı!",
+  congratsDeckSub: "Bu destedeki tüm zamanı gelen kartlar FSRS ile yeniden planlandı.",
   congratsTitle: "Bugünkü Tüm Kartlar Tamamlandı!",
   copiedBadge: "Kopyalandı",
   copyBackBtn: "Arkayı Kopyala",

@@ -77,6 +77,8 @@ export const dict: TranslationTable = {
   confirm: "Bestätigen",
   confirmBatchDeletePrompt: "{n} ausgewählte Karten dauerhaft löschen?",
   congratsSub: "Jede fällige Karte wurde durch FSRS neu geplant",
+  congratsDeckTitle: "Stapel-Wiederholung abgeschlossen!",
+  congratsDeckSub: "Alle fälligen Karten dieses Stapels wurden per FSRS neu geplant.",
   congratsTitle: "Alle fälligen Karten abgeschlossen!",
   copiedBadge: "Kopiert",
   copyBackBtn: "Rückseite kopieren",
