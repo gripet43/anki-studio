@@ -18,24 +18,24 @@ export const LEARNING_TIPS: LearningTip[] = [
     id: 'understand-first',
     category: { zh: '制卡原则', en: 'Card Making' },
     text: {
-      zh: '先理解，再制卡——没弄懂的内容，先别交给 Anki 去记。',
-      en: 'Understand first, then make the card — don’t hand Anki something you haven’t grasped.',
+      zh: '没弄懂的内容，先别交给 Anki 去记。',
+      en: 'Don’t hand Anki something you haven’t grasped.',
     },
   },
   {
     id: 'keep-cards-short',
     category: { zh: '制卡原则', en: 'Card Making' },
     text: {
-      zh: '卡片短一点：20–80 字、10 秒内能答完；长知识点拆成几张。',
-      en: 'Keep cards short: 20–80 words, answerable in 10 seconds; split big topics into several cards.',
+      zh: '20–80 字、10 秒内能答完；长知识点拆成几张。',
+      en: '20–80 words, answerable in 10 seconds; split big topics into several cards.',
     },
   },
   {
     id: 'make-your-own',
     category: { zh: '制卡原则', en: 'Card Making' },
     text: {
-      zh: '自己做的卡记得最牢：别人的 deck 可以借鉴，但别省掉自己的理解。',
-      en: 'Cards you make yourself stick best — borrow decks if you like, but don’t skip your own understanding.',
+      zh: '别人的 deck 可以借鉴，但别省掉自己动手做卡的那一步。',
+      en: 'Borrow decks if you like, but don’t skip the step of making cards yourself.',
     },
   },
   {
@@ -50,8 +50,8 @@ export const LEARNING_TIPS: LearningTip[] = [
     id: 'learn-vs-review',
     category: { zh: '复习习惯', en: 'Review Habits' },
     text: {
-      zh: '学习与复习分开：Anki 用来「记住」，不用来「第一次学会」。',
-      en: 'Separate learning from reviewing: Anki is for remembering, not for learning something the first time.',
+      zh: 'Anki 用来「记住」，不用来「第一次学会」。',
+      en: 'Anki is for remembering, not for learning something the first time.',
     },
   },
   {
@@ -74,16 +74,16 @@ export const LEARNING_TIPS: LearningTip[] = [
     id: 'backlog-in-batches',
     category: { zh: '积压应对', en: 'Backlog' },
     text: {
-      zh: '积压别一口气清完：分批追赶，或让「进度减负」把压力摊到接下来几天。',
-      en: 'Don’t clear a backlog in one sitting — catch up in batches, or let Schedule Relief spread it over the next few days.',
+      zh: '分批追赶积压，或让「进度减负」把压力摊到接下来几天。',
+      en: 'Catch up on a backlog in batches, or let Schedule Relief spread it over the next few days.',
     },
   },
   {
     id: 'fsrs-order',
     category: { zh: '排序', en: 'Ordering' },
     text: {
-      zh: '先复习最可能忘的：FSRS 的遗忘预测会帮你把真正该看的卡排在前面。',
-      en: 'Review what you’re most likely to forget first — FSRS predicts what deserves the front of the queue.',
+      zh: '让 FSRS 的遗忘预测，把最可能忘的卡排在前面。',
+      en: 'Let FSRS put the cards you’re most likely to forget at the front.',
     },
   },
   {
@@ -122,8 +122,8 @@ export const LEARNING_TIPS: LearningTip[] = [
     id: 'cloze-first',
     category: { zh: '制卡原则', en: 'Card Making' },
     text: {
-      zh: '优先用填空：挖掉关键词，比整句背诵更省力，也更接近真实回忆。',
-      en: 'Prefer cloze deletions: hiding the key word beats memorising whole sentences, and mirrors real recall.',
+      zh: '挖掉关键词，比整句背诵更省力，也更接近真实回忆。',
+      en: 'Hide the key word — it beats memorising whole sentences and mirrors real recall.',
     },
   },
   {
@@ -154,16 +154,16 @@ export const LEARNING_TIPS: LearningTip[] = [
     id: 'prune-the-library',
     category: { zh: '卡片质量', en: 'Card Quality' },
     text: {
-      zh: '定期清理卡片库：删掉永远答不对和一眼就会的卡，留好卡比留多卡重要。',
-      en: 'Prune the library now and then: drop the never-right and the always-easy — good cards beat many cards.',
+      zh: '删掉永远答不对和一眼就会的卡，留好卡比留多卡重要。',
+      en: 'Drop the never-right and the always-easy; good cards beat many cards.',
     },
   },
   {
     id: 'own-words',
     category: { zh: '制卡原则', en: 'Card Making' },
     text: {
-      zh: '用自己的话写卡面：照抄原句记住的是句子，复述出来的才是理解。',
-      en: 'Write cards in your own words — copying a sentence remembers the words, not the idea.',
+      zh: '照抄原句记住的是句子；用自己的话复述，才是理解。',
+      en: 'Copying a sentence remembers the words; saying it in your own words remembers the idea.',
     },
   },
   {

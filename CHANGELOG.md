@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.30] - 2026-11-13
+
+- **[DeepSeek] 审计并精简 20 条学习小贴士：去掉「小标题 + 冒号」式前缀**（改 [`frontend/src/content/learningTips.ts`](frontend/src/content/learningTips.ts)）：
+  - 原则：一句话直接说事，避免「主题标签：具体建议」的双层结构增加阅读负担（例：`定期清理卡片库：删掉永远答不对和一眼就会的卡，留好卡比留多卡重要。` → `删掉永远答不对和一眼就会的卡，留好卡比留多卡重要。`）。
+  - 共改写 9 条：先理解再制卡——、卡片短一点：、自己做的卡记得最牢：、学习与复习分开：、优先用填空：、定期清理卡片库：、用自己的话写卡面：、积压别一口气清完：、先复习最可能忘的：；其余 11 条本身已是单句直述，保留。
+  - 中英文同步改写，语义不变。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 122 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.29 → 1.4.30。
+
 ## [v1.4.29] - 2026-11-13
 
 - **[DeepSeek] 首页今日进度圆环新增悬停说明**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx) 及 16 种语言字典）：
