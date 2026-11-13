@@ -2,6 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { formatShortcut, translate } from '../../i18n/translations';
 import { useAppStore } from '../../stores/useAppStore';
 import { resolveMediaInHtml } from '../../utils/mediaUrl';
+import {
+  tableBodyCellStyle,
+  tableHeaderCellStyle,
+  tableWrapperStyle,
+} from '../../utils/editorTable';
+import { serializeFromWysiwyg } from '../../utils/wysiwygField';
 
 export interface TowerWysiwygEditorProps {
   label: string;
@@ -67,58 +73,6 @@ function deserializeToWysiwyg(raw: string, mediaBaseUrl?: string): string {
   });
 
   return html;
-}
-
-/**
- * Serializes editor HTML back to pure, standard Anki note field content:
- * Replaces visual cloze pills back into standard {{c1::answer}} syntax,
- * removes empty ghost pills/marks, and strips internal zero-width space cursor anchors.
- */
-function serializeFromWysiwyg(container: HTMLElement): string {
-  if (!container) return '';
-  const clone = container.cloneNode(true) as HTMLElement;
-
-  const pills = clone.querySelectorAll('.anki-cloze-pill');
-  pills.forEach((pill) => {
-    const ord = pill.getAttribute('data-cloze-ord') || '1';
-    const hint = pill.getAttribute('data-cloze-hint');
-    const bodyEl = pill.querySelector('.anki-cloze-body');
-    let text = '';
-    if (bodyEl) {
-      text = bodyEl.textContent || '';
-    } else {
-      const clonePill = pill.cloneNode(true) as HTMLElement;
-      clonePill.querySelectorAll('.anki-cloze-prefix').forEach((p) => p.remove());
-      text = clonePill.textContent || '';
-    }
-    text = text.replace(/\u200B/g, '').replace(new RegExp(`^c${ord}:\\s*`), '');
-    if (hint && text.endsWith(`(${hint})`)) {
-      text = text.slice(0, -`(${hint})`.length).trimEnd();
-    }
-    if (!text.trim()) {
-      pill.parentNode?.removeChild(pill);
-      return;
-    }
-    const ankiCloze = hint ? `{{c${ord}::${text}::${hint}}}` : `{{c${ord}::${text}}}`;
-    const textNode = document.createTextNode(ankiCloze);
-    pill.parentNode?.replaceChild(textNode, pill);
-  });
-
-  // Unwrap empty <mark> placeholders or strip data-empty attributes
-  clone.querySelectorAll('mark').forEach((mk) => {
-    const clean = (mk.textContent || '').replace(/\u200B/g, '');
-    if (!clean.trim()) {
-      mk.parentNode?.removeChild(mk);
-    } else {
-      mk.removeAttribute('data-empty');
-    }
-  });
-
-  const serialized = clone.innerHTML.replace(/\u200B/g, '');
-  if (serialized === '<br>' || serialized === '<p><br></p>') {
-    return '';
-  }
-  return serialized;
 }
 
 function computeVisibleCharCount(container: HTMLElement | null): number {
@@ -557,18 +511,17 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
     if (!editorRef.current) return;
     focusAndRestoreSelection();
 
-    const borderColor = isDark ? '#343646' : '#E5E5EA';
-    const thBg = isDark ? '#21222E' : '#F5F5F7';
-
+    // 样式必须是主题无关的：这些内联样式会存进字段，之后在 Anki 原生（白底黑字）
+    // 里渲染。之前按 isDark 烘了深色底，原生卡片里就变成黑底黑字，表头整行看不见。
     const table = document.createElement('table');
-    table.style.cssText = `width:100%; border-collapse:collapse; margin:10px 0; border:1px solid ${borderColor};`;
+    table.style.cssText = tableWrapperStyle();
 
     const thead = document.createElement('thead');
     const headRow = document.createElement('tr');
     let firstCell: HTMLElement | null = null;
     for (let c = 0; c < cols; c++) {
       const th = document.createElement('th');
-      th.style.cssText = `border:1px solid ${borderColor}; padding:6px 10px; background:${thBg}; text-align:start; font-size:13px; min-width:48px;`;
+      th.style.cssText = tableHeaderCellStyle();
       th.appendChild(document.createElement('br'));
       if (c === 0) firstCell = th;
       headRow.appendChild(th);
@@ -581,7 +534,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
       const tr = document.createElement('tr');
       for (let c = 0; c < cols; c++) {
         const td = document.createElement('td');
-        td.style.cssText = `border:1px solid ${borderColor}; padding:6px 10px; font-size:13px; min-width:48px;`;
+        td.style.cssText = tableBodyCellStyle();
         td.appendChild(document.createElement('br'));
         tr.appendChild(td);
       }

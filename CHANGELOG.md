@@ -15,6 +15,16 @@
 
 ## [Unreleased]
 
+## [v1.5.2] - 2026-11-13
+
+- **[DeepSeek] 审计「编辑器产出的卡片在 Anki 原生界面是否正常」，修掉两个真问题**（新增 [`frontend/src/utils/wysiwygField.ts`](frontend/src/utils/wysiwygField.ts)、[`frontend/src/utils/editorTable.ts`](frontend/src/utils/editorTable.ts)、[`tests/frontend/specs/editorTable.spec.ts`](tests/frontend/specs/editorTable.spec.ts)、[`tests/frontend/run_browser.py`](tests/frontend/run_browser.py)；改 [`TowerWysiwygEditor.tsx`](frontend/src/components/quick-add/TowerWysiwygEditor.tsx)、[`frontend_audit.py`](tests/scenarios/frontend_audit.py)）：
+  - **审计结论（好消息）**：编辑器所有格式在原生 Anki 里都能正常显示。实测方式——把「标题 / 加粗 / 斜体 / emoji / 高亮 / 有序无序列表 / 引用 / 代码块 / 表格 / 分隔线 / `\(…\)` 公式 / 图片 / 居中 / 缩进」一次性写进一个 Basic 笔记，交给 `card.render_output()`（Anki 复习界面真正用的那条渲染路径）：17 项特性**逐字原样输出，零丢失、零转义**。原因是编辑器存的都是标准 HTML + 内联样式 + 裸文件名图片，不依赖任何插件 CSS 类。
+  - **问题一：深色模式下插入的表格，进了原生卡片表头不可见。** 表格样式原先按 `isDark` 烘进了笔记内容：深色主题下 `th` 写死 `background:#21222E`，而文字颜色是**继承**来的——在插件深色界面里继承到浅色字（正常），到了原生白底卡片继承到黑字，就成了黑底黑字。现抽出 [`editorTable.ts`](frontend/src/utils/editorTable.ts) 统一为**主题无关**样式：`th` 显式声明 `background:#F5F5F7` + `color:#1F2328`（对比度 13.6:1），`td` 刻意不写色以便跟随宿主主题，并去掉写死的 `font-size`（编辑器里多大，原生里就多大）。单测用 WCAG 公式算对比度，不靠肉眼。
+  - **问题二：挖空里的富文本被静默吃掉。** `serializeFromWysiwyg` 取挖空正文用的是 `bodyEl.textContent`，于是 `{{c1::<b>答案</b>}}` 打开一次编辑器再保存就变成 `{{c1::答案}}`，`{{c1::<img …>}}` 里的图直接消失。界面当时看不出来，下次打开才发现。现在改为取 **innerHTML**，并把该函数从 1700 行的组件里抽到 [`wysiwygField.ts`](frontend/src/utils/wysiwygField.ts)。
+  - **顺带踩到并绕过的一个坑**：直接 `replaceChild(createTextNode('{{c1::<b>x</b>}}'))` 也不行——`innerHTML` 序列化文本节点时会把 `<b>` 转义成 `&lt;b&gt;`，存进去就是「Cloze 里印着字面量 `<b>`」。改用控制字符占位符 `\u0001ANKI_CLOZE_n\u0001` 先占位、序列化完再替换回原文，既保留标签又不破坏转义语义（挖空里本来是文本的 `<` 依然是 `&lt;`）。
+  - **测试补强**：前端单测 72 → **78 项**（`editorTable.spec.ts` 6 项）；静态审计 8 → **17 项**（新增：挖空序列化必须用 innerHTML、编辑器必须走同一个实现、表格样式不得出现 `isDark`）。新增可选的 [`tests/frontend/run_browser.py`](tests/frontend/run_browser.py)：用 esbuild 把 `wysiwygField.ts` 打成 IIFE 交给无头 Chrome 跑 **8 项** DOM 往返断言（加粗、图片、hint 不重复、空挖空清理、文本 `<` 仍转义、只剩图片的高亮不被误删、普通内容原样、零宽空格清干净）。无 Chrome 时跳过返回 0，不进门禁。
+  - **验证**：`tsc --noEmit`、前端单元 78 项、浏览器往返 8 项、Bundle 审计、Python 141 项、场景冒烟 692/692 + 前端静态审计 17/17、无头 Chrome 白底截图比对（表头黑底黑字 → 浅底深字），全绿。版本 1.5.1 → 1.5.2。
+
 ## [v1.5.1] - 2026-11-13
 
 - **[DeepSeek] 遮挡编辑器改为产出**原生 Image Occlusion 笔记**，并修掉翻面后遮罩标签裸露与卡片背面按钮悬空两个样式 bug**（改 [`bridge/edit_service.py`](bridge/edit_service.py)、[`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx`](frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/utils/mathRenderer.ts`](frontend/src/utils/mathRenderer.ts)、[`frontend/src/index.css`](frontend/src/index.css)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、14 个语种文件；新增 [`tests/frontend/specs/ioRects.spec.ts`](tests/frontend/specs/ioRects.spec.ts)）：

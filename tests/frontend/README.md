@@ -30,7 +30,7 @@ node tests/frontend/run.mjs
 退出码非 0 即失败，输出格式与 `test_frontend_bundle.mjs` 一致（`ALL N CHECKS PASSED!`）。
 首次运行前需要 `cd frontend && npm install`（和其它前端命令共用同一份依赖）。
 
-## 覆盖范围（58 项）
+## 覆盖范围（78 项）
 
 | 文件 | 覆盖内容 |
 |---|---|
@@ -39,11 +39,28 @@ node tests/frontend/run.mjs
 | `specs/mediaUrl.spec.ts` | `collection.media` 基址归一化、单次 URL 编码（防二次编码）、`http/data/blob/file://` 放行、`data-anki-media` 兜底、`<img>` 重写幂等、cloze/`[sound:]`/锚点不被误伤 |
 | `specs/translations.spec.ts` | 16 语言注册表、Anki/browser 别名归一、`pref → Anki → browser` 回退链、RTL 判定、快捷键跨平台映射、同步相对时间格式 |
 | `specs/render.spec.tsx` | `AnkiStudioLogo` / `SyncStateIcon` / `StreakFlameBackdrop` 的静态渲染：尺寸、无障碍属性、四种同步状态互不相同、深色模式确实生效 |
+| `specs/ioRects.spec.ts` | Anki 渲染过的遮挡挖空（`span.cloze`）逆向还原成 `{{cN::}}`、幂等、缺 `data-ordinal` 时退回 `data-io-rect`、框外 cloze 不动、空输入安全 |
+| `specs/editorTable.spec.ts` | 编辑器插表格的样式必须主题无关：表头显式文字色、表头底色/文字色对比度 ≥4.5:1、`td` 不写死色、不写死字号 |
+
+## 浏览器端往返测试（可选）
+
+`serializeFromWysiwyg`（`frontend/src/utils/wysiwygField.ts`）是纯 DOM 逻辑，Node 里没有 DOM
+就没法测；它一旦退化是**静默丢数据**——挖空里的 `<b>`/`<img>` 被吃掉，界面上看不出来，
+下次打开卡片才发现。
+
+```bash
+python3 tests/frontend/run_browser.py
+```
+
+用现成的 esbuild 把该模块打成 IIFE，交给无头 Chrome 跑 8 项断言（`--dump-dom` 取回结果）。
+找不到 Chrome 时**跳过并返回 0**，不会卡住没有浏览器的机器。它**不在** `gate.sh` 与
+`test_frontend_bundle.mjs` 里，属于需要时手动跑的补充层。
 
 ## 不覆盖什么
 
 - **交互与 DOM 行为**：点击、拖拽、动画、弹窗焦点陷阱、iframe 沙盒通信，仍需要真实浏览器
-  （`tests/scenarios/` 的场景库 + 手工目视）。这是当前唯一剩下的前端盲区。
+  （`tests/scenarios/` 的场景库 + 手工目视）。这是当前唯一剩下的前端盲区——除了
+  `run_browser.py` 覆盖的那条「编辑器 → 字段」序列化链路。
 - **状态机**：`useAppStore.ts` 依赖 `window.pycmd` 与 React Hook，未在本套件内直接实例化。
 - **构建产物**：`web/` 的打包结果由 `test_frontend_bundle.mjs` 与 `npm run build` 负责。
 
