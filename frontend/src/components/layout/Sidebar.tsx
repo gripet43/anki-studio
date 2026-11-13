@@ -261,15 +261,30 @@ export const Sidebar: React.FC = () => {
                         e.stopPropagation();
                         appActions.toggleDeckCollapse(deck.id);
                       }}
-                      className="w-3.5 text-[10px] text-[#8E8E93] hover:text-[var(--brand-text)] cursor-pointer"
+                      aria-label={deck.name}
+                      aria-expanded={!isCollapsed}
+                      className="w-4 h-4 -ms-0.5 flex items-center justify-center rounded text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-black/[0.04] dark:hover:bg-white/[0.06] cursor-pointer shrink-0 transition-colors"
                     >
-                      {isCollapsed ? '▸' : '▾'}
+                      <svg
+                        className={`w-3 h-3 transition-transform duration-150 ${isCollapsed ? '' : 'rotate-90'}`}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="m9 18 6-6-6-6" />
+                      </svg>
                     </button>
                   ) : (
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0 ms-1"
-                      style={{ backgroundColor: dotColor }}
-                    />
+                    <span className="w-4 h-4 flex items-center justify-center shrink-0">
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: dotColor }}
+                      />
+                    </span>
                   )}
                   <button
                     onClick={() => appActions.startReview(deck.id)}

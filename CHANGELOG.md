@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+## [v1.4.59] - 2026-11-13
+
+- **[DeepSeek] 侧边栏牌组树的折叠三角放大**（改 [`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)）：原来用 10px 的 `▸ / ▾` 字符，太细小；改为 12px 的矢量 chevron，折叠状态旋转 90°，点击热区扩到 20×20，并有 hover 背景反馈；无子牌组的圆点占位同步对齐，保证牌组名整齐。附带 `aria-expanded` 状态。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.58 → 1.4.59。
+
 ## [v1.4.58] - 2026-11-13
 
 - **[DeepSeek] Gallery 图片卡统一媒体视窗**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
