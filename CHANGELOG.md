@@ -15,6 +15,23 @@
 
 ## [Unreleased]
 
+## [v1.5.4] - 2026-11-13
+
+> 本版对**已装用户的运行时体验**只有第一条（学习统计页入场动效）；其余为注释修正与测试/构建工具链修复，`tests/` 与 `scripts/` 都不进 `.ankiaddon`。
+
+- **[DeepSeek] 学习统计页加上卡片库同款入场动效**（改 [`StatsView.tsx`](frontend/src/components/stats/StatsView.tsx)、[`index.css`](frontend/src/index.css)；`tests/test_frontend_bundle.mjs` 新增 Item #43 守卫）：
+  - **做了什么**：把卡片库 Gallery 的「错峰淡入 + 轻微上浮」搬到学习统计页的 6 块面板上 —— 每块延迟 28ms 依次进场，时长 260ms、缓动 `cubic-bezier(0.22, 1, 0.36, 1)`，与卡片库完全一致。
+  - **顺便消掉一处重复**：原本关键帧与规则叫 `@keyframes library-card-enter`，只有卡片库在用。既然要跨页面复用，把关键帧改成中性名 `ui-stagger-enter`，规则写成 `.library-card-enter, .stats-panel-enter` 共用同一条 `animation` 声明 —— 只留一个真值来源，以后调手感不会出现「改了卡片库、统计页没跟上」。`.library-card-enter` 这个类名本身保留，`LibraryView` 与它的 `animationDelay` 不用动。
+  - **错峰上限沿用 12 档**：`Math.min(index, 12) * 28`。统计页只有 6 块，实际延迟 0 / 28 / 56 / 84 / 112 / 140ms，最后一块 400ms 内全部落位。
+  - **`fill: backwards` 是关键**：有 `animationDelay` 时，元素在延迟期间就停在 `from` 态（opacity 0、下移 7px），不会先闪一下完整内容再重播；动画结束后 fill 撤回成 `transform: none`，也不干扰面板内已有的 hover / tooltip 层。
+  - **`prefers-reduced-motion: reduce` 下关闭**，与卡片库同规则。
+  - **验证（三层，全部实测）**：
+    1. **计算样式**：无头 Chrome 读 `getComputedStyle`，`library-card-enter` 与 `stats-panel-enter` 都解析到 `ui-stagger-enter` / 0.26s / `backwards` / 同一条 cubic-bezier；内联延迟分别回报 `0s`、`0.028s`、`0.14s`。
+    2. **按时间点采样**（Web Animations API 把进度钉死，不信虚拟时钟）：`t=0` 六块全在 `opacity 0 / translateY 7px`；`t=130ms` 出现干净阶梯 `0.96 → 0.91 → 0.81 → 0.62 → 0.29 → 0.00`（最后一块还没起步）；`t=400ms` 六块全部 `opacity 1 / transform none`。
+    3. **截图对照**：固定 `currentTime=130ms` 截出明显的三级淡入梯度；固定 `400ms` 截出完整对齐的 2 列栅格，无残留淡出或位移。（第一次用 `--virtual-time-budget` 抓拍得到一张「只剩一块」的假象，是虚拟时钟跟 CSS 动画不同步的伪影，换成冻结 `currentTime` 才可信 —— 记一笔，别再被它骗。）
+  - **测试**：新增 Item #43，断言「统计页至少 6 块面板挂了 `stats-panel-enter`」「错峰常量是 28ms」「CSS 里 `@keyframes ui-stagger-enter` 存在」「共用选择器与 `animation` 声明绑在一条规则里」「`prefers-reduced-motion` 下同选择器 `animation: none`」。**负向对照跑过**：把 `.stats-panel-enter` 从共享选择器里摘掉，守卫立刻报 `[AUDIT CHECK FAILED] Item #43`；恢复后转绿。（第一版守卫用宽松正则只查选择器，被 `prefers-reduced-motion` 里那对同名选择器蒙过去了 —— 改成「选择器 + 动画声明」绑定的整串匹配才真正咬得住。）
+  - **验证门禁**：`tsc --noEmit` 干净、前端单元 84 项、Bundle 审计（含新 Item #43）、Python 141 项，全绿。版本 1.5.3 → 1.5.4。
+
 - **[DeepSeek] 修掉 Windows 验版报告点出的 4 个跨平台缺陷**（改 [`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)、[`tests/test_card_safety_round3.py`](tests/test_card_safety_round3.py)、[`scripts/build_ankiaddon.py`](scripts/build_ankiaddon.py)、8 个测试模块的导入头部；新增 [`tests/_addon_bootstrap.py`](tests/_addon_bootstrap.py)；**只动测试与构建脚本，`scripts/` 与 `tests/` 都不进 .ankiaddon，运行时零变化**）：
   - **背景**：本机（macOS）门禁一直全绿，但 Windows 侧干净 clone 上四处跑不通，全部集中在工具链、与产品功能无关。报告见 [`tests/reports/windows-20261113-r5.md`](tests/reports/windows-20261113-r5.md) 与 [`tests/reports/windows-compat-20261113.md`](tests/reports/windows-compat-20261113.md)。本次逐个修，并且**在 macOS 上造出等价环境实测**，不靠读代码猜。
   - **① CRLF 让 i18n 字典守卫误报（Item #33）**：Windows 版 Git 默认 `core.autocrlf=true`，工作区换行变 CRLF；`test_frontend_bundle.mjs` 里 63 处 `fs.readFileSync(..., 'utf-8')` 读进来的每一行都带 `\r`，`parseFlatDict()` 的 `/^ {2}(\w+):\s*(['"])(.*)\2,?$/` 里 `(.*)` 匹配不了换行符、`$` 也不认 `\r`，于是字典解析出 **0 条**，报「解析 ZH_CN 基准字典失败」。修法是加一个 `readText()` 统一读取并 `replace(/\r\n?/g, '\n')`，63 处调用全部改走它 —— 一处归一化，字典边界、按行解析、多行 `includes` 全部恢复稳定。**没动 `.gitattributes`**：给全仓加 `eol=lf` 会让 Windows 侧下一次 checkout 产生大面积 diff，收益与风险不匹配。

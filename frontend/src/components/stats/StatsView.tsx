@@ -30,6 +30,16 @@ export const StatsView: React.FC = () => {
 
   const subText = 'text-[#5C5E66] dark:text-[#A8AAB8]';
 
+  // 面板入场错峰：与卡片库 Gallery（LibraryView）共用同一套节奏 ——
+  // 每档 28ms、最多 12 档。上限既是防止大屏上一屏几十块面板排队到失去耐心，
+  // 也因为视觉上超过 ~330ms 的延迟就不像"一起进来"而像"一个个蹦出来"了。
+  // 实际动效定义在 index.css 的 `.stats-panel-enter`（与 `.library-card-enter` 同源）。
+  const ENTER_STAGGER_MS = 28;
+  const ENTER_STAGGER_MAX = 12;
+  const enterDelay = (index: number): React.CSSProperties => ({
+    animationDelay: `${Math.min(index, ENTER_STAGGER_MAX) * ENTER_STAGGER_MS}ms`,
+  });
+
   // Interactive hover state unified with DashboardView's `.dashboard-tooltip` popovers
   const [hoveredForecastIdx, setHoveredForecastIdx] = useState<number | null>(null);
   const [hoveredMaturitySeg, setHoveredMaturitySeg] = useState<{
@@ -219,7 +229,10 @@ export const StatsView: React.FC = () => {
       {/* Top Row: 30-Day Review Load Forecast (col-span-8) + Card Maturity Breakdown (col-span-4) */}
       <section className="grid grid-cols-12 gap-4">
         {/* 1. 30-Day Review Load Forecast */}
-        <div className={`col-span-8 rounded-2xl border p-6 flex flex-col justify-between shadow-xs relative ${cardSurface}`}>
+        <div
+          className={`stats-panel-enter col-span-8 rounded-2xl border p-6 flex flex-col justify-between shadow-xs relative ${cardSurface}`}
+          style={enterDelay(0)}
+        >
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-[15px] font-bold">
@@ -322,7 +335,10 @@ export const StatsView: React.FC = () => {
         </div>
 
         {/* 2. Card Maturity Distribution Breakdown */}
-        <div className={`col-span-4 rounded-2xl border p-6 flex flex-col justify-between shadow-xs relative ${cardSurface}`}>
+        <div
+          className={`stats-panel-enter col-span-4 rounded-2xl border p-6 flex flex-col justify-between shadow-xs relative ${cardSurface}`}
+          style={enterDelay(1)}
+        >
           <div>
             <h2 className="text-[15px] font-bold">
               {t('statsMaturityTitle')}
@@ -440,7 +456,10 @@ export const StatsView: React.FC = () => {
       {/* Bottom Row: Historical Retention Curve (col-span-6) + 24-Hour Study Time Distribution (col-span-6) */}
       <section className="grid grid-cols-12 gap-4">
         {/* 3. Historical Retention Curve with Dynamic Baseline & Clean Timeline */}
-        <div className={`col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs relative ${cardSurface}`}>
+        <div
+          className={`stats-panel-enter col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs relative ${cardSurface}`}
+          style={enterDelay(2)}
+        >
           <div className="flex items-center justify-between mb-3">
             <div>
               <h2 className="text-[15px] font-bold">
@@ -545,7 +564,10 @@ export const StatsView: React.FC = () => {
         </div>
 
         {/* 4. 24-Hour Study Time Distribution */}
-        <div className={`col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs relative ${cardSurface}`}>
+        <div
+          className={`stats-panel-enter col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs relative ${cardSurface}`}
+          style={enterDelay(3)}
+        >
           <div className="flex items-center justify-between mb-3">
             <div>
               <h2 className="text-[15px] font-bold">
@@ -631,7 +653,10 @@ export const StatsView: React.FC = () => {
       {/* Third Row: Anki official "Answer Buttons" + "True Retention" metrics */}
       <section className="grid grid-cols-12 gap-4">
         {/* 5. Answer Buttons — reveals card-quality and scheduling problems */}
-        <div className={`col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs ${cardSurface}`}>
+        <div
+          className={`stats-panel-enter col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs ${cardSurface}`}
+          style={enterDelay(4)}
+        >
           <div className="flex items-start justify-between mb-4">
             <div>
               <h2 className="text-[15px] font-bold">
@@ -693,7 +718,10 @@ export const StatsView: React.FC = () => {
         </div>
 
         {/* 6. True Retention — Anki's official FSRS calibration metric */}
-        <div className={`col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs ${cardSurface}`}>
+        <div
+          className={`stats-panel-enter col-span-6 rounded-2xl border p-6 flex flex-col justify-between shadow-xs ${cardSurface}`}
+          style={enterDelay(5)}
+        >
           <div>
             <h2 className="text-[15px] font-bold">
               {t('statsTrueRetentionTitle')}

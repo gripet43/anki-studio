@@ -1027,4 +1027,26 @@ assert(
   'Item #42: mathRenderer.ts 必须保护 <style> 块不被注入 <br/>，且 Track B SandboxCardFrame 必须使用 sandbox="allow-scripts"（严禁 allow-same-origin）与本地 HTTP 媒体服务'
 );
 
+// Item #43: 学习统计页必须复用卡片库的错峰入场动效（同一套 keyframes / 曲线 / 降级规则）
+// 先把 CSS 压成单行，避免正则被缩进量、空行与新格式牵着走；
+// 断言必须把「选择器」和「动画声明」绑在一起 —— 只查选择器的话，
+// 下面 prefers-reduced-motion 里那对同样的选择器会让检查假绿。
+const cssCompact = dashboardCssSrc.replace(/\s+/g, ' ');
+const statsPanelCount = (statsViewSrc.match(/stats-panel-enter/g) || []).length;
+assert(
+  librarySrc.includes('library-card-enter') &&
+    librarySrc.includes('animationDelay') &&
+    statsPanelCount >= 6 &&
+    statsViewSrc.includes('enterDelay(') &&
+    statsViewSrc.includes('const ENTER_STAGGER_MS = 28') &&
+    cssCompact.includes('@keyframes ui-stagger-enter') &&
+    cssCompact.includes(
+      '.library-card-enter, .stats-panel-enter { animation: ui-stagger-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }'
+    ) &&
+    cssCompact.includes(
+      '@media (prefers-reduced-motion: reduce) { .library-card-enter, .stats-panel-enter { animation: none; }'
+    ),
+  'Item #43: 学习统计页 6 个面板必须复用卡片库的错峰入场动效（同一套 ui-stagger-enter 关键帧、同一条缓动曲线、同样在 prefers-reduced-motion 下关闭）'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');
