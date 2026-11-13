@@ -122,6 +122,49 @@ def normalize_language_code(raw_code: Optional[str], default: str = "zh-CN") -> 
     return default
 
 
+def compute_backlog_alert(
+    daily_counts,
+    overdue_count: int,
+    total_due: int,
+    *,
+    vacation_active: bool = False,
+    cooldown_active: bool = False,
+) -> Dict[str, Any]:
+    """Relative backlog pressure based on the user's own recent review volume.
+
+    "Large backlog" is not judged by an absolute card count: we compare the
+    overdue queue with how many cards this user actually reviews on a busy day
+    (75th percentile of active days over the last 56 days). Two regular days
+    of backlog — or a today-queue twice that size — is when relief is useful.
+    """
+    counts = sorted(int(c or 0) for c in (daily_counts or []) if int(c or 0) > 0)
+    active_days = len(counts)
+    capacity = 0
+    if active_days >= 5:
+        capacity = counts[min(active_days - 1, int(round(0.75 * (active_days - 1))))]
+    capacity = max(1, int(capacity or 0))
+    backlog_days = round(overdue_count / capacity, 2) if active_days >= 5 else 0.0
+    load_ratio = round(total_due / capacity, 2) if active_days >= 5 else 0.0
+    pressure = max(backlog_days, load_ratio)
+    has_alert = bool(
+        active_days >= 5
+        and not vacation_active
+        and not cooldown_active
+        and (backlog_days >= 2.0 or load_ratio >= 2.0)
+    )
+    suggested_days = 7
+    if active_days >= 5:
+        suggested_days = max(5, min(14, int(round(pressure * 2))))
+    return {
+        "hasAvalanche": has_alert,
+        "typicalDaily": capacity if active_days >= 5 else 0,
+        "activeDays": active_days,
+        "backlogDays": backlog_days,
+        "loadRatio": load_ratio,
+        "suggestedDays": suggested_days,
+    }
+
+
 class DeckService:
     """Service interacting with mw.col.decks, mw.col.sched, and revlog statistics."""
 
@@ -352,7 +395,28 @@ class DeckService:
                 except Exception:
                     overdue_count = total_due_review
 
-            has_avalanche = overdue_count >= 30 or (total_due_review + total_due_new) >= 60
+            try:
+                heat_cells = (heatmap_data.get("heatmap") or {}).get("cells") or []
+                recent_daily_counts = [int(c.get("count") or 0) for c in heat_cells[-56:]]
+            except Exception:
+                recent_daily_counts = []
+            cooldown_active = False
+            try:
+                receipt = cfg.get("last_rescue_receipt") or {}
+                receipt_ts = str(receipt.get("timestamp") or "").strip()
+                if receipt_ts:
+                    rescued_at = datetime.datetime.strptime(receipt_ts[:16], "%Y-%m-%d %H:%M")
+                    cooldown_active = (datetime.datetime.now() - rescued_at).days < 7
+            except Exception:
+                cooldown_active = False
+            backlog_alert = compute_backlog_alert(
+                recent_daily_counts,
+                overdue_count,
+                total_due_review + total_due_new,
+                vacation_active=is_vacation_active,
+                cooldown_active=cooldown_active,
+            )
+            has_avalanche = bool(backlog_alert.get("hasAvalanche"))
 
             ls_ts = self._get_last_sync_timestamp(col)
             last_sync_ts = ls_ts
@@ -385,8 +449,6 @@ class DeckService:
                     "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                     "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
                     "tipsHiddenOn": str(cfg.get("dashboard_tips_hidden_on") or ""),
-                "analyticsEnabled": bool(cfg.get("analytics_enabled", True)),
-                "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),
                     "analyticsEnabled": bool(cfg.get("analytics_enabled", True)),
                     "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),
                     "debugMode": bool(cfg.get("debug_mode", False)),
@@ -407,7 +469,10 @@ class DeckService:
                     "totalDue": total_due_review + total_due_new,
                     "overdueCount": overdue_count,
                     "hasAvalanche": has_avalanche,
-                    "suggestedDays": 14 if (total_due_review + total_due_new) > 200 else (7 if (total_due_review + total_due_new) > 80 else 5),
+                    "typicalDaily": int(backlog_alert.get("typicalDaily") or 0),
+                    "backlogDays": float(backlog_alert.get("backlogDays") or 0),
+                    "loadRatio": float(backlog_alert.get("loadRatio") or 0),
+                    "suggestedDays": int(backlog_alert.get("suggestedDays") or 7),
                 },
                 "todayStats": {
                     "completed": completed_today,

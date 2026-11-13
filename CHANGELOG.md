@@ -15,6 +15,16 @@
 
 ## [Unreleased]
 
+## [v1.4.44] - 2026-11-13
+
+- **[DeepSeek] 进度减负提示改为「相对用户自己复习量」的动态标准，并统一首页胶囊与侧边栏圆点**（改 [`bridge/deck_service.py`](bridge/deck_service.py)、[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)；新增 [`tests/test_backlog_alert.py`](tests/test_backlog_alert.py) 8 项回归）：
+  - **旧标准的问题**：首页胶囊写死 `dueReview >= 60`，侧边栏圆点用后端 `overdue >= 30 或总数 >= 60`，两套标准互相打架；而且固定张数对「每天 20 张」和「每天 300 张」的用户意义完全不同。
+  - **新标准（相对）**：取最近 56 天内有复习记录的日子，用每日复习量的 **75 分位** 作为「我平时认真复习一天能处理多少张」；`积压天数 = 逾期卡数 / 日容量`，`今日压力 = 今日待复习+新卡 / 日容量`；当 **积压天数 ≥ 2 或 今日压力 ≥ 2** 时提示。活跃天数不足 5 天的新用户不提示（没有基准，不打扰）。
+  - **抑制条件**：休假中不提示；最近 7 天用过进度减负则进入冷却；首页胶囊与侧边栏圆点统一读取 `backlog.hasAvalanche`。
+  - **弹窗默认平摊天数也相对化**：`clamp(压力 × 2, 5, 14)` 天，不再用 14/7/5 的固定阶梯。
+  - 顺带修复 dashboard preferences 载荷里重复/错位的 `analyticsEnabled` / `answerButtonMode` 键。
+  - **验证**：Python 138 项（新增 8 项相对标准回归）、`tsc --noEmit`、前端单元 63 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.43 → 1.4.44。
+
 ## [v1.4.43] - 2026-11-13
 
 - **[DeepSeek] 同步更新设置里的快捷键速查表与复习界面提示**（改 [`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)）：

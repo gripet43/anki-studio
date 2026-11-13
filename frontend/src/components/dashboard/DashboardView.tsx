@@ -779,7 +779,7 @@ export const DashboardView: React.FC = () => {
                           {dueNewParts[1] && <span>{dueNewParts[1]}</span>}
                         </button>
 
-                        {dashboard.todayStats.dueReview >= 60 && (
+                        {dashboard.backlog?.hasAvalanche && (
                           <>
                             <span aria-hidden="true" className="text-[var(--text-muted)] opacity-55 select-none">
                               •
