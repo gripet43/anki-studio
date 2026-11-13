@@ -15,6 +15,16 @@
 
 ## [Unreleased]
 
+## [v1.4.49] - 2026-11-13
+
+- **[DeepSeek] 匿名统计补强：记录国家/地区、时区偏移与真实界面语言，便于判断大陆用户**（改 [`bridge/analytics_service.py`](bridge/analytics_service.py)、[`bridge/router.py`](bridge/router.py)、[`scripts/analytics-worker/worker.js`](scripts/analytics-worker/worker.js)、[`scripts/analytics-worker/schema.sql`](scripts/analytics-worker/schema.sql)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts) 及 16 种语言隐私文案）：
+  - Cloudflare Worker 增加 `country` / `colo`（来自 `request.cf`，仅两位/三位代码，不存 IP）；
+  - 客户端上报 `tz_offset`（本地时区偏移小时）与**已解析界面语言**（此前 config 为 `auto` 时只能记到 `auto`）；
+  - 隐私说明同步：明确「国家/地区代码、时区偏移」属于粗粒度环境信息；README / config.md / 设置页文案更新；
+  - Worker 已重新部署并执行 `ALTER TABLE`（`tz_offset` / `country` / `colo`），实测落库：`locale=zh-CN, tz_offset=8, country=SG, colo=SIN`；
+  - 附注：当前 D1 仅 9 条事件 / 4 个安装，全部来自本轮开发测试，暂无真实用户数据；Cloudflare 的国家图是按请求 IP 的粗粒度统计，代理出口会显示为 SG/HK/US。
+  - **验证**：Python 140 项、`tsc --noEmit`、前端单元 63 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.48 → 1.4.49。
+
 ## [v1.4.48] - 2026-11-13
 
 - **[DeepSeek] Gallery 小卡按参考稿重构：延迟翻面、纸面反光、正反面分工**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
