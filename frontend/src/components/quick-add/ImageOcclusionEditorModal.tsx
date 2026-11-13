@@ -172,6 +172,12 @@ function resolveMediaName(imgSrc: string, mediaFilename?: string): string {
  * `{{c1::image-occlusion:rect:left=.1:top=.2:width=.08:height=.06:oi=1}}`，
  * 坐标是相对底图的 0–1 小数（见 AnkiWeb 上的原生遮挡卡包），Image 字段是一张
  * `<img src="文件名">`。全部遮罩共用 ordinal 1，因此恒定只出 1 张卡。
+ *
+ * `oi=1` 是 Anki 用来区分两种模式的**唯一**开关（原生编辑器里就是
+ * `hideAllGuessOne` 这个 store 直接决定写不写它）：
+ *   - `oi=1`  → 隐藏全部、猜一个（别组的遮罩也一起盖住）
+ *   - 不写 oi → 隐藏一个、猜一个（只盖当前这张卡的那组）
+ * 所以模式必须落到这里，光记在预览 HTML 的 `data-io-mode` 上，原生 Anki 是看不到的。
  */
 export function buildNativeOcclusion(params: {
   titleText: string;
@@ -187,6 +193,7 @@ export function buildNativeOcclusion(params: {
   // Anki 原生的 Occlusion 指令，坐标是 0–1 小数（不是 0–100）。
   // 全部遮罩共用 c1：实测同 ordinal 重复 N 次会被 Anki 合并成「1 个组 N 个 shape」，
   // 于是 1 张笔记 = 1 张卡，同时每个遮罩都还在。
+  const oiSuffix = mode === 'hide-all' ? ':oi=1' : '';
   const occlusions = rects
     .map((r) => {
       const l = Math.max(0, Math.min(0.99, r.leftPct / 100));
@@ -195,7 +202,7 @@ export function buildNativeOcclusion(params: {
       const h = Math.max(0.005, Math.min(1 - t, r.heightPct / 100));
       return (
         `{{c1::image-occlusion:rect:left=${l.toFixed(4)}:top=${t.toFixed(4)}` +
-        `:width=${w.toFixed(4)}:height=${h.toFixed(4)}:oi=1}}`
+        `:width=${w.toFixed(4)}:height=${h.toFixed(4)}${oiSuffix}}}`
       );
     })
     .join('');

@@ -30,7 +30,7 @@ node tests/frontend/run.mjs
 退出码非 0 即失败，输出格式与 `test_frontend_bundle.mjs` 一致（`ALL N CHECKS PASSED!`）。
 首次运行前需要 `cd frontend && npm install`（和其它前端命令共用同一份依赖）。
 
-## 覆盖范围（78 项）
+## 覆盖范围（84 项）
 
 | 文件 | 覆盖内容 |
 |---|---|
@@ -40,6 +40,7 @@ node tests/frontend/run.mjs
 | `specs/translations.spec.ts` | 16 语言注册表、Anki/browser 别名归一、`pref → Anki → browser` 回退链、RTL 判定、快捷键跨平台映射、同步相对时间格式 |
 | `specs/render.spec.tsx` | `AnkiStudioLogo` / `SyncStateIcon` / `StreakFlameBackdrop` 的静态渲染：尺寸、无障碍属性、四种同步状态互不相同、深色模式确实生效 |
 | `specs/ioRects.spec.ts` | Anki 渲染过的遮挡挖空（`span.cloze`）逆向还原成 `{{cN::}}`、幂等、缺 `data-ordinal` 时退回 `data-io-rect`、框外 cloze 不动、空输入安全 |
+| `specs/nativeOcclusion.spec.ts` | 遮挡编辑器写出的原生 IO 指令：`hide-all` 每条带 `oi=1`、`hide-one` 一个 `oi` 都不带、坐标 0–1 小数、全部共用 `c1`（一笔记一卡）、Header 去空白 |
 | `specs/editorTable.spec.ts` | 编辑器插表格的样式必须主题无关：表头显式文字色、表头底色/文字色对比度 ≥4.5:1、`td` 不写死色、不写死字号 |
 
 ## 浏览器端往返测试（可选）

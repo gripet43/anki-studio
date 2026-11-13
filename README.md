@@ -48,7 +48,7 @@ npm run build    # 打包生产静态资源到 web/ 目录
 ### 2. 自动化测试与体检
 ```bash
 node tests/test_frontend_bundle.mjs                   # 前端字符串审计：护栏 / IPC / 样式 / i18n
-node tests/frontend/run.mjs                           # 前端单元套件：纯逻辑 + 叶子组件渲染（78 项）
+node tests/frontend/run.mjs                           # 前端单元套件：纯逻辑 + 叶子组件渲染（84 项）
 python3 tests/frontend/run_browser.py                 # 可选：无头 Chrome 跑「编辑器→字段」DOM 往返（8 项，缺 Chrome 自动跳过）
 python3 tests/scenarios/frontend_audit.py              # 前端静态审计：DOM target 防御 / helper 使用（仅需 Python）
 python3 -m unittest discover -s tests -p "test_*.py"  # Python 侧单元测试（141 项，含兼容性自检、通用修复与 CSS 解析回归）

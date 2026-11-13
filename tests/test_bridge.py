@@ -1755,6 +1755,20 @@ class BridgeRouterAuditTest(unittest.TestCase):
             re.findall(r'data-io-rect="(\d+)"', front_two), ["1", "1", "2"]
         )
 
+        # `oi=1` 是 Anki 区分两种遮挡模式的唯一开关（原生编辑器由 hideAllGuessOne 直接
+        # 决定写不写它）。带 oi → 隐藏全部；不带 oi → 只隐藏当前这张卡那组。
+        # 这里守住「读」的这一侧：渲染时必须把 mode 从指令串里还原出来，否则用
+        # hide-one 建的卡在插件界面里也会被当成 hide-all、全部盖住。
+        self.assertIn('data-io-mode="hide-all"', front_same)
+        hide_one = dict(note)
+        hide_one["Occlusion"] = (
+            "{{c1::image-occlusion:rect:left=0.1:top=0.1:width=0.1:height=0.1}}"
+            "{{c1::image-occlusion:rect:left=0.3:top=0.3:width=0.1:height=0.1}}"
+        )
+        front_hide_one = render_native_image_occlusion(hide_one)[0]
+        self.assertIn('data-io-mode="hide-one"', front_hide_one)
+        self.assertNotIn("oi=", front_hide_one)
+
 
     def test_23_sync_no_changes_checked_timestamp_and_requires_login(self):
         """Anki NO_CHANGES leaves col.ls unchanged; verified check timestamp must merge cleanly."""

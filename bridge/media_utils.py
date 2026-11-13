@@ -301,6 +301,7 @@ def render_native_image_occlusion(note) -> tuple[str, str, str]:
         return "", "", header
 
     spans = []
+    occlude_flags = []
     for token in IO_SHAPE_RE.finditer(occlusion):
         num = token.group(1)
         props = _io_shape_props(token.group(3))
@@ -317,6 +318,10 @@ def render_native_image_occlusion(note) -> tuple[str, str, str]:
         top = max(0.0, min(99.0, top))
         width = max(0.5, min(100.0 - left, width))
         height = max(0.5, min(100.0 - top, height))
+        # `oi=1` 是 Anki 用来区分两种模式的唯一开关（原生编辑器由 hideAllGuessOne 直接决定
+        # 写不写它）：带 oi 的遮罩在「不是当前这张卡」时也要盖住 → 隐藏全部、猜一个；
+        # 不带 oi → 只盖当前这张卡的那组，其余组露出来 → 隐藏一个、猜一个。
+        occlude_flags.append(str(props.get("oi", "")).strip().lower() in ("1", "true", "yes"))
         spans.append(
             f'<span class="anki-io-rect" data-io-rect="{num}" '
             f'style="position:absolute;left:{left:.2f}%;top:{top:.2f}%;'
@@ -326,8 +331,11 @@ def render_native_image_occlusion(note) -> tuple[str, str, str]:
     if not spans:
         return "", "", header
 
+    # 全部形状都带 oi=1 才算「隐藏全部」；出现任何一个不带 oi 的，就按「隐藏一个」处理
+    # （宁可少盖一块让人看见答案，也不要多盖一块把人挡死）。
+    io_mode = "hide-all" if all(occlude_flags) else "hide-one"
     front = (
-        '<div class="anki-io-wrap" data-io-mode="hide-all" '
+        f'<div class="anki-io-wrap" data-io-mode="{io_mode}" '
         'style="position:relative;display:inline-block;max-width:100%;line-height:0;'
         'border-radius:12px;overflow:hidden;">'
         f"{image}{''.join(spans)}</div>"

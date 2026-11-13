@@ -15,6 +15,17 @@
 
 ## [Unreleased]
 
+## [v1.5.3] - 2026-11-13
+
+- **[DeepSeek] 遮挡编辑器的「隐藏全部 / 仅隐藏当前提问框」原来在原生 Anki 里不生效**（改 [`ImageOcclusionEditorModal.tsx`](frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx)、[`bridge/media_utils.py`](bridge/media_utils.py)；新增 [`tests/frontend/specs/nativeOcclusion.spec.ts`](tests/frontend/specs/nativeOcclusion.spec.ts)）：
+  - **先回答命名问题**：这两个模式是 **Anki 原生自带**的，不是我们发明的 —— 官方 Image Occlusion 编辑器顶部就这两个选项 **Hide All, Guess One** / **Hide One, Guess One**（`Anki.app` 里就是 `hideAllGuessOne` 这个 store）。我们的中文文案与按钮外观是自己做的，语义与原生一致。
+  - **但实现漏了关键一环**：这两种模式在原生里**不是**单独的存储字段，而是靠每条遮挡指令末尾的 `:oi=1` 区分 —— 原生编辑器由 `hideAllGuessOne` 直接决定写不写它（`return _ && k("oi","1")`）。我们把它写死成 `:oi=1`，于是**选了「仅隐藏当前提问框」建出来的卡，进原生 Anki 仍然是「隐藏全部」**，选项等于摆设。
+  - **复现证据**（真实 collection，`card.render_output()`）：带 `:oi=1` 的形状渲染成 `<div class="cloze" … data-occludeInactive="1">`（复习器据此把别组的遮罩也盖住）；不带的**完全没有这个属性**。两者都稳定只出 1 张卡。
+  - **修法**：写侧按模式决定是否追加 `:oi=1`（`hide-all` 才写）；读侧 `render_native_image_occlusion` 从指令串里还原模式 —— 全部形状都带 `oi` 才算 `hide-all`，出现任何一个不带的就按 `hide-one` 处理（宁可少盖一块让人看见答案，也不要多盖一块把人挡死）。此前它把 `data-io-mode="hide-all"` 也写死了，等于插件自己的复习界面同样无视这个选项。
+  - **兼容性**：本次修复之前建的遮挡卡全都带 `oi=1`，读出来仍是 `hide-all`，行为不变。
+  - **测试**：前端单测 78 → **84 项**（新增 `nativeOcclusion.spec.ts`：`hide-all` 每条都带 `oi=1`、`hide-one` 一个 `oi` 都不许出现、坐标必须是 0–1 小数、全部共用 `c1`、Header 去空白）；Python `test_22` 补两侧断言（带 `oi` → `data-io-mode="hide-all"`，不带 → `hide-one`）。
+  - **验证**：`tsc --noEmit`、前端单元 84 项、Bundle 审计、Python 141 项、场景冒烟 692/692 + 前端静态审计 17/17、真实 Anki `get_image_occlusion_note()` 与 `render_output()` 实测，全绿。版本 1.5.2 → 1.5.3。
+
 ## [v1.5.2] - 2026-11-13
 
 - **[DeepSeek] 审计「编辑器产出的卡片在 Anki 原生界面是否正常」，修掉两个真问题**（新增 [`frontend/src/utils/wysiwygField.ts`](frontend/src/utils/wysiwygField.ts)、[`frontend/src/utils/editorTable.ts`](frontend/src/utils/editorTable.ts)、[`tests/frontend/specs/editorTable.spec.ts`](tests/frontend/specs/editorTable.spec.ts)、[`tests/frontend/run_browser.py`](tests/frontend/run_browser.py)；改 [`TowerWysiwygEditor.tsx`](frontend/src/components/quick-add/TowerWysiwygEditor.tsx)、[`frontend_audit.py`](tests/scenarios/frontend_audit.py)）：
