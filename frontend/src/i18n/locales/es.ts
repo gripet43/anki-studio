@@ -1,6 +1,8 @@
 import type { TranslationTable } from '../translations';
 
 export const dict: TranslationTable = {
+  ioEditUnsupportedTitle: "No se admite editar tarjetas de oclusión de imagen",
+  ioEditUnsupportedSub: "Aún puedes previsualizar y repasar esta tarjeta. Para cambiar máscaras, grupos o modos, ábrela en el editor nativo de oclusión de imagen de Anki.",
   accentName_amber: "Ámbar cálido",
   accentName_cyan: "Cian océano",
   accentName_emerald: "Esmeralda bosque",

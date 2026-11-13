@@ -1,6 +1,8 @@
 import type { TranslationTable } from '../translations';
 
 export const dict: TranslationTable = {
+  ioEditUnsupportedTitle: "لا يدعم تحرير بطاقات حجب الصور",
+  ioEditUnsupportedSub: "لا يزال بإمكانك معاينة هذه البطاقة ومراجعتها. لتغيير الأقنعة أو المجموعات أو الأوضاع، افتحها في محرر حجب الصور الأصلي في Anki.",
   accentName_amber: "كهرماني دافئ",
   accentName_cyan: "سماوي محيطي",
   accentName_emerald: "زمردي غابي",

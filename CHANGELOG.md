@@ -15,6 +15,19 @@
 
 ## [Unreleased]
 
+## [v1.5.6] - 2026-11-13
+
+- **[DeepSeek] 产品决定：图片遮挡改为「只显示、不创建、不编辑」**（新增 [`utils/imageOcclusionPolicy.ts`](frontend/src/utils/imageOcclusionPolicy.ts)；改 [`CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、16 份语言包；新增 [`tests/frontend/specs/imageOcclusionPolicy.spec.ts`](tests/frontend/specs/imageOcclusionPolicy.spec.ts) 7 项 + Bundle 审计 Item #45；Item #38 同步改口径）：
+  - **为什么下线**：上一轮实测确认，Studio 的编辑器固定产出「整图一组」的笔记，而 Anki 原生支持多组 + 两种遮挡模式。继续提供编辑入口只有两个结局 —— 要么摆一个实际不起作用的模式开关，要么在「重新编辑」时把原生的多组笔记静默压扁成一组（数据损失）。而且编辑器画框时仍按 `maxCloze+1` 顺序编 c1/c2/c3、预览按多组渲染，落库却全写 c1，**预览与成品本来就不一致**。与其半吊子，不如把建卡与改卡完整交回 Anki 原生编辑器，Studio 专注显示。
+  - **关掉的是什么**：`IMAGE_OCCLUSION_AUTHORING_ENABLED = false` 一处策略常量，把 5 个创建/编辑入口全部收口 —— 富文本工具栏的「图片遮挡」按钮（本来就是 `onOpenImageOcclusion` 存在才渲染）、正面字段的遮挡入口、附加字段的逐字段入口、遮挡摘要卡上的「重新编辑 / 移除」、遮挡编辑器弹窗本身；`canSubmit`、`saveCardEdits` 字段回填、`quickAddCard` 的 `imageOcclusion` 载荷也一并加同样的护栏，连残留状态都写不回去。
+  - **保留的是什么**：**没有删解析与渲染能力**。`media_utils.render_native_image_occlusion`（含 v1.5.3 的 `oi` 模式还原）、`restore_rendered_io_rects` / `restoreRenderedIoRects`、`mathRenderer` 的遮罩色块、`review_service` 的 `card.ord + 1` 定位、`search_service` 的卡片库/Cmd+K 路径全部原样保留。复习、卡片库、Cmd+K、预览仍能正确显示 Anki 原生做出来的两种模式与多组笔记。`ImageOcclusionEditorModal.tsx` 里的纯函数（`buildNativeOcclusion` 等）也保留，作为格式知识库并继续被单测守着 —— **关的是 UI 入口，不是格式理解**。
+  - **只读态的交互**：打开一张已有的遮挡卡时，弹窗**默认落在预览态**（看到的是卡片而不是一串 `{{c1::image-occlusion:rect:...}}` 原始指令），顶栏显示「当前不支持图片挖空卡片编辑」+「仍可预览与复习；修改遮罩/分组/模式请在 Anki 原生编辑器中打开」，隐藏「返回编辑」切换与保存按钮，Esc 改为直接关闭弹窗。`handleSubmit` 另有兜底 `return`，任何漏掉的入口也写不回去。
+  - **判别必须准**（这是最容易误伤的地方）：`isImageOcclusionNote()` 只认三类结构化信号 —— ① 字段名同时含 `Occlusion` 和 `Image`（大小写/空格不敏感）；② 任一字段值含原生指令 `image-occlusion:rect:` 等；③ 已渲染 HTML 含 `.anki-io-wrap`。**故意不做「正文里出现 image occlusion 就算」的模糊匹配**，否则一张正文讨论这个术语的普通卡会被误锁成只读。
+  - **i18n**：新增 `ioEditUnsupportedTitle` / `ioEditUnsupportedSub` 两个键，ZH-CN + EN + 14 个懒加载语言包共 **16 份字典全部补齐**；Item #33 的键与占位符一致性守卫通过。
+  - **验证**：① 用真实 collection 跑 `SearchService._serialize_library_card` 导出一张 IO 卡和一张**正文故意写到 "image occlusion"** 的 Basic 卡，喂给 TS 判别器 —— `true` / `false`，在真实后端数据上不误伤。② `tsc --noEmit` 干净、前端单元 **96 项**（84→89→96）、Bundle 审计（Item #33/#38/#43/#44/#45）、Python 141 项、前端静态审计 17/17。③ Item #45 负向对照：把提交兜底那行 `readOnlyImageOcclusion ||` 去掉，守卫立刻报红，还原后转绿。
+  - 版本 1.5.5 → 1.5.6。
+
+
 ## [v1.5.5] - 2026-11-13
 
 - **[DeepSeek] 修：应用遮挡后点「预览」整块空白**（改 [`CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)；新增 [`tests/frontend/specs/occlusionPreview.spec.ts`](tests/frontend/specs/occlusionPreview.spec.ts) 5 项 + Bundle 审计 Item #44）：

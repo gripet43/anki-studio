@@ -1,6 +1,8 @@
 import type { TranslationTable } from '../translations';
 
 export const dict: TranslationTable = {
+  ioEditUnsupportedTitle: "目前不支援圖片遮罩卡片編輯",
+  ioEditUnsupportedSub: "這張卡片仍可預覽與複習；如需修改遮罩、分組或模式，請在 Anki 原生的圖片遮罩編輯器中開啟。",
   accentName_amber: "溫暖琥珀",
   accentName_cyan: "海洋青藍",
   accentName_emerald: "森林翠綠",

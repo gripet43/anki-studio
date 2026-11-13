@@ -20,6 +20,7 @@ import './specs/mathRenderer.spec';
 import './specs/ioRects.spec';
 import './specs/nativeOcclusion.spec';
 import './specs/occlusionPreview.spec';
+import './specs/imageOcclusionPolicy.spec';
 import './specs/editorTable.spec';
 import './specs/domTarget.spec';
 

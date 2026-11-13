@@ -851,7 +851,11 @@ assert(
     editorSrc.includes('previewReverseDir') &&
     editorSrc.includes('ui-answer-reveal') &&
     editorSrc.includes('ui-divider-reveal') &&
-    editorSrc.includes('onOpenImageOcclusion={() => setIoEditorOpen(true)}') &&
+    // 2026-11-13 产品改为「遮挡卡只显示、不创建不编辑」：工具栏入口仍存在，
+    // 但由策略常量控制是否挂载，不再无条件 setIoEditorOpen(true)。
+    editorSrc.includes('onOpenImageOcclusion={') &&
+    editorSrc.includes('IMAGE_OCCLUSION_AUTHORING_ENABLED') &&
+    !editorSrc.includes('onOpenImageOcclusion={() => setIoEditorOpen(true)}') &&
     !editorSrc.includes('role="tablist"') &&
     !editorSrc.includes('⌘P') &&
     mathRendererSrc.includes('activeClozeOrd?: number') &&
@@ -864,7 +868,7 @@ assert(
     !wysiwygSrc.includes("findClosestElement(anchor, 'b, strong', editorRef.current)) ||") &&
     !wysiwygSrc.includes("const selectedText = range.toString().trim() || '...';") &&
     dashboardCssSrc.includes('.anki-cloze-body[data-empty="true"]::after'),
-  'Item #38: CardEditorModal 与 TowerWysiwygEditor 必须支持顶栏单按钮循环切换编辑/查看、移除左下角查看按钮、图片遮挡整合进工具栏、加粗/斜体即时状态翻转与多语言帮助说明'
+  'Item #38: CardEditorModal 与 TowerWysiwygEditor 必须支持顶栏单按钮循环切换编辑/查看、移除左下角查看按钮、遮挡入口受策略常量控制、加粗/斜体即时状态翻转与多语言帮助说明'
 );
 
 // Item #39: 牌组卡配色必须由主题色派生（utils/deckPalette.ts）。
@@ -1058,6 +1062,31 @@ assert(
     cardEditorSrc.includes("!front.includes('anki-io-wrap') && !ioPayload") &&
     fs.existsSync(path.resolve(ADDON_ROOT, 'tests/frontend/specs/occlusionPreview.spec.ts')),
   'Item #44: 图片遮挡卡的预览必须把 ioPayload.previewHtml 当作正面内容源（否则整块预览空白），并由 occlusionPreview.spec.ts 守住遮罩渲染'
+);
+
+// Item #45: 图片遮挡「只显示、不创建不编辑」的产品边界。
+// 关键点不是把按钮藏起来，而是：① 判别要走结构化信号（不能误锁普通卡）；
+// ② 只读卡默认落在预览态、没有保存按钮、Esc 不切进不存在的编辑页；
+// ③ handleSubmit 有兜底 return，任何漏掉的入口都写不回去；
+// ④ 16 语言提示文案齐全（Item #33 会逐字典校验键与占位符）。
+const policySrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/imageOcclusionPolicy.ts'));
+assert(
+  policySrc.includes('IMAGE_OCCLUSION_AUTHORING_ENABLED = false') &&
+    policySrc.includes('export function isImageOcclusionNote') &&
+    policySrc.includes('image-occlusion:') &&
+    policySrc.includes('anki-io-wrap') &&
+    editorSrc.includes('isImageOcclusionNote(editingCardData)') &&
+    editorSrc.includes("setEditorMode(readOnlyImageOcclusion ? 'preview' : 'edit')") &&
+    editorSrc.includes('!readOnlyImageOcclusion && (') &&
+    editorSrc.includes('if (readOnlyImageOcclusion || !canSubmit || submitting) return;') &&
+    editorSrc.includes("t('ioEditUnsupportedTitle')") &&
+    editorSrc.includes("t('ioEditUnsupportedSub')") &&
+    editorSrc.includes('if (readOnlyImageOcclusion) handleAttemptClose();') &&
+    translationsSrc.includes('ioEditUnsupportedTitle:') &&
+    translationsSrc.includes('ioEditUnsupportedSub:') &&
+    fs.existsSync(path.resolve(ADDON_ROOT, 'tests/frontend/specs/imageOcclusionPolicy.spec.ts')),
+  'Item #45: 图片遮挡必须只读（新建/编辑入口全关、结构化判别、默认预览态、无保存按钮、提交兜底、16 语言提示）'
 );
 
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

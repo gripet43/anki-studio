@@ -1,6 +1,8 @@
 import type { TranslationTable } from '../translations';
 
 export const dict: TranslationTable = {
+  ioEditUnsupportedTitle: "Edytowanie kart z zasłanianiem obrazu nie jest obsługiwane",
+  ioEditUnsupportedSub: "Kartę nadal można podglądać i powtarzać. Zmiany masek, grup lub trybów wykonaj w natywnym edytorze okluzji obrazu Anki.",
   accentName_amber: "Ciepły bursztyn",
   accentName_cyan: "Oceaniczny cyjan",
   accentName_emerald: "Leśny szmaragd",

@@ -1,6 +1,8 @@
 import type { TranslationTable } from '../translations';
 
 export const dict: TranslationTable = {
+  ioEditUnsupportedTitle: "Das Bearbeiten von Bild-Abdeckkarten wird nicht unterstützt",
+  ioEditUnsupportedSub: "Du kannst diese Karte weiterhin ansehen und wiederholen. Änderungen an Masken, Gruppen oder Modi bitte im nativen Bild-Abdeckungs-Editor von Anki vornehmen.",
   accentName_amber: "Warmes Bernstein",
   accentName_cyan: "Ozean-Cyan",
   accentName_emerald: "Wald-Smaragd",

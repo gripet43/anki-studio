@@ -7,6 +7,10 @@ import { renderMathAndRichHtml } from '../../utils/mathRenderer';
 import { extractMediaBaseUrlFromHtml, resolveMediaInHtml } from '../../utils/mediaUrl';
 import { getAccentScale } from '../../utils/themeTokens';
 import {
+  IMAGE_OCCLUSION_AUTHORING_ENABLED,
+  isImageOcclusionNote,
+} from '../../utils/imageOcclusionPolicy';
+import {
   ImageOcclusionEditorModal,
   NativeOcclusionPayload,
   buildImageOcclusionHtml,
@@ -166,6 +170,11 @@ export const CardEditorModal: React.FC = () => {
   const clozeShortcutStr = formatShortcut('Cmd+Shift+C', envInfo.platform);
 
   const isEditMode = Boolean(editingCardData);
+
+  // 图片遮挡卡在 Studio 里是只读的：不可新建、不可编辑，但仍可预览与复习。
+  // 判别必须走结构化信号（字段名 / 原生指令 / .anki-io-wrap），不能靠「看起来像」，
+  // 否则一张正文里提到 image occlusion 的普通卡会被误锁成只读。
+  const readOnlyImageOcclusion = isEditMode && isImageOcclusionNote(editingCardData);
 
   // Deck State
   const [selectedDeckId, setSelectedDeckId] = useState<string>('1');
@@ -387,11 +396,12 @@ export const CardEditorModal: React.FC = () => {
     setConfirmDiscardOpen(false);
     setBackendDupCount(0);
     setBackendDupPreview('');
-    setEditorMode('edit');
+    // 遮挡卡没有编辑态，直接落在预览态，让用户看到的是卡片而不是一串原生指令。
+    setEditorMode(readOnlyImageOcclusion ? 'preview' : 'edit');
     setPreviewFlipped(false);
     setPreviewClozeOrd(1);
     setPreviewReverseDir('forward');
-  }, [quickAddOpen, editingCardData]);
+  }, [quickAddOpen, editingCardData, readOnlyImageOcclusion]);
 
   // Click outside dropdowns to close
   useEffect(() => {
@@ -719,13 +729,15 @@ export const CardEditorModal: React.FC = () => {
         } else if (!isInput && e.key === 'Escape') {
           e.preventDefault();
           e.stopPropagation();
-          setEditorMode('edit');
+          // 遮挡卡没有编辑态，Esc 应该关掉弹窗而不是切到一个不存在的编辑页。
+          if (readOnlyImageOcclusion) handleAttemptClose();
+          else setEditorMode('edit');
         }
       }
     };
     window.addEventListener('keydown', onWindowKeyDown, true);
     return () => window.removeEventListener('keydown', onWindowKeyDown, true);
-  }, [quickAddOpen, ioEditorOpen, confirmDiscardOpen, editorMode]);
+  }, [quickAddOpen, ioEditorOpen, confirmDiscardOpen, editorMode, readOnlyImageOcclusion]);
 
   const presence = usePresence(quickAddOpen, 120);
   if (!presence.mounted) return null;
@@ -771,12 +783,13 @@ export const CardEditorModal: React.FC = () => {
     ? (ioPayload.occlusions.match(/image-occlusion:rect:/g) || []).length
     : 0;
 
-  const canSubmit = isMultiFieldEdit
+  const canSubmit = !readOnlyImageOcclusion && (isMultiFieldEdit
     ? noteFieldOrder.some((k) => Boolean((allFieldsMap[k] || '').trim()))
-    : Boolean(ioPayload?.occlusions) || Boolean(front.trim());
+    : (IMAGE_OCCLUSION_AUTHORING_ENABLED && Boolean(ioPayload?.occlusions)) || Boolean(front.trim()));
 
   const handleSubmit = async () => {
-    if (!canSubmit || submitting) return;
+    // 双保险：即使某个快捷键/按钮漏了禁用，也绝不能把只读的遮挡卡写回去。
+    if (readOnlyImageOcclusion || !canSubmit || submitting) return;
     setSubmitting(true);
     applyFormatting('cloze');
 
@@ -800,7 +813,8 @@ export const CardEditorModal: React.FC = () => {
 
         // 原生 Image Occlusion 笔记的 Occlusion/Image 是结构化字段，不能把编辑器里的
         // 文本直接塞回去（那会把 SVG 覆盖层写成一段 HTML）。按字段名精确回填。
-        if (ioPayload) {
+        // 遮挡载荷只在 authoring 开关打开时可能存在；关掉时连残留状态都不许写回。
+        if (IMAGE_OCCLUSION_AUTHORING_ENABLED && ioPayload) {
           const keyOf = (name: string) =>
             Object.keys(mergedFields).find((k) => k.trim().toLowerCase() === name);
           const occlKey = keyOf('occlusion');
@@ -845,7 +859,7 @@ export const CardEditorModal: React.FC = () => {
           createReverseCard: selectedPreset === 'reversed',
           fields: Object.keys(extraClean).length > 0 ? extraClean : undefined,
           // 有遮挡载荷时后端走原生 Image Occlusion 分支，front/back 不参与建卡。
-          imageOcclusion: ioPayload
+          imageOcclusion: IMAGE_OCCLUSION_AUTHORING_ENABLED && ioPayload
             ? { ...ioPayload, backExtra: formattedBack }
             : undefined,
         });
@@ -1103,6 +1117,8 @@ export const CardEditorModal: React.FC = () => {
 
           {/* Right Action & Close Buttons: Single Unified Cycling Button (View <-> Edit) + Close */}
           <div className="flex items-center gap-2 shrink-0">
+          {/* 遮挡卡没有编辑态，这个「预览 / 返回编辑」开关对它没有意义 */}
+          {!readOnlyImageOcclusion && (
             <button
               type="button"
               onClick={() => {
@@ -1143,6 +1159,7 @@ export const CardEditorModal: React.FC = () => {
                 </>
               )}
             </button>
+            )}
 
             <button
               type="button"
@@ -1155,6 +1172,31 @@ export const CardEditorModal: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* 图片遮挡卡：只读提示。卡片本体照常走下面的预览态，可翻面，不提供任何写入口。 */}
+        {readOnlyImageOcclusion && (
+          <div
+            className={`mx-4 sm:mx-6 mt-4 px-4 py-3 rounded-xl border flex items-start gap-3 ${
+              isDark
+                ? 'bg-[#F59E0B]/10 border-[#F59E0B]/35 text-[#F5D08B]'
+                : 'bg-[#FFF8E6] border-[#F59E0B]/35 text-[#8A5A00]'
+            }`}
+            role="status"
+          >
+            <svg className="w-4 h-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8v5M12 16.5v.01" />
+            </svg>
+            <div className="min-w-0">
+              <div className="text-[13px] font-semibold">
+                {t('ioEditUnsupportedTitle')}
+              </div>
+              <div className="text-[11px] leading-relaxed mt-0.5 opacity-80">
+                {t('ioEditUnsupportedSub')}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modal Body: Either Two Tower WYSIWYG Editor Blocks OR Reviewer-Grade Live Card Preview */}
         {editorMode === 'edit' ? (
@@ -1215,7 +1257,9 @@ export const CardEditorModal: React.FC = () => {
                         onKeyDownShortcut={handleEditorKeyDown}
                         showCloze={true}
                         onOpenImageOcclusion={
-                          fKey === frontFieldName ? () => setIoEditorOpen(true) : undefined
+                          IMAGE_OCCLUSION_AUTHORING_ENABLED && fKey === frontFieldName
+                            ? () => setIoEditorOpen(true)
+                            : undefined
                         }
                         hasImageOcclusion={
                           fKey === frontFieldName ? fVal.includes('anki-io-wrap') : false
@@ -1289,7 +1333,7 @@ export const CardEditorModal: React.FC = () => {
             ) : (
               <>
                 {/* Front WYSIWYG Box (Tower Editor — with Image Occlusion integrated in toolbar row) */}
-                {ioPayload ? (
+                {IMAGE_OCCLUSION_AUTHORING_ENABLED && ioPayload ? (
                   /* 遮挡模式：正面不再是自由文本，而是对已生成遮挡的摘要。
                      直接展示一张原生 Image Occlusion 笔记的承诺：整图 1 张卡。 */
                   <div className={`rounded-xl border p-3.5 space-y-2.5 ${inputBg} ${cardBorder}`}>
@@ -1340,7 +1384,9 @@ export const CardEditorModal: React.FC = () => {
                   onPasteImage={appActions.pasteImageFromClipboard}
                   onKeyDownShortcut={handleEditorKeyDown}
                   showCloze={true}
-                  onOpenImageOcclusion={() => setIoEditorOpen(true)}
+                  onOpenImageOcclusion={
+                    IMAGE_OCCLUSION_AUTHORING_ENABLED ? () => setIoEditorOpen(true) : undefined
+                  }
                   hasImageOcclusion={front.includes('anki-io-wrap')}
                 />
                 )}
@@ -1892,23 +1938,25 @@ export const CardEditorModal: React.FC = () => {
               onClick={handleAttemptClose}
               className="btn-secondary !h-9 !px-3.5"
             >
-              {t('cancel')}
+              {readOnlyImageOcclusion ? t('close') : t('cancel')}
             </button>
 
-            <button
-              type="button"
-              onClick={() => handleSubmit()}
-              disabled={!canSubmit || submitting}
-              style={{ backgroundColor: brandHex }}
-              className="btn-primary !h-9 !px-5"
-            >
-              {submitting && <span className="animate-spin text-xs">⟳</span>}
-              <span>
-                {isEditMode
-                  ? t('saveChangesBtn')
-                  : t('addToDeckBtn', { deck: currentDeck.name })}
-              </span>
-            </button>
+            {!readOnlyImageOcclusion && (
+              <button
+                type="button"
+                onClick={() => handleSubmit()}
+                disabled={!canSubmit || submitting}
+                style={{ backgroundColor: brandHex }}
+                className="btn-primary !h-9 !px-5"
+              >
+                {submitting && <span className="animate-spin text-xs">⟳</span>}
+                <span>
+                  {isEditMode
+                    ? t('saveChangesBtn')
+                    : t('addToDeckBtn', { deck: currentDeck.name })}
+                </span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1959,7 +2007,7 @@ export const CardEditorModal: React.FC = () => {
 
         {/* Visual Image Occlusion Studio Modal */}
         <ImageOcclusionEditorModal
-          open={ioEditorOpen}
+          open={IMAGE_OCCLUSION_AUTHORING_ENABLED && ioEditorOpen}
           initialFrontHtml={ioPayload ? ioPayload.previewHtml : front}
           isDark={isDark}
           brandHex={brandHex}

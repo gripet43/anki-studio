@@ -1,6 +1,8 @@
 import type { TranslationTable } from '../translations';
 
 export const dict: TranslationTable = {
+  ioEditUnsupportedTitle: "画像マスクカードの編集はサポートされていません",
+  ioEditUnsupportedSub: "このカードは引き続きプレビュー・復習できます。マスク・グループ・モードの変更は Anki 標準の画像マスクエディタで行ってください。",
   accentName_amber: "ウォームアンバー",
   accentName_cyan: "オーシャンシアン",
   accentName_emerald: "フォレストエメラルド",

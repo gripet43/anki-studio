@@ -1,6 +1,8 @@
 import type { TranslationTable } from '../translations';
 
 export const dict: TranslationTable = {
+  ioEditUnsupportedTitle: "Редактирование карточек с маскированием изображения не поддерживается",
+  ioEditUnsupportedSub: "Карточку по-прежнему можно просматривать и повторять. Чтобы изменить маски, группы или режимы, откройте её в собственном редакторе маскирования Anki.",
   accentName_amber: "Тёплый янтарь",
   accentName_cyan: "Океанический циан",
   accentName_emerald: "Лесной изумруд",

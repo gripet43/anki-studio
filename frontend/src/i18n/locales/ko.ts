@@ -1,6 +1,8 @@
 import type { TranslationTable } from '../translations';
 
 export const dict: TranslationTable = {
+  ioEditUnsupportedTitle: "이미지 가리기 카드 편집은 지원되지 않습니다",
+  ioEditUnsupportedSub: "이 카드는 미리 보기와 학습이 가능합니다. 마스크·그룹·모드를 변경하려면 Anki 기본 이미지 가리기 편집기에서 여세요.",
   accentName_amber: "웜 앰버",
   accentName_cyan: "오션 시안",
   accentName_emerald: "포레스트 에메랄드",

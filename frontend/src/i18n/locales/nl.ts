@@ -1,6 +1,8 @@
 import type { TranslationTable } from '../translations';
 
 export const dict: TranslationTable = {
+  ioEditUnsupportedTitle: "Het bewerken van beeld-occlusiekaarten wordt niet ondersteund",
+  ioEditUnsupportedSub: "Je kunt deze kaart nog steeds bekijken en herhalen. Wijzig maskers, groepen of modi in Anki's eigen beeld-occlusie-editor.",
   accentName_amber: "Warm amber",
   accentName_cyan: "Oceaancyaan",
   accentName_emerald: "Bossmaragd",

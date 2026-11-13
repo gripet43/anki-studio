@@ -353,6 +353,8 @@ export function formatFullDateWithWeekday(dateIso: string, lang: ResolvedLanguag
 }
 
 const ZH_CN_DICT = {
+  ioEditUnsupportedTitle: "当前不支持图片挖空卡片编辑",
+  ioEditUnsupportedSub: "这张卡片仍可正常预览与复习；如需修改遮罩、分组或模式，请在 Anki 原生的图片遮挡编辑器中打开。",
   accentName_amber: "温暖琥珀",
   accentName_cyan: "海洋青蓝",
   accentName_emerald: "森林翠绿",
@@ -954,6 +956,8 @@ export type TranslationTable = Record<TranslationKey, string>;
 
 
 const EN_DICT: TranslationTable = {
+  ioEditUnsupportedTitle: "Editing image-occlusion cards is not supported",
+  ioEditUnsupportedSub: "You can still preview and review this card. To change masks, groups or modes, open it in Anki's native Image Occlusion editor.",
   accentName_amber: "Warm Amber",
   accentName_cyan: "Ocean Cyan",
   accentName_emerald: "Forest Emerald",

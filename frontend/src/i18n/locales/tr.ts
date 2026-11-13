@@ -1,6 +1,8 @@
 import type { TranslationTable } from '../translations';
 
 export const dict: TranslationTable = {
+  ioEditUnsupportedTitle: "Görsel maskeleme kartlarının düzenlenmesi desteklenmiyor",
+  ioEditUnsupportedSub: "Bu kartı önizlemeye ve çalışmaya devam edebilirsiniz. Maskeleri, grupları veya modları değiştirmek için Anki'nin yerel Görsel Maskeleme düzenleyicisinde açın.",
   accentName_amber: "Sıcak Kehribar",
   accentName_cyan: "Okyanus Camgöbeği",
   accentName_emerald: "Orman Zümrüdü",

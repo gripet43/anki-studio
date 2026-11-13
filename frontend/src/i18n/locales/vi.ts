@@ -1,6 +1,8 @@
 import type { TranslationTable } from '../translations';
 
 export const dict: TranslationTable = {
+  ioEditUnsupportedTitle: "Không hỗ trợ chỉnh sửa thẻ che khuất hình ảnh",
+  ioEditUnsupportedSub: "Bạn vẫn có thể xem trước và ôn thẻ này. Để sửa vùng che, nhóm hoặc chế độ, hãy mở trong trình chỉnh sửa che khuất hình ảnh gốc của Anki.",
   accentName_amber: "Hổ phách ấm",
   accentName_cyan: "Xanh đại dương",
   accentName_emerald: "Xanh ngọc lục bảo",
