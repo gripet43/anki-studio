@@ -1049,4 +1049,15 @@ assert(
   'Item #43: 学习统计页 6 个面板必须复用卡片库的错峰入场动效（同一套 ui-stagger-enter 关键帧、同一条缓动曲线、同样在 prefers-reduced-motion 下关闭）'
 );
 
+// Item #44: 遮挡卡的预览必须读 ioPayload.previewHtml，而不是只读 front/back。
+// 用户往输入框里一个字都没写时，图片与遮罩全在 ioPayload 上；只读 front/back
+// 会让「预览」变成一块白板（2026-11-13 实拍报障）。
+assert(
+  cardEditorSrc.includes("const ioPreviewHtml = ioPayload ? ioPayload.previewHtml : ''") &&
+    cardEditorSrc.includes('ioPreviewHtml || (isReverseSecondCard ? back : front)') &&
+    cardEditorSrc.includes("!front.includes('anki-io-wrap') && !ioPayload") &&
+    fs.existsSync(path.resolve(ADDON_ROOT, 'tests/frontend/specs/occlusionPreview.spec.ts')),
+  'Item #44: 图片遮挡卡的预览必须把 ioPayload.previewHtml 当作正面内容源（否则整块预览空白），并由 occlusionPreview.spec.ts 守住遮罩渲染'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

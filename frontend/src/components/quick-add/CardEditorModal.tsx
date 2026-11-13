@@ -534,7 +534,16 @@ export const CardEditorModal: React.FC = () => {
   const previewCardContent = useMemo(() => {
     const isReverseSecondCard =
       !isEditMode && selectedPreset === 'reversed' && previewReverseDir === 'reverse';
-    const rawQ = resolveMediaInHtml(isReverseSecondCard ? back : front, effectiveMediaBaseUrl);
+    // 遮挡卡的正文不在 front/back 里 —— 用户什么都没往输入框写，图片与遮罩全在
+    // ioPayload 上（Occlusion 指令 + Image 字段）。所以预览必须优先取 previewHtml，
+    // 否则正面只剩 placeholder、背面空白，看起来就是「预览是白板」。
+    // previewHtml 里带的是 `.anki-io-wrap` + 原始 `{{c1::label}}`，交给下面的
+    // renderMathAndRichHtml 才会按「问题=盖住 / 答案=揭晓」渲染成真实色块。
+    const ioPreviewHtml = ioPayload ? ioPayload.previewHtml : '';
+    const rawQ = resolveMediaInHtml(
+      ioPreviewHtml || (isReverseSecondCard ? back : front),
+      effectiveMediaBaseUrl
+    );
     const rawA = resolveMediaInHtml(isReverseSecondCard ? front : back, effectiveMediaBaseUrl);
 
     const plainQ = rawQ
@@ -627,6 +636,7 @@ export const CardEditorModal: React.FC = () => {
     additionalFields,
     injectedCardStyle,
     injectedFrontCardStyle,
+    ioPayload,
   ]);
 
   const handleSelectNotePreset = (presetId: NoteCreationPreset, customModel?: NoteTypeOption) => {
@@ -1798,7 +1808,7 @@ export const CardEditorModal: React.FC = () => {
                               __html: previewCardContent.answerHtml,
                             }}
                           />
-                        ) : !isCloze && !front.includes('anki-io-wrap') ? (
+                        ) : !isCloze && !front.includes('anki-io-wrap') && !ioPayload ? (
                           <div className="text-[13px] text-[#8E8E93] italic">
                             {t('noBackContentPlaceholder')}
                           </div>

@@ -15,6 +15,24 @@
 
 ## [Unreleased]
 
+## [v1.5.5] - 2026-11-13
+
+- **[DeepSeek] 修：应用遮挡后点「预览」整块空白**（改 [`CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)；新增 [`tests/frontend/specs/occlusionPreview.spec.ts`](tests/frontend/specs/occlusionPreview.spec.ts) 5 项 + Bundle 审计 Item #44）：
+  - **根因不在渲染，在取数**。`previewCardContent` 里 `rawQ` / `rawA` 一律取自 `front` / `back` 两个输入框字符串。但遮挡卡的正文根本不在这两个字段里 —— 用户一个字都没往输入框写（截图里「背面」是空的），图片与遮罩全挂在 `ioPayload` 上（`Occlusion` 指令 + `Image` 字段）。于是 `rawQ.trim()` 为假，渲染分支直接落到「输入正面问题或词条…」的占位文字；翻到答案侧又因为 `rawA` 为空而只剩分隔线。看起来就是一块白板。
+  - 线索其实早就在代码里：`hasBlockMarkup` 的正则本来就含 `anki-io-wrap`，答案侧占位判断也专门写了 `!front.includes('anki-io-wrap')` —— 说明这条路径当初是按「预览 HTML 会流进 `rawQ`」设计的，只是 v1.5.1 把编辑器改成产出原生 IO 笔记后，`previewHtml` 只喂给了 `ImageOcclusionEditorModal` 的「重新编辑」（`initialFrontHtml`），**从没接到预览舞台**。
+  - **修法**：`previewCardContent` 优先取 `ioPayload.previewHtml` 作为正面内容源，仍走原有的 `renderMathAndRichHtml` —— 这个渲染器本来就会按 `maskClozeAsQuestion` 把 `{{c1::label}}` 换成「问题态琥珀遮罩 / 答案态绿框揭晓」，所以一行取数改动就同时修好了两面。答案侧的空内容占位在 `ioPayload` 存在时也一并抑制（此时「翻面」这件事由同一份 HTML 从遮罩变揭晓来表达，不需要也不该再补一块空白答案区）。
+  - **验证**：用 esbuild 把 `buildNativeOcclusion` + `renderMathAndRichHtml` 打进 IIFE，喂真实的三遮罩 payload，把生成的问题态/答案态 HTML 在无头 Chrome 里 1:1 复现预览舞台并截图 —— 问题态是三块不透明琥珀「? #1」盖住底图，答案态是三块绿色描边「#1」露出底图，标题与图片都在，没有裸 `{{c1::}}` 灰字、没有空白。
+  - **测试**：前端单元 84 → **89 项**（新增 `occlusionPreview.spec.ts`：previewHtml 结构、问题态色块、答案态揭晓、`hide-one` 下非本题遮罩 `opacity:0`、普通卡片不受影响）；Bundle 审计新增 **Item #44** 钉住取数链路，**负向对照**把 `ioPreviewHtml` 改回空串后守卫立刻报红，还原后转绿。
+  - **验证门禁**：`tsc --noEmit` 干净、前端单元 89 项、Bundle 审计（含 Item #43/#44）、Python 141 项、前端静态审计 17/17，全绿。版本 1.5.4 → 1.5.5。
+
+- **[DeepSeek] 概念澄清（不改代码）：1 张卡 vs N 张卡不是「和 Anki 冲突」，是同一条规则下的两种配置**。详见本轮对话结论；这里把实测数据留档：
+  - 原生 `Image Occlusion` 卡型只有 **1 个卡片模板**（`templates: [('Image Occlusion', 0)]`）、5 个字段 `Occlusion/Image/Header/Back Extra/Comments`。**不存在「自带两套卡片」**。
+  - 卡数 = **`Occlusion` 字段里不同 ordinal 的个数**，与遮挡模式无关。实测：`c1` 重复 3 次 → **1 张卡**；`c1/c2/c3` → **3 张卡**；单个遮罩 → 1 张卡。
+  - Anki 自带编辑器（`_aqt/data/web/sveltekit/_app/immutable/chunks/ma7HtDcV.mjs` 的 `Wa()`）给每个**未分组**的新形状分配一个新 ordinal（`o===void 0 → o=s,s++`），所以原生默认是「N 个矩形 = N 张卡」；只有框选后 `toGroup()` 把一组形状统一成 `Math.min(...ordinals)` 才会合成一张卡。
+  - 我们全部写 `c1`，等价于「默认把用户画的所有框归到一组」——**是 Anki 原生支持的合法配置，不是另起一套逻辑**。之前改成 1 张卡是为了满足「一个笔记 = 一张卡」，在当时那套 Cloze 实现里 3 个框确实产出 3 张重复卡。
+  - **代价（必须说清）**：只有一组时，「隐藏全部 / 仅隐藏当前提问框」这两个模式在最终卡片上**画面相同**（没有别的组可以「一起盖住」）。实测 `oi=1` 与不写 `oi` 的正面 HTML 确实不同（`data-occludeInactive="1"` 出现 3 次 vs 0 次），但没有第二组可遮挡，肉眼无差别。所以 v1.5.3 修好的 `oi` 开关在**当前单组设计下没有可观察效果**；它要在 ≥2 组（≥2 张卡）时才真正生效。这是「1 张卡」这个决定的连带影响，不是回归。
+
+
 ## [v1.5.4] - 2026-11-13
 
 > 本版对**已装用户的运行时体验**只有第一条（学习统计页入场动效）；其余为注释修正与测试/构建工具链修复，`tests/` 与 `scripts/` 都不进 `.ankiaddon`。
