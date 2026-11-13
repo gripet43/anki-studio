@@ -1351,6 +1351,9 @@ export const LibraryView: React.FC = () => {
                 const frontPreviewHtml = formatCardPreviewHtml(card.frontHtml || card.front);
                 const backPreviewHtml = formatCardPreviewHtml(card.backHtml || card.back);
                 const hasBackPreview = backPreviewHtml.trim().length > 0;
+                const hasFrontMedia = /<(img|svg|video|canvas|iframe)\b|anki-io-wrap|background-image/i.test(
+                  frontPreviewHtml || ''
+                );
                 const masteryColor =
                   card.mastery >= 90
                     ? 'var(--status-success)'
@@ -1372,6 +1375,7 @@ export const LibraryView: React.FC = () => {
                     onMouseLeave={() => setCardMenuId(null)}
                     className={`library-card group relative rounded-2xl transition-[background-color,border-color,box-shadow,transform] duration-200 cursor-pointer select-none border ${
                       librarySelectionMode ? 'library-card--no-flip' : ''
+                    } ${hasFrontMedia ? 'library-card--media' : ''
                     } ${
                       isSelected
                         ? 'bg-[var(--brand-surface)] border-[var(--brand)] ring-2 ring-[var(--brand)]/35 shadow-md'

@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+## [v1.4.58] - 2026-11-13
+
+- **[DeepSeek] Gallery 图片卡统一媒体视窗**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
+  - 检测正面是否含图片/SVG/遮挡卡等媒体，给卡片加 `library-card--media`；
+  - 媒体卡使用固定 **108px 高**的浅色媒体视窗（圆角），横图按宽度铺满、竖图居中显示，不再出现「有的图很大、有的图缩成一小块」和四周大片留白；
+  - `object-fit: contain` 保证不裁切卡片内容；多元素时垂直居中排列；
+  - 文字卡保持原有 3 行题目布局，不受影响。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.57 → 1.4.58。
+
 ## [v1.4.57] - 2026-11-13
 
 - **[DeepSeek] 卡片编辑器预览切换按钮文案「查看」改为「预览」**（改 [`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx) 及 16 种语言字典）：

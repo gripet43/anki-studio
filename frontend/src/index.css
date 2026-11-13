@@ -1417,3 +1417,47 @@ ruby rt {
     margin-inline-start: auto;
   }
 }
+
+/* ===== 图片/媒体类卡片：统一媒体视窗，避免横竖图大小不一 ===== */
+.library-card--media .library-card-title-wrap {
+  height: 108px;
+  min-height: 108px;
+  padding: 6px;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-subtle, #f7f8fa);
+  border-radius: 10px;
+}
+
+.library-card--media .library-card-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.library-card--media .library-card-title img,
+.library-card--media .library-card-title svg,
+.library-card--media .library-card-title video,
+.library-card--media .library-card-title canvas,
+.library-card--media .library-card-title .anki-io-wrap {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 6px;
+  align-self: center;
+  margin-inline: auto;
+}
+
+.library-card--media .library-card-title .anki-io-wrap img {
+  max-height: 100%;
+}
