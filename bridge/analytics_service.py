@@ -1,18 +1,23 @@
 # -*- coding: utf-8 -*-
 """Minimal, privacy-conscious anonymous usage analytics for Anki Studio.
 
+Status: LIVE and ON BY DEFAULT since v1.4.33. `DEFAULT_ENDPOINT` points at the
+production Cloudflare Worker, so a fresh install reports as soon as it starts.
+Users turn it off with `analytics_enabled: false` (Settings → 隐私与统计), or by
+setting `analytics_endpoint` to an empty string to keep the local queue but stop
+all outbound requests. AnkiWeb's add-on description discloses this.
+
 What is sent (and nothing else):
   * a random per-install id, hashed with SHA-256 (no account, no email)
   * event name (app_open / daily_active / review_session / feature_use)
-  * add-on version, OS, Anki version, UI language
+  * add-on version, OS, Anki version, UI language, UTC offset in whole hours
   * a tiny props object from a fixed allowlist (feature, cards_bucket, ...)
+
+Country is NOT sent by the client: the Worker derives it from Cloudflare's
+`cf.country` on the request itself.
 
 Never sent: card contents, deck names, tags, search queries, notes, file paths,
 screenshots or any user identifier from AnkiWeb.
-
-The endpoint is configurable (`analytics_endpoint` in config). When it is empty
-the service is a no-op, which is the default until the Cloudflare Worker from
-`scripts/analytics-worker/` is deployed and its custom-domain URL is configured.
 
 Networking happens on a daemon thread and failures are swallowed, so analytics
 can never block or break the UI.
@@ -30,7 +35,8 @@ import urllib.request
 import uuid
 from typing import Any, Callable, Dict, List, Optional
 
-# 部署 Worker 后填写，例如 https://stats.example.com/v1/events
+# 线上正式端点（Cloudflare Worker，见 scripts/analytics-worker/）。
+# 用户可在配置里把 analytics_endpoint 改成自建地址，或设为空串彻底停发。
 DEFAULT_ENDPOINT = "https://anki-studio-analytics.congtoubyby.workers.dev/v1/events"
 
 MAX_QUEUE = 100

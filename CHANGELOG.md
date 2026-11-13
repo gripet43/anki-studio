@@ -15,6 +15,13 @@
 
 ## [Unreleased]
 
+- **[DeepSeek] 纯文档修正：把三处「注释与实际不符」的地方拉齐**（改 [`bridge/analytics_service.py`](bridge/analytics_service.py)、[`docs/DESIGN_AND_DEV_GUIDELINES.md`](docs/DESIGN_AND_DEV_GUIDELINES.md)、[`frontend/tailwind.config.ts`](frontend/tailwind.config.ts)；**无运行时行为变化，不需要重新打包**，1.5.3 的发布产物保持冻结）：
+  - **`analytics_service.py` 的模块 docstring 与实际相反**：原文写「endpoint 为空时是 no-op，**这也是默认状态**，等 `scripts/analytics-worker/` 的 Worker 部署后再配」—— 实际从 v1.4.33 起就是**默认开启**，`DEFAULT_ENDPOINT` 早已指向线上 Worker，`enabled()` 缺省 `True`。这种「注释说没上报、代码在天天上报」的落差属于最该修的一类文档债，容易被后来的人当成隐私承诺引用。现已改为如实描述：默认开启、两种关闭方式（`analytics_enabled: false`，或把 `analytics_endpoint` 设成空串）、国家由 Worker 侧从 `cf.country` 推断而非客户端上报。同时把 `DEFAULT_ENDPOINT` 上方那句「部署 Worker 后填写，例如 https://stats.example.com/v1/events」改成说明这是线上正式端点、用户可改自建或清空。
+  - **`DESIGN_AND_DEV_GUIDELINES.md` 的焦点环规范写死了旧品牌色**：原文要求 `outline: 2px solid #5E5CE6`，而代码用的是 `var(--brand)`。这不只是色值过期（`indigo` 早已复用为官方经典蓝 `#3076C3`），更重要的是**规范本身会诱导后来者写死十六进制** —— accent 是用户可切换的 8 套色板之一，写死任何字面色值都会在换色后与界面其余部分脱节。现改为 `var(--brand)` 并补充这条理由。
+  - **`frontend/tailwind.config.ts` 是彻底不生效的历史文件**：项目已迁到 Tailwind v4（`index.css` 用 `@import "tailwindcss"` + `@custom-variant dark` + `@theme`），全仓库**没有任何 `@config` 指令**，v4 的 Vite 插件不会读它；`brand-*` / `surface-*` 工具类在 `src/` 里也一次都没用过（实测 `grep` 零命中）。它里面还留着 `brand.indigo: '#5E5CE6'` 这个过期值，是纯粹的误导源。本次在文件头写明「不参与构建 + 真正令牌来源是 `themeTokens.ts` 与 `index.css` 的 `:root`」，并把色值对齐到 `#3076C3`；文件保留（删掉属于构建结构变更，不在本次范围内）。
+  - **顺带核对过 `config.md`**：`analytics_enabled`（默认 `true`）、`analytics_endpoint`（默认线上端点）、`accent_color` 的 8 个取值本来都是准确的，无需改动。
+  - **验证**：实跑 `AnalyticsService` 确认三种状态与新 docstring 逐条对应（缺省 `enabled()` = `True`、`analytics_enabled: false` = `False`、`analytics_endpoint: ""` = `False`）；`tsc --noEmit` 干净、前端单元 84 项、Bundle 审计通过、Python 141 项，全绿。
+
 ## [v1.5.3] - 2026-11-13
 
 - **[DeepSeek] 遮挡编辑器的「隐藏全部 / 仅隐藏当前提问框」原来在原生 Anki 里不生效**（改 [`ImageOcclusionEditorModal.tsx`](frontend/src/components/quick-add/ImageOcclusionEditorModal.tsx)、[`bridge/media_utils.py`](bridge/media_utils.py)；新增 [`tests/frontend/specs/nativeOcclusion.spec.ts`](tests/frontend/specs/nativeOcclusion.spec.ts)）：

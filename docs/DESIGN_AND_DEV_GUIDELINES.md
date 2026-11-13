@@ -118,7 +118,7 @@ flowchart LR
 
 > **规范红线**：
 > 1. 按钮状态切换必须使用 `:hover:not(:disabled)`，严禁为 disabled 状态触发悬浮动效。
-> 2. 必须保留 `:focus-visible` 统一双层焦点环（`outline: 2px solid #5E5CE6; outline-offset: 2px;`），保障键盘无障碍导航。
+> 2. 必须保留 `:focus-visible` 统一双层焦点环（`outline: 2px solid var(--brand); outline-offset: 2px;`），保障键盘无障碍导航。**颜色必须走 `var(--brand)` 变量，不要写字面色值** —— accent 是用户可切换的 8 套色板之一（见 `frontend/src/themeTokens.ts`），写死任何十六进制都会在换色后与界面其他部分脱节。
 
 ---
 
