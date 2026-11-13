@@ -40,6 +40,7 @@ export const dict: TranslationTable = {
   backlogRescueBtn: "Yükü Azalt",
   backlogRescueTooltip: "Yükü Azalt: Biriken kartları gelecek günlere dengeli dağıtın",
   batchAddTag: "Etiket Ekle",
+  batchContinueToast: "{n} kart tamamlandı — devam",
   batchBury: "Ertele",
   batchDelete: "Sil",
   batchFindReplace: "Bul ve Değiştir",

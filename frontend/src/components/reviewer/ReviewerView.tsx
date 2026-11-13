@@ -357,8 +357,11 @@ export const ReviewerView: React.FC = () => {
     resolvedLang,
   ]);
 
-  const totalSessionCards = Math.max(reviewQueue.length, 1);
-  const currentNumber = Math.min(totalSessionCards, currentCardIndex + 1);
+  // 会话按 100 张一批从调度器取；续批时 currentCardIndex 会归零，直接用它算进度
+  // 会跳回 1/100。这里用「已学张数」跨批累计：batchStartStudied 是当前批之前已学的数量。
+  const batchStartStudied = Math.max(0, sessionStudiedCount - currentCardIndex);
+  const totalSessionCards = Math.max(1, batchStartStudied + reviewQueue.length);
+  const currentNumber = Math.min(totalSessionCards, sessionStudiedCount + 1);
   const progressPct = isSessionComplete ? 100 : Math.round((currentNumber / totalSessionCards) * 100);
 
   const accuracyPct =

@@ -40,6 +40,7 @@ export const dict: TranslationTable = {
   backlogRescueBtn: "進度減負",
   backlogRescueTooltip: "進度減負：將積壓卡片平滑分攤至未來數天",
   batchAddTag: "加標籤",
+  batchContinueToast: "本批 {n} 張已完成，繼續下一批",
   batchBury: "擱置至明日",
   batchDelete: "刪除",
   batchFindReplace: "尋找取代",

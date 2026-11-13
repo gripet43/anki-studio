@@ -15,6 +15,13 @@
 
 ## [Unreleased]
 
+## [v1.4.17] - 2026-11-13
+
+- **[DeepSeek] 复习会话按批续学：进度跨批累计 + 「本批完成，继续下一批」提示**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts) 及 16 种语言字典）：
+  - **先澄清 100 的语义**：单批 100 张是 IPC 传输批量（后端 `limit` 默认 100），**不是每日上限**；每天实际可学多少由 Anki 调度器决定（新卡/复习限额、learn-ahead、兄弟卡埋没）。超过 100 张时会自动续批，50/150/300 都一样。
+  - **续批不再静默跳回 1/100**：进度改为跨批累计（例如第一批学完后显示 `101 / 200`），并在批次衔接时弹出「本批 100 张已完成，继续下一批」；只有调度器真的返回空才显示「恭喜完成今日牌组复习！」——不会把「100 张学完」误报成「今日学完」。
+  - **验证**：150 张新卡的合成集合上，batch1 = 100，全部答完后重新取队列非空（成功续批）；Python 111 项、`tsc --noEmit`、前端单元 63 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.16 → 1.4.17。
+
 ## [v1.4.16] - 2026-11-13
 
 - **[DeepSeek] 修复复习会话「首页 360 张却只学 20 张就显示今日完成」+ 学习步卡片丢失**（改 [`bridge/review_service.py`](bridge/review_service.py)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 5 项回归）：

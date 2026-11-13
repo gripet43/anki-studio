@@ -40,6 +40,7 @@ export const dict: TranslationTable = {
   backlogRescueBtn: "진도 완화",
   backlogRescueTooltip: "진도 완화: 밀린 카드를 앞으로 며칠에 걸쳐 고르게 분산합니다",
   batchAddTag: "태그 추가",
+  batchContinueToast: "{n}장 완료 — 다음 배치로 계속",
   batchBury: "내일로 미루기",
   batchDelete: "삭제",
   batchFindReplace: "찾기 및 바꾸기",

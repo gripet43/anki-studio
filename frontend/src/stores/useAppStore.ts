@@ -1978,6 +1978,13 @@ export const appActions = {
       },
     }));
 
+    if (continuation) {
+      // 一批学完了但调度器还有卡：明确告诉用户是「本批完成、继续下一批」，
+      // 而不是让他误以为今日已学完（也不能显示今日完成）。
+      showToast(tState('batchContinueToast', { n: nextQueue.length }));
+      return;
+    }
+
     const dynamicIvl =
       ease === 1
         ? currentCard.predictions.again

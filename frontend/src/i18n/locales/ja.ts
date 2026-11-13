@@ -40,6 +40,7 @@ export const dict: TranslationTable = {
   backlogRescueBtn: "負担軽減",
   backlogRescueTooltip: "負担軽減：溜まったカードを今後数日間に均等分散します",
   batchAddTag: "タグ追加",
+  batchContinueToast: "{n} 枚完了。次のバッチへ",
   batchBury: "明日まで延期",
   batchDelete: "削除",
   batchFindReplace: "検索と置換",

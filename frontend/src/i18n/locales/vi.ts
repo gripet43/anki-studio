@@ -40,6 +40,7 @@ export const dict: TranslationTable = {
   backlogRescueBtn: "Giảm tải",
   backlogRescueTooltip: "Giảm tải: Phân bổ đều thẻ tồn đọng sang những ngày tới",
   batchAddTag: "Thêm nhãn",
+  batchContinueToast: "Đã xong {n} thẻ — tiếp tục",
   batchBury: "Hoãn đến mai",
   batchDelete: "Xóa",
   batchFindReplace: "Tìm & Thay thế",

@@ -40,6 +40,7 @@ export const dict: TranslationTable = {
   backlogRescueBtn: "Pensum entlasten",
   backlogRescueTooltip: "Pensum entlasten: Überfällige Karten auf die nächsten Tage verteilen",
   batchAddTag: "Schlagwort +",
+  batchContinueToast: "Stapel von {n} fertig – weiter",
   batchBury: "Zurückstellen",
   batchDelete: "Löschen",
   batchFindReplace: "Suchen & Ersetzen",

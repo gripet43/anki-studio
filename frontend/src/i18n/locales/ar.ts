@@ -40,6 +40,7 @@ export const dict: TranslationTable = {
   backlogRescueBtn: "تخفيف التراكم",
   backlogRescueTooltip: "تخفيف التراكم: توزيع البطاقات المتأخرة بسلاسة على الأيام القادمة",
   batchAddTag: "إضافة وسم",
+  batchContinueToast: "اكتملت دفعة من {n} — المتابعة",
   batchBury: "تأجيل للغد",
   batchDelete: "حذف",
   batchFindReplace: "بحث واستبدال",
