@@ -21,6 +21,7 @@
 | Anki | 26.x 桌面版 | 能正常打开 |
 | Python | 3.10 及以上 | `python -V` 或 `py -3 -V` |
 | Git | 任意较新版本 | `git --version` |
+| Node.js（可选） | 20+，跑前端单测用 | `node -v`；没有也不影响静态审计 |
 | 仓库 | 已 clone 到本地 | `git -C <repo> rev-parse --short HEAD` |
 
 仓库已公开为 <https://github.com/gripet43/anki-studio>，可直接匿名 clone，无需凭据。
@@ -101,13 +102,40 @@ python smoke.py
 如果出现 `FAIL`，**不要改产品代码去让它变绿**。记录：场景名、检查项、
 错误信息。这是要带回去的结论。
 
+## 第三步·补：前端静态审计（必跑，10 秒）
+
+后端 smoke 覆盖不到前端事件处理。这里加了一步**只用 Python** 的静态审计，
+专门盯住 `event.target` 不是 Element 这一类问题（Windows 上最容易踩）：
+
+```powershell
+python frontend_audit.py
+```
+
+期望输出：`8 项前端静态审计全部通过`。
+
+它检查：`domTarget.ts` 的鸭子类型防御、复习键盘/窗口拖拽是否走 helper、
+helper 之外是否还有直接 `.closest()` 调用、构建产物是否包含防御逻辑。
+任何一项 ✗ 都算阻断项，记进报告。
+
+如果这台机器装了 Node.js，再补跑前端单测（覆盖 `document` / 文本节点 /
+`null` / `Element` 四种 target）：
+
+```powershell
+cd <repo>\frontend
+npm install
+cd ..
+node tests/frontend/run.mjs
+```
+
+期望 `ALL 67 CHECKS PASSED`（后续版本数字可能增加）。
+
 ## 第四步：启动界面并人工检查
 
 ```powershell
 python run.py exam
 ```
 
-会打开 Anki 窗口并加载 `exam` 场景（815 张卡、三层牌组）。逐项看一眼，**共 15 项**：
+会打开 Anki 窗口并加载 `exam` 场景（815 张卡、三层牌组）。逐项看一眼，**共 19 项**：
 
 基础路径：
 
@@ -133,6 +161,15 @@ python run.py exam
       「匹配 N 张」旁的竖线只在有筛选条件时出现
 - [ ] 制卡编辑器：点表情按钮能弹出面板（本轮修复了被 `overflow` 裁切的问题），
       选一个表情能插到光标处；面板打开时按 `Esc` **只关面板**，不关整个制卡窗口
+
+本轮新增的事件 / 交互防御检查：
+
+- [ ] 先点一下窗口空白处（让页面不聚焦），再按 `Space` 和 `1–4`：能正常翻面/评分，
+      控制台**没有** `closest is not a function` 一类报错
+- [ ] 拖拽标题栏能移动窗口，双击标题栏能最大化/还原（Windows 非 Element target 曾在此崩溃）
+- [ ] 制卡编辑器输入框里按 `1–4`、`Space`、`E`：只输入字符，不触发答题/翻面
+- [ ] 卡片库 Gallery：hover 整卡翻转；点标签按该标签筛选；正文/图片里的链接不可点；
+      点卡片空白不打开编辑器，只有「编辑」按钮才打开；多选模式下卡片不翻转
 
 再额外跑一次旗标场景（`mixed` 有 7 色旗标数据，`exam` 没有）：
 
@@ -180,7 +217,8 @@ python run.py power
 ## 结果
 - build.py --all：通过 / 失败（附错误）
 - smoke.py：692/692 通过 / 失败 n 项（附清单）
-- 界面检查：15 项中通过 n 项
+- frontend_audit.py：8/8 通过 / 失败 n 项（附 ✗ 项）
+- 界面检查：19 项中通过 n 项
 
 ## 发现的问题
 1. <现象> | <复现步骤> | <截图文件名> | <是否阻断发布>
@@ -208,6 +246,7 @@ macOS 那边会 pull 下来看。
 | `run.py` 启动后立即退出 | 主 Anki 也开着，Anki 是单实例应用 | 先完全退出 Anki 再跑 |
 | 媒体图片显示不出来 | `file://` URL 在 Windows 上是 `file:///C:/...` | 记录下来，这是要修的问题 |
 | 中文乱码 | 终端编码不是 UTF-8 | `chcp 65001` 后重试 |
+| 控制台 `closest is not a function` | `event.target` 是 document 而非 Element | 记录操作路径 + 截图；跑 `python frontend_audit.py` 确认是否回归 |
 
 ## 绝对不要做的事
 

@@ -37,7 +37,7 @@
 ```bash
 cd tests/scenarios
 
-./gate.sh                        # 一键门禁：隔离自检 → 补场景 → 冒烟回归
+./gate.sh                        # 一键门禁：隔离自检 → 补场景 → 冒烟 → 前端静态审计
 ./gate.sh --with-project         # 额外跑项目的 Bundle 审计与单测
 
 python3 build.py --list          # 看有哪些场景
@@ -76,6 +76,7 @@ Windows 上需要 Python 3.10+；`run.py` 用纯标准库实现，不依赖 bash
 ./run.sh --sync                  # 只同步插件，不启动
 ./run.sh --status                # 沙盒状态
 python3 smoke.py                 # 冒烟回归（不启动 GUI）
+python3 frontend_audit.py        # 前端静态审计（DOM target 防御、helper 使用；仅需 Python）
 python3 verify_isolation.py      # 隔离自检
 python3 verify_isolation.py --baseline   # 记录真实库指纹
 python3 verify_isolation.py --check      # 确认真实库未被改动

@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.66] - 2026-11-13
+
+- **[DeepSeek] Windows 验版流程补上「前端事件 target」这一类覆盖**（新增 [`tests/scenarios/frontend_audit.py`](tests/scenarios/frontend_audit.py)；改 [`tests/WINDOWS_HANDOFF.md`](tests/WINDOWS_HANDOFF.md)、[`tests/scenarios/gate.sh`](tests/scenarios/gate.sh)、[`tests/scenarios/README.md`](tests/scenarios/README.md)、[`README.md`](README.md)）：
+  - **新增 Node 无关的前端静态审计**（Windows 只需 Python）：检查 `domTarget.ts` 的鸭子类型防御、复习键盘/窗口拖拽是否走 helper、helper 之外是否还有直接 `.closest(` 调用、构建产物是否包含防御逻辑，共 **8 项**；已挂进 `gate.sh` 第 5/6 步。
+  - **Windows 作业指导**新增「第三步·补：前端静态审计」，并补 4 条人工检查：页面未聚焦时按 Space/1–4、标题栏拖拽/双击、编辑器输入框内按键、Gallery 翻面/标签筛选/正文链接/编辑按钮；界面检查从 15 项增至 **19 项**，报告模板同步。
+  - README 测试命令补充 `frontend_audit.py`，并把过时的 Python 单测数 122 修正为 140。
+  - **验证**：`tsc --noEmit`、前端单元 67 项、Bundle 审计、Python 140 项、场景冒烟 692/692 + 前端静态审计 8/8、打包全绿。版本 1.4.65 → 1.4.66。
+
 ## [v1.4.65] - 2026-11-13
 
 - **[DeepSeek] 复盘 Windows `closest is not a function`：抽防御 helper + 补前端单测 + 静态守卫**（新增 [`frontend/src/utils/domTarget.ts`](frontend/src/utils/domTarget.ts)、[`tests/frontend/specs/domTarget.spec.ts`](tests/frontend/specs/domTarget.spec.ts)；改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/utils/windowDrag.ts`](frontend/src/utils/windowDrag.ts)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
