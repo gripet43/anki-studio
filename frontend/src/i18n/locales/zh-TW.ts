@@ -24,7 +24,7 @@ export const dict: TranslationTable = {
   addToDeckBtn: "新增至「{deck}」",
   allClearedSub: "今日共完成 {n} 張卡片複習",
   allClearedTitle: "恭喜你已完成全部牌組的學習！",
-  allDecksManage: "全部牌組管理 ›",
+  allDecksManage: "牌組管理 ›",
   allDecksOption: "全部牌組",
   amortizeDaysLabel: "分攤週期",
   amortizeOptionSub: "將積壓卡片按天均勻分散，每日僅增加少量複習負擔。",

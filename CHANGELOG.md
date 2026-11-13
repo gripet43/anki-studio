@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+## [v1.4.15] - 2026-11-13
+
+- **[DeepSeek] 首页牌组区入口文案「全部牌组管理」精简为「牌组管理」**（改 [`frontend/src/i18n/translations.ts`](frontend/src/i18n/translations.ts)、[`frontend/src/i18n/locales/zh-TW.ts`](frontend/src/i18n/locales/zh-TW.ts)）：该入口只是切换到牌组页签，没有「全部 / 部分」的筛选语义；其他语言（Manage Decks / デッキ管理 …）本来就没有这层冗余，简繁中文对齐。
+  - 验证：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 106 项、打包全绿。版本 1.4.14 → 1.4.15。
+
 ## [v1.4.14] - 2026-11-13
 
 - **[DeepSeek] 移除「卡片信息」面板底部多余的「切回原生」按钮**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)）：该入口与三层防迷失机制（`Ctrl+Opt+M` / `Ctrl+Alt+M` 快捷键、工具菜单、原生工具栏胶囊）完全重复，放在卡片检查器底部既占空间又容易误触。移除后原生兜底入口一个不少。

@@ -376,7 +376,7 @@ const ZH_CN_DICT = {
   addToDeckBtn: "添加至「{deck}」",
   allClearedSub: "今日共完成 {n} 张卡片复习",
   allClearedTitle: "恭喜你已完成全部牌组的学习！",
-  allDecksManage: "全部牌组管理 ›",
+  allDecksManage: "牌组管理 ›",
   allDecksOption: "全部牌组",
   amortizeDaysLabel: "分摊周期",
   amortizeOptionSub: "将积压卡片按天均匀分散，每日仅增加少量复习负担。",
