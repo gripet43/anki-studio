@@ -340,6 +340,8 @@ export interface UserPreferences {
   tipsHiddenOn?: string;
   /** 匿名使用统计开关（默认开启，可关闭）。 */
   analyticsEnabled?: boolean;
+  /** 答题按钮布局：'binary'（简洁双按钮，默认）或 'four'（原生四按钮）。 */
+  answerButtonMode?: 'binary' | 'four';
 }
 
 export interface SafetyWarning {

@@ -16,6 +16,7 @@ export const ReviewerView: React.FC = () => {
     sessionTotalTimeMs,
     revealedHintsCount,
     optionKeyHeld,
+    answerButtonMode,
     sessionStudiedCount,
     sessionCorrectCount,
     inlineEditing,
@@ -1248,7 +1249,7 @@ export const ReviewerView: React.FC = () => {
                   </kbd>
                 )}
               </button>
-            ) : optionKeyHeld ? (
+            ) : optionKeyHeld || answerButtonMode === 'four' ? (
               /* 4-Level FSRS Mode: 560px 4-column grid */
               <div className="grid grid-cols-4 gap-3 w-[560px] h-[58px]">
                 <button

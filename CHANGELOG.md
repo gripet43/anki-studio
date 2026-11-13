@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.40] - 2026-11-13
+
+- **[DeepSeek] 新增可选「原生四按钮」答题布局（默认仍为简洁双按钮）**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py) 及 16 种语言字典）：
+  - 尊重从 Anki 迁移、习惯「重来 / 困难 / 良好 / 简单」四按钮和 1–4 键的用户，但**不改变默认体验**：默认仍是「重来 + 良好」的大按钮，减少每张卡的决策负担；
+  - 设置 → 外观新增「答题按钮」选项：简洁双按钮（默认）/ 原生四按钮；四按钮模式持久化到 config（`answer_button_mode`），重启后保持；
+  - 原有「按住 Option 临时显示四按钮」仍然可用，两种方式互不冲突；
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 130 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.39 → 1.4.40。
+
 ## [v1.4.39] - 2026-11-13
 
 - **[DeepSeek] 首页 Hero 主按钮与牌组卡保持一致：今日学完后变灰显示「明日再来」**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)）：

@@ -118,6 +118,8 @@ export interface AppState {
   tipsHiddenOn: string;
   /** 匿名使用统计开关（只上报匿名计数，不含卡片内容）。 */
   analyticsEnabled: boolean;
+  /** 答题按钮布局：二选一（默认）或原生四按钮。 */
+  answerButtonMode: 'binary' | 'four';
   envInfo: EnvInfo;
 
   // Dashboard, Decks & Statistics
@@ -230,6 +232,7 @@ const initialState: AppState = {
   showShortcutHints: false,
   tipsHiddenOn: '',
   analyticsEnabled: true,
+  answerButtonMode: 'binary',
   envInfo: {
     platform: initialPlatform,
     osName: initialPlatform === 'mac' ? 'macOS' : initialPlatform === 'win' ? 'Windows' : 'Linux',
@@ -480,6 +483,7 @@ export const appActions = {
         showShortcutHints: prefs?.showShortcutHints !== undefined ? prefs.showShortcutHints : state.showShortcutHints,
         tipsHiddenOn: prefs?.tipsHiddenOn !== undefined ? prefs.tipsHiddenOn : state.tipsHiddenOn,
         analyticsEnabled: prefs?.analyticsEnabled !== undefined ? prefs.analyticsEnabled : state.analyticsEnabled,
+        answerButtonMode: prefs?.answerButtonMode === 'four' ? 'four' : 'binary',
         debugModeUnlocked: Boolean(prefs?.debugMode) || state.debugModeUnlocked,
         envInfo: dash?.envInfo || state.envInfo,
         lastSyncedTimestamp: genuineSyncTs,
@@ -576,6 +580,7 @@ export const appActions = {
     showShortcutHints?: boolean;
     tipsHiddenOn?: string;
     analyticsEnabled?: boolean;
+    answerButtonMode?: 'binary' | 'four';
   }) {
     const nextLangPref = patch.language !== undefined ? patch.language : state.languagePref;
     const nextResolvedLang = resolveLanguage(nextLangPref, state.dashboard.language);
@@ -589,6 +594,7 @@ export const appActions = {
       ...(patch.showShortcutHints !== undefined ? { showShortcutHints: patch.showShortcutHints } : {}),
       ...(patch.tipsHiddenOn !== undefined ? { tipsHiddenOn: patch.tipsHiddenOn } : {}),
       ...(patch.analyticsEnabled !== undefined ? { analyticsEnabled: patch.analyticsEnabled } : {}),
+      ...(patch.answerButtonMode !== undefined ? { answerButtonMode: patch.answerButtonMode } : {}),
     });
 
     if (isAnkiNativeEnv()) {

@@ -45,6 +45,7 @@ export const SettingsModal: React.FC = () => {
     showShortcutHints,
     tipsHiddenOn,
     analyticsEnabled,
+    answerButtonMode,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(settingsInitialTab || 'appearance');
@@ -545,6 +546,45 @@ export const SettingsModal: React.FC = () => {
                     }`}
                   />
                 </button>
+              </div>
+              {/* Answer Buttons Layout */}
+              <div className={`rounded-xl border p-4 space-y-3 ${cardSurface}`}>
+                <div className="space-y-1">
+                  <div className="text-[13px] font-semibold">{t('settingsAnswerButtonsTitle')}</div>
+                  <div className={`text-[11px] ${subText} leading-relaxed`}>
+                    {t('settingsAnswerButtonsSub')}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => appActions.updatePreferences({ answerButtonMode: 'binary' })}
+                    aria-pressed={answerButtonMode === 'binary'}
+                    className={`h-8 px-3.5 rounded-lg border text-[12px] font-medium cursor-pointer transition-colors ${
+                      answerButtonMode === 'binary'
+                        ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
+                        : isDark
+                        ? 'bg-white/[0.03] border-white/[0.08] text-[#C8C8D2] hover:bg-white/[0.07]'
+                        : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#F4F4F6]'
+                    }`}
+                  >
+                    {t('answerButtonsBinary')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => appActions.updatePreferences({ answerButtonMode: 'four' })}
+                    aria-pressed={answerButtonMode === 'four'}
+                    className={`h-8 px-3.5 rounded-lg border text-[12px] font-medium cursor-pointer transition-colors ${
+                      answerButtonMode === 'four'
+                        ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
+                        : isDark
+                        ? 'bg-white/[0.03] border-white/[0.08] text-[#C8C8D2] hover:bg-white/[0.07]'
+                        : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#F4F4F6]'
+                    }`}
+                  >
+                    {t('answerButtonsFour')}
+                  </button>
+                </div>
               </div>
             </div>
           )}

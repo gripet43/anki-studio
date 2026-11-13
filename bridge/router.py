@@ -242,6 +242,9 @@ class BridgeRouter:
             patch["show_shortcut_hints"] = bool(data["showShortcutHints"])
         if "analyticsEnabled" in data:
             patch["analytics_enabled"] = bool(data["analyticsEnabled"])
+        if "answerButtonMode" in data:
+            mode = str(data["answerButtonMode"] or "binary").strip()
+            patch["answer_button_mode"] = mode if mode in ("binary", "four") else "binary"
         if "tipsHiddenOn" in data:
             hidden_on = str(data["tipsHiddenOn"] or "").strip()
             if hidden_on:
@@ -265,6 +268,7 @@ class BridgeRouter:
                 "showShortcutHints": bool(saved.get("show_shortcut_hints", False)),
                 "tipsHiddenOn": str(saved.get("dashboard_tips_hidden_on") or ""),
                 "analyticsEnabled": bool(saved.get("analytics_enabled", True)),
+                "answerButtonMode": str(saved.get("answer_button_mode") or "binary"),
             },
         }
 

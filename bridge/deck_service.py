@@ -386,7 +386,9 @@ class DeckService:
                     "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
                     "tipsHiddenOn": str(cfg.get("dashboard_tips_hidden_on") or ""),
                 "analyticsEnabled": bool(cfg.get("analytics_enabled", True)),
+                "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),
                     "analyticsEnabled": bool(cfg.get("analytics_enabled", True)),
+                    "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),
                     "debugMode": bool(cfg.get("debug_mode", False)),
                 },
                 "vacation": {
