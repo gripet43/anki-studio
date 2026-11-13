@@ -1,0 +1,121 @@
+/**
+ * Behaviour tests for the analytics Worker (scripts/analytics-worker/worker.js).
+ *
+ * Run: node tests/test_analytics_worker.mjs
+ *
+ * The Worker is an ES module but lives in a package without "type": "module",
+ * so it is loaded through a data: URL instead of a direct import. No network,
+ * no Cloudflare credentials and no D1 are involved — only the request gating
+ * and the (mocked) batch call are asserted.
+ */
+
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const src = readFileSync(path.join(root, "scripts/analytics-worker/worker.js"), "utf8");
+const worker = (await import(`data:text/javascript;base64,${Buffer.from(src).toString("base64")}`)).default;
+
+let passed = 0;
+const failures = [];
+
+function check(name, condition, detail = "") {
+  if (condition) {
+    passed += 1;
+    console.log(`  PASS  ${name}`);
+  } else {
+    failures.push(`${name}${detail ? ` — ${detail}` : ""}`);
+    console.log(`  FAIL  ${name}${detail ? ` — ${detail}` : ""}`);
+  }
+}
+
+function makeEnv() {
+  const batches = [];
+  return {
+    batches,
+    DB: {
+      prepare: (sql) => ({ bind: (...args) => ({ sql, args }) }),
+      batch: async (stmts) => {
+        batches.push(stmts);
+        return stmts;
+      },
+    },
+  };
+}
+
+const validEvent = () => ({
+  event: "app_open",
+  ts: Math.floor(Date.now() / 1000),
+  install_id: "0123456789abcdef0123456789abcdef",
+  version: "1.5.5",
+  os: "darwin",
+  anki_version: "26.9.4",
+  locale: "zh-CN",
+});
+
+function makeRequest(method, pathname, ua, body) {
+  const headers = { "content-type": "application/json" };
+  if (ua !== null) headers["user-agent"] = ua;
+  return new Request(`https://example.workers.dev${pathname}`, {
+    method,
+    headers,
+    body: method === "POST" ? JSON.stringify(body ?? { schema: 1, events: [] }) : undefined,
+  });
+}
+
+async function call(method, pathname, ua, body) {
+  const env = makeEnv();
+  const response = await worker.fetch(makeRequest(method, pathname, ua, body), env);
+  const payload = await response.json();
+  return { status: response.status, payload, writes: env.batches.length };
+}
+
+const EVENTS_PATH = "/v1/events";
+const good = { schema: 1, events: [validEvent()] };
+
+// 1. Legitimate client — current and older add-on versions.
+const current = await call("POST", EVENTS_PATH, "AnkiStudio/1.5.5", good);
+check("合法客户端 UA 放行", current.status === 200, `status=${current.status}`);
+check("合法请求写入 1 条", current.payload.stored === 1 && current.writes === 1, JSON.stringify(current.payload));
+
+const legacy = await call("POST", EVENTS_PATH, "AnkiStudio/1.4.33", {
+  schema: 1,
+  events: [{ ...validEvent(), version: "1.4.33" }],
+});
+check("已装旧版客户端兼容", legacy.status === 200 && legacy.payload.stored === 1, `status=${legacy.status}`);
+
+// 2. Everything else is rejected before the body is parsed or D1 is touched.
+const rejected = [
+  ["无 UA", null],
+  ["curl", "curl/8.7.1"],
+  ["python-requests", "python-requests/2.31.0"],
+  ["Go 扫描器", "Go-http-client/1.1"],
+  ["浏览器跨站请求", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"],
+  ["空版本号", "AnkiStudio/"],
+  ["前缀伪装", "XAnkiStudio/1.5.5"],
+  ["超长 UA", `AnkiStudio/${"9".repeat(200)}`],
+];
+for (const [name, ua] of rejected) {
+  const result = await call("POST", EVENTS_PATH, ua, good);
+  check(`拒绝 ${name}`, result.status === 403 && result.writes === 0, `status=${result.status}, writes=${result.writes}`);
+}
+
+// 3. The allowlist does not relax the existing event validation.
+const badInstall = await call("POST", EVENTS_PATH, "AnkiStudio/1.5.5", {
+  schema: 1,
+  events: [{ ...validEvent(), install_id: "fake" }],
+});
+check("合法 UA 下无效 install_id 仍不入库", badInstall.status === 200 && badInstall.payload.stored === 0 && badInstall.writes === 0, JSON.stringify(badInstall.payload));
+
+// 4. Unrelated methods keep their original behaviour (preflight must not break).
+const options = await worker.fetch(makeRequest("OPTIONS", EVENTS_PATH, null), makeEnv());
+check("OPTIONS 预检不受 UA 限制", options.status === 200);
+const get = await call("GET", EVENTS_PATH, "curl/8.7.1");
+check("GET 仍返回 404", get.status === 404, `status=${get.status}`);
+
+console.log(`\n${passed} passed, ${failures.length} failed`);
+if (failures.length) {
+  console.error(failures.join("\n"));
+  process.exit(1);
+}

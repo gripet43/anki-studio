@@ -35,11 +35,28 @@ wrangler routes add stats.example.com/*
 
 ## 验证
 
+端点**只接受 `AnkiStudio/` 开头的 User-Agent**（插件的 Python 客户端固定发
+`AnkiStudio/<版本号>`）。不带 UA 或用 curl / 浏览器直接 POST 会返回 `403`，
+这是故意的：扫描器和跨站请求连 D1 的门都进不去。UA 只用于判断，不落库。
+
 ```bash
 curl -s https://stats.example.com/v1/events \
+  -A 'AnkiStudio/1.4.33' \
   -H 'content-type: application/json' \
   -d '{"schema":1,"events":[{"event":"app_open","ts":0,"install_id":"0123456789abcdef0123456789abcdef","version":"1.4.33","os":"darwin","anki_version":"26.9.4","locale":"zh-CN"}]}'
 # => {"ok":true,"stored":1}
+
+# 反向验证：漏掉 -A 应返回 403（curl 默认 UA 不是 AnkiStudio/）
+curl -s -o /dev/null -w '%{http_code}\n' https://stats.example.com/v1/events \
+  -H 'content-type: application/json' \
+  -d '{"schema":1,"events":[]}'
+# => 403
+```
+
+本地行为回归（不需要 Cloudflare 凭据，从仓库根目录跑）：
+
+```bash
+node tests/test_analytics_worker.mjs   # 14 项，含 UA 白名单的正反向用例
 ```
 
 ## 看数据

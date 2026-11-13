@@ -15,6 +15,12 @@
 
 ## [Unreleased]
 
+- **[WorkBuddy] 匿名统计端点加 User-Agent 白名单**（改 [`scripts/analytics-worker/worker.js`](scripts/analytics-worker/worker.js) 与同级 `README.md`；新增 [`tests/test_analytics_worker.mjs`](tests/test_analytics_worker.mjs)）。**不改插件运行时代码、不进 `.ankiaddon`，必须重新 `wrangler deploy` 才在线上生效**：
+  - **起因**：`152.32.210.61`（中国香港 UCloud HK / AS135377，AbuseIPDB 6 次举报、2026-11-12 仍有 aggressive 扫描记录）对 `*.workers.dev` 统计端点异常访问。端点地址明文写在 public 仓库，而原 Worker **无鉴权、无限流、CORS `*`** —— 任何人构造 32 位 hex 的 `install_id` 就能往 D1 塞假事件；D1 又不存 IP，事后无法区分真假行。
+  - **做法**：在解析 body / 打开 D1 batch **之前**校验 `User-Agent` 必须以 `AnkiStudio/` 开头、版本号非空、长度 ≤80，否则直接 403。插件自 v1.4.33 引入统计起就固定发 `AnkiStudio/<human_version>`（`git show 21cdad0` 核对过），**不挡任何已装用户，客户端零改动**。浏览器 JS 无法伪造 UA，所以 `Access-Control-Allow-Origin: *` 带来的跨站写入风险也一并堵住。UA 只比较不落库，「不存 IP / 不上报卡片内容」的披露不变。
+  - **边界**：这挡的是**数据污染，不是流量** —— 扫描请求仍到达 Worker、仍消耗请求额度。要少挨打仍需限流 / WAF / 自定义域名。README 的验证 curl 同步补了 `-A`（否则现在会 403），并留了反向验证示例。
+  - **验证**：新增 `node tests/test_analytics_worker.mjs`（14 项，data: URL 加载 Worker + mock D1，覆盖合法/旧版 UA、无 UA、curl、python-requests、Go、浏览器、空版本、前缀伪装、超长 UA、无效 install_id、OPTIONS 预检、GET 404）；Bundle 审计、Python 141 项、前端 96 项、`npm run build` 全绿，前端产物无 diff。
+
 ## [v1.5.6] - 2026-11-13
 
 - **[DeepSeek] 产品决定：图片遮挡改为「只显示、不创建、不编辑」**（新增 [`utils/imageOcclusionPolicy.ts`](frontend/src/utils/imageOcclusionPolicy.ts)；改 [`CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、16 份语言包；新增 [`tests/frontend/specs/imageOcclusionPolicy.spec.ts`](tests/frontend/specs/imageOcclusionPolicy.spec.ts) 7 项 + Bundle 审计 Item #45；Item #38 同步改口径）：

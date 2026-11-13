@@ -2,6 +2,7 @@
  * Anki Studio — minimal anonymous analytics endpoint (Cloudflare Worker + D1).
  *
  * POST /v1/events  { schema: 1, events: [ { event, ts, install_id, version, os, anki_version, locale, props? } ] }
+ * Requires User-Agent: AnkiStudio/<add-on version>.
  *
  * Privacy: validates and stores only the allowlisted fields below. No IP is
  * written to D1. Rows older than 90 days are removed by the cron trigger.
@@ -10,6 +11,13 @@
 const ALLOWED_EVENTS = new Set(["app_open", "daily_active", "review_session", "feature_use"]);
 const MAX_EVENTS = 100;
 const RETENTION_DAYS = 90;
+
+// Only the add-on's Python client identifies itself this way. Generic scanners
+// (curl / python-requests / Go-http-client) and browser drive-by requests —
+// which cannot spoof User-Agent — are rejected before they can reach D1.
+// The value is compared for gating and never stored.
+const LEGIT_UA_PREFIX = "AnkiStudio/";
+const MAX_UA_LENGTH = 80;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -63,6 +71,17 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
     if (request.method !== "POST" || url.pathname !== "/v1/events") {
       return json({ error: "not found" }, 404);
+    }
+
+    // UA allowlist: reject anything that is not the add-on client before we
+    // parse the body or open a D1 batch. See LEGIT_UA_PREFIX above.
+    const ua = request.headers.get("user-agent") || "";
+    if (
+      !ua.startsWith(LEGIT_UA_PREFIX) ||
+      ua.length <= LEGIT_UA_PREFIX.length ||
+      ua.length > MAX_UA_LENGTH
+    ) {
+      return json({ error: "forbidden" }, 403);
     }
 
     let body;
