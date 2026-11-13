@@ -523,6 +523,7 @@ export const dict: TranslationTable = {
   themeOledDesc: "純黑高對比度，適合 OLED 螢幕極致省電",
   todayLabel: "今天",
   todayProgressTitle: "今日學習進度",
+  todayProgressTooltip: "今天已完成 {done} 張，總共 {total} 張",
   topLevelDeckOption: "無（作為頂層主牌組）",
   typeAnswerCheckTitle: "拼寫默寫核對 (Type in the Answer)",
   typeAnswerExactMatchBadge: "✓ 100% 完全匹配",

@@ -523,6 +523,7 @@ export const dict: TranslationTable = {
   themeOledDesc: "OLED ekranlar için saf siyah yüksek kontrast",
   todayLabel: "Bugün",
   todayProgressTitle: "Bugünkü İlerleme",
+  todayProgressTooltip: "Bugün {total} karttan {done} tanesi tamamlandı",
   topLevelDeckOption: "Yok (Üst Düzey Ana Deste Olarak Oluştur)",
   typeAnswerCheckTitle: "Yazılı Cevap Kontrolü",
   typeAnswerExactMatchBadge: "✓ %100 Tam Eşleşme",

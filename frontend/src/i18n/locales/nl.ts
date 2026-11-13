@@ -523,6 +523,7 @@ export const dict: TranslationTable = {
   themeOledDesc: "Puur zwart met hoog contrast voor OLED-schermen",
   todayLabel: "Vandaag",
   todayProgressTitle: "Voortgang van vandaag",
+  todayProgressTooltip: "Vandaag {done} van {total} kaarten voltooid",
   topLevelDeckOption: "Geen (Maken als hoofdleerset)",
   typeAnswerCheckTitle: "Controle ingetypt antwoord",
   typeAnswerExactMatchBadge: "✓ 100% Exacte overeenkomst",

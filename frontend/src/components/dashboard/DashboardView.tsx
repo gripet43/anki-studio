@@ -568,7 +568,7 @@ export const DashboardView: React.FC = () => {
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 sm:gap-7 min-w-0">
                 {/* Zone 1: Left Circular Ring */}
                 <div
-                  className="relative w-[104px] h-[104px] shrink-0 flex items-center justify-center"
+                  className="group/ring relative w-[104px] h-[104px] shrink-0 flex items-center justify-center"
                   role="progressbar"
                   aria-valuenow={isVacationActive ? vacRemaining : completed}
                   aria-valuemin={0}
@@ -643,6 +643,18 @@ export const DashboardView: React.FC = () => {
                       </>
                     )}
                   </div>
+
+                  <span
+                    role="tooltip"
+                    className="dashboard-tooltip pointer-events-none absolute start-0 top-full z-50 mt-2 w-[220px] rounded-xl border px-3 py-2.5 text-start whitespace-normal text-[11px] leading-[1.6] opacity-0 translate-y-1 transition-[opacity,transform] duration-150 group-hover/ring:opacity-100 group-hover/ring:translate-y-0"
+                  >
+                    {isVacationActive
+                      ? `${t('vacationActiveBadge')} · ${vacRemaining}/${vacDays} ${t('daysUnit')}`
+                      : t('todayProgressTooltip', {
+                          done: completed,
+                          total: totalWorkload,
+                        })}
+                  </span>
                 </div>
 
                 {/* Zone 2: 3-Line Progress Stack */}

@@ -523,6 +523,7 @@ export const dict: TranslationTable = {
   themeOledDesc: "Czysta czerń o wysokim kontraście dla ekranów OLED",
   todayLabel: "Dziś",
   todayProgressTitle: "Dzisiejszy postęp",
+  todayProgressTooltip: "Dziś ukończono {done} z {total} kart",
   topLevelDeckOption: "Brak (Utwórz jako talię główną)",
   typeAnswerCheckTitle: "Sprawdzenie wpisanej odpowiedzi",
   typeAnswerExactMatchBadge: "✓ 100% Dokładne dopasowanie",

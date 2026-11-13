@@ -523,6 +523,7 @@ export const dict: TranslationTable = {
   themeOledDesc: "OLED 디스플레이에 최적화된 순수 블랙 고대비",
   todayLabel: "오늘",
   todayProgressTitle: "오늘의 학습 진도",
+  todayProgressTooltip: "오늘 {done} / {total}장 완료",
   topLevelDeckOption: "없음 (최상위 메인 덱으로 생성)",
   typeAnswerCheckTitle: "철자 타이핑 대조",
   typeAnswerExactMatchBadge: "✓ 100% 정확히 일치",

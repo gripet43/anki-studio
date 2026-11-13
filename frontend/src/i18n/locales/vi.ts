@@ -523,6 +523,7 @@ export const dict: TranslationTable = {
   themeOledDesc: "Đen thuần tương phản cao tối ưu cho màn hình OLED",
   todayLabel: "Hôm nay",
   todayProgressTitle: "Tiến độ hôm nay",
+  todayProgressTooltip: "Hôm nay đã hoàn thành {done}/{total} thẻ",
   topLevelDeckOption: "Không (Tạo làm bộ thẻ cấp cao nhất)",
   typeAnswerCheckTitle: "Kiểm tra chính tả gõ phím",
   typeAnswerExactMatchBadge: "✓ Khớp chính xác 100%",

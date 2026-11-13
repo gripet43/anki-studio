@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.29] - 2026-11-13
+
+- **[DeepSeek] 首页今日进度圆环新增悬停说明**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx) 及 16 种语言字典）：
+  - 鼠标移到圆环上，浮出「今天已完成 20 张，总共 45 张」的完整说明（原圆环只显示 `20 / 45 张`，缺少「已完成/总共」的语义）；
+  - 休假模式下改为显示休假进度「休假中 · 剩余 / 总天数」；
+  - 沿用首页已有的 tooltip 样式（深/浅色自动适配），不额外占布局高度。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 122 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.28 → 1.4.29。
+
 ## [v1.4.28] - 2026-11-13
 
 - **[DeepSeek] 学习小贴士扩充到 20 条 + 与牌组计数再拉开 10px**（改 [`frontend/src/content/learningTips.ts`](frontend/src/content/learningTips.ts)、[`frontend/src/components/dashboard/DashboardTipLine.tsx`](frontend/src/components/dashboard/DashboardTipLine.tsx)）：

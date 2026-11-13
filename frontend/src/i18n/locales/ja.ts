@@ -523,6 +523,7 @@ export const dict: TranslationTable = {
   themeOledDesc: "OLEDディスプレイに最適な漆黒ハイコントラスト",
   todayLabel: "今日",
   todayProgressTitle: "今日の学習進捗",
+  todayProgressTooltip: "今日は {done} / {total} 枚完了",
   topLevelDeckOption: "なし（最上位の親デッキとして作成）",
   typeAnswerCheckTitle: "タイピングスペル照合",
   typeAnswerExactMatchBadge: "✓ 100% 完全一致",
