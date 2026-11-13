@@ -752,3 +752,42 @@ class TestStopAudio(unittest.TestCase):
 
         router = BridgeRouter(col_getter=lambda: None, mw_getter=lambda: None)
         self.assertIn("stopped", router.action_stop_audio({}))
+
+
+class TestAboutPanelBackend(unittest.TestCase):
+    """设置-关于：版本号必须读 manifest，外链必须只放行 http(s) 并交给系统浏览器。"""
+
+    def test_studio_version_matches_manifest(self):
+        import json
+
+        from anki_modern_os.bridge.deck_service import DeckService
+
+        manifest = json.loads((ADDON_ROOT / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(DeckService._studio_version(), manifest["human_version"])
+
+    def test_external_link_opens_via_aqt(self):
+        import types
+        from unittest import mock
+
+        from anki_modern_os.bridge.router import BridgeRouter
+
+        opened = []
+        fake_utils = types.ModuleType("aqt.utils")
+        fake_utils.openLink = lambda url: opened.append(url)
+        fake_aqt = types.ModuleType("aqt")
+        fake_aqt.utils = fake_utils
+        router = BridgeRouter(col_getter=lambda: None, mw_getter=lambda: None)
+        url = "https://www.xiaohongshu.com/user/profile/6496d6f8000000001001ff0f"
+        with mock.patch.dict(sys.modules, {"aqt": fake_aqt, "aqt.utils": fake_utils}):
+            result = router.action_open_external_url({"url": url})
+        self.assertTrue(result["opened"])
+        self.assertEqual(opened, [url])
+
+    def test_external_link_rejects_non_http_schemes(self):
+        from anki_modern_os.bridge.router import BridgeRouter
+
+        router = BridgeRouter(col_getter=lambda: None, mw_getter=lambda: None)
+        for bad in ("javascript:alert(1)", "file:///etc/passwd", "data:text/html,x", "", "not-a-url"):
+            result = router.action_open_external_url({"url": bad})
+            self.assertFalse(result["opened"], bad)
+            self.assertIn("error", result)

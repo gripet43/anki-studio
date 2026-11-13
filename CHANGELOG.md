@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.20] - 2026-11-13
+
+- **[DeepSeek] 设置-关于完善：动态版本号、产品亮点、小红书与 GitHub 外链**（改 [`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts) 及 16 种语言字典；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 3 项回归）：
+  - **动态版本号**：版本卡原先写死 `Version 1.3.0`，现在读取 `manifest.json` 的 `human_version`（`envInfo.studioVersion`），并保留平台 / Anki 版本徽章。
+  - **产品亮点**：新增一行卖点摘要（沉浸式桌面界面 · 16 种语言 · FSRS 调度 · 休假守护 · 零数据锁定），16 种语言同步。
+  - **关注与反馈**：新增「关注与反馈」区块，包含 **小红书主页**（<https://www.xiaohongshu.com/user/profile/6496d6f8000000001001ff0f>）与 **GitHub 源码 / 反馈** 两个入口。链接通过新增的 `open_external_url` action 交给系统浏览器打开（WebView 从 `file://` 加载，直接导航会把整个工作区替换成网页）；只放行 `http(s)`，拒绝 `javascript:` / `file:` / `data:` 等 scheme。
+  - **验证**：Python 118 项（新增 3 项关于页/外链回归）、`tsc --noEmit`、前端单元 63 项、Bundle 审计、隔离场景冒烟 692/692、打包全绿。版本 1.4.19 → 1.4.20。
+
 ## [v1.4.19] - 2026-11-13
 
 - **[DeepSeek] 离开复习界面时停止音频播放**（改 [`bridge/review_service.py`](bridge/review_service.py)、[`bridge/router.py`](bridge/router.py)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 4 项回归）：

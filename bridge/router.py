@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import time
 import traceback
+import urllib.parse
 from typing import Any, Callable, Dict, Optional
 
 from .deck_service import DeckService
@@ -155,6 +156,36 @@ class BridgeRouter:
 
     def action_run_maintenance(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.deck_service.run_maintenance_action(data)
+
+    # ---- External Links ----
+
+    def action_open_external_url(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Opens an http(s) link in the user's system browser.
+
+        The SPA is loaded from ``file://``; letting an ``<a>`` navigate inside the
+        WebView would replace the whole workspace, so the About panel asks the
+        host to open links externally instead. Only http(s) is accepted.
+        """
+        url = str((data or {}).get("url", "") or "").strip()
+        if not url or len(url) > 2048:
+            return {"opened": False, "error": "invalid url"}
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
+            return {"opened": False, "error": "unsupported scheme"}
+        try:
+            from aqt.utils import openLink
+
+            openLink(url)
+            return {"opened": True}
+        except Exception:
+            try:
+                from PyQt6.QtCore import QUrl
+                from PyQt6.QtGui import QDesktopServices
+
+                QDesktopServices.openUrl(QUrl(url))
+                return {"opened": True}
+            except Exception as exc:
+                return {"opened": False, "error": str(exc)}
 
     # ---- Runtime Compatibility / Diagnostics ----
 

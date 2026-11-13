@@ -10,7 +10,9 @@ comprehensive Statistics, and Anki client environment detection.
 from __future__ import annotations
 
 import datetime
+import json
 import sys
+from pathlib import Path
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -201,9 +203,20 @@ class DeckService:
             "osName": os_name,
             "ankiVersion": anki_ver,
             "platformBadge": f"{os_name} · {anki_ver}",
+            "studioVersion": self._studio_version(),
             "mediaBaseUrl": get_media_base_url(get_media_dir(self.col)),
             "mediaHttpBaseUrl": get_media_http_base_url(self.mw),
         }
+
+    @staticmethod
+    def _studio_version() -> str:
+        """Reads the add-on version from manifest.json (single source of truth)."""
+        try:
+            manifest_path = Path(__file__).resolve().parent.parent / "manifest.json"
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            return str(data.get("human_version") or data.get("version") or "").strip()
+        except Exception:
+            return ""
 
     @staticmethod
     def resolve_profile_sync_key(mw: Any = None) -> str:

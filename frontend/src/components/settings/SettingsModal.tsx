@@ -18,7 +18,12 @@ import {
   ThemeMode,
   useAppStore,
 } from '../../stores/useAppStore';
+import { callAnki, isAnkiNativeEnv } from '../../bridge/pycmd';
 import { ACCENT_COLOR_LIST, getAccentScale } from '../../utils/themeTokens';
+
+const XIAOHONGSHU_PROFILE_URL =
+  'https://www.xiaohongshu.com/user/profile/6496d6f8000000001001ff0f';
+const GITHUB_REPO_URL = 'https://github.com/gripet43/anki-studio';
 
 type SettingsTab = 'appearance' | 'shortcuts' | 'sync' | 'maintenance' | 'native' | 'about';
 
@@ -49,6 +54,16 @@ export const SettingsModal: React.FC = () => {
   const isDark = theme === 'dark' || theme === 'oled';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
+
+  // 关于页的外链用系统浏览器打开：WebView 从 file:// 加载，直接导航会把整个
+  // 工作区替换成网页；非 Anki 环境（演示/测试）退化为 window.open。
+  const openExternal = (url: string) => {
+    if (isAnkiNativeEnv()) {
+      callAnki('open_external_url', { url }).catch(() => {});
+    } else if (typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   useEffect(() => {
     if (settingsOpen && settingsInitialTab) {
@@ -1012,9 +1027,45 @@ export const SettingsModal: React.FC = () => {
                 <div>
                   <div className="text-[16px] font-bold">Anki Studio</div>
                   <div className={`text-[12px] ${subText} mt-0.5`}>
-                    Version 1.3.0 · {envInfo.platformBadge} · FSRS Ready
+                    Version {envInfo.studioVersion || '1.4'} · {envInfo.platformBadge} · FSRS Ready
                   </div>
                 </div>
+              </div>
+
+              {/* Highlights Card */}
+              <div className={`rounded-xl border p-4 ${cardSurface}`}>
+                <p className={`text-[12px] ${subText} leading-relaxed`}>
+                  {t('aboutHighlights')}
+                </p>
+              </div>
+
+              {/* Follow & Feedback */}
+              <div className={`rounded-xl border p-4 space-y-2 ${cardSurface}`}>
+                <div className="font-semibold text-[12px] text-[var(--brand-text)]">
+                  {t('aboutLinksTitle')}
+                </div>
+                {[
+                  { key: 'aboutXiaohongshu', url: XIAOHONGSHU_PROFILE_URL, primary: true },
+                  { key: 'aboutGithub', url: GITHUB_REPO_URL, primary: false },
+                ].map((link) => (
+                  <button
+                    key={link.key}
+                    type="button"
+                    onClick={() => openExternal(link.url)}
+                    className={`w-full h-9 px-3 rounded-lg border text-[12px] font-medium flex items-center justify-between gap-2 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
+                      link.primary
+                        ? 'border-[var(--brand-border)] bg-[var(--brand-soft)] text-[var(--brand-text)] hover:opacity-90'
+                        : isDark
+                        ? 'border-white/[0.08] bg-white/[0.03] text-[#E8E8F0] hover:bg-white/[0.07]'
+                        : 'border-[#E5E5EA] bg-[#FAFAFC] text-[#3A3A3C] hover:bg-[#F1F1F5]'
+                    }`}
+                  >
+                    <span>{t(link.key)}</span>
+                    <span className="text-[10px] opacity-60" aria-hidden="true">
+                      ↗
+                    </span>
+                  </button>
+                ))}
               </div>
 
               {/* Philosophy Card */}

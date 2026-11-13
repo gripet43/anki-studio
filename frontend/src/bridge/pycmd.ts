@@ -321,6 +321,8 @@ export interface EnvInfo {
   osName: string;
   ankiVersion: string;
   platformBadge: string;
+  /** Anki Studio 自身版本（来自 manifest.json 的 human_version）。 */
+  studioVersion?: string;
   mediaBaseUrl?: string;
   mediaHttpBaseUrl?: string;
 }
