@@ -32,11 +32,12 @@ export const DashboardTipLine: React.FC = () => {
 
   useEffect(() => {
     if (paused || hiddenToday) return;
-    const timer = window.setInterval(() => switchTip(1), ROTATE_MS);
-    return () => window.clearInterval(timer);
-    // switchTip 只依赖函数式 setState，无需进依赖数组
+    const timer = window.setTimeout(() => switchTip(1), ROTATE_MS);
+    return () => window.clearTimeout(timer);
+    // switchTip 只依赖函数式 setState，无需进依赖数组；index 变化时重新计时，
+    // 保证手动「换一条」后自动轮播仍按完整周期继续。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused, hiddenToday]);
+  }, [paused, hiddenToday, index]);
 
   if (hiddenToday) return null;
 
@@ -44,9 +45,9 @@ export const DashboardTipLine: React.FC = () => {
 
   return (
     <div
-      className="group/tip flex items-center gap-1.5 min-w-0 max-w-[620px] flex-1 self-center ms-5"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
+      className="group/tip flex items-center gap-1.5 min-w-0 max-w-[620px] w-fit self-center ms-5"
+      onPointerEnter={() => setPaused(true)}
+      onPointerLeave={() => setPaused(false)}
     >
       <svg
         className="w-3 h-3 shrink-0 text-[var(--brand-text)] opacity-70"
@@ -75,7 +76,10 @@ export const DashboardTipLine: React.FC = () => {
       <span className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/tip:opacity-100 group-focus-within/tip:opacity-100 transition-opacity duration-150">
         <button
           type="button"
-          onClick={() => switchTip(1)}
+          onClick={(e) => {
+            e.currentTarget.blur();
+            switchTip(1);
+          }}
           title={translate(resolvedLang, 'tipShuffle')}
           aria-label={translate(resolvedLang, 'tipShuffle')}
           className="w-5 h-5 rounded-md flex items-center justify-center cursor-pointer text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-black/[0.04] dark:hover:bg-white/[0.08] transition-colors"
@@ -87,7 +91,10 @@ export const DashboardTipLine: React.FC = () => {
         </button>
         <button
           type="button"
-          onClick={() => appActions.updatePreferences({ tipsHiddenOn: today })}
+          onClick={(e) => {
+            e.currentTarget.blur();
+            appActions.updatePreferences({ tipsHiddenOn: today });
+          }}
           title={translate(resolvedLang, 'tipHideToday')}
           aria-label={translate(resolvedLang, 'tipHideToday')}
           className="w-5 h-5 rounded-md flex items-center justify-center cursor-pointer text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-black/[0.04] dark:hover:bg-white/[0.08] transition-colors"

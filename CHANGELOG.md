@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+## [v1.4.31] - 2026-11-13
+
+- **[DeepSeek] 修复学习小贴士 hover 后图标不消失、自动轮播中断**（改 [`frontend/src/components/dashboard/DashboardTipLine.tsx`](frontend/src/components/dashboard/DashboardTipLine.tsx)）：
+  - **hover 热区过大**：提示行原先用 `flex-1` 撑到 620px，鼠标移到文字外的空白仍算 hover，导致「换一条 / 今天不再显示」不消失、轮播也一直暂停。改为 `w-fit` + `max-w-[620px]`，热区与文字宽度一致。
+  - **点击后图标常显**：按钮点击后保持焦点，`focus-within` 让图标继续显示；点击后主动 `blur()` 释放焦点（键盘 Tab 聚焦时仍会显示，保留可访问性）。
+  - **自动轮播中断**：从 `setInterval` 改为按 `index` 重新计时的 `setTimeout`，手动「换一条」后自动按完整周期继续；hover 暂停后移开一定恢复。
+  - 同时 hover 暂停改用 `pointerenter/pointerleave`，比 mouse 事件更可靠。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 122 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.30 → 1.4.31。
+
 ## [v1.4.30] - 2026-11-13
 
 - **[DeepSeek] 审计并精简 20 条学习小贴士：去掉「小标题 + 冒号」式前缀**（改 [`frontend/src/content/learningTips.ts`](frontend/src/content/learningTips.ts)）：
