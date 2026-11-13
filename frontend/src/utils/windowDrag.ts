@@ -11,7 +11,12 @@ export function startWindowDrag(e: React.MouseEvent) {
 
   // Do not initiate drag if user interacted with a button, link, input, or explicit no-drag area
   const target = e.target as HTMLElement | null;
-  if (target?.closest('button, input, textarea, select, a, [data-no-drag]')) {
+  // 某些 Windows / WebView 场景下 event.target 可能是 document（没有 closest）
+  if (
+    target &&
+    typeof target.closest === 'function' &&
+    target.closest('button, input, textarea, select, a, [data-no-drag]')
+  ) {
     return;
   }
 
@@ -82,7 +87,12 @@ export function startWindowDrag(e: React.MouseEvent) {
  */
 export function handleWindowDoubleClick(e: React.MouseEvent) {
   const target = e.target as HTMLElement | null;
-  if (target?.closest('button, input, textarea, select, a, [data-no-drag]')) {
+  // 某些 Windows / WebView 场景下 event.target 可能是 document（没有 closest）
+  if (
+    target &&
+    typeof target.closest === 'function' &&
+    target.closest('button, input, textarea, select, a, [data-no-drag]')
+  ) {
     return;
   }
   appActions.toggleMaximize();

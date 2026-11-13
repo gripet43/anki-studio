@@ -236,9 +236,12 @@ export const ReviewerView: React.FC = () => {
       const target = e.target as HTMLElement | null;
       // CardEditorModal uses a contentEditable DIV, which is not in the tag
       // whitelist: typing a space or digit used to flip/grade the card instead.
+      // event.target can be document on some Windows/WebView setups (no closest).
       if (
-        target?.isContentEditable ||
-        target?.closest('input, textarea, select, [contenteditable="true"]')
+        target &&
+        (target.isContentEditable ||
+          (typeof target.closest === 'function' &&
+            target.closest('input, textarea, select, [contenteditable="true"]')))
       ) {
         return;
       }

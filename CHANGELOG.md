@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.64] - 2026-11-13
+
+- **[DeepSeek] 修复 Windows 下 `xxx.closest is not a function` 报错**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/utils/windowDrag.ts`](frontend/src/utils/windowDrag.ts)）：
+  - **根因**：`event.target` 在部分 Windows / WebView 场景（例如页面没有聚焦元素时）会是 `document` 而不是 Element，`document` 没有 `.closest()`，于是键盘处理里 `target?.closest(...)` 抛 `TypeError: ...closest is not a function`；
+  - 复习界面键盘处理、窗口拖拽（mousedown）与双击标题栏三处都加了 `typeof target.closest === 'function'` 防御；
+  - 行为不变，只是不再因非元素 target 崩溃。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.63 → 1.4.64。
+
 ## [v1.4.63] - 2026-11-13
 
 - **[DeepSeek] Gallery 卡片增加错峰进入动画**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：打开卡片库或切换筛选时，卡片按索引依次淡入并轻微上浮（每张延迟 28ms、最多叠加 12 张；动画 260ms，`cubic-bezier(0.22,1,0.36,1)`）。使用 `animation-fill-mode: backwards`，动画结束后不影响 hover 抬升与翻面；`prefers-reduced-motion` 下不播动画。
