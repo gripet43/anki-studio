@@ -27,3 +27,4 @@ config.json
 # Anki 运行时配置：含昵称、减负回执与真实卡片正文，绝不入库
 # 历史上曾被提交过，已用 filter-repo 从全部历史移除（2026-11-11）
 meta.json
+scripts/analytics-worker/.wrangler/
