@@ -15,6 +15,13 @@
 
 ## [Unreleased]
 
+## [v1.4.57] - 2026-11-13
+
+- **[DeepSeek] 卡片编辑器预览切换按钮文案「查看」改为「预览」**（改 [`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx) 及 16 种语言字典）：
+  - 新增独立 key `previewCardBtn`（预览 / Preview），避免与首页牌组卡的「查看」（View，跳转卡片库）共用同一 key 而被误改；
+  - 眼睛图标的按钮现在点击后进入「预览」，语义更准确。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.56 → 1.4.57。
+
 ## [v1.4.56] - 2026-11-13
 
 - **[DeepSeek] Gallery 背面新增「更多操作」菜单**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/index.css`](frontend/src/index.css) 及 16 种语言字典）：

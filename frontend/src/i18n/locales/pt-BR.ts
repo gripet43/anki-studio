@@ -585,6 +585,7 @@ export const dict: TranslationTable = {
   vacationTabSetup: "Configurar",
   vacationTabStatus: "Status atual",
   viewDeckBtn: "Ver",
+  previewCardBtn: "Pré-visualizar",
   viewInLibraryBtn: "Ver na biblioteca",
   weekStudied: "Esta semana",
   weeklyRhythmFooter: "Méd. {sec}s / cartão · Maior sessão {min}m",

@@ -1093,7 +1093,7 @@ export const CardEditorModal: React.FC = () => {
                     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
                     <circle cx="12" cy="12" r="3" />
                   </svg>
-                  <span>{t('viewDeckBtn')}</span>
+                  <span>{t('previewCardBtn')}</span>
                   {generatedCardCount > 1 && (
                     <span className="px-1 rounded text-[9px] font-mono font-bold bg-[var(--brand-soft-strong)] text-[var(--brand-text)]">
                       ×{generatedCardCount}

@@ -585,6 +585,7 @@ export const dict: TranslationTable = {
   vacationTabSetup: "新建休假",
   vacationTabStatus: "目前狀態",
   viewDeckBtn: "檢視",
+  previewCardBtn: "預覽",
   viewInLibraryBtn: "去卡片庫檢視",
   weekStudied: "本週已學",
   weeklyRhythmFooter: "平均 {sec} 秒 / 張 · 最長單次 {min} 分鐘",

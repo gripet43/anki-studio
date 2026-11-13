@@ -585,6 +585,7 @@ export const dict: TranslationTable = {
   vacationTabSetup: "휴가 설정",
   vacationTabStatus: "현재 상태",
   viewDeckBtn: "보기",
+  previewCardBtn: "미리보기",
   viewInLibraryBtn: "보관함에서 보기",
   weekStudied: "이번 주",
   weeklyRhythmFooter: "평균 {sec}초/장 · 최장 세션 {min}분",
