@@ -336,6 +336,8 @@ export interface UserPreferences {
   sandboxNoteTypeIds?: string[];
   debugMode?: boolean;
   showShortcutHints?: boolean;
+  /** 首页学习小贴士是否已收起（持久化到 config）。 */
+  tipsDismissed?: boolean;
 }
 
 export interface SafetyWarning {

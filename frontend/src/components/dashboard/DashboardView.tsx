@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { DashboardTipBar } from './DashboardTipBar';
 import { useCountUp } from '../../hooks/useCountUp';
 import {
   formatFullDateWithWeekday,
@@ -544,7 +545,7 @@ export const DashboardView: React.FC = () => {
 
           {/* Dynamic Today's Study Progress Board / Active Vacation Protection Hero */}
           <section
-            className={`dashboard-hero relative rounded-[24px] border px-7 sm:px-9 py-6 sm:py-7 flex flex-col lg:flex-row lg:items-center justify-between gap-6 lg:gap-8 transition-all duration-500 ${cardSurface} ${
+            className={`dashboard-hero relative rounded-[24px] border px-7 sm:px-9 py-6 sm:py-7 flex flex-col transition-all duration-500 ${cardSurface} ${
               isSyncPending
                 ? 'border-[var(--brand-border)] shadow-md ring-1 ring-[var(--brand)]/20'
                 : isVacationActive
@@ -970,6 +971,8 @@ export const DashboardView: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            <DashboardTipBar />
           </section>
 
           {/* Deck Cards Grid */}

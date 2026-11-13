@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.4.24] - 2026-11-13
+
+- **[DeepSeek] 首页 Hero 底部新增「学习小贴士」轮播（不新增独立卡片）**（新增 [`frontend/src/components/dashboard/DashboardTipBar.tsx`](frontend/src/components/dashboard/DashboardTipBar.tsx)、[`frontend/src/content/learningTips.ts`](frontend/src/content/learningTips.ts)，改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx) 及 16 种语言字典）：
+  - **位置**：嵌在「今日进度」Hero 卡片内部最底部，用一条发丝分隔线承接，**不新增独立卡片**，保持首页「Hero + 牌组 + 图表」的简洁层次。
+  - **内容**：10 条 Studio 定制原则——先理解再制卡、卡片 20–80 字/10 秒答完、自己做的卡最牢、错题只记错点、学习与复习分开、宁少刷不糊弄、固定复习时段、积压分批追赶（进度减负）、FSRS 排序、卡片+笔记成体系。剔除了第三方工具广告类建议；中文/英文文案，其余语言回退英文。
+  - **交互**：10 秒自动轮播（hover 暂停）、左右箭头 + `2/10` 计数、`×` 收起；收起偏好写入 config，可在 **设置 → 外观 → 首页显示学习小贴士** 重新打开；尊重 `prefers-reduced-motion`。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 122 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.23 → 1.4.24。
+
 ## [v1.4.23] - 2026-11-13
 
 - **[DeepSeek] 卡片库信息层级优化：多选模式化、标签计数说明、移除无含义状态点**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts) 及 16 种语言字典）：

@@ -403,6 +403,8 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Toetsenbordgerichte workflow met automatische aanpassing voor macOS (Cmd) en Windows/Linux (Ctrl).",
   settingsShowShortcutBadgesSub: "Toon sneltoetsbadges in de zijbalk, op beoordelingsknoppen en werkbalken",
   settingsShowShortcutBadgesTitle: "Sneltoetsbadges tonen",
+  settingsShowTipsTitle: "Leertips op het dashboard tonen",
+  settingsShowTipsSub: "Toont kaartmaak- en herhaalprincipes onderaan de dagelijkse voortgangskaart.",
   settingsSwitchNativeCardSub: "Verberg Anki Studio en toon het klassieke Anki-hoofdvenster",
   settingsSwitchNativeCardTitle: "Overschakelen naar klassieke Anki-UI",
   settingsSyncTabSub: "Bekijk je AnkiWeb-synchronisatiestatus of start direct een synchronisatie.",

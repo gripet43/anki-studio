@@ -403,6 +403,8 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Thiết kế ưu tiên bàn phím, tự động tương thích phím Cmd (macOS) và Ctrl (Windows / Linux).",
   settingsShowShortcutBadgesSub: "Hiển thị nhãn phím tắt trên thanh bên, nút chấm điểm và thanh công cụ",
   settingsShowShortcutBadgesTitle: "Hiển thị gợi ý phím tắt",
+  settingsShowTipsTitle: "Hiển thị mẹo học tập trên trang chính",
+  settingsShowTipsSub: "Luân phiên các nguyên tắc tạo thẻ và ôn tập ở cuối thẻ tiến độ hôm nay.",
   settingsSwitchNativeCardSub: "Ẩn giao diện hiện đại và mở cửa sổ Anki gốc với toàn bộ tiến độ được đồng bộ tức thì",
   settingsSwitchNativeCardTitle: "Chuyển về giao diện Anki gốc",
   settingsSyncTabSub: "Kiểm tra trạng thái đồng bộ đám mây AnkiWeb hoặc kích hoạt đồng bộ hai chiều ngay.",

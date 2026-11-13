@@ -403,6 +403,8 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Klavye odaklı iş akışı. macOS (Cmd) ve Windows/Linux (Ctrl) tuşlarına otomatik uyum sağlar.",
   settingsShowShortcutBadgesSub: "Kenar çubuğunda ve değerlendirme düğmelerinde klavye kısayol rozetlerini göster",
   settingsShowShortcutBadgesTitle: "Kısayol Rozetlerini Göster",
+  settingsShowTipsTitle: "Panoda çalışma ipuçlarını göster",
+  settingsShowTipsSub: "Kart oluşturma ve tekrar ilkelerini günlük ilerleme kartının altında döndürür.",
   settingsSwitchNativeCardSub: "Modern arayüzü gizleyip klasik Anki ana penceresini gerçek zamanlı olarak açar",
   settingsSwitchNativeCardTitle: "Klasik Anki Arayüzüne Geç",
   settingsSyncTabSub: "AnkiWeb bulut eşitleme durumunu inceleyin veya anında eşitleme başlatın.",

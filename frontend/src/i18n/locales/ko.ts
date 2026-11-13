@@ -403,6 +403,8 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "키보드 중심 워크플로. macOS(Cmd)와 Windows/Linux(Ctrl) 보조키에 자동으로 맞춰집니다.",
   settingsShowShortcutBadgesSub: "사이드바, 평가 버튼 및 도구 모음에 키보드 단축키 배지를 표시합니다",
   settingsShowShortcutBadgesTitle: "단축키 배지 표시",
+  settingsShowTipsTitle: "대시보드에 학습 팁 표시",
+  settingsShowTipsSub: "오늘의 진행 카드 하단에서 카드 제작과 복습 원칙을 순환 표시합니다.",
   settingsSwitchNativeCardSub: "모던 화면을 숨기고 모든 학습 진도가 실시간 공유되는 기본 Anki 메인 창을 표시합니다",
   settingsSwitchNativeCardTitle: "Anki 기본 UI로 전환",
   settingsSyncTabSub: "현재 AnkiWeb 클라우드 동기화 상태를 확인하거나 즉시 양방향 동기화를 실행합니다.",

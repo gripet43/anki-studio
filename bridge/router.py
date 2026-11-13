@@ -215,6 +215,7 @@ class BridgeRouter:
             "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
             "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
             "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
+            "tipsDismissed": bool(cfg.get("dashboard_tips_dismissed", False)),
             "envInfo": self.deck_service._resolve_platform_and_version(),
         }
 
@@ -234,6 +235,8 @@ class BridgeRouter:
             patch["sandbox_notetype_ids"] = [str(x) for x in data["sandboxNoteTypeIds"] if str(x).strip()]
         if "showShortcutHints" in data:
             patch["show_shortcut_hints"] = bool(data["showShortcutHints"])
+        if "tipsDismissed" in data:
+            patch["dashboard_tips_dismissed"] = bool(data["tipsDismissed"])
 
         saved = self._write_config(patch)
         return {
@@ -247,6 +250,7 @@ class BridgeRouter:
                 "collapsedDeckIds": saved.get("collapsed_deck_ids", []),
                 "sandboxNoteTypeIds": [str(x) for x in (saved.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(saved.get("show_shortcut_hints", False)),
+                "tipsDismissed": bool(saved.get("dashboard_tips_dismissed", False)),
             },
         }
 

@@ -403,6 +403,8 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Flusso pensato per la tastiera. Adatta automaticamente Cmd (macOS) e Ctrl (Windows / Linux).",
   settingsShowShortcutBadgesSub: "Mostra i badge delle scorciatoie sulla barra laterale e sui pulsanti di valutazione",
   settingsShowShortcutBadgesTitle: "Mostra badge scorciatoie",
+  settingsShowTipsTitle: "Mostra consigli di studio nella dashboard",
+  settingsShowTipsSub: "Mostra i principi di creazione delle carte e di ripasso in fondo alla scheda dei progressi giornalieri.",
   settingsSwitchNativeCardSub: "Nasconde Anki Studio e mostra la finestra principale classica di Anki",
   settingsSwitchNativeCardTitle: "Passa all'interfaccia nativa di Anki",
   settingsSyncTabSub: "Controlla lo stato di sincronizzazione AnkiWeb o avvia una sincronizzazione immediata.",

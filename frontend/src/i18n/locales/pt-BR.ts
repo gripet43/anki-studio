@@ -403,6 +403,8 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Fluxo focado no teclado. Adapta automaticamente Cmd (macOS) e Ctrl (Windows / Linux).",
   settingsShowShortcutBadgesSub: "Exibir insígnias de atalhos de teclado na barra lateral e nos botões de avaliação",
   settingsShowShortcutBadgesTitle: "Mostrar insígnias de atalhos",
+  settingsShowTipsTitle: "Mostrar dicas de estudo no painel",
+  settingsShowTipsSub: "Exibe princípios de criação de cartões e revisão na parte inferior do cartão de progresso diário.",
   settingsSwitchNativeCardSub: "Oculta o Anki Studio e exibe a janela principal clássica do Anki em tempo real",
   settingsSwitchNativeCardTitle: "Alternar para a interface nativa do Anki",
   settingsSyncTabSub: "Verifique o status de sincronização com o AnkiWeb ou inicie uma sincronização manual.",

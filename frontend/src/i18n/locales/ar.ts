@@ -403,6 +403,8 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "تصميم يعتمد على لوحة المفاتيح ويتكيف تلقائياً مع أزرار macOS و Windows/Linux.",
   settingsShowShortcutBadgesSub: "إظهار شارات اختصارات لوحة المفاتيح على الشريط الجانبي وأزرار التقييم",
   settingsShowShortcutBadgesTitle: "إظهار شارات الاختصارات",
+  settingsShowTipsTitle: "عرض نصائح الدراسة في اللوحة",
+  settingsShowTipsSub: "يعرض مبادئ إنشاء البطاقات والمراجعة أسفل بطاقة التقدم اليومي.",
   settingsSwitchNativeCardSub: "إخفاء الواجهة الحديثة وإظهار نافذة Anki الأصلية مع مشاركة فورية للتقدم",
   settingsSwitchNativeCardTitle: "التبديل إلى واجهة Anki الأصلية",
   settingsSyncTabSub: "تحقق من حالة المزامنة السحابية مع AnkiWeb أو ابدأ مزامنة فورية.",

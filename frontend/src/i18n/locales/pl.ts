@@ -403,6 +403,8 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Praca oparta na skrótach klawiszowych z automatycznym dopasowaniem do macOS i Windows/Linux.",
   settingsShowShortcutBadgesSub: "Wyświetlaj oznaczenia skrótów klawiszowych na pasku bocznym i przyciskach oceny",
   settingsShowShortcutBadgesTitle: "Pokazuj plakietki skrótów",
+  settingsShowTipsTitle: "Pokazuj wskazówki nauki na pulpicie",
+  settingsShowTipsSub: "Wyświetla zasady tworzenia kart i powtórek na dole karty dziennego postępu.",
   settingsSwitchNativeCardSub: "Ukryj nowoczesny interfejs i pokaż klasyczne okno główne Anki",
   settingsSwitchNativeCardTitle: "Przełącz na klasyczny interfejs Anki",
   settingsSyncTabSub: "Sprawdź stan synchronizacji z AnkiWeb lub uruchom natychmiastową synchronizację.",

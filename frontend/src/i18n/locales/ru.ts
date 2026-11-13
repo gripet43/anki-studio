@@ -403,6 +403,8 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Управление с клавиатуры с автоадаптацией клавиш Cmd (macOS) и Ctrl (Windows / Linux).",
   settingsShowShortcutBadgesSub: "Показывать подсказки горячих клавиш в боковой панели и на кнопках оценки",
   settingsShowShortcutBadgesTitle: "Показывать значки горячих клавиш",
+  settingsShowTipsTitle: "Показывать советы по учёбе на главной",
+  settingsShowTipsSub: "Показывать принципы создания карточек и повторения внизу карточки дневного прогресса.",
   settingsSwitchNativeCardSub: "Скрыть современный интерфейс и показать классическое окно Anki",
   settingsSwitchNativeCardTitle: "Переключиться в классический интерфейс Anki",
   settingsSyncTabSub: "Проверьте статус синхронизации с AnkiWeb или запустите её вручную.",

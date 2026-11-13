@@ -384,6 +384,7 @@ class DeckService:
                     "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
                     "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                     "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
+                    "tipsDismissed": bool(cfg.get("dashboard_tips_dismissed", False)),
                     "debugMode": bool(cfg.get("debug_mode", False)),
                 },
                 "vacation": {
@@ -1783,6 +1784,7 @@ class DeckService:
                 "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
                 "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
+                "tipsDismissed": bool(cfg.get("dashboard_tips_dismissed", False)),
                 "debugMode": bool(cfg.get("debug_mode", False)),
             },
             "vacation": {

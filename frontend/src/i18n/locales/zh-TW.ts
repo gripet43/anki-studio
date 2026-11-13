@@ -403,6 +403,8 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "全鍵盤流設計，根據目前作業系統自動適配 Cmd (macOS) 與 Ctrl (Windows / Linux) 修飾鍵。",
   settingsShowShortcutBadgesSub: "在導覽列、複習評分按鈕和編輯器底部顯示鍵盤快捷鍵角標提示",
   settingsShowShortcutBadgesTitle: "顯示介面快捷鍵角標提示",
+  settingsShowTipsTitle: "首頁顯示學習小提示",
+  settingsShowTipsSub: "在今日進度卡底部輪播製卡與複習原則，隨時提醒自己的學習方式。",
   settingsSwitchNativeCardSub: "立即隱藏現代工作台並展示 Anki 原生主視窗，所有複習進度與卡片修改即時共享",
   settingsSwitchNativeCardTitle: "切回 Anki 原生介面",
   settingsSyncTabSub: "檢視目前 AnkiWeb 雲端同步狀態快照，或隨時手動觸發雙向雲端同步。",

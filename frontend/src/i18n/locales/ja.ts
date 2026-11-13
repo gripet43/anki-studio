@@ -403,6 +403,8 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "キーボード中心の操作設計。macOS (Cmd) と Windows/Linux (Ctrl) の修飾キーに自動適応します。",
   settingsShowShortcutBadgesSub: "サイドバーや回答ボタン、ツールバーにショートカットキーのバッジを表示します",
   settingsShowShortcutBadgesTitle: "ショートカットバッジを表示",
+  settingsShowTipsTitle: "ダッシュボードに学習のヒントを表示",
+  settingsShowTipsSub: "今日の進捗カードの下部で、カード作成と復習の原則をローテーション表示します。",
   settingsSwitchNativeCardSub: "モダン画面を閉じてAnki標準のメインウィンドウを表示します（進捗はリアルタイム共有）",
   settingsSwitchNativeCardTitle: "Anki 標準画面へ切り替える",
   settingsSyncTabSub: "AnkiWeb クラウド同期のスナップショット確認や、手動での双方向同期を実行します。",
