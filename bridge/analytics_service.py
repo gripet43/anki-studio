@@ -20,6 +20,7 @@ can never block or break the UI.
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import platform
@@ -59,6 +60,7 @@ class AnalyticsService:
         self._lock = threading.Lock()
         self._flushing = False
         self._started = False
+        self._client_locale = ""
 
     # ---- config helpers -------------------------------------------------
 
@@ -68,6 +70,10 @@ class AnalyticsService:
             return cfg if isinstance(cfg, dict) else {}
         except Exception:
             return {}
+
+    def set_client_locale(self, locale: str) -> None:
+        """前端传入的已解析界面语言（config 里的 language 常为 auto）。"""
+        self._client_locale = str(locale or "").strip()[:16]
 
     def endpoint(self) -> str:
         cfg = self._cfg()
@@ -111,11 +117,17 @@ class AnalyticsService:
                 anki_version = ""
         except Exception:
             pass
+        try:
+            offset = datetime.datetime.now().astimezone().utcoffset()
+            tz_offset = int(round(offset.total_seconds() / 3600)) if offset else 0
+        except Exception:
+            tz_offset = 0
         return {
             "version": version,
             "os": platform.system().lower(),
             "anki_version": anki_version,
-            "locale": str(self._cfg().get("language") or "auto"),
+            "locale": self._client_locale or str(self._cfg().get("language") or "auto"),
+            "tz_offset": tz_offset,
         }
 
     @staticmethod

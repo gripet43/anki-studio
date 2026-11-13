@@ -373,7 +373,7 @@ export const dict: TranslationTable = {
   aboutGithub: "Mã nguồn & issues trên GitHub",
   settingsAboutSub: "Không gian học tập hiện đại tương thích 100% với cơ sở dữ liệu Anki gốc và thuật toán FSRS.",
   settingsAnalyticsTitle: "Thống kê sử dụng ẩn danh",
-  settingsAnalyticsSub: "Chỉ gửi số đếm ẩn danh (lần mở, hoạt động hằng ngày, khoảng số thẻ, lượt dùng tính năng) — không gồm nội dung thẻ, tên bộ thẻ hay từ khóa tìm kiếm. Có thể tắt bất cứ lúc nào.",
+  settingsAnalyticsSub: "Chỉ gửi số đếm ẩn danh (lần mở, hoạt động hằng ngày, khoảng số thẻ, lượt dùng tính năng) và thông tin môi trường thô (phiên bản, hệ điều hành, ngôn ngữ giao diện, mã quốc gia/vùng, múi giờ) — không gồm nội dung thẻ, tên bộ thẻ hay từ khóa tìm kiếm. Có thể tắt bất cứ lúc nào.",
   settingsAppearanceSub: "Tùy chỉnh ngôn ngữ giao diện, chế độ nền và màu nhấn thương hiệu.",
   settingsCheatsheetTitle: "Bảng tra cứu phím tắt",
   settingsCheckDbBtn: "Kiểm tra cơ sở dữ liệu",

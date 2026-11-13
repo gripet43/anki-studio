@@ -445,7 +445,7 @@ export const appActions = {
       coldStartInProgress = false;
       if (!analyticsStarted && isAnkiNativeEnv()) {
         analyticsStarted = true;
-        callAnki('analytics_start', {}).catch(() => {});
+        callAnki('analytics_start', { locale: effectiveLang }).catch(() => {});
       }
 
       const hasBackendSyncTs = typeof dash?.syncedAt === 'number';

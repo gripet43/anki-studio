@@ -337,6 +337,7 @@ class BridgeRouter:
 
     def action_analytics_start(self, data: Dict[str, Any]) -> Dict[str, Any]:
         try:
+            self.analytics_service.set_client_locale(str((data or {}).get("locale") or ""))
             return self.analytics_service.start()
         except Exception:
             return {"started": False}

@@ -373,7 +373,7 @@ export const dict: TranslationTable = {
   aboutGithub: "Kod i zgłoszenia na GitHub",
   settingsAboutSub: "Nowoczesne środowisko nauki w 100% kompatybilne z bazą Anki i algorytmem FSRS.",
   settingsAnalyticsTitle: "Anonimowe statystyki użycia",
-  settingsAnalyticsSub: "Wysyłamy tylko anonimowe liczniki (uruchomienia, dzienna aktywność, przedziały kart, użycie funkcji) — nigdy treści kart, nazw talii ani zapytań. Można wyłączyć w każdej chwili.",
+  settingsAnalyticsSub: "Wysyłamy tylko anonimowe liczniki (uruchomienia, dzienna aktywność, przedziały kart, użycie funkcji) oraz przybliżone informacje o środowisku (wersja, system, język interfejsu, kod kraju/regionu, przesunięcie strefy czasowej) — nigdy treści kart, nazw talii ani zapytań. Można wyłączyć w każdej chwili.",
   settingsAppearanceSub: "Dostosuj język interfejsu, motyw oraz kolor akcentu.",
   settingsCheatsheetTitle: "Wykaz skrótów klawiszowych",
   settingsCheckDbBtn: "Sprawdź bazę danych",

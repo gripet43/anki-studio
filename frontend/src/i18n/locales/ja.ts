@@ -373,7 +373,7 @@ export const dict: TranslationTable = {
   aboutGithub: "GitHub ソースとフィードバック",
   settingsAboutSub: "ネイティブAnkiデータベースおよびFSRSアルゴリズムと100%互換のモダン学習環境。",
   settingsAnalyticsTitle: "匿名の利用統計",
-  settingsAnalyticsSub: "起動・日次アクティブ・復習枚数帯・機能利用の匿名カウントのみ送信します。カード内容・デッキ名・検索語は含みません。いつでもオフにできます。",
+  settingsAnalyticsSub: "匿名カウント（起動・日次アクティブ・復習枚数帯・機能利用）と粗い環境情報（バージョン・OS・UI言語・国/地域コード・タイムゾーンオフセット）のみ送信します。カード内容・デッキ名・検索語は含みません。いつでもオフにできます。",
   settingsAppearanceSub: "表示言語・テーマ・アクセントカラーをカスタマイズします。設定は自動保存されます。",
   settingsCheatsheetTitle: "キーボードショートカット一覧",
   settingsCheckDbBtn: "データベースをチェック",

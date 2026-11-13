@@ -43,6 +43,7 @@ function sanitize(event) {
       props = null;
     }
   }
+  const tz = Number.isFinite(event.tz_offset) ? Math.max(-12, Math.min(14, Math.trunc(event.tz_offset))) : null;
   return {
     ts,
     install_id: installId,
@@ -51,6 +52,7 @@ function sanitize(event) {
     os: str(event.os, 16),
     anki_version: str(event.anki_version, 32),
     locale: str(event.locale, 16),
+    tz_offset: tz,
     props,
   };
 }
@@ -73,8 +75,11 @@ export default {
     const rows = incoming.map(sanitize).filter(Boolean);
     if (!rows.length) return json({ ok: true, stored: 0 });
 
+    const cf = request.cf || {};
+    const country = cf.country ? String(cf.country).slice(0, 2).toUpperCase() : "";
+    const colo = cf.colo ? String(cf.colo).slice(0, 3).toUpperCase() : "";
     const stmt = env.DB.prepare(
-      "INSERT INTO events (ts, install_id, event, version, os, anki_version, locale, props) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO events (ts, install_id, event, version, os, anki_version, locale, tz_offset, country, colo, props) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     await env.DB.batch(
       rows.map((row) =>
@@ -86,6 +91,9 @@ export default {
           row.os,
           row.anki_version,
           row.locale,
+          row.tz_offset,
+          country,
+          colo,
           row.props
         )
       )
