@@ -523,22 +523,23 @@ const item29IndexCssSrc = fs.readFileSync(
 );
 assert(
   item29MathRendererSrc.includes('export function formatCardPreviewHtml') &&
-    item29IndexCssSrc.includes('.library-card-grid') &&
-    item29IndexCssSrc.includes('container: library-card-band / inline-size') &&
-    item29IndexCssSrc.includes('@supports (grid-template-rows: subgrid)') &&
-    item29IndexCssSrc.includes('.library-card-snippet-body') &&
-    item29IndexCssSrc.includes('text-wrap: balance') &&
-    item29IndexCssSrc.includes('@container library-card-band (max-width: 222px)') &&
-    item29IndexCssSrc.includes('@container library-card-band (max-width: 185px)') &&
+    item29IndexCssSrc.includes('.library-card-flip-inner') &&
+    item29IndexCssSrc.includes('.library-card-face') &&
+    item29IndexCssSrc.includes('@keyframes library-card-sheen') &&
+    item29IndexCssSrc.includes('transition-delay: 220ms') &&
+    item29IndexCssSrc.includes('.library-card-answer') &&
+    item29IndexCssSrc.includes('.library-card-edit-btn') &&
     librarySrc.includes('formatCardPreviewHtml') &&
-    librarySrc.includes('library-card-grid') &&
-    librarySrc.includes('library-card-snippet-body') &&
-    librarySrc.includes('library-card-footer-meta') &&
+    librarySrc.includes('library-card-flip-inner') &&
+    librarySrc.includes('library-card-face-front') &&
+    librarySrc.includes('library-card-face-back') &&
+    librarySrc.includes('library-card-tags') &&
+    librarySrc.includes('library-card-edit-btn') &&
     librarySrc.includes('aria-pressed={isSelected}') &&
     librarySrc.includes('table-fixed') &&
     librarySrc.includes('library-table-preview') &&
     !librarySrc.includes('p-2.5 rounded-xl text-[12px] leading-relaxed line-clamp-2'),
-  'Item #29: LibraryView cards must use subgrid alignment, container queries, decoupled multi-block snippet clamping, non-overlapping footer, and accessible targets'
+  'Item #29: LibraryView cards must keep flip faces, delayed hover animation + sheen, front/back content separation, and accessible targets'
 );
 
 // Item #30: Hook 顺序守卫 —— 任何顶层提前 return 之后都不允许再出现 Hook 调用

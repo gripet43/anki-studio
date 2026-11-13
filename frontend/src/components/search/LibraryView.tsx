@@ -1348,6 +1348,12 @@ export const LibraryView: React.FC = () => {
                 const frontPreviewHtml = formatCardPreviewHtml(card.frontHtml || card.front);
                 const backPreviewHtml = formatCardPreviewHtml(card.backHtml || card.back);
                 const hasBackPreview = backPreviewHtml.trim().length > 0;
+                const masteryColor =
+                  card.mastery >= 90
+                    ? 'var(--status-success)'
+                    : card.mastery >= 60
+                    ? 'var(--brand)'
+                    : 'var(--status-warning)';
                 return (
                   <article
                     key={card.id}
@@ -1360,7 +1366,7 @@ export const LibraryView: React.FC = () => {
                       }
                     }}
                     onDoubleClick={() => appActions.openCardEditor(card)}
-                    className={`library-card group relative rounded-2xl p-4 transition-[background-color,border-color,box-shadow,transform] duration-200 cursor-pointer select-none border ${
+                    className={`library-card group relative rounded-2xl transition-[background-color,border-color,box-shadow,transform] duration-200 cursor-pointer select-none border ${
                       isSelected
                         ? 'bg-[var(--brand-surface)] border-[var(--brand)] ring-2 ring-[var(--brand)]/35 shadow-md'
                         : isDark
@@ -1368,198 +1374,224 @@ export const LibraryView: React.FC = () => {
                         : 'bg-white border-[#EAECEF] hover:border-[var(--brand-border)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] motion-safe:hover:-translate-y-0.5 shadow-[0_1px_3px_rgba(0,0,0,0.02)]'
                     }`}
                   >
-                    <header className="library-card-header">
-                      <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
-                        {/* Deck Pill with Deck Color Indicator */}
-                        <span
-                          className={`library-card-deck inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-medium min-w-0 shrink ${
-                            isDark ? 'bg-white/5 text-[#A1A1A6]' : 'bg-[#F2F2F7] text-[#636366]'
-                          }`}
-                          title={card.fullDeckName || card.deckName}
-                        >
-                          <span
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{ backgroundColor: topBarColor }}
-                          />
-                          <span className="truncate">{card.deckName}</span>
-                        </span>
-
-                        {cardFlagSpec && (
-                          <span
-                            title={t(`flagLabel_${cardFlagNum}` as any)}
-                            style={{
-                              backgroundColor: cardFlagSpec.bgSoft,
-                              color: cardFlagSpec.hex,
-                            }}
-                            className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 shrink-0"
-                          >
-                            <span
-                              className="w-1.5 h-1.5 rounded-full shrink-0"
-                              style={{ backgroundColor: cardFlagSpec.hex }}
-                            />
-                            <span>{t(`flagShort_${cardFlagNum}` as any)}</span>
-                          </span>
-                        )}
-
-                        {/* Status Badge if special state */}
-                        {isSuspended ? (
-                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--status-warning-soft)] text-[var(--status-warning)] shrink-0">
-                            {t('statusSuspended')}
-                          </span>
-                        ) : isBuried ? (
-                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-black/5 dark:bg-white/10 text-[#555558] dark:text-[#A1A1A6] shrink-0">
-                            {t('statusBuried')}
-                          </span>
-                        ) : card.status === 'new' ? (
-                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--status-info-soft)] text-[var(--status-info)] shrink-0">
-                            {t('statusNew')}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <div className="flex items-center gap-1 shrink-0 min-w-0">
-                        {/* Tags */}
-                        {card.tags.length > 0 && (
-                          <div className="flex items-center gap-1 min-w-0">
-                            <span
-                              className="library-card-tag-pill inline-block px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-[var(--brand-soft)] text-[var(--brand-text)] truncate"
-                              title={`#${card.tags[0]}`}
-                            >
-                              #{card.tags[0]}
-                            </span>
-                            {card.tags.length > 1 && (
-                              <span
-                                className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-black/[0.04] dark:bg-white/[0.07] text-[#6E6E73] dark:text-[#A1A1A6] cursor-default shrink-0"
-                                title={card.tags.map((tg) => `#${tg}`).join(' ')}
-                              >
-                                {t('moreTagsLabel', { n: card.tags.length - 1 })}
-                              </span>
-                            )}
-                          </div>
-                        )}
-
-                        {/* 勾选框只在「多选模式」下出现；平时点卡片就是打开编辑 */}
-                        {librarySelectionMode && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            appActions.toggleCardSelection(card.id);
-                          }}
-                          aria-pressed={isSelected}
-                          aria-label={card.front}
-                          className="-my-1 -me-1 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1"
-                        >
-                          <span
-                            className={`w-4.5 h-4.5 rounded-[5px] flex items-center justify-center transition-colors ${
-                              isSelected
-                                ? 'bg-[var(--brand)] text-white shadow-2xs'
-                                : 'border border-[#C7C7CC] dark:border-[#48484A] group-hover:border-[var(--brand)]/60 bg-white/90 dark:bg-[#20202A]/90'
-                            }`}
-                          >
-                            {isSelected && (
-                              <svg
-                                className="w-3 h-3"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                aria-hidden="true"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </span>
-                        </button>
-                        )}
-                      </div>
-                    </header>
-
-                    {/* Content Section — 正面常驻，hover 时翻到背面 */}
-                    <div className="library-card-body library-card-flip">
+                    <div className="library-card-flip">
                       <div className="library-card-flip-inner">
-                        <div className="library-card-flip-front">
+                        {/* ===== 正面：只放题目 + 到期 / 熟记度 ===== */}
+                        <div className="library-card-face library-card-face-front">
+                          <header className="library-card-header">
+                            <div className="library-card-head-left">
+                              <span
+                                className="library-card-deck"
+                                title={card.fullDeckName || card.deckName}
+                              >
+                                <span
+                                  className="library-card-deck-dot"
+                                  style={{ backgroundColor: topBarColor }}
+                                />
+                                <span className="truncate">{card.deckName}</span>
+                              </span>
+
+                              {cardFlagSpec && (
+                                <span
+                                  title={t(`flagLabel_${cardFlagNum}` as any)}
+                                  style={{
+                                    backgroundColor: cardFlagSpec.bgSoft,
+                                    color: cardFlagSpec.hex,
+                                  }}
+                                  className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 shrink-0"
+                                >
+                                  <span
+                                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                                    style={{ backgroundColor: cardFlagSpec.hex }}
+                                  />
+                                  <span>{t(`flagShort_${cardFlagNum}` as any)}</span>
+                                </span>
+                              )}
+
+                              {isSuspended ? (
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--status-warning-soft)] text-[var(--status-warning)] shrink-0">
+                                  {t('statusSuspended')}
+                                </span>
+                              ) : isBuried ? (
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-black/5 dark:bg-white/10 text-[#555558] dark:text-[#A1A1A6] shrink-0">
+                                  {t('statusBuried')}
+                                </span>
+                              ) : card.status === 'new' ? (
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--status-info-soft)] text-[var(--status-info)] shrink-0">
+                                  {t('statusNew')}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {librarySelectionMode && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  appActions.toggleCardSelection(card.id);
+                                }}
+                                aria-pressed={isSelected}
+                                aria-label={card.front}
+                                className="-my-1 -me-1 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1"
+                              >
+                                <span
+                                  className={`w-4.5 h-4.5 rounded-[5px] flex items-center justify-center transition-colors ${
+                                    isSelected
+                                      ? 'bg-[var(--brand)] text-white shadow-2xs'
+                                      : 'border border-[#C7C7CC] dark:border-[#48484A] group-hover:border-[var(--brand)]/60 bg-white/90 dark:bg-[#20202A]/90'
+                                  }`}
+                                >
+                                  {isSelected && (
+                                    <svg
+                                      className="w-3 h-3"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="3"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      aria-hidden="true"
+                                    >
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  )}
+                                </span>
+                              </button>
+                            )}
+                          </header>
+
                           <h3
-                            className="library-card-title text-[#1D1D1F] dark:text-white select-text cursor-text"
+                            className="library-card-title text-[#1D1D1F] dark:text-[#F2F3F7] select-text cursor-text"
                             dangerouslySetInnerHTML={{
                               __html: frontPreviewHtml,
                             }}
                           />
+
+                          <footer className="library-card-foot">
+                            <div className="library-card-stats">
+                              <span
+                                className={`library-card-stat ${
+                                  card.status === 'due'
+                                    ? 'is-due'
+                                    : (card.dueRaw ?? 999) <= 7
+                                    ? 'is-soon'
+                                    : ''
+                                }`}
+                                title={card.dueText}
+                              >
+                                <svg
+                                  width="13"
+                                  height="13"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  aria-hidden="true"
+                                >
+                                  <circle cx="12" cy="12" r="9" />
+                                  <path d="M12 7v5l3 2" />
+                                </svg>
+                                <span className="num">{card.dueText}</span>
+                              </span>
+
+                              <span
+                                className="library-card-stat"
+                                title={`${t('masteryLabel')} ${card.mastery}%`}
+                              >
+                                <svg
+                                  className="library-card-ring"
+                                  width="13"
+                                  height="13"
+                                  viewBox="0 0 16 16"
+                                  aria-hidden="true"
+                                >
+                                  <circle
+                                    className="ring-track"
+                                    cx="8"
+                                    cy="8"
+                                    r="6"
+                                    fill="none"
+                                    strokeWidth="2.4"
+                                  />
+                                  <circle
+                                    cx="8"
+                                    cy="8"
+                                    r="6"
+                                    fill="none"
+                                    strokeWidth="2.4"
+                                    strokeLinecap="round"
+                                    stroke={masteryColor}
+                                    strokeDasharray="37.7"
+                                    strokeDashoffset={
+                                      37.7 * (1 - Math.min(100, Math.max(0, card.mastery)) / 100)
+                                    }
+                                  />
+                                </svg>
+                                <span className="num">{card.mastery}%</span>
+                              </span>
+                            </div>
+                          </footer>
                         </div>
-                        <div className="library-card-flip-back">
-                          <div
-                            className={`library-card-snippet transition-colors ${
-                              isDark
-                                ? 'bg-[#14151B]/75 border-[#252732] text-[#A1A1A6]'
-                                : 'bg-[#F7F8FA] border-[#ECEEF2] text-[#5C5F66]'
-                            }`}
-                          >
-                            {hasBackPreview ? (
-                              <div
-                                className="library-card-snippet-body select-text cursor-text"
-                                dangerouslySetInnerHTML={{
-                                  __html: backPreviewHtml,
+
+                        {/* ===== 背面：答案 + 完整标签 + 操作 ===== */}
+                        <div className="library-card-face library-card-face-back">
+                          <div className="library-card-label">{t('cardBackLabel')}</div>
+
+                          {hasBackPreview ? (
+                            <div
+                              className="library-card-answer select-text cursor-text"
+                              dangerouslySetInnerHTML={{
+                                __html: backPreviewHtml,
+                              }}
+                            />
+                          ) : (
+                            <p className="library-card-answer opacity-50 italic select-none">
+                              {t('noBackContentPlaceholder')}
+                            </p>
+                          )}
+
+                          {card.tags.length > 0 && (
+                            <div className="library-card-tags">
+                              {card.tags.map((tg) => (
+                                <span key={tg}>#{tg}</span>
+                              ))}
+                            </div>
+                          )}
+
+                          <footer className="library-card-foot library-card-foot-back">
+                            <div className="library-card-actions">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  appActions.openCardEditor(card);
                                 }}
-                              />
-                            ) : (
-                              <p className="library-card-snippet-body opacity-50 italic select-none">
-                                {t('noBackContentPlaceholder')}
-                              </p>
-                            )}
-                          </div>
+                                aria-label={t('editCardTitle')}
+                                title={t('editCardTitle')}
+                                className="library-card-edit-btn"
+                              >
+                                <svg
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  aria-hidden="true"
+                                >
+                                  <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" />
+                                  <path d="m13.5 6.5 4 4" />
+                                </svg>
+                                <span>{t('editBtnShort')}</span>
+                              </button>
+                            </div>
+                          </footer>
                         </div>
                       </div>
                     </div>
-
-                    {/* Footer Section */}
-                    <footer className="library-card-footer border-black/[0.05] dark:border-white/[0.06] text-[11px]">
-                      <div className="library-card-footer-meta text-[#8E8E93] text-[11px]">
-                        <span className="library-card-due" title={card.dueText}>
-                          <span className="truncate">{card.dueText}</span>
-                        </span>
-                        <span
-                          className={`px-1.5 py-0.5 rounded-md font-semibold text-[10px] shrink-0 whitespace-nowrap ${
-                            card.mastery >= 80
-                              ? 'bg-[var(--status-success-soft)] text-[var(--status-success)]'
-                              : card.mastery >= 50
-                              ? 'bg-[var(--brand-soft)] text-[var(--brand-text)]'
-                              : card.mastery > 0
-                              ? 'bg-[var(--status-warning-soft)] text-[var(--status-warning)]'
-                              : 'bg-black/5 dark:bg-white/5 text-[#8E8E93]'
-                          }`}
-                        >
-                          {t('masteryLabel')} {card.mastery}%
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          appActions.openCardEditor(card);
-                        }}
-                        aria-label={t('editCardTitle')}
-                        className="library-card-edit-btn min-h-6.5 h-6.5 px-2.5 rounded-lg text-[11px] font-medium inline-flex items-center gap-1 cursor-pointer transition-colors bg-[var(--brand-soft)] text-[var(--brand-text)] hover:bg-[var(--brand)] hover:text-white shrink-0 shadow-2xs focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
-                        title={t('editCardTitle')}
-                      >
-                        <svg
-                          className="w-3 h-3 shrink-0"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                          <path d="m15 5 4 4" />
-                        </svg>
-                        <span>{t('editBtnShort')}</span>
-                      </button>
-                    </footer>
                   </article>
                 );
               })}

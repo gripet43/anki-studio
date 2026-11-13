@@ -15,6 +15,16 @@
 
 ## [Unreleased]
 
+## [v1.4.48] - 2026-11-13
+
+- **[DeepSeek] Gallery 小卡按参考稿重构：延迟翻面、纸面反光、正反面分工**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)）：
+  - **翻面节奏**：hover 后 **220ms 才翻**（鼠标只是划过不会误触发），离开立即翻回；时长 640ms、`cubic-bezier(0.22, 1, 0.36, 1)`，并加一道很淡的纸面反光（sheen）扫过；
+  - **正面只放**：牌组（圆点 + 名称）、旗标/状态、题目（3 行截断）、到期（时钟图标，今天/逾期高亮、7 天内次强调）、熟记度（小圆环 + 百分比，按 90/60 分档着色）；
+  - **背面放**：答案（4 行截断）、完整标签、编辑操作；背面底部有分隔线；
+  - 卡片 hover 时轻微抬升 + 阴影加深，`prefers-reduced-motion` 下改为淡入淡出；
+  - 多选模式勾选框保留在正面右上角，Table 视图不变。
+  - **验证**：`tsc --noEmit`、前端单元 63 项、Bundle 审计、Python 140 项、隔离场景冒烟 692/692、打包全绿。版本 1.4.47 → 1.4.48。
+
 ## [v1.4.47] - 2026-11-13
 
 - **[DeepSeek] Gallery 小卡翻转动画放慢并改为对称缓动**（改 [`frontend/src/index.css`](frontend/src/index.css)）：460ms 的快速翻转变慢为 **780ms**，缓动由偏「快出慢停」的 `cubic-bezier(0.22, 1, 0.36, 1)` 改为更从容的对称缓动 `cubic-bezier(0.65, 0.05, 0.36, 1)`（EaseInOutCubic 风格），翻转起始与收尾都更柔和；`prefers-reduced-motion` 仍直接切换。
