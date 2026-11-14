@@ -1,12 +1,69 @@
 # Anki Studio
 
-> 专为 Anki 打造的现代化、桌面级沉浸式记忆工作区。以 Apple 人机交互设计规范（HIG）为审美基准，界面支持 16 种语言，并沿用 Anki 原生同步链路（不介入其数据流），与 AnkiWeb 双向同步兼容。
-
-![Anki Studio 界面预览](docs/assets/anki-studio-preview.gif)
+**[English](#english) · [简体中文](#简体中文)** · **[AnkiWeb Add-on (`1071937836`)](https://ankiweb.net/shared/info/1071937836)**
 
 ---
 
-## 🌟 核心特性
+<a id="english"></a>
+
+> A calm, Apple HIG–inspired desktop workspace for Anki — built for focused daily study with FSRS analytics, Vacation Mode, Schedule Relief, and **zero mini-games**. Completely compatible with official AnkiWeb sync and 16 interface languages.
+
+![Anki Studio Preview](docs/assets/anki-studio-preview.gif)
+
+## Quick Install
+
+1. Open Anki (**26.09.4 or later** on macOS, Windows, or Linux).
+2. Go to **Tools → Add-ons → Get Add-ons...**
+3. Enter add-on code: **`1071937836`**
+4. Restart Anki.
+
+> **Instant Escape Hatch:** Press `Ctrl+Opt+M` (macOS) / `Ctrl+Alt+M` (Windows & Linux), or click the toolbar/Tools menu toggle anytime to switch back to classic Anki in one second.
+
+---
+
+## Highlights
+
+- **Distraction-Free Workspace** — Today Dashboard with daily goal ring, streak tracker, 26×7 learning heatmap, deck mastery bars derived harmoniously from your accent color, and weekly review rhythm.
+- **Calm Reviewer** — spacious centered card stage with FSRS interval previews (`Again / Hard / Good / Easy`), Cloze, MathJax/KaTeX, flags, tags, and instant Light / Dark / True OLED themes across 8 accent palettes.
+- **FSRS Analytics & Memory Insights** — 30-day due workload forecast, card maturity lifecycle breakdown, 12-week historical retention trend, 24-hour focus breakdown, and strict FSRS True Retention.
+- **Burnout Shield (`Vacation Mode` & `Schedule Relief`)** — freeze new-card limits, snapshot & shift due dates without breaking intervals or streaks, spread overdue backlogs smoothly over *N* days, or trigger a curated 10–15 card **Light Session** on exhausted days.
+- **Fast Card Library** — filter by status, difficulty, flag, tag, or deck; multi-select to batch edit, suspend, bury, move, or delete.
+- **Safe Script & Image Occlusion Compatibility** — write Cloze notes, tables, and math natively; template-driven and native Image Occlusion cards render faithfully in isolated **Compatibility Mode** without flattening or altering your original notes.
+- **16 Interface Languages** — auto-matches your Anki locale across English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Français, Español, Italiano, Português (Brasil), Русский, Nederlands, Polski, Türkçe, Tiếng Việt, and العربية.
+
+---
+
+## Screenshots
+
+| Today Dashboard (Light) | Calm Cloze Reviewer |
+|---|---|
+| ![Dashboard](docs/assets/screenshots/01-dashboard.png) | ![Reviewer](docs/assets/screenshots/02-reviewer.png) |
+
+| Card Library (Grid + KaTeX) | FSRS Analytics (Dark Mode) |
+|---|---|
+| ![Card Library](docs/assets/screenshots/03-library.png) | ![FSRS Stats](docs/assets/screenshots/04-stats-dark.png) |
+
+| Schedule Relief | Vacation Mode |
+|---|---|
+| ![Schedule Relief](docs/assets/screenshots/05-relief.png) | ![Vacation Mode](docs/assets/screenshots/05-vacation.png) |
+
+---
+
+## Safety, Compatibility & Privacy
+
+- **Anki Requirement**: **Anki 26.09.4 or later** (`min_point_version: 260904`, Qt6 / Python 3.13) on macOS, Windows, and Linux.
+- **100% Native Anki Writes**: All writes go exclusively through Anki's official Python API (`col.update_card`, `col.sched.*`), letting Anki maintain `mod` / `usn` directly so **AnkiWeb sync remains untouched**.
+- **Privacy First**: Card contents, deck names, tags, and search queries **never leave your device**. Optional anonymous usage counters (launches, daily activity, session-size buckets, feature usage) can be disabled anytime in **Settings → About**, or pointed to a self-hosted endpoint (`scripts/analytics-worker/`).
+
+---
+
+<a id="简体中文"></a>
+
+## 简体中文
+
+> 专为 Anki 打造的现代化、桌面级沉浸式记忆工作区。以 Apple 人机交互设计规范（HIG）为审美基准，界面支持 16 种语言，并沿用 Anki 原生同步链路（不介入其数据流），与 AnkiWeb 双向同步兼容。
+
+### 🌟 核心特性
 
 - **macOS 沉浸式标题栏**：无缝延伸至原生红黄绿交通灯后方，支持无感拖拽与系统级窗口缩放。
 - **0 毫秒首帧启动**：Qt 底层背景颜色预注入 + HTML 预挂载骨架，彻底消除传统 Web 插件冷启动白屏。
@@ -19,11 +76,12 @@
 
 ---
 
-## 📖 设计与开发规范手册
+### 📖 设计与开发规范手册
 
 为保持后续迭代的代码与视觉一致性，请务必参阅项目内部规范标准：
 
 👉 **[详细设计规范与开发工程标准手册 (docs/DESIGN_AND_DEV_GUIDELINES.md)](docs/DESIGN_AND_DEV_GUIDELINES.md)**  
+👉 **[AnkiWeb 上架文案与多语言描述 (docs/ANKIWEB_LISTING.md)](docs/ANKIWEB_LISTING.md)**  
 👉 **[项目改动日志与多助手协同协议 (CHANGELOG.md)](CHANGELOG.md)**
 
 该文档涵盖：
@@ -35,9 +93,9 @@
 
 ---
 
-## 🛠️ 本地开发与构建
+### 🛠️ 本地开发与构建
 
-### 1. 前端开发
+#### 1. 前端开发
 ```bash
 cd frontend
 npm install
@@ -45,50 +103,43 @@ npm run dev      # 启动本地开发热更新服务器 (localhost:5173)
 npm run build    # 打包生产静态资源到 web/ 目录
 ```
 
-### 2. 自动化测试与体检
+#### 2. 自动化测试与体检
 ```bash
 node tests/test_frontend_bundle.mjs                   # 前端字符串审计：护栏 / IPC / 样式 / i18n
-node tests/frontend/run.mjs                           # 前端单元套件：纯逻辑 + 叶子组件渲染（84 项）
-python3 tests/frontend/run_browser.py                 # 可选：无头 Chrome 跑「编辑器→字段」DOM 往返（8 项，缺 Chrome 自动跳过）
+node tests/frontend/run.mjs                           # 前端单元套件：纯逻辑 + 叶子组件渲染
+python3 tests/frontend/run_browser.py                 # 可选：无头 Chrome 跑「编辑器→字段」DOM 往返（缺 Chrome 自动跳过）
 python3 tests/scenarios/frontend_audit.py              # 前端静态审计：DOM target 防御 / helper 使用（仅需 Python）
-python3 -m unittest discover -s tests -p "test_*.py"  # Python 侧单元测试（141 项，含兼容性自检、通用修复与 CSS 解析回归）
+python3 -m unittest discover -s tests -p "test_*.py"  # Python 侧单元测试（含兼容性自检、通用修复与 CSS 解析回归）
 
-cd tests/scenarios && ./gate.sh                       # 隔离冒烟 + 前端静态审计：11 个场景 / 692 项检查（不动真实数据）
+cd tests/scenarios && ./gate.sh                       # 隔离冒烟 + 前端静态审计（不动真实数据）
 python3 tests/apkg/run.py                             # 真实 .apkg 显示兼容性：17 个排名卡组（需本地卡组，约 16 秒）
 ```
 
 前三组都必须全绿再提交；改完还要跑一次 `npm run build`，确保 `web/assets` 与源码同步。
-改到桥接层业务逻辑时，再跑一次场景冒烟。前端单元套件只依赖 `frontend/node_modules`
-里已有的 esbuild，无需额外安装测试框架。
+改到桥接层业务逻辑时，再跑一次场景冒烟。前端单元套件只依赖 `frontend/node_modules` 里已有的 esbuild，无需额外安装测试框架。
 
-### 3. 打包发布
+#### 3. 打包发布
 ```bash
 python3 scripts/build_ankiaddon.py
 ```
 打包完成后会在根目录生成 `anki_modern_os.ankiaddon` 安装包，并打印其 SHA-256；随后自动复制一份到 `~/Downloads/anki_modern_os.ankiaddon`（覆盖旧包），方便直接上传 AnkiWeb 或装到另一台机器。加 `--no-downloads` 可关闭复制。
 
-脚本只按白名单收运行时文件（`__init__.py`、`manifest.json`、`config.json`、`config.md`、
-`bridge/`、`web/`），并保证：顶层不带包裹目录、不含 `__pycache__`、不打包 `meta.json`、
-随包的 `config.json` 会剥掉昵称与学习记录等私人数据。打包时还会自动把 `manifest.json`
-的 `mod` 刷新为当前时间戳（AnkiWeb 靠它判断版本更新），并校验 `min_point_version`
-与 `human_version` 是否合法。
+脚本只按白名单收运行时文件（`__init__.py`、`manifest.json`、`config.json`、`config.md`、`bridge/`、`web/`），并保证：顶层不带包裹目录、不含 `__pycache__`、不打包 `meta.json`、随包的 `config.json` 会剥掉昵称与学习记录等私人数据。打包时还会自动把 `manifest.json` 的 `mod` 刷新为当前时间戳（AnkiWeb 靠它判断版本更新），并校验 `min_point_version` 与 `human_version` 是否合法。
 
-### 4. 预览图
-README 与 AnkiWeb 简介页共用同一张循环 GIF，由 `scripts/build_preview_gif.py` 生成。
-把若干张同尺寸、同构图的整窗截图传进去即可重建，宽度、每帧停留时长、是否淡入都可调：
+#### 4. 预览图
+README 与 AnkiWeb 简介页共用同一张 5 帧英文循环 GIF，由 `scripts/build_preview_gif.py` 生成（当前规格 **1200×850 / 5 帧 × 2.8s / 613 KB**）。把若干张同尺寸、同构图、纯白底边的整窗截图传进去即可重建，宽度、每帧停留时长、是否淡入都可调：
 
 ```bash
 python3 scripts/build_preview_gif.py \
-  --frames 01-dashboard.jpg 02-search.jpg 03-relief.jpg 04-vacation.jpg \
+  --frames 01-dashboard.png 02-reviewer.png 03-library.png 04-stats-dark.png 05-relief.png \
   --out docs/assets/anki-studio-preview.gif --width 1200 --hold-ms 2800
 ```
 
-GIF 只有 256 色，画质上有几个已经踩过并写在脚本 docstring 里的坑（JPEG 白噪声污染调色板、
-全局调色板反而放大会差、抖动与预模糊是负收益），改参数前建议先读一遍。
+GIF 只有 256 色，画质上有几个已经踩过并写在脚本 docstring 里的坑（JPEG 白噪声污染调色板、全局调色板反而放大色差、抖动与预模糊是负收益），改参数前建议先读一遍。
 
 ---
 
-## ✅ 兼容性
+### ✅ 兼容性
 
 | 项 | 说明 |
 |---|---|
@@ -99,18 +150,14 @@ GIF 只有 256 色，画质上有几个已经踩过并写在脚本 docstring 里
 | 运行时自检 | 启动时校验 Anki 版本、4 个原生界面补丁与 8 个生命周期钩子；任一失效会在控制台打印 `patch health` 报告，也可通过 `get_patch_health` 读取 |
 | 网络 | 同步仍由 Anki 原生完成；可选的匿名使用统计只上报计数（不含卡片内容），可在设置中关闭 |
 
-> 为什么下限写死在一个具体版本：Anki 的兼容判断是 `int_version() < min_point_version`，
-> 而 `int_version()` 是 `YYMMDD` 整数（26.9.4 → `260904`）。写一个小数字（例如 `26`）
-> 等于宣称兼容所有版本，会让旧版用户装上一个必然崩溃的插件。下限可以下探，
-> 但必须在对应 Anki 版本上实测通过后再改。
+> 为什么下限写死在一个具体版本：Anki 的兼容判断是 `int_version() < min_point_version`，而 `int_version()` 是 `YYMMDD` 整数（26.9.4 → `260904`）。写一个小数字（例如 `26`）等于宣称兼容所有版本，会让旧版用户装上一个必然崩溃的插件。下限可以下探，但必须在对应 Anki 版本上实测通过后再改。
 
-## 📄 许可
+### 📄 许可
 
 本项目以 [MIT License](LICENSE) 发布。
 
-## 隐私与匿名统计
+### 隐私与匿名统计
 
 - 卡片内容、牌组名、标签、搜索词、学习记录**永远不会上传**；所有学习数据只存在你自己的 Anki 里。
 - 可选匿名统计（默认开启，设置 → 关于可关闭）：只上报启动、日活、复习会话张数区间、功能使用计数，以及版本 / 系统 / Anki 版本 / 界面语言 / 国家地区代码 / 时区偏移 / 随机安装 ID 的哈希。
 - 统计端点可自建（见 `scripts/analytics-worker/`）；`analytics_endpoint` 为空时插件完全不发请求。
-

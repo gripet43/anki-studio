@@ -1,54 +1,37 @@
-# AnkiWeb 上架资料（v1.5.3）
+# AnkiWeb 上架资料（v1.5.7+ / 出海优化版）
 
-> 上传入口：<https://ankiweb.net/shared/addons> → Upload
+> 上传入口：<https://ankiweb.net/shared/addons> → Edit / Upload
 > 表单只有五个字段：Title、Tags、Support Page、Branches、Description。
 
 ---
 
 ## 1. Title（限 80 字符）
 
-表单对 Title 的说明是「A one-line description, less than 80 characters」，它出现在插件目录的列表页。
+表单对 Title 的说明是「A one-line description, less than 80 characters」，它出现在 AnkiWeb 插件目录的列表页并直接参与站内关键词检索。
 
-这里要的不是「说明功能」，而是**让任何语言的用户在扫列表时第一眼认出自己的文字**：`Anki Studio` 之后依次排开各语言里「工作室」这个词本身。读者看到母语的那个词，会自动得出「这插件我看得懂」的结论——比写 `16 languages` 强，因为数字需要经过一次推理，而母语词是零成本的。
+英文/国际用户搜索插件时常输入 `modern`、`UI`、`theme`、`dashboard`、`workspace`、`FSRS` 等关键词。相比纯品牌多语言词组，**英文价值主张优先 + 多语言能力提示**能让搜索者在一秒内看懂定位并点击进入。
 
-**推荐（72 字符，7 种语言）**
+**推荐（66 字符，高点击率 + 强关键词覆盖）**
 
 ```
-Anki Studio · 工作室 · スタジオ · 스튜디오 · Estudio · Atelier · Werkstatt · Студия
+Anki Studio — Modern UI Workspace, Dashboard & FSRS (16 Languages)
 ```
-
-| 词 | 语言 | 顺带覆盖 |
-|---|---|---|
-| 工作室 | 中文（简繁同形） | zh-CN / zh-TW |
-| スタジオ | 日本語 | |
-| 스튜디오 | 한국어 | |
-| Estudio | Español | 葡语 Estúdio 只差一个重音符，读者照样认得出 |
-| Atelier | Français | |
-| Werkstatt | Deutsch | 荷兰语 Werkplaats 同源，可类推 |
-| Студия | Русский | 乌克兰语、保加利亚语同形或近似 |
-
-**为什么停在 7 个**：以 ` · ` 分隔实测，第 8 个词（Estúdio 或 Stüdyo）会把标题推到 **82 / 81 字符**，硬超限。7 是这套写法的上限，剩下的 8 字符放不下任何有意义的词。
-
-**刻意没列的两种语言**：`it` 和 `pl` 的「工作室」就是 **Studio**——与标题里已有的英文原词一字不差。列上去只占字符、不产生任何新信息，这两国读者其实已经看懂了。
-
-**代价**：标题从此不再说明「插件干什么用」。这是有意的取舍——功能归 Tags 和 Description 承担，而 Description 首句 `Anki Studio turns Anki's main window into a desktop-grade workspace` 正是列表页正文的第一行，扫到标题的人往下拉一行就能补上功能信息。
 
 <details>
 <summary>其他备选（字符数均实测）</summary>
 
 | 方案 | 字符 | 内容 | 取舍 |
 |---|---|---|---|
-| 窄分隔 9 种 | 76 | `Anki Studio·工作室·スタジオ·스튜디오·Estudio·Atelier·Werkstatt·Студия·Stüdyo·Werkplaats` | 多塞土语、荷语，但无空格全挤在一起，扫读变慢 |
-| 窄分隔 8 种 | 65 | `Anki Studio·工作室·スタジオ·스튜디오·Estudio·Atelier·Werkstatt·Студия·Stüdyo` | 同上，且省下的空间没处用 |
-| 7 种 +「桌面工作区」 | 71 | `Anki Studio · 工作室 · スタジオ · 스튜디오 · Estudio · Atelier · Werkstatt · 桌面工作区` | 补回一点功能暗示，但要挤掉一个语言位 |
-| 功能描述优先 | 56 | `Anki Studio — immersive desktop workspace · 16 languages` | 语言信号变成需要推理的数字 |
+| 多语言词组（旧版） | 72 | `Anki Studio · 工作室 · スタジオ · 스튜디오 · Estudio · Atelier · Werkstatt · Студия` | 缺少英文功能关键词（modern / ui / dashboard / fsrs），列表搜索不易命中 |
+| 极简 + 16 语 | 64 | `Anki Studio — Modern Anki Workspace, Dashboard & FSRS (16 Langs)` | 缩写略影响阅读完整度 |
+| 极简聚焦版 | 65 | `Anki Studio — Modern Minimalist Workspace, Dashboard & FSRS Stats` | 缺少多语言信号，但纯英文搜索意图更聚焦 |
 
 </details>
 
 ## 2. Tags（空格分隔）
 
 ```
-anki addon ui interface theme dashboard scheduler review srs productivity
+anki addon ui theme dashboard modern minimalist fsrs scheduler analytics
 ```
 
 ## 3. Support Page（必须以 http 开头）
@@ -57,64 +40,61 @@ anki addon ui interface theme dashboard scheduler review srs productivity
 https://github.com/gripet43/anki-studio/issues
 ```
 
-仓库已于 2026-11-12 转为 public，链接与描述里的图片直链均可匿名访问。**上传前先确认要引用的文件已经推送到 `main`**，否则 raw 直链仍是 404（本地改了没推 = 线上没有）。
+仓库为 public，链接与描述里的 GitHub raw 图片直链均可匿名访问。**更新 AnkiWeb 文案前请确保对应资产已推送到 GitHub `main` 分支**。
 
 ## 4. Branches
 
 只保留默认分支即可。AnkiWeb 会用包内 `manifest.json` 的 `min_point_version`（当前 `260904`）生成下载行，正常情况下页面会显示单行 **26.09.4+**。
 
-只有当你要为不同 Anki 版本提供不同构建时才需要「Add New Branch」，且非最后一条分支的 max version 需写成 `-2.1.66` 这种负值前缀。
-
 ---
 
 ## 5. Description
 
-表单说明：**Markdown 和 basic HTML tags 都支持**。以下整段复制即可。
+AnkiWeb 实测已原生支持标准 Markdown（包括 `##` 二级标题、加粗、行内代码、无序/有序列表、`---` 分隔线、图片与链接）。以下整段代码块可直接全选复制到 AnkiWeb **Description** 输入框。
 
-图片走 GitHub raw 直链，仓库公开后自动可用。
+预览动图由真实编译前端 + Python `BridgeRouter` + 英文模拟牌组渲染合成，再经 [`scripts/build_preview_gif.py`](../scripts/build_preview_gif.py) 量化生成：当前为 **1200×850 / 5 帧 × 2.8s / 14.0s / 613 KB**，内容依次是：
 
-预览图由 [`scripts/build_preview_gif.py`](../scripts/build_preview_gif.py) 生成（可复现，改版后重跑即可），当前为 **1200×850 / 4 帧 / 每帧 2.8 秒 / 564 KB**，内容依次是：今日概览 → 全局搜索 → 进度减负 → 休假模式。用硬切而非交叉淡入。
-
-```bash
-python3 scripts/build_preview_gif.py \
-  --frames 01-dashboard.jpg 02-search.jpg 03-relief.jpg 04-vacation.jpg \
-  --out docs/assets/anki-studio-preview.gif --width 1200 --hold-ms 2800
-```
-
-> **画质上的四件事，都实测过，别再往回改**
->
-> 1. **先拍平 JPEG 的白色噪声**。截图是 JPEG，白底带 ±1 色度噪声，会占掉调色板名额，把整片底向量化到 252 这类「脏白」——纯白像素从 58% 掉到 0%，观感就是整屏发灰、底色有噪点。量化前把所有接近纯白的像素统一成 255，即可复原。
-> 2. **不要用全局调色板**。曾把四帧拼成蒙太奇量化出一套共用调色板，想让换帧时底色不跳色；但共用调色板要迁就四帧的平均分布，单帧误差反而大：平均色差 **MAE 2.32**，逐帧自适应只要 **0.24**，差一个数量级。硬切播放时每帧本就独立出现，跳色问题不存在，共用调色板纯亏。
-> 3. **不要开抖动，也不要预模糊**。Pillow 的 `quantize(dither=...)` 在这条路径下被静默忽略（四组参数输出像素完全相同）；预模糊则把文字糊掉，MAE 从 0.24 涨到 0.60（0.4px）/ 1.32（0.7px）。LANCZOS 缩放自带抗锯齿，无需补模糊。
-> 4. **不交叉淡入**。3 步淡入会把体积从 564 KB 顶到 3.4 MB，且中间帧是两张图合成的、落在调色板分布之外，量化质量最差。
->
-> **一处已知短板**：四帧里只有首页是亮屏，后三帧都是弹窗叠加「压暗 + 模糊」的背景，平均亮度从 242 掉到 155–180，纯白占比 58% → 17%。这是模态层的真实表现，不宜靠调色补偿，但循环时会有明显「一帧亮、三帧灰」的落差。若能补两张亮屏截图（卡片库、复习界面），换掉其中一帧观感会整齐很多。
-
-正文共 16 段语言文案，顺序与 §1 标题呼应：英文打头（不设标题）、其余 15 段用 `## 语言名` 分隔。
-
-> **一处待验证**：已确认 AnkiWeb 一定渲染的是粗体、斜体、链接、图片、无序列表、`---` 分隔线（对着 Review Heatmap 的线上页面核过）。至于 `##` 二级标题这个语法，官方文档只写了「supports Markdown」，没有明确保证。万一上传后看到的是字面的 `## 简体中文`，把 15 处 `## ` 前缀批量换成 `**…**` 即可，分隔效果由已有的 `---` 承担，观感几乎不受影响。
+1. **Today Dashboard（浅色）**：日活环形进度、46 天连胜、`USMLE Step 1` / `Japanese Core 2K` 双牌组、26×7 热力图与周节奏
+2. **Reviewer（浅色）**：`Cardiology · Cloze Note`（Frank-Starling Law）、彩旗、FSRS 复习间隔按钮
+3. **Card Library（浅色）**：452 张卡片网格视图、医学填空 + KaTeX 公式 + 日语卡片混排
+4. **FSRS Analytics（深石墨暗黑模式）**：30 天负载预测、成熟度分布、12 周保持率趋势、Strict True Retention
+5. **Schedule Relief（浅色弹窗）**：积压平摊 7 天方案（另已在 `docs/assets/screenshots/05-vacation.png` 同步留存同风格 Vacation Mode 高清图）
 
 ```markdown
-Anki Studio turns Anki's main window into a desktop-grade workspace, while staying fully compatible with AnkiWeb sync.
+A calm, Apple HIG–inspired desktop workspace for Anki — with FSRS analytics, Vacation Mode, Schedule Relief, and zero mini-games.
 
 ![Anki Studio preview](https://raw.githubusercontent.com/gripet43/anki-studio/main/docs/assets/anki-studio-preview.gif)
 
-**What you get**
+## Quick Install
 
-- **Today overview** — streak, 26×7 study heatmap, deck mastery, weekly rhythm
-- **Deck colours derived from your accent colour** — 8 palettes × light / dark / OLED
-- **Vacation Mode** — freeze new-card limits, shift due dates, freeze your streak
-- **Schedule Relief** — spread overdue cards across N days without touching intervals
-- **Low-energy sessions** — a curated 10–15 card queue for exhausted days
-- **Rich-text card editor** — Cloze, image occlusion, tables, math
-- **16 interface languages**, with Cmd/Ctrl shortcuts that adapt to your OS
-- **Three ways back to native Anki** — hotkey, menu, toolbar button
-- **Card library & search** — filter by status, difficulty, flag, tag or deck; batch edit, suspend, bury, move or delete in multi-select mode
-- **Script-card compatibility** — multiple-choice templates, Image Occlusion and other template-driven cards render in a sandboxed compatibility mode
-- **Learning tips** — a quiet daily principle beside your decks, about making and reviewing cards
-- **Privacy-first.** Card contents, deck names, tags and search queries never leave your device. Optional anonymous usage counts (launches, daily activity, session-size buckets, feature usage) can be turned off in Settings; all writes go through Anki's official API, so AnkiWeb sync stays intact.
+1. Open Anki (**26.09.4 or later**) and go to **Tools → Add-ons → Get Add-ons...**
+2. Paste code: `1071937836`
+3. Restart Anki.
 
-**Requires Anki 26.09.4 or later.** MIT licensed. Source & issue tracker: https://github.com/gripet43/anki-studio
+## Built for Focus, Not Distractions
+
+Most Anki overhauls add mini-games, pets, or cluttered side panels. Anki Studio takes the opposite approach: clean typography, low-friction daily tracking, and burnout protection designed for serious learners.
+
+- **Today Dashboard** — daily progress ring, streak counter, 26×7 study heatmap, deck mastery bars, and weekly rhythm
+- **Calm Reviewer & Cloze Support** — spacious card stage, FSRS interval previews (`Again / Hard / Good / Easy`), flags, tags, and MathJax/KaTeX rendering
+- **FSRS Analytics & Memory Insights** — 30-day review workload forecast, card maturity breakdown, 12-week retention trend, 24-hour focus window, and strict FSRS True Retention
+- **Vacation Mode & Schedule Relief** — freeze new-card caps, snapshot & shift due dates without touching intervals, preserve streaks, spread overdue backlogs over *N* days, or start a curated 10–15 card **Light Session** on low-energy days
+- **Card Library & Batch Actions** — filter instantly by status, difficulty, flag, tag, or deck; multi-select to edit, suspend, bury, move, or delete in bulk
+- **Rich Card Editor & Script Compatibility** — write Cloze notes, tables, and math formatting natively; template-driven and Image Occlusion cards render faithfully in isolated **Compatibility Mode** (authoring/editing Image Occlusion masks stays in Anki's native editor so card structure is never altered)
+- **Light, Dark & True OLED Themes** — 3 display modes × 8 harmonious accent palettes synced cleanly across decks and charts
+
+## Safe by Design: Zero Lock-In
+
+- **100% Native Anki APIs** — every review, reschedule, and note edit runs through Anki's official Python API (`col.update_card` / `col.sched`), keeping **AnkiWeb sync** completely intact
+- **Instant Escape Hatch** — switch back to classic Anki anytime in 1 second via 3 built-in paths (`Ctrl+Opt+M` on macOS / `Ctrl+Alt+M` on Windows & Linux, Tools menu, or top-bar toggle)
+- **16 Interface Languages** — auto-follows your Anki language (English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Français, Español, Italiano, Português (Brasil), Русский, Nederlands, Polski, Türkçe, Tiếng Việt, العربية)
+
+## Privacy & Links
+
+Card contents, deck names, tags, and search queries **never leave your device**. Optional anonymous usage counts (app launches, daily active status, session-size buckets, feature counters) can be turned off anytime in **Settings**.
+
+- **Requires Anki 26.09.4 or later** (macOS, Windows, Linux) · **MIT License**
+- GitHub, full changelog & issue tracker: https://github.com/gripet43/anki-studio
 
 ---
 
@@ -127,7 +107,7 @@ Anki Studio 把 Anki 主窗口变成桌面级沉浸式工作区，同时与 Anki
 - **休假模式** — 冻结新卡上限、顺延到期日期、连胜冰冻
 - **进度减负** — 不改变间隔，把逾期卡平摊到 N 天
 - **低能量极简打卡** — 精选 10–15 张的轻量队列
-- **富文本制卡** — 挖空、图片遮挡、表格、公式
+- **富文本制卡** — 挖空、表格、公式（原生图片遮挡卡在兼容/只读模式中正常显示与复习）
 - **16 种界面语言**，快捷键自动适配 Cmd / Ctrl
 - **三重返回原生界面** — 快捷键、菜单、工具栏按钮
 - **卡片库与检索** — 按状态、难度、旗帜、标签或牌组筛选；多选模式下批量编辑、暂停、搁置、移动或删除
@@ -146,7 +126,7 @@ Anki Studio 把 Anki 主視窗變成桌面級沉浸式工作區，同時與 Anki
 - **休假模式** — 凍結新卡上限、順延到期日期、連勝冰凍
 - **進度減負** — 不改變間隔，把逾期卡平攤到 N 天
 - **低能量極簡打卡** — 精選 10–15 張的輕量佇列
-- **富文字製卡** — 挖空、圖片遮擋、表格、公式
+- **富文字製卡** — 挖空、表格、公式（原生圖片遮擋卡於相容／唯讀模式中正常顯示與複習）
 - **16 種介面語言**，快速鍵自動適配 Cmd / Ctrl
 - **三重返回原生介面** — 快速鍵、選單、工具列按鈕
 - **卡片庫與檢索** — 依狀態、難度、旗標、標籤或牌組篩選；在多選模式下批次編輯、暫停、擱置、移動或刪除
@@ -165,7 +145,7 @@ Anki Studio は Anki のメインウィンドウをデスクトップ級のワ�
 - **休暇モード** — 新規カード上限の凍結、期日の繰り下げ、連続記録の凍結
 - **負担軽減** — 間隔を変えずに期限切れカードを N 日に分散
 - **低エネルギー学習** — 10〜15 枚だけの軽量キュー
-- **リッチテキストエディタ** — 穴埋め、画像隠し、表、数式
+- **リッチテキストエディタ** — 穴埋め、表、数式（Image Occlusion カードの閲覧・復習は互換表示で対応）
 - **16 言語の UI**、ショートカットは Cmd / Ctrl を自動判別
 - **ネイティブ Anki に戻る手段が 3 つ** — ホットキー、メニュー、ツールバー
 - **カードライブラリと検索** — 状態・難易度・フラグ・タグ・デッキで絞り込み、複数選択で一括編集・一時停止・保留・移動・削除
@@ -184,7 +164,7 @@ Anki Studio는 Anki의 메인 창을 데스크톱급 작업 공간으로 바꿉�
 - **휴가 모드** — 새 카드 한도 동결, 만기일 미루기, 연속 기록 동결
 - **진도 완화** — 간격을 바꾸지 않고 만기 카드를 N일에 분산
 - **저에너지 학습** — 10~15장만 골라 주는 가벼운 큐
-- **리치 텍스트 편집기** — 빈칸, 이미지 가리기, 표, 수식
+- **리치 텍스트 편집기** — 빈칸, 표, 수식 (Image Occlusion 카드는 호환 모드로 읽기 전용 표시 및 복습 지원)
 - **16개 언어 UI**, 단축키는 Cmd / Ctrl 자동 적용
 - **네이티브 Anki로 돌아가는 세 가지 경로** — 단축키, 메뉴, 툴바 버튼
 - **카드 라이브러리와 검색** — 상태·난이도·플래그·태그·덱으로 필터링하고, 다중 선택으로 일괄 편집·일시 중지·묻기·이동·삭제
@@ -203,7 +183,7 @@ Anki Studio verwandelt das Hauptfenster von Anki in einen Arbeitsbereich im Desk
 - **Urlaubsmodus** — Limit für neue Karten einfrieren, Fälligkeiten verschieben, Streak einfrieren
 - **Pensum entlasten** — überfällige Karten ohne Änderung der Intervalle auf N Tage verteilen
 - **Lernsitzung mit wenig Energie** — eine kuratierte Warteschlange von 10–15 Karten
-- **Rich-Text-Editor** — Lücke, Bild-Ausblendung, Tabellen, Formeln
+- **Rich-Text-Editor** — Lücke, Tabellen, Formeln (native Image-Occlusion-Karten werden schreibgeschützt im Kompatibilitätsmodus angezeigt)
 - **16 Oberflächensprachen**, Cmd/Ctrl wird automatisch angepasst
 - **Drei Wege zurück zum nativen Anki** — Hotkey, Menü, Werkzeugleiste
 - **Kartenbibliothek & Suche** — filtern nach Status, Schwierigkeit, Flag, Tag oder Stapel; im Mehrfachauswahl-Modus bearbeiten, aussetzen, zurückstellen, verschieben oder löschen
@@ -222,7 +202,7 @@ Anki Studio transforme la fenêtre principale d'Anki en espace de travail de bur
 - **Mode vacances** — gel des limites de nouvelles cartes, report des échéances, gel de la série
 - **Alléger la charge** — répartir les cartes en retard sur N jours sans toucher aux intervalles
 - **Session à faible énergie** — une file de 10 à 15 cartes seulement
-- **Éditeur de cartes enrichi** — texte à trous, masquage d'image, tableaux, formules
+- **Éditeur de cartes enrichi** — texte à trous, tableaux, formules (les cartes Image Occlusion natives restent compatibles en lecture et révision)
 - **16 langues d'interface**, raccourcis Cmd/Ctrl adaptés automatiquement
 - **Trois retours vers Anki natif** — raccourci, menu, barre d'outils
 - **Bibliothèque et recherche de cartes** — filtrer par statut, difficulté, drapeau, étiquette ou paquet ; en mode sélection multiple, modifier, suspendre, reporter, déplacer ou supprimer
@@ -241,7 +221,7 @@ Anki Studio convierte la ventana principal de Anki en un espacio de trabajo de e
 - **Modo vacaciones** — congela límites de tarjetas nuevas, aplaza vencimientos, congela la racha
 - **Aliviar carga** — reparte las tarjetas atrasadas en N días sin tocar los intervalos
 - **Sesión de baja energía** — una cola de solo 10–15 tarjetas
-- **Editor de tarjetas enriquecido** — hueco, ocultación de imagen, tablas, fórmulas
+- **Editor de tarjetas enriquecido** — hueco, tablas, fórmulas (las tarjetas nativas de Image Occlusion se muestran fielmente en modo solo lectura)
 - **16 idiomas de interfaz**, con atajos Cmd/Ctrl automáticos
 - **Tres formas de volver a Anki nativo** — atajo, menú y botón de la barra
 - **Biblioteca y búsqueda de tarjetas** — filtra por estado, dificultad, bandera, etiqueta o mazo; en modo multiselección, edita, suspende, entierra, mueve o elimina en lote
@@ -260,7 +240,7 @@ Anki Studio trasforma la finestra principale di Anki in uno spazio di lavoro des
 - **Modalità vacanza** — blocca i limiti delle nuove carte, sposta le scadenze, congela la serie
 - **Alleggerisci il carico** — distribuisce le carte scadute su N giorni senza toccare gli intervalli
 - **Sessione a bassa energia** — una coda di sole 10–15 carte
-- **Editor di carte avanzato** — cloze, occultamento immagine, tabelle, formule
+- **Editor di carte avanzato** — cloze, tabelle, formule (le carte Image Occlusion native restano visibili e ripassabili in modalità compatibilità)
 - **16 lingue dell'interfaccia**, scorciatoie Cmd/Ctrl automatiche
 - **Tre modi per tornare ad Anki nativo** — scorciatoia, menu, barra degli strumenti
 - **Libreria e ricerca delle carte** — filtra per stato, difficoltà, bandiera, tag o mazzo; in modalità selezione multipla modifica, sospendi, rimanda, sposta o elimina
@@ -279,7 +259,7 @@ O Anki Studio transforma a janela principal do Anki em um espaço de trabalho de
 - **Modo férias** — congela limites de cartões novos, adia vencimentos, congela a sequência
 - **Aliviar carga** — distribui cartões atrasados em N dias sem alterar os intervalos
 - **Sessão de baixa energia** — uma fila de apenas 10–15 cartões
-- **Editor de cartões avançado** — cloze, oclusão de imagem, tabelas, fórmulas
+- **Editor de cartões avançado** — cloze, tabelas, fórmulas (cartões nativos de Image Occlusion são exibidos normalmente para revisão)
 - **16 idiomas de interface**, com atalhos Cmd/Ctrl automáticos
 - **Três formas de voltar ao Anki nativo** — atalho, menu e botão da barra
 - **Biblioteca e busca de cartões** — filtre por status, dificuldade, bandeira, etiqueta ou baralho; no modo de seleção múltipla, edite, suspenda, enterre, mova ou exclua em lote
@@ -298,7 +278,7 @@ Anki Studio превращает главное окно Anki в полноце�
 - **Режим отпуска** — заморозка лимита новых карт, сдвиг сроков, заморозка серии
 - **Разгрузка** — распределение просроченных карт на N дней без изменения интервалов
 - **Сессия «мало сил»** — очередь всего из 10–15 карт
-- **Редактор карт** — пропуск, скрытие части изображения, таблицы, формулы
+- **Редактор карт** — пропуск, таблицы, формулы (карточки Image Occlusion отображаются для повторения в режиме совместимости)
 - **16 языков интерфейса**, горячие клавиши Cmd/Ctrl подстраиваются автоматически
 - **Три способа вернуться в нативный Anki** — горячая клавиша, меню, кнопка на панели
 - **Библиотека и поиск карточек** — фильтр по статусу, сложности, флагу, тегу или колоде; в режиме множественного выбора — пакетное редактирование, приостановка, откладывание, перемещение и удаление
@@ -317,7 +297,7 @@ Anki Studio verandert het hoofdvenster van Anki in een desktop-werkruimte, volle
 - **Vakantiemodus** — limiet voor nieuwe kaarten bevriezen, vervaldata verschuiven, reeks bevriezen
 - **Werkdruk verlichten** — achterstallige kaarten over N dagen spreiden zonder intervallen te wijzigen
 - **Sessie met weinig energie** — een wachtrij van slechts 10–15 kaarten
-- **Rich-text kaarteditor** — invuloefening, afbeelding verbergen, tabellen, formules
+- **Rich-text kaarteditor** — invuloefening, tabellen, formules (native Image Occlusion-kaarten werken veilig in lees-/compatibiliteitsmodus)
 - **16 interfacetalen**, sneltoetsen passen Cmd/Ctrl automatisch aan
 - **Drie manieren terug naar native Anki** — sneltoets, menu, werkbalkknop
 - **Kaartenbibliotheek en zoeken** — filter op status, moeilijkheid, vlag, tag of set; bewerk, pauzeer, begraaf, verplaats of verwijder in bulk in de selectiemodus
@@ -336,7 +316,7 @@ Anki Studio zamienia główne okno Anki w pulpit klasy desktop, zachowując peł
 - **Tryb wakacyjny** — zamrożenie limitu nowych kart, przesunięcie terminów, zamrożenie serii
 - **Ulżenie obciążeniu** — rozłożenie zaległych kart na N dni bez zmiany interwałów
 - **Sesja na małej energii** — kolejka zaledwie 10–15 kart
-- **Edytor kart z formatowaniem** — luka, zasłanianie obrazu, tabele, wzory
+- **Edytor kart z formatowaniem** — luka, tabele, wzory (natywne karty Image Occlusion działają bez zmian w trybie podglądu i powtórek)
 - **16 języków interfejsu**, skróty Cmd/Ctrl dopasowują się automatycznie
 - **Trzy drogi powrotu do natywnego Anki** — skrót, menu, przycisk paska
 - **Biblioteka i wyszukiwanie kart** — filtruj według statusu, trudności, flagi, tagu lub talii; w trybie wielokrotnego wyboru edytuj, zawieś, odłóż, przenieś lub usuń zbiorczo
@@ -355,7 +335,7 @@ Anki Studio, Anki'nin ana penceresini masaüstü düzeyinde bir çalışma alan�
 - **Tatil modu** — yeni kart limitini dondur, vadeleri ötele, seriyi dondur
 - **Yükü hafiflet** — gecikmiş kartları aralıkları değiştirmeden N güne yay
 - **Düşük enerji oturumu** — yalnızca 10–15 kartlık bir kuyruk
-- **Zengin metin kart editörü** — boşluk doldurma, görsel maskeleme, tablolar, formüller
+- **Zengin metin kart editörü** — boşluk doldurma, tablolar, formüller (yerel Image Occlusion kartları uyumluluk modunda sorunsuz görüntülenir)
 - **16 arayüz dili**, Cmd/Ctrl kısayolları otomatik uyarlanır
 - **Yerel Anki'ye üç dönüş yolu** — kısayol, menü, araç çubuğu düğmesi
 - **Kart kitaplığı ve arama** — duruma, zorluğa, bayrağa, etikete veya desteye göre filtreleyin; çoklu seçimde toplu düzenleyin, askıya alın, gömün, taşıyın veya silin
@@ -374,7 +354,7 @@ Anki Studio biến cửa sổ chính của Anki thành không gian làm việc c
 - **Chế độ nghỉ phép** — đóng băng giới hạn thẻ mới, dời ngày đến hạn, đóng băng chuỗi ngày
 - **Giảm tải** — dàn đều thẻ quá hạn ra N ngày mà không đổi khoảng cách ôn tập
 - **Phiên ôn nhẹ** — hàng đợi chỉ 10–15 thẻ
-- **Trình soạn thẻ định dạng phong phú** — điền khuyết, che ảnh, bảng, công thức
+- **Trình soạn thẻ định dạng phong phú** — điền khuyết, bảng, công thức (thẻ Image Occlusion gốc hiển thị và ôn tập bình thường ở chế độ tương thích)
 - **16 ngôn ngữ giao diện**, phím tắt tự đổi Cmd / Ctrl
 - **Ba cách quay về Anki gốc** — phím tắt, menu, nút trên thanh công cụ
 - **Thư viện và tìm kiếm thẻ** — lọc theo trạng thái, độ khó, cờ, thẻ tag hoặc bộ thẻ; ở chế độ chọn nhiều, sửa, tạm dừng, hoãn, di chuyển hoặc xóa hàng loạt
@@ -393,7 +373,7 @@ Anki Studio biến cửa sổ chính của Anki thành không gian làm việc c
 - **وضع العطلة** — تجميد حد البطاقات الجديدة، تأجيل تواريخ الاستحقاق، تجميد السلسلة
 - **تخفيف العبء** — توزيع البطاقات المتأخرة على N أيام دون تغيير الفواصل
 - **جلسة الطاقة المنخفضة** — قائمة من 10–15 بطاقة فقط
-- **محرر بطاقات غني** — ملء الفراغ، إخفاء أجزاء الصورة، جداول، معادلات
+- **محرر بطاقات غني** — ملء الفراغ، جداول، معادلات (بطاقات Image Occlusion الأصلية تُعرض وتُراجع بأمان في وضع التوافق)
 - **16 لغة واجهة**، مع تكييف اختصارات Cmd / Ctrl تلقائيًا
 - **ثلاث طرق للعودة إلى Anki الأصلي** — اختصار، قائمة، زر شريط الأدوات
 - **مكتبة البطاقات والبحث** — تصفية حسب الحالة أو الصعوبة أو العلامة أو الوسم أو الرزمة؛ وفي وضع التحديد المتعدد عدّل أو علّق أو ادفن أو انقل أو احذف دفعةً واحدة
@@ -410,10 +390,12 @@ Anki Studio biến cửa sổ chính của Anki thành không gian làm việc c
 
 | 文件 | 用途 | 规格 |
 |---|---|---|
-| `docs/assets/anki-studio-preview.gif` | 描述顶部主视觉 | **1200×850、4 帧 × 2.8 秒、564 KB** |
-| `tests/reports/screenshots/r4/01-home.png` | 静态首页（GIF 加载失败时的后备） | 1296×776 |
-| `tests/reports/screenshots/r4/07-dark.png` | 深色主题 | 1280×800 |
+| [`docs/assets/anki-studio-preview.gif`](assets/anki-studio-preview.gif) | AnkiWeb 与 README 首屏主视觉 | **1200×850、5 帧 × 2.8s（14.0s）、613 KB** |
+| [`docs/assets/screenshots/01-dashboard.png`](assets/screenshots/01-dashboard.png) | Dashboard（英文浅色高清图） | 2944×2086 · 486 KB |
+| [`docs/assets/screenshots/02-reviewer.png`](assets/screenshots/02-reviewer.png) | Reviewer（英文 Cloze 背面 + FSRS 按钮） | 2944×2086 · 171 KB |
+| [`docs/assets/screenshots/03-library.png`](assets/screenshots/03-library.png) | Card Library（452 卡网格 + KaTeX 公式） | 2944×2086 · 494 KB |
+| [`docs/assets/screenshots/04-stats-dark.png`](assets/screenshots/04-stats-dark.png) | FSRS Analytics（深石墨暗黑模式） | 2944×2086 · 423 KB |
+| [`docs/assets/screenshots/05-relief.png`](assets/screenshots/05-relief.png) | Schedule Relief（积压平摊弹窗） | 2944×2086 · 592 KB |
+| [`docs/assets/screenshots/05-vacation.png`](assets/screenshots/05-vacation.png) | Vacation Mode（休假模式弹窗，Reddit/发帖备用） | 2944×2086 · 592 KB |
 
-GIF 由 4 张 **2944×2086 的 macOS 整窗截图**（今日概览 / 全局搜索 / 进度减负 / 休假模式）硬切合成，非录屏。四张原始 JPEG 合计约 1.5 MB，**没有入库**——为一张 564 KB 的预览图把仓库撑大不合算。要换素材时按「同尺寸、同构图、纯白外底」重新截即可，生成命令与全部画质注意事项见 README「预览图」小节和 `scripts/build_preview_gif.py` 的 docstring。
-
-体积上，AnkiWeb 列表页点进来的首屏就会加载它，**建议控制在 1.5 MB 以内**；当前 564 KB 有充足余量，真要换成操作录屏也别超过这个量级。
+新版英文 GIF 修复了旧版「1 帧亮、3 帧压暗灰弹窗」的亮度落差问题：改为 **3 张主界面亮屏 + 1 张深石墨 FSRS 统计 + 1 张 Schedule Relief 弹窗**，由 `1380×960` `@2x` 无头 Chrome 对真实 React 前端 + Python `BridgeRouter` 隔离渲染，外加纯白 `#FFFFFF` 底边与 macOS 窗口框，再通过 `scripts/build_preview_gif.py` 以逐帧自适应调色板生成。AnkiWeb 列表建议图片控制在 1.5 MB 以内，当前 **613 KB** 兼具秒开加载速度与清晰文字细节。
