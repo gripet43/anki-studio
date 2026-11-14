@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AnkiStudioLogo } from '../common/AnkiStudioLogo';
+import { Tooltip } from '../common/Tooltip';
 import { SyncStateIcon, SyncVisualState } from '../common/SyncStateIcon';
 import { usePresence } from '../../hooks/usePresence';
 import {
@@ -18,7 +19,12 @@ import {
   ThemeMode,
   useAppStore,
 } from '../../stores/useAppStore';
-import { callAnki, isAnkiNativeEnv } from '../../bridge/pycmd';
+import {
+  callAnki,
+  isAnkiNativeEnv,
+  REVIEW_CONTENT_SCALES,
+  ReviewStageWidth,
+} from '../../bridge/pycmd';
 import { ACCENT_COLOR_LIST, getAccentScale } from '../../utils/themeTokens';
 import { localDateKey } from '../../utils/localDate';
 
@@ -46,6 +52,10 @@ export const SettingsModal: React.FC = () => {
     tipsHiddenOn,
     analyticsEnabled,
     answerButtonMode,
+    autoPlayFrontAudio,
+    autoPlayBackAudio,
+    reviewStageWidth,
+    reviewContentScale,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(settingsInitialTab || 'appearance');
@@ -240,20 +250,21 @@ export const SettingsModal: React.FC = () => {
         className={`w-[800px] h-[560px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.35)] flex overflow-hidden ui-modal-panel relative ${modalSurface}`}
       >
         {/* Top Right Close Button */}
-        <button
-          type="button"
-          onClick={() => setAppState({ settingsOpen: false })}
-          className={`absolute top-4 end-4 z-20 w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
-            isDark ? 'text-[#8E8E93] hover:text-white hover:bg-white/10' : 'text-[#8E8E93] hover:text-black hover:bg-black/5'
-          }`}
-          title={`${t('close')} (Esc)`}
-          aria-label={t('close')}
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+        <Tooltip variant="compact" content={t('close')} shortcut="Esc" side="bottom">
+          <button
+            type="button"
+            onClick={() => setAppState({ settingsOpen: false })}
+            className={`absolute top-4 end-4 z-20 w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+              isDark ? 'text-[#8E8E93] hover:text-white hover:bg-white/10' : 'text-[#8E8E93] hover:text-black hover:bg-black/5'
+            }`}
+            aria-label={t('close')}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </Tooltip>
 
         {/* Left Settings Sidebar */}
         <div className={`w-[210px] shrink-0 border-e p-3.5 flex flex-col ${sidebarBg}`}>
@@ -360,13 +371,12 @@ export const SettingsModal: React.FC = () => {
                     const shortLabel = t(`accentShort_${a.id}` as any);
                     const fullLabel = t(`accentName_${a.id}` as any);
                     return (
-                      <button
-                        key={a.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        aria-label={fullLabel}
-                        title={fullLabel}
+                      <Tooltip key={a.id} variant="compact" content={fullLabel}>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          aria-label={fullLabel}
                         onClick={() => {
                           appActions.setAccentColor(a.id);
                           showToast(t('savedAccentToast', { name: shortLabel }));
@@ -421,6 +431,7 @@ export const SettingsModal: React.FC = () => {
                           )}
                         </div>
                       </button>
+                      </Tooltip>
                     );
                   })}
                 </div>
@@ -480,16 +491,20 @@ export const SettingsModal: React.FC = () => {
                           }`}
                         >
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-[12px] truncate leading-snug">
-                              {langOpt.nativeName}
-                            </span>
+                            <Tooltip variant="compact" content={langOpt.nativeName} onlyWhenTruncated>
+                              <span className="text-[12px] truncate leading-snug">
+                                {langOpt.nativeName}
+                              </span>
+                            </Tooltip>
                             {active && (
                               <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand)] shrink-0" />
                             )}
                           </div>
-                          <div className="text-[10px] text-[#8E8E93] truncate mt-0.5">
-                            {langOpt.subLabel}
-                          </div>
+                          <Tooltip variant="compact" content={langOpt.subLabel} onlyWhenTruncated>
+                            <div className="text-[10px] text-[#8E8E93] truncate mt-0.5">
+                              {langOpt.subLabel}
+                            </div>
+                          </Tooltip>
                         </button>
                       );
                     })}
@@ -611,6 +626,158 @@ export const SettingsModal: React.FC = () => {
                   >
                     {t('answerButtonsFour')}
                   </button>
+                </div>
+              </div>
+
+              {/* Audio Auto-Play */}
+              <div className={`rounded-xl border p-4 space-y-3.5 ${cardSurface}`}>
+                <div className="space-y-1">
+                  <div className="text-[13px] font-semibold">{t('settingsAutoPlayAudioTitle')}</div>
+                  <div className={`text-[11px] ${subText} leading-relaxed`}>
+                    {t('settingsAutoPlayAudioSub')}
+                  </div>
+                </div>
+
+                <div className={`divide-y ${isDark ? 'divide-white/[0.06]' : 'divide-[#E5E5EA]/70'}`}>
+                  <div className="pb-3 flex items-center justify-between gap-4">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="text-[12.5px] font-medium">{t('autoPlayFrontAudioTitle')}</div>
+                      <div className={`text-[11px] ${subText} leading-relaxed`}>
+                        {t('autoPlayFrontAudioSub')}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={autoPlayFrontAudio}
+                      aria-label={t('autoPlayFrontAudioTitle')}
+                      onClick={() => {
+                        const next = !autoPlayFrontAudio;
+                        appActions.updatePreferences({ autoPlayFrontAudio: next });
+                        if (!next && !autoPlayBackAudio) {
+                          appActions.stopAudio();
+                        }
+                      }}
+                      style={autoPlayFrontAudio ? { backgroundColor: currentScale.brand } : undefined}
+                      className={`w-12 h-6.5 shrink-0 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${
+                        autoPlayFrontAudio ? '' : isDark ? 'bg-[#3A3A48]' : 'bg-[#E5E5EA]'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                          autoPlayFrontAudio ? 'translate-x-5.5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="pt-3 flex items-center justify-between gap-4">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="text-[12.5px] font-medium">{t('autoPlayBackAudioTitle')}</div>
+                      <div className={`text-[11px] ${subText} leading-relaxed`}>
+                        {t('autoPlayBackAudioSub')}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={autoPlayBackAudio}
+                      aria-label={t('autoPlayBackAudioTitle')}
+                      onClick={() => {
+                        const next = !autoPlayBackAudio;
+                        appActions.updatePreferences({ autoPlayBackAudio: next });
+                        if (!next && !autoPlayFrontAudio) {
+                          appActions.stopAudio();
+                        }
+                      }}
+                      style={autoPlayBackAudio ? { backgroundColor: currentScale.brand } : undefined}
+                      className={`w-12 h-6.5 shrink-0 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${
+                        autoPlayBackAudio ? '' : isDark ? 'bg-[#3A3A48]' : 'bg-[#E5E5EA]'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                          autoPlayBackAudio ? 'translate-x-5.5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card Content Scale */}
+              <div className={`rounded-xl border p-4 space-y-3 ${cardSurface}`}>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-semibold">{t('reviewScaleTitle')}</span>
+                    <span className="text-[11px] font-mono text-[var(--brand-text)]">
+                      {reviewContentScale}%
+                    </span>
+                  </div>
+                  <div className={`text-[11px] ${subText} leading-relaxed`}>
+                    {t('reviewScaleSub')}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {REVIEW_CONTENT_SCALES.map((scaleOpt) => {
+                    const active = reviewContentScale === scaleOpt;
+                    return (
+                      <button
+                        key={scaleOpt}
+                        type="button"
+                        onClick={() => appActions.updatePreferences({ reviewContentScale: scaleOpt })}
+                        aria-pressed={active}
+                        className={`h-8 px-3.5 rounded-lg border text-[12px] font-mono font-medium cursor-pointer transition-colors ${
+                          active
+                            ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
+                            : isDark
+                            ? 'bg-white/[0.03] border-white/[0.08] text-[#C8C8D2] hover:bg-white/[0.07]'
+                            : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#F4F4F6]'
+                        }`}
+                      >
+                        {scaleOpt}%
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Card Stage Width */}
+              <div className={`rounded-xl border p-4 space-y-3 ${cardSurface}`}>
+                <div className="space-y-1">
+                  <div className="text-[13px] font-semibold">{t('reviewWidthTitle')}</div>
+                  <div className={`text-[11px] ${subText} leading-relaxed`}>
+                    {t('reviewWidthSub')}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {(
+                    [
+                      { value: 'auto', labelKey: 'reviewWidthAuto' },
+                      { value: 'standard', labelKey: 'reviewWidthStandard' },
+                      { value: 'wide', labelKey: 'reviewWidthWide' },
+                      { value: 'full', labelKey: 'reviewWidthFull' },
+                    ] as Array<{ value: ReviewStageWidth; labelKey: any }>
+                  ).map((opt) => {
+                    const active = reviewStageWidth === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => appActions.updatePreferences({ reviewStageWidth: opt.value })}
+                        aria-pressed={active}
+                        className={`h-8 px-3.5 rounded-lg border text-[12px] font-medium cursor-pointer transition-colors ${
+                          active
+                            ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
+                            : isDark
+                            ? 'bg-white/[0.03] border-white/[0.08] text-[#C8C8D2] hover:bg-white/[0.07]'
+                            : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#F4F4F6]'
+                        }`}
+                      >
+                        {t(opt.labelKey)}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>

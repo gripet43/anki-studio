@@ -7,6 +7,7 @@ import {
   isAnkiNativeEnv,
 } from '../../bridge/pycmd';
 import { usePresence } from '../../hooks/usePresence';
+import { Tooltip } from '../common/Tooltip';
 import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { getAccentScale } from '../../utils/themeTokens';
@@ -322,11 +323,10 @@ export const CustomStudyModal: React.FC = () => {
           const meta = ANKI_FLAG_PALETTE[fNum];
           const isSel = flag === String(fNum);
           return (
-            <button
-              key={fNum}
-              type="button"
-              onClick={() => setFlag(isSel ? 'all' : String(fNum))}
-              title={t(`flagLabel_${fNum}` as any)}
+            <Tooltip key={fNum} variant="compact" content={t(`flagLabel_${fNum}` as any)}>
+              <button
+                type="button"
+                onClick={() => setFlag(isSel ? 'all' : String(fNum))}
               className={`h-7 px-2 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-all ${
                 isSel
                   ? 'font-semibold shadow-2xs'
@@ -348,6 +348,7 @@ export const CustomStudyModal: React.FC = () => {
               />
               <span>{t(`flagShort_${fNum}` as any)}</span>
             </button>
+            </Tooltip>
           );
         })}
       </div>
@@ -426,14 +427,16 @@ export const CustomStudyModal: React.FC = () => {
               </select>
             </div>
 
-            <button
-              type="button"
-              onClick={() => appActions.closeCustomStudyModal()}
-              aria-label={t('close')}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors"
-            >
-              ✕
-            </button>
+            <Tooltip variant="compact" content={t('close')} shortcut="Esc" side="bottom">
+              <button
+                type="button"
+                onClick={() => appActions.closeCustomStudyModal()}
+                aria-label={t('close')}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors"
+              >
+                ✕
+              </button>
+            </Tooltip>
           </div>
         </header>
 
@@ -711,15 +714,26 @@ export const CustomStudyModal: React.FC = () => {
                     matchedCount > 0 ? 'bg-[var(--status-success)]' : 'bg-[var(--status-warning)]'
                   }`}
                 />
-                <span className="truncate">
-                  {t('customStudyMatchedSummary', {
+                <Tooltip
+                  variant="compact"
+                  content={t('customStudyMatchedSummary', {
                     matched: matchedCount,
                     limit: effectiveDrawCount,
                   })}
-                </span>
+                  onlyWhenTruncated
+                >
+                  <span className="truncate">
+                    {t('customStudyMatchedSummary', {
+                      matched: matchedCount,
+                      limit: effectiveDrawCount,
+                    })}
+                  </span>
+                </Tooltip>
               </span>
             ) : (
-              <span className={`truncate ${subText}`}>{t('customStudyModalSub')}</span>
+              <Tooltip variant="compact" content={t('customStudyModalSub')} onlyWhenTruncated>
+                <span className={`truncate ${subText}`}>{t('customStudyModalSub')}</span>
+              </Tooltip>
             )}
           </div>
 

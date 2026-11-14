@@ -7,6 +7,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { usePresence } from '../../hooks/usePresence';
+import { Tooltip } from '../common/Tooltip';
 import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { getAccentScale } from '../../utils/themeTokens';
@@ -215,13 +216,16 @@ export const VacationModal: React.FC = () => {
               </button>
             </div>
 
-            <button
-              onClick={() => appActions.closeVacationModal()}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors"
-              aria-label={t('close')}
-            >
-              ✕
-            </button>
+            <Tooltip variant="compact" content={t('close')} shortcut="Esc" side="bottom">
+              <button
+                type="button"
+                onClick={() => appActions.closeVacationModal()}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors"
+                aria-label={t('close')}
+              >
+                ✕
+              </button>
+            </Tooltip>
           </div>
         </header>
 
@@ -380,25 +384,29 @@ export const VacationModal: React.FC = () => {
 
                     {/* Fine-tune Stepper (- / N / +) */}
                     <div className="flex items-center h-8 rounded-lg border border-black/10 dark:border-white/10 px-1 bg-black/[0.02] dark:bg-white/[0.02]">
-                      <button
-                        type="button"
-                        onClick={() => setDays((prev) => Math.max(1, prev - 1))}
-                        className="w-6 h-6 rounded text-xs text-[#8E8E93] hover:text-current cursor-pointer"
-                        title="-1"
-                      >
-                        −
-                      </button>
+                      <Tooltip variant="compact" content={t('decreaseDaysBtn')}>
+                        <button
+                          type="button"
+                          onClick={() => setDays((prev) => Math.max(1, prev - 1))}
+                          aria-label={t('decreaseDaysBtn')}
+                          className="w-6 h-6 rounded text-xs text-[#8E8E93] hover:text-current cursor-pointer"
+                        >
+                          −
+                        </button>
+                      </Tooltip>
                       <span className="w-9 text-center text-[12px] font-mono font-semibold">
                         {days}d
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => setDays((prev) => Math.min(30, prev + 1))}
-                        className="w-6 h-6 rounded text-xs text-[#8E8E93] hover:text-current cursor-pointer"
-                        title="+1"
-                      >
-                        +
-                      </button>
+                      <Tooltip variant="compact" content={t('increaseDaysBtn')}>
+                        <button
+                          type="button"
+                          onClick={() => setDays((prev) => Math.min(30, prev + 1))}
+                          aria-label={t('increaseDaysBtn')}
+                          className="w-6 h-6 rounded text-xs text-[#8E8E93] hover:text-current cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </Tooltip>
                     </div>
                   </div>
                 </div>

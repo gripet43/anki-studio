@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { usePresence } from '../../hooks/usePresence';
+import { Tooltip } from '../common/Tooltip';
 import { formatShortcut, translate } from '../../i18n/translations';
 import { appActions, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
 import { copyTextToClipboard } from '../../utils/clipboard';
@@ -246,7 +247,6 @@ export const CommandPaletteModal: React.FC = () => {
       <button
         type="button"
         onClick={() => handleCopyText(getText(), side)}
-        title={title}
         aria-label={title}
         className={`${
           isInlineSide ? 'px-2 py-0.5 min-h-[24px]' : 'px-2.5 py-1'
@@ -335,7 +335,6 @@ export const CommandPaletteModal: React.FC = () => {
                     ? 'text-[#A1A1AA] hover:text-white bg-white/6 hover:bg-white/12'
                     : 'text-[#6E6E73] hover:text-[#1D1D1F] bg-black/5 hover:bg-black/10'
                 }`}
-                title={t('clearSearchBtn')}
                 aria-label={t('clearSearchBtn')}
               >
                 {t('clearSearchBtn')}
@@ -350,15 +349,16 @@ export const CommandPaletteModal: React.FC = () => {
                 <span>{t('searchingShort')}</span>
               </span>
             )}
-            <button
-              type="button"
-              onClick={() => setAppState({ cmdKOpen: false })}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-              title={`${t('close')} (Esc)`}
-              aria-label={t('close')}
-            >
-              ✕
-            </button>
+            <Tooltip variant="compact" content={t('close')} shortcut="Esc" side="bottom">
+              <button
+                type="button"
+                onClick={() => setAppState({ cmdKOpen: false })}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label={t('close')}
+              >
+                ✕
+              </button>
+            </Tooltip>
           </div>
         </div>
 
@@ -516,11 +516,18 @@ export const CommandPaletteModal: React.FC = () => {
 
                       <div className="min-w-0 flex-1">
                         <div
-                          className={`text-[13px] font-semibold truncate leading-snug ${
+                          className={`text-[13px] font-semibold leading-snug flex items-center gap-1.5 ${
                             isSelected ? 'text-[var(--brand-text)]' : ''
                           }`}
                         >
-                          {item.front}
+                          <Tooltip variant="compact" content={item.front} onlyWhenTruncated>
+                            <span className="truncate">{item.front}</span>
+                          </Tooltip>
+                          {(item.siblingCount || 1) > 1 && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-[var(--brand-soft)] text-[var(--brand-text)] shrink-0">
+                              ×{item.siblingCount}
+                            </span>
+                          )}
                         </div>
                         <div className="text-[11px] text-[#8E8E93] truncate mt-0.5 flex items-center gap-1.5">
                           <span className="font-medium text-[var(--brand-text)]">
@@ -564,13 +571,20 @@ export const CommandPaletteModal: React.FC = () => {
                   <div className="space-y-3">
                     {/* Header: Deck Badge & Single Copy Button */}
                     <div className="flex items-center justify-between">
-                      <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1.5 bg-[var(--brand-soft)] text-[var(--brand-text)]">
-                        <span
-                          className="w-1.5 h-1.5 rounded-full"
-                          style={{ backgroundColor: getDeckColorByHash(activeCard.deckId || activeCard.deckName) }}
-                        />
-                        <span>{activeCard.deckName}</span>
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1.5 bg-[var(--brand-soft)] text-[var(--brand-text)]">
+                          <span
+                            className="w-1.5 h-1.5 rounded-full"
+                            style={{ backgroundColor: getDeckColorByHash(activeCard.deckId || activeCard.deckName) }}
+                          />
+                          <span>{activeCard.deckName}</span>
+                        </span>
+                        {(activeCard.siblingCount || 1) > 1 && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-black/5 dark:bg-white/10 text-[#636366] dark:text-[#A1A1A6]">
+                            {t('subCardsCountBadge', { n: activeCard.siblingCount || 1 })}
+                          </span>
+                        )}
+                      </div>
 
                       {renderCopyButton({
                         side: 'all',

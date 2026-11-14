@@ -257,6 +257,44 @@ class DeckService:
         }
 
     @staticmethod
+    def _coerce_bool(val: Any, default: bool) -> bool:
+        if val is None:
+            return default
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, str):
+            low = val.strip().lower()
+            if low in ("true", "1", "yes", "on"):
+                return True
+            if low in ("false", "0", "no", "off", ""):
+                return False
+        return bool(val)
+
+    @classmethod
+    def _normalize_review_audio_prefs(cls, cfg: Dict[str, Any]) -> Tuple[bool, bool]:
+        """Normalizes front and back audio auto-play preferences with safe defaults."""
+        if not isinstance(cfg, dict):
+            return False, True
+        return (
+            cls._coerce_bool(cfg.get("auto_play_front_audio"), False),
+            cls._coerce_bool(cfg.get("auto_play_back_audio"), True),
+        )
+
+    @staticmethod
+    def _normalize_review_display_prefs(cfg: Dict[str, Any]) -> Tuple[str, int]:
+        """Normalizes and clamps review stage width and content scale preferences."""
+        raw_stage_width = str(cfg.get("review_stage_width") or "auto").strip()
+        review_stage_width = (
+            raw_stage_width if raw_stage_width in ("standard", "auto", "wide", "full") else "auto"
+        )
+        try:
+            raw_scale = int(cfg.get("review_content_scale", 100))
+        except (TypeError, ValueError):
+            raw_scale = 100
+        review_content_scale = raw_scale if raw_scale in (90, 100, 115, 130, 150) else 100
+        return review_stage_width, review_content_scale
+
+    @staticmethod
     def _studio_version() -> str:
         """Reads the add-on version from manifest.json (single source of truth)."""
         try:
@@ -437,6 +475,9 @@ class DeckService:
                             last_sync_ts = checked_ts
                     except Exception:
                         pass
+            review_stage_width, review_content_scale = self._normalize_review_display_prefs(cfg)
+            auto_play_front_audio, auto_play_back_audio = self._normalize_review_audio_prefs(cfg)
+
             return {
                 "userName": profile_name,
                 "greeting": self._get_greeting(now.hour, lang),
@@ -456,6 +497,10 @@ class DeckService:
                     "tipsHiddenOn": str(cfg.get("dashboard_tips_hidden_on") or ""),
                     "analyticsEnabled": bool(cfg.get("analytics_enabled", True)),
                     "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),
+                    "autoPlayFrontAudio": auto_play_front_audio,
+                    "autoPlayBackAudio": auto_play_back_audio,
+                    "reviewStageWidth": review_stage_width,
+                    "reviewContentScale": review_content_scale,
                     "debugMode": bool(cfg.get("debug_mode", False)),
                 },
                 "vacation": {
@@ -1859,6 +1904,8 @@ class DeckService:
                 "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
                 "tipsHiddenOn": str(cfg.get("dashboard_tips_hidden_on") or ""),
+                "autoPlayFrontAudio": cls._normalize_review_audio_prefs(cfg)[0],
+                "autoPlayBackAudio": cls._normalize_review_audio_prefs(cfg)[1],
                 "debugMode": bool(cfg.get("debug_mode", False)),
             },
             "vacation": {

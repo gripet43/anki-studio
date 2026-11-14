@@ -30,7 +30,7 @@ wrangler routes add stats.example.com/*
 { "analytics_endpoint": "https://stats.example.com/v1/events" }
 ```
 
-官方部署实例：`https://anki-studio-analytics.congtoubyby.workers.dev/v1/events`（已内置为默认端点）。
+官方部署实例：`https://anki.63096039.xyz/v1/events`（已内置为默认端点）。
 `analytics_endpoint` 设为空字符串时插件**完全不会发出任何请求**。
 
 ## 验证
@@ -56,10 +56,24 @@ curl -s -o /dev/null -w '%{http_code}\n' https://stats.example.com/v1/events \
 本地行为回归（不需要 Cloudflare 凭据，从仓库根目录跑）：
 
 ```bash
-node tests/test_analytics_worker.mjs   # 14 项，含 UA 白名单的正反向用例
+node tests/test_analytics_worker.mjs   # 19 项，含 UA 白名单、/dashboard 与 /v1/stats 鉴权用例
 ```
 
-## 看数据
+## 实时可视化看板（`/dashboard`）
+
+Worker 内置了一个无需外部 CDN 的单页实时看板（`GET /dashboard`）和聚合接口（`GET /v1/stats`）：
+* 支持查看 15 分钟 / 1 小时实时活跃、今日/昨日 DAU、7 日/30 日活跃、每日趋势、国家地区、插件版本、系统/语言/时区、功能热度与最近 15 条脱敏上报记录，并支持 30 秒自动刷新。
+* **必须先设置访问密钥才会放行数据**：
+
+```bash
+cd scripts/analytics-worker
+npx wrangler secret put DASHBOARD_TOKEN   # 输入你自定义的后台密码
+npx wrangler deploy
+```
+
+（也可以直接在 Cloudflare 控制台 **Workers & Pages → `anki-studio-analytics` → 设置 → 变量和机密** 添加名为 `DASHBOARD_TOKEN` 的 Secret，再部署新版 `worker.js`。）
+
+## 看数据（SQL 备用）
 
 ```bash
 # 日活

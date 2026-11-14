@@ -32,6 +32,101 @@ MODERN_DEFAULT_HEIGHT = 760
 MODERN_MIN_WIDTH = 860
 MODERN_MIN_HEIGHT = 600
 
+# Localized strings for Anki's native Qt menus / toolbar safety-net entry across
+# the 16 canonical languages supported by Anki Studio.
+_NATIVE_UI_STRINGS: Dict[str, Tuple[str, str, str]] = {
+    "zh-CN": (
+        "切换 Anki Studio / 原生界面",
+        "进入 Anki Studio",
+        "点击立即返回 Anki Studio 现代工作区",
+    ),
+    "zh-TW": (
+        "切換 Anki Studio / 原生介面",
+        "進入 Anki Studio",
+        "點擊立即返回 Anki Studio 現代工作區",
+    ),
+    "en": (
+        "Switch Anki Studio / Native UI",
+        "Enter Anki Studio",
+        "Click to return to Anki Studio workspace",
+    ),
+    "ja": (
+        "Anki Studio / ネイティブ画面を切り替え",
+        "Anki Studio へ",
+        "クリックして Anki Studio に戻る",
+    ),
+    "ko": (
+        "Anki Studio / 기본 화면 전환",
+        "Anki Studio로 이동",
+        "클릭하여 Anki Studio 작업 공간으로 돌아가기",
+    ),
+    "es": (
+        "Cambiar entre Anki Studio / interfaz nativa",
+        "Ir a Anki Studio",
+        "Haz clic para volver a Anki Studio",
+    ),
+    "fr": (
+        "Basculer Anki Studio / interface native",
+        "Aller vers Anki Studio",
+        "Cliquer pour revenir à Anki Studio",
+    ),
+    "de": (
+        "Zwischen Anki Studio / nativer Ansicht wechseln",
+        "Zu Anki Studio",
+        "Klicken, um zu Anki Studio zurückzukehren",
+    ),
+    "ru": (
+        "Переключить Anki Studio / стандартный интерфейс",
+        "В Anki Studio",
+        "Нажмите, чтобы вернуться в Anki Studio",
+    ),
+    "pt-BR": (
+        "Alternar Anki Studio / interface nativa",
+        "Ir para Anki Studio",
+        "Clique para voltar ao Anki Studio",
+    ),
+    "it": (
+        "Passa tra Anki Studio / interfaccia nativa",
+        "Vai ad Anki Studio",
+        "Clicca per tornare ad Anki Studio",
+    ),
+    "ar": (
+        "التبديل بين Anki Studio والواجهة الأصلية",
+        "الانتقال إلى Anki Studio",
+        "انقر للعودة إلى Anki Studio",
+    ),
+    "vi": (
+        "Chuyển đổi Anki Studio / giao diện gốc",
+        "Vào Anki Studio",
+        "Nhấp để quay lại Anki Studio",
+    ),
+    "tr": (
+        "Anki Studio / Yerel Arayüz Değiştir",
+        "Anki Studio Moduna Geç",
+        "Anki Studio çalışma alanına dönmek için tıklayın",
+    ),
+    "pl": (
+        "Przełącz Anki Studio / natywny interfejs",
+        "Przejdź do Anki Studio",
+        "Kliknij, aby wrócić do Anki Studio",
+    ),
+    "nl": (
+        "Wissel tussen Anki Studio / native interface",
+        "Naar Anki Studio",
+        "Klik om terug te keren naar Anki Studio",
+    ),
+}
+
+
+def _get_native_toggle_shortcut_hint() -> str:
+    """Return the human-readable native workspace toggle shortcut for the current OS."""
+    return "Ctrl+Opt+M" if sys.platform.startswith("darwin") else "Ctrl+Alt+M"
+
+
+def _get_native_ui_copy(lang: Optional[str]) -> Tuple[str, str, str]:
+    """Return `(toggle_action_label, return_btn_label, return_btn_tooltip)` for `lang`."""
+    return _NATIVE_UI_STRINGS.get(lang or "en", _NATIVE_UI_STRINGS["en"])
+
 
 class AnkiModernHost:
     """Manages the full-screen modern Anki WebEngine overlay, preferences persistence, and 3-layer native switch."""
@@ -92,6 +187,13 @@ class AnkiModernHost:
             pass
         return merged
 
+    def _resolve_host_language(self) -> str:
+        """Resolve the active UI language via DeckService (config preference or Anki locale)."""
+        try:
+            return self.router.deck_service._resolve_language()
+        except Exception:
+            return "en"
+
     def initialize(self) -> None:
         try:
             from aqt import gui_hooks, mw
@@ -129,14 +231,15 @@ class AnkiModernHost:
             gui_hooks.top_toolbar_did_init_links.append(self._on_top_toolbar_init_links)
 
         # 5. Layer 1 & Layer 2 Safety Net: Tools menu action, Top Menu Bar action & Application-wide Hotkeys
-        shortcut_hint = "Ctrl+Opt+M" if sys.platform.startswith("darwin") else "Ctrl+Alt+M"
+        shortcut_hint = _get_native_toggle_shortcut_hint()
+        toggle_label, _, _ = _get_native_ui_copy(self._resolve_host_language())
         # Qt swaps Ctrl/Meta on macOS: "Meta+Alt+M" is the documented ⌃⌥M there,
         # while other platforms need a literal "Ctrl+Alt+M". Using ApplicationShortcut
         # guarantees the shortcut works even when a child QWebEngineView holds or loses focus.
         shortcut_seq = QKeySequence(
             "Meta+Alt+M" if sys.platform.startswith("darwin") else "Ctrl+Alt+M"
         )
-        action = QAction(f"切换 Anki Studio / 原生界面 ({shortcut_hint})", mw)
+        action = QAction(f"{toggle_label} ({shortcut_hint})", mw)
         action.setShortcut(shortcut_seq)
         try:
             action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
@@ -152,7 +255,7 @@ class AnkiModernHost:
         try:
             if hasattr(mw.form, "menubar") and mw.form.menubar is not None:
                 menubar_action = QAction("🌟 Anki Studio", mw)
-                menubar_action.setToolTip(f"切换 Anki Studio / 原生界面 ({shortcut_hint})")
+                menubar_action.setToolTip(f"{toggle_label} ({shortcut_hint})")
                 menubar_action.triggered.connect(self.toggle_modern_ui)
                 mw.form.menubar.addAction(menubar_action)
                 self._menubar_toggle_action = menubar_action
@@ -404,7 +507,10 @@ class AnkiModernHost:
         so users who switched to native Anki can always return to Anki Studio in a single click.
         """
         try:
-            shortcut_hint = "Ctrl+Opt+M" if sys.platform.startswith("darwin") else "Ctrl+Alt+M"
+            shortcut_hint = _get_native_toggle_shortcut_hint()
+            _, return_label, return_tip = _get_native_ui_copy(
+                self._resolve_host_language()
+            )
             label_html = (
                 "<span style='"
                 "background:linear-gradient(135deg,#3076C3,#4D92DE);"
@@ -418,14 +524,14 @@ class AnkiModernHost:
                 "align-items:center;"
                 "gap:4px;"
                 "'>"
-                f"🌟 进入 Anki Studio ({shortcut_hint})"
+                f"🌟 {return_label} ({shortcut_hint})"
                 "</span>"
             )
             link = toolbar.create_link(
                 cmd="anki_modern_os_return",
                 label=label_html,
                 func=self.show_modern_ui,
-                tip=f"点击立即返回 Anki Studio 现代工作区 ({shortcut_hint})",
+                tip=f"{return_tip} ({shortcut_hint})",
                 id="anki-studio-return-btn",
             )
             links.append(link)
@@ -529,6 +635,24 @@ class AnkiModernHost:
             except Exception:
                 pass
 
+    @staticmethod
+    def _sync_webview_rect(webview: Any, target: Any) -> None:
+        """Updates webview geometry only when bounds differ to avoid redundant Windows LayoutRequest repaints."""
+        if webview is None or target is None:
+            return
+        w, h = int(target.width()), int(target.height())
+        if w <= 0 or h <= 0:
+            return
+        geom = webview.geometry() if hasattr(webview, "geometry") else None
+        if (
+            geom is None
+            or int(geom.x()) != 0
+            or int(geom.y()) != 0
+            or int(geom.width()) != w
+            or int(geom.height()) != h
+        ):
+            webview.setGeometry(0, 0, w, h)
+
     def _sync_webview_geometry_and_focus(self, grab_focus: bool = False) -> None:
         """Synchronizes Modern WebView bounds to its parent container and keeps it stacked on top."""
         if self.webview is None or not self.is_modern_visible:
@@ -538,10 +662,7 @@ class AnkiModernHost:
             target = self.webview.parentWidget() if hasattr(self.webview, "parentWidget") else None
             if target is None:
                 target = self.webview.parent() or mw
-            if target is not None:
-                w, h = int(target.width()), int(target.height())
-                if w > 0 and h > 0:
-                    self.webview.setGeometry(0, 0, w, h)
+            self._sync_webview_rect(self.webview, target)
             self.webview.show()
             self.webview.raise_()
             if grab_focus:
@@ -799,9 +920,7 @@ class AnkiModernHost:
                     and host.is_modern_visible
                 ):
                     target = host.webview.parent() or mw_obj
-                    w, h = int(target.width()), int(target.height())
-                    if w > 0 and h > 0:
-                        host.webview.setGeometry(0, 0, w, h)
+                    host._sync_webview_rect(host.webview, target)
                 return False
 
         self._resize_filter = ResizeFilter(mw_obj)

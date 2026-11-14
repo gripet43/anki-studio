@@ -986,6 +986,62 @@ def resolve_replace_front_on_flip(
     return should_replace_front_on_flip(card, front_plain, native_answer)
 
 
+_NON_TRIVIAL_TMPL_TAG_RE = re.compile(r"<(?!/?(?:br|hr)\b)[a-zA-Z]", flags=re.I)
+_NATIVE_CLOZE_OPEN_TAG_RE = re.compile(
+    r'(<span\b[^>]*?\bclass\s*=\s*)(?:(["\'])([^"\']*\bcloze\b(?![-a-z])[^"\']*)\2|(cloze\b(?![-a-z])))([^>]*>)',
+    flags=re.I,
+)
+
+
+def is_custom_styled_cloze_model(model: Any) -> bool:
+    """判断挖空卡型是否携带自定义模板/样式（包括由标准卡型自动生成的伴生挖空卡型）。"""
+    if not isinstance(model, dict) or int(model.get("type", 0) or 0) != 1:
+        return False
+    if model.get("anki_studio_companion_of"):
+        return True
+    for tmpl in (model.get("tmpls") or []):
+        if not isinstance(tmpl, dict):
+            continue
+        blob = f"{tmpl.get('qfmt', '') or ''}\n{tmpl.get('afmt', '') or ''}"
+        if _NON_TRIVIAL_TMPL_TAG_RE.search(blob):
+            return True
+    return False
+
+
+def style_native_cloze_spans(raw_html: str, is_question_side: bool = True) -> str:
+    """为 Anki 原生引擎渲染出的 ``<span class="cloze">`` 注入 Studio 胶囊高亮样式（保留内嵌 HTML）。"""
+    if not raw_html or "cloze" not in raw_html.lower():
+        return raw_html or ""
+    extra_cls = "anki-cloze-question" if is_question_side else "anki-cloze-answer"
+
+    def _repl(match: re.Match) -> str:
+        prefix = match.group(1)
+        quote = match.group(2) or '"'
+        orig_cls = match.group(3) if match.group(3) is not None else (match.group(4) or "cloze")
+        suffix = match.group(5)
+        if "anki-cloze-question" in orig_cls or "anki-cloze-answer" in orig_cls:
+            return match.group(0)
+        return f"{prefix}{quote}{orig_cls} {extra_cls}{quote}{suffix}"
+
+    return _NATIVE_CLOZE_OPEN_TAG_RE.sub(_repl, raw_html)
+
+
+def split_native_cloze_answer(answer_html: str, question_html: str = "") -> Tuple[str, str, bool]:
+    """拆分自定义挖空卡背面的正面揭示段与纯背面段，返回 ``(front_answer, back_only, replace_on_flip)``。"""
+    if not answer_html:
+        return "", "", False
+    hr_m = HR_ANSWER_RE.search(answer_html)
+    if hr_m:
+        front_answer = answer_html[: hr_m.start()].strip()
+        back_part = answer_html[hr_m.end() :].strip()
+        has_back = bool(plain_text_of(back_part) or "<img" in back_part.lower())
+        return front_answer, (back_part if has_back else ""), not has_back
+    if 'class="cloze"' in answer_html or "class='cloze'" in answer_html or "class=cloze" in answer_html:
+        return "", answer_html.strip(), True
+    back_only = strip_front_side_from_answer(answer_html, question_html)
+    return "", back_only, False
+
+
 def render_native_card_sides(
     card, media_dir: str = "", strip_front_side: bool = True, raw_output=None
 ) -> NativeRender:
@@ -1052,6 +1108,34 @@ def _av_filenames(tags) -> List[str]:
     return names
 
 
+def split_card_side_audio(
+    native_question_audio: List[str],
+    parsed_front_audio: List[str],
+    native_answer_audio: List[str],
+    parsed_back_audio: List[str],
+) -> Tuple[List[str], List[str], List[str]]:
+    """Split card audio into front-only, answer-only, and deduplicated combined lists."""
+    front_files: List[str] = []
+    for fname in list(native_question_audio or []) + list(parsed_front_audio or []):
+        clean = str(fname or "").strip()
+        if clean and clean not in front_files:
+            front_files.append(clean)
+
+    back_files: List[str] = []
+    for fname in list(native_answer_audio or []) + list(parsed_back_audio or []):
+        clean = str(fname or "").strip()
+        # Exclude question-side sounds re-emitted on answer templates (e.g. Cloze `{{cloze:Text}}`)
+        if clean and clean not in front_files and clean not in back_files:
+            back_files.append(clean)
+
+    combined: List[str] = list(front_files)
+    for fname in back_files:
+        if fname not in combined:
+            combined.append(fname)
+
+    return front_files, back_files, combined
+
+
 def render_native_card_html(
     card, media_dir: str = ""
 ) -> tuple[str, list[str], str]:
@@ -1099,6 +1183,43 @@ class SandboxRender(NamedTuple):
     css: str
 
 
+_SANDBOX_SAFE_CLOZE_RE = re.compile(
+    r"(<script\b[^>]*>[\s\S]*?</script\s*>|<style\b[^>]*>[\s\S]*?</style\s*>|<[^>]+>)"
+    r"|\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}",
+    flags=re.I,
+)
+
+
+def _render_literal_cloze_for_sandbox(
+    raw_html: str, cloze_ord: int = 1, is_question_side: bool = True
+) -> str:
+    """为尚未转换的标准卡型保留字面 ``{{cN::...}}`` 时在兼容模式沙盒内渲染合法挖空状态，跳过脚本与样式块。"""
+    if not raw_html or "{{c" not in raw_html.lower():
+        return raw_html or ""
+    if _NATIVE_CLOZE_OPEN_TAG_RE.search(raw_html):
+        return raw_html
+    target_idx = str(max(1, cloze_ord))
+
+    def _repl(match: re.Match) -> str:
+        if match.group(1) is not None:
+            return match.group(0)
+        c_num = match.group(2)
+        c_ans = match.group(3) or ""
+        c_hint = match.group(4)
+        if c_num == target_idx:
+            if is_question_side:
+                hint_label = html.escape(c_hint) if c_hint else "..."
+                cloze_attr = html.escape(plain_text_of(c_ans) or c_ans, quote=True)
+                return (
+                    f'<span class="cloze" data-cloze="{cloze_attr}" '
+                    f'data-ordinal="{c_num}">[{hint_label}]</span>'
+                )
+            return f'<span class="cloze" data-ordinal="{c_num}">{c_ans}</span>'
+        return f'<span class="cloze-inactive" data-ordinal="{c_num}">{c_ans}</span>'
+
+    return _SANDBOX_SAFE_CLOZE_RE.sub(_repl, raw_html)
+
+
 def render_sandbox_card_sides(
     card, media_dir: str = "", http_base_url: str = "", raw_output=None
 ) -> SandboxRender:
@@ -1116,6 +1237,46 @@ def render_sandbox_card_sides(
         q_raw = _as_text(getattr(output, "question_text", ""))
         a_raw = _as_text(getattr(output, "answer_text", ""))
         raw_css = _as_text(getattr(output, "css", ""))
+
+        is_io_card = False
+        card_cloze_ord = 1
+        if card is not None:
+            card_cloze_ord = max(1, int(getattr(card, "ord", 0) or 0) + 1)
+            try:
+                note_obj = card.note() if hasattr(card, "note") else None
+                model_obj = (
+                    note_obj.note_type()
+                    if note_obj is not None and hasattr(note_obj, "note_type")
+                    else None
+                )
+                if isinstance(model_obj, dict):
+                    f_names = {
+                        str(f.get("name", "") or "").strip().lower()
+                        for f in (model_obj.get("flds") or [])
+                        if isinstance(f, dict)
+                    }
+                    m_name = str(model_obj.get("name", "") or "").strip().lower()
+                    is_io_card = "image occlusion" in m_name or (
+                        "occlusion" in f_names and "image" in f_names
+                    )
+            except Exception:
+                is_io_card = False
+
+        if (
+            not is_io_card
+            and "anki-io-rect" not in q_raw
+            and not IO_SHAPE_RE.search(q_raw)
+            and not IO_SHAPE_RE.search(a_raw)
+        ):
+            if CLOZE_RE.search(q_raw):
+                q_raw = _render_literal_cloze_for_sandbox(
+                    q_raw, cloze_ord=card_cloze_ord, is_question_side=True
+                )
+            if CLOZE_RE.search(a_raw):
+                a_raw = _render_literal_cloze_for_sandbox(
+                    a_raw, cloze_ord=card_cloze_ord, is_question_side=False
+                )
+
         q_html = resolve_media_for_sandbox(q_raw, media_dir, http_base_url=http_base_url)
         a_html = resolve_media_for_sandbox(a_raw, media_dir, http_base_url=http_base_url)
         css_out = (
@@ -1294,6 +1455,8 @@ def resolve_front_field_name(
                     probe = plain_text_of(fields.get(name, ""))
                     if not probe:
                         continue
+                    if CLOZE_RE.search(fields.get(name, "") or ""):
+                        return name
                     if not probe_front or probe in probe_front:
                         return name
     return pick_display_field(fields, rendered_front)

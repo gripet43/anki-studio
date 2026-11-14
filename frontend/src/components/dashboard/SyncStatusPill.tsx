@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   formatDetailedSyncTimestamp,
   formatRelativeTimeString,
   translate,
 } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
+import { HoverCard } from '../common/HoverCard';
 import { SyncStateIcon, SyncVisualState } from '../common/SyncStateIcon';
 
 export const SyncStatusPill: React.FC = () => {
@@ -33,83 +34,29 @@ export const SyncStatusPill: React.FC = () => {
     ? 'snapshot'
     : 'unsynced';
 
-  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const escDismissedRef = useRef(false);
-  const flyoutRef = useRef<HTMLDivElement>(null);
-
   // Periodic tick so relative snapshot duration updates live ("刚刚" -> "1分钟前")
   useEffect(() => {
     const timer = setInterval(() => setNowTick(Date.now()), 15000);
     return () => clearInterval(timer);
   }, []);
 
-  // Cleanup pending hover timer on unmount
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-    };
-  }, []);
-
-  // Click outside & Escape key dismissal (WCAG 1.4.13 Dismissible)
+  // Escape key dismissal (WCAG 1.4.13 Dismissible)
   useEffect(() => {
     if (!isFlyoutOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (flyoutRef.current && !flyoutRef.current.contains(e.target as Node)) {
-        setIsFlyoutOpen(false);
-      }
-    };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        escDismissedRef.current = true;
         setIsFlyoutOpen(false);
       }
     };
-    window.addEventListener('mousedown', handleClickOutside);
     window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFlyoutOpen]);
-
-  const handleMouseEnter = () => {
-    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-    if (escDismissedRef.current) return;
-    hoverTimeoutRef.current = setTimeout(() => {
-      setIsFlyoutOpen(true);
-    }, 200);
-  };
-
-  const handleMouseLeave = () => {
-    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-    escDismissedRef.current = false;
-    hoverTimeoutRef.current = setTimeout(() => {
-      setIsFlyoutOpen(false);
-    }, 250);
-  };
-
-  const handleFocusCapture = () => {
-    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-    if (!escDismissedRef.current) {
-      setIsFlyoutOpen(true);
-    }
-  };
-
-  const handleBlurCapture = (e: React.FocusEvent<HTMLDivElement>) => {
-    const nextTarget = e.relatedTarget as Node | null;
-    if (!nextTarget || !flyoutRef.current?.contains(nextTarget)) {
-      escDismissedRef.current = false;
-      setIsFlyoutOpen(false);
-    }
-  };
 
   const handleTriggerSync = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (syncing) return;
+    if (isSyncActive) return;
     appActions.syncCollection();
   };
-
-  const popoverSurface = 'dashboard-tooltip';
 
   const effectiveNow = Math.max(nowTick, lastSyncedTimestamp || 0);
   const relativeTimeStr = formatRelativeTimeString(lastSyncedTimestamp, resolvedLang, effectiveNow);
@@ -122,25 +69,82 @@ export const SyncStatusPill: React.FC = () => {
     ? t('syncNowWithSnapshotAria', { rel: relativeTimeStr, abs: detailedTimeStr })
     : t('syncNotYetAria');
 
+  const flyoutContent = (
+    <>
+      {/* Header */}
+      <div className="flex items-center gap-2 pb-2.5 border-b border-[var(--border-subtle)]">
+        <div className="relative flex items-center justify-center w-4 h-4 shrink-0">
+          <SyncStateIcon state={syncVisualState} size="sm" />
+        </div>
+        <span className="text-[13px] font-semibold tracking-tight">
+          {t('syncCloudTitle')}
+        </span>
+      </div>
+
+      {/* Time & Snapshot Fact */}
+      <div className="py-2.5 space-y-1 text-[11px]">
+        <div className="flex items-center justify-between text-[var(--text-secondary)]">
+          <span>{t('synced')}</span>
+          {hasSynced ? (
+            <time
+              dateTime={isoTimestamp}
+              className="font-mono text-[var(--text-primary)] tabular-nums"
+            >
+              {relativeTimeStr}
+            </time>
+          ) : (
+            <span className="font-mono text-[var(--text-primary)]">
+              {t('neverSyncedShort')}
+            </span>
+          )}
+        </div>
+        {hasSynced && detailedTimeStr && (
+          <div className="text-[10px] text-[var(--text-secondary)] text-end font-mono tabular-nums">
+            <time dateTime={isoTimestamp}>{detailedTimeStr}</time>
+          </div>
+        )}
+        {!hasSynced && (
+          <div className="text-[10px] text-[var(--text-secondary)] text-end">
+            {t('noCloudSyncRecord')}
+          </div>
+        )}
+      </div>
+
+      {/* Sync Guidance Footnote (此时间代表上次同步云端时间。如有新的修改，请点击按钮完成同步。) */}
+      <div className="pt-2.5 text-[10.5px] leading-relaxed text-[var(--text-secondary)] border-t border-[var(--border-subtle)]">
+        {hasSynced
+          ? t('syncSnapshotFootnote')
+          : t('syncNoRecordFootnote')}
+      </div>
+    </>
+  );
+
   return (
-    <div
-      ref={flyoutRef}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      onFocusCapture={handleFocusCapture}
-      onBlurCapture={handleBlurCapture}
-      className="relative select-none"
+    <HoverCard
+      size="md"
+      side="bottom"
+      align="end"
+      offset={8}
+      openDelay={200}
+      closeDelay={250}
+      toggleOnClick={false}
+      open={isFlyoutOpen}
+      onOpenChange={setIsFlyoutOpen}
+      ariaLabel={t('syncCloudTitle')}
+      repositionKey={`${syncVisualState}-${hasSynced}`}
+      className="sync-pill-forced-border"
+      content={flyoutContent}
     >
       {/* Lightweight Inline Status Trigger matching reference visual */}
       <button
         type="button"
-        onClick={() => handleTriggerSync()}
-        disabled={isSyncActive}
+        onClick={(e) => handleTriggerSync(e)}
+        aria-disabled={isSyncActive || undefined}
         aria-label={triggerAriaLabel}
-        className={`group relative h-9 px-2.5 rounded-xl text-[12.5px] flex items-center gap-2 transition-colors duration-200 motion-safe:active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] ${
+        className={`group relative select-none h-9 px-2.5 rounded-xl text-[12.5px] flex items-center gap-2 shrink-0 whitespace-nowrap transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] ${
           isSyncActive
             ? 'cursor-default'
-            : 'cursor-pointer hover:bg-black/[0.035] dark:hover:bg-white/[0.05]'
+            : 'cursor-pointer motion-safe:active:scale-[0.98] hover:bg-black/[0.035] dark:hover:bg-white/[0.05]'
         }`}
       >
         {/* Status Icon：同步中为脉冲点，其余按快照真实状态显示云图标（已同步 = 绿色云） */}
@@ -156,41 +160,41 @@ export const SyncStatusPill: React.FC = () => {
         </span>
 
         {/* Sync Label & Relative Time */}
-        <div className="flex items-center min-w-0 overflow-hidden">
+        <div className="flex items-center shrink-0 whitespace-nowrap py-0.5">
           {isSyncActive ? (
-            <span className="text-[12.5px] font-medium text-[var(--status-warning)] tracking-tight motion-safe:animate-pulse truncate">
+            <span className="text-[12.5px] font-medium text-[var(--status-warning)] tracking-tight leading-[1.4] whitespace-nowrap motion-safe:animate-pulse">
               {isInitialSyncing && !syncing
                 ? t('loadingLocalCollection')
                 : t('syncing')}
             </span>
           ) : syncJustFinished ? (
-            <span className="text-[12.5px] font-semibold text-[var(--status-success)] tracking-tight flex items-center gap-1 animate-sync-reveal">
+            <span className="text-[12.5px] font-semibold text-[var(--status-success)] tracking-tight leading-[1.4] whitespace-nowrap flex items-center gap-1 animate-sync-reveal">
               <span>{t('syncCompleted')}</span>
             </span>
           ) : hasSynced ? (
-            <div className="flex items-center gap-1.5 text-[var(--text-secondary)]">
-              <span className="font-medium text-[12.5px] leading-none">
+            <div className="flex items-center gap-1.5 text-[var(--text-secondary)] whitespace-nowrap">
+              <span className="font-medium text-[12.5px] leading-[1.4] whitespace-nowrap">
                 {t('synced')}
               </span>
-              <span aria-hidden="true" className="text-[var(--text-muted)] text-[12px] leading-none">
+              <span aria-hidden="true" className="text-[var(--text-muted)] text-[12px] leading-[1.4] shrink-0">
                 ·
               </span>
               <time
                 dateTime={isoTimestamp}
-                className="text-[12.5px] font-medium tracking-tight tabular-nums leading-none"
+                className="text-[12.5px] font-medium tracking-tight tabular-nums leading-[1.4] whitespace-nowrap"
               >
                 {relativeTimeStr}
               </time>
             </div>
           ) : (
-            <span className="font-medium text-[12.5px] text-[var(--text-secondary)] leading-none">
+            <span className="font-medium text-[12.5px] text-[var(--text-secondary)] leading-[1.4] whitespace-nowrap">
               {t('notSyncedShort')}
             </span>
           )}
         </div>
 
         {/* Refresh Action Icon + Optional Shortcut Hint */}
-        <div className="flex items-center gap-1.5 ms-1">
+        <div className="flex items-center gap-1.5 ms-1 shrink-0">
           <svg
             aria-hidden="true"
             style={isSyncActive ? { willChange: 'transform' } : undefined}
@@ -228,59 +232,6 @@ export const SyncStatusPill: React.FC = () => {
           </div>
         )}
       </button>
-
-      {/* Honest Snapshot Details Hovercard */}
-      {isFlyoutOpen && (
-        <div
-          className={`absolute end-0 top-11 z-50 w-[280px] max-w-[calc(100vw-2rem)] rounded-2xl border p-3.5 backdrop-blur-xl animate-flyout-enter sync-pill-forced-border ${popoverSurface}`}
-        >
-          {/* Header */}
-          <div className="flex items-center gap-2 pb-2.5 border-b border-[var(--border-subtle)]">
-            <div className="relative flex items-center justify-center w-4 h-4 shrink-0">
-              <SyncStateIcon state={syncVisualState} size="sm" />
-            </div>
-            <span className="text-[13px] font-semibold tracking-tight">
-              {t('syncCloudTitle')}
-            </span>
-          </div>
-
-          {/* Time & Snapshot Fact */}
-          <div className="py-2.5 space-y-1 text-[11px]">
-            <div className="flex items-center justify-between text-[var(--text-secondary)]">
-              <span>{t('synced')}</span>
-              {hasSynced ? (
-                <time
-                  dateTime={isoTimestamp}
-                  className="font-mono text-[var(--text-primary)] tabular-nums"
-                >
-                  {relativeTimeStr}
-                </time>
-              ) : (
-                <span className="font-mono text-[#1D1D1F] dark:text-[#E5E5EA]">
-                  {t('neverSyncedShort')}
-                </span>
-              )}
-            </div>
-            {hasSynced && detailedTimeStr && (
-              <div className="text-[10px] text-[var(--text-secondary)] text-end font-mono tabular-nums">
-                <time dateTime={isoTimestamp}>{detailedTimeStr}</time>
-              </div>
-            )}
-            {!hasSynced && (
-              <div className="text-[10px] text-[var(--text-secondary)] text-end">
-                {t('noCloudSyncRecord')}
-              </div>
-            )}
-          </div>
-
-          {/* Sync Guidance Footnote (此时间代表上次同步云端时间。如有新的修改，请点击按钮完成同步。) */}
-          <div className="pt-2.5 text-[10.5px] leading-relaxed text-[var(--text-secondary)] border-t border-[var(--border-subtle)]">
-            {hasSynced
-              ? t('syncSnapshotFootnote')
-              : t('syncNoRecordFootnote')}
-          </div>
-        </div>
-      )}
-    </div>
+    </HoverCard>
   );
 };

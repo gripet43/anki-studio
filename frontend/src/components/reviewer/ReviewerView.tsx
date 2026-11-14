@@ -1,10 +1,33 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ANKI_FLAG_PALETTE, CardFlagColor } from '../../bridge/pycmd';
+import {
+  ANKI_FLAG_PALETTE,
+  CardFlagColor,
+  REVIEW_CONTENT_SCALES,
+  ReviewContentScale,
+  ReviewStageWidth,
+} from '../../bridge/pycmd';
 import { formatShortcut, translate } from '../../i18n/translations';
-import { appActions, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
+import {
+  appActions,
+  getAppState,
+  setAppState,
+  showToast,
+  useAppStore,
+} from '../../stores/useAppStore';
 import { renderMathAndRichHtml } from '../../utils/mathRenderer';
-import { isTypingTarget } from '../../utils/domTarget';
+import {
+  cardDebugSnapshotFromReviewCard,
+  collectAndCopyCardDebugInfo,
+} from '../../utils/cardDebugInfo';
+import { getClosestFromTarget, isTypingTarget } from '../../utils/domTarget';
+import {
+  resolveManualPlayAudioFiles,
+  resolveVisibleAudioFiles,
+} from '../../utils/reviewAudio';
 import { getAccentScale } from '../../utils/themeTokens';
+import { CopyDebugInfoButton } from '../common/CopyDebugInfoButton';
+import { Tooltip } from '../common/Tooltip';
+import { LightboxTarget, ReviewerImageLightbox } from './ReviewerImageLightbox';
 import { SandboxCardFrame } from './SandboxCardFrame';
 
 export const ReviewerView: React.FC = () => {
@@ -34,6 +57,10 @@ export const ReviewerView: React.FC = () => {
     activeDeckId,
     reviewScopeDeckId,
     sandboxNoteTypeIds,
+    autoPlayFrontAudio,
+    autoPlayBackAudio,
+    reviewStageWidth,
+    reviewContentScale,
   } = useAppStore();
 
   const isDark = theme === 'dark' || theme === 'oled';
@@ -55,14 +82,25 @@ export const ReviewerView: React.FC = () => {
   const [selectedSlashIdx, setSelectedSlashIdx] = useState(0);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [flagPopoverOpen, setFlagPopoverOpen] = useState(false);
+  const [displayPopoverOpen, setDisplayPopoverOpen] = useState(false);
+  const [audioPopoverOpen, setAudioPopoverOpen] = useState(false);
+  const [lightboxTarget, setLightboxTarget] = useState<LightboxTarget | null>(null);
 
   const activeInputRef = useRef<HTMLInputElement>(null);
   const flagMenuRef = useRef<HTMLDivElement>(null);
+  const displayMenuRef = useRef<HTMLDivElement>(null);
+  const audioMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       if (flagMenuRef.current && !flagMenuRef.current.contains(e.target as Node)) {
         setFlagPopoverOpen(false);
+      }
+      if (displayMenuRef.current && !displayMenuRef.current.contains(e.target as Node)) {
+        setDisplayPopoverOpen(false);
+      }
+      if (audioMenuRef.current && !audioMenuRef.current.contains(e.target as Node)) {
+        setAudioPopoverOpen(false);
       }
     };
     document.addEventListener('mousedown', onDocClick);
@@ -82,6 +120,9 @@ export const ReviewerView: React.FC = () => {
   useEffect(() => {
     setConfirmingDelete(false);
     setFlagPopoverOpen(false);
+    setDisplayPopoverOpen(false);
+    setAudioPopoverOpen(false);
+    setLightboxTarget(null);
     if (currentCard) {
       const fMap: Record<string, string> =
         currentCard.fields && Object.keys(currentCard.fields).length > 0
@@ -193,10 +234,18 @@ export const ReviewerView: React.FC = () => {
     });
   };
 
+  const manualAudioFiles = resolveManualPlayAudioFiles(currentCard, isCardFlipped);
+  const visibleAudioFiles = resolveVisibleAudioFiles(currentCard, isCardFlipped);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Alt') {
         setAppState({ optionKeyHeld: true });
+      }
+
+      const { settingsOpen, cmdKOpen, quickAddOpen } = getAppState();
+      if (settingsOpen || cmdKOpen || quickAddOpen) {
+        return;
       }
 
       if (isSessionComplete || !currentCard) {
@@ -250,9 +299,54 @@ export const ReviewerView: React.FC = () => {
         return;
       }
 
+      // Scoped Card Content Scale Shortcuts: Cmd/Ctrl + =/+ (zoom in), -/_ (zoom out), Shift+0 (reset 100%)
+      if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        const curIdx = REVIEW_CONTENT_SCALES.indexOf(reviewContentScale);
+        const nextScale =
+          REVIEW_CONTENT_SCALES[Math.min(REVIEW_CONTENT_SCALES.length - 1, Math.max(0, (curIdx >= 0 ? curIdx : 1) + 1))];
+        if (nextScale !== reviewContentScale) {
+          appActions.updatePreferences({ reviewContentScale: nextScale });
+        }
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === '-' || e.key === '_')) {
+        e.preventDefault();
+        const curIdx = REVIEW_CONTENT_SCALES.indexOf(reviewContentScale);
+        const nextScale =
+          REVIEW_CONTENT_SCALES[Math.min(REVIEW_CONTENT_SCALES.length - 1, Math.max(0, (curIdx >= 0 ? curIdx : 1) - 1))];
+        if (nextScale !== reviewContentScale) {
+          appActions.updatePreferences({ reviewContentScale: nextScale });
+        }
+        return;
+      }
+
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.shiftKey &&
+        (e.key === '0' || e.key === ')' || e.code === 'Digit0')
+      ) {
+        e.preventDefault();
+        if (reviewContentScale !== 100 || reviewStageWidth !== 'auto') {
+          appActions.updatePreferences({ reviewContentScale: 100, reviewStageWidth: 'auto' });
+        }
+        return;
+      }
+
       if (e.key === 'Escape') {
         e.preventDefault();
-        appActions.exitReview();
+        if (lightboxTarget) {
+          setLightboxTarget(null);
+        } else if (audioPopoverOpen) {
+          setAudioPopoverOpen(false);
+        } else if (displayPopoverOpen) {
+          setDisplayPopoverOpen(false);
+        } else if (flagPopoverOpen) {
+          setFlagPopoverOpen(false);
+        } else {
+          appActions.exitReview();
+        }
         return;
       }
 
@@ -269,7 +363,7 @@ export const ReviewerView: React.FC = () => {
 
       if (e.key.toLowerCase() === 'r' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
-        appActions.playAudio();
+        appActions.playAudio(manualAudioFiles);
         return;
       }
 
@@ -368,6 +462,13 @@ export const ReviewerView: React.FC = () => {
     isSessionComplete,
     currentCard,
     resolvedLang,
+    lightboxTarget,
+    audioPopoverOpen,
+    displayPopoverOpen,
+    flagPopoverOpen,
+    manualAudioFiles,
+    reviewContentScale,
+    reviewStageWidth,
   ]);
 
   // 会话按 100 张一批从调度器取；续批时 currentCardIndex 会归零，直接用它算进度
@@ -568,6 +669,77 @@ export const ReviewerView: React.FC = () => {
   const activeFlagNum = ((currentCard.flags || 0) & 7) as CardFlagColor;
   const activeFlagSpec = activeFlagNum !== 0 ? ANKI_FLAG_PALETTE[activeFlagNum] : null;
 
+  const isSandboxCard = Boolean(
+    (currentCard.needsSandbox ||
+      (currentCard.notetypeId && sandboxNoteTypeIds.includes(currentCard.notetypeId))) &&
+      (currentCard.sandboxFrontHtml || currentCard.sandboxBackHtml)
+  );
+  const combinedCardMarkup = [
+    currentCard.frontHtml,
+    currentCard.frontAnswerHtml,
+    currentCard.backHtml,
+    currentCard.front,
+    currentCard.meaning,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const combinedCardTextLen = combinedCardMarkup.replace(/<[^>]*>/g, '').trim().length;
+  const isComplexCard =
+    isSandboxCard ||
+    /<(img|table|svg|pre|canvas|video)\b|anki-io-wrap/i.test(combinedCardMarkup) ||
+    combinedCardTextLen > 200;
+
+  const isStageWidened =
+    reviewStageWidth === 'full' ||
+    reviewStageWidth === 'wide' ||
+    (reviewStageWidth === 'auto' && isComplexCard);
+
+  const stageMaxWidthClass =
+    reviewStageWidth === 'full'
+      ? 'max-w-[1120px]'
+      : isStageWidened
+      ? 'max-w-[840px]'
+      : 'max-w-[580px]';
+
+  const scaleFactor = reviewContentScale / 100;
+  const scaleIdx = REVIEW_CONTENT_SCALES.indexOf(reviewContentScale);
+  const resolvedScaleIdx = scaleIdx >= 0 ? scaleIdx : 1;
+  const stepReviewScale = (delta: 1 | -1) => {
+    const nextIdx = Math.min(REVIEW_CONTENT_SCALES.length - 1, Math.max(0, resolvedScaleIdx + delta));
+    const nextScale = REVIEW_CONTENT_SCALES[nextIdx];
+    if (nextScale !== reviewContentScale) {
+      appActions.updatePreferences({ reviewContentScale: nextScale });
+    }
+  };
+
+  const inlineImgMaxHeightPx = Math.round((isStageWidened ? 500 : 380) * scaleFactor);
+  const inlineIoMaxHeightPx = Math.round((isStageWidened ? 560 : 420) * scaleFactor);
+
+  const handleCardMediaClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (inlineEditing) return;
+    const ioWrap = getClosestFromTarget(e.target, '.anki-io-wrap') as HTMLElement | null;
+    if (ioWrap && !getClosestFromTarget(e.target, 'a, button')) {
+      e.preventDefault();
+      e.stopPropagation();
+      setLightboxTarget({ mode: 'io-html', html: ioWrap.outerHTML });
+      return;
+    }
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      target.tagName === 'IMG' &&
+      !getClosestFromTarget(e.target, 'a, button, [onclick]')
+    ) {
+      const img = target as HTMLImageElement;
+      const src = img.currentSrc || img.src;
+      if (src) {
+        e.preventDefault();
+        e.stopPropagation();
+        setLightboxTarget({ mode: 'img', src, alt: img.alt || undefined });
+      }
+    }
+  };
+
   return (
     <div className={`fixed inset-0 z-30 flex flex-col select-none overflow-hidden transition-colors ${screenBg}`}>
       {/* Ultra-thin Top Progress Bar */}
@@ -591,25 +763,34 @@ export const ReviewerView: React.FC = () => {
         }`}
       >
         <div className="flex items-center gap-3.5">
-          <button
-            onClick={() => {
-              if (inlineEditing) {
-                setFieldsDraft({ ...originalFieldsDraft });
-                appActions.exitInlineEdit();
-              } else {
-                appActions.exitReview();
-              }
-            }}
-            className={`w-8 h-8 rounded-xl border flex items-center justify-center cursor-pointer transition-colors ${headerBtnSurface}`}
-          >
-            ‹
-          </button>
+          <Tooltip variant="compact" content={t('backBtn')} side="bottom">
+            <button
+              type="button"
+              onClick={() => {
+                if (inlineEditing) {
+                  setFieldsDraft({ ...originalFieldsDraft });
+                  appActions.exitInlineEdit();
+                } else {
+                  appActions.exitReview();
+                }
+              }}
+              aria-label={t('backBtn')}
+              className={`w-8 h-8 rounded-xl border flex items-center justify-center cursor-pointer transition-colors ${headerBtnSurface}`}
+            >
+              ‹
+            </button>
+          </Tooltip>
           <div>
             <div className="text-[14px] font-semibold tracking-tight flex items-center gap-2">
               <span>{inlineEditing ? t('editCardTitle') : currentCard.deckName}</span>
               {currentCard.isCloze && (
                 <span className="px-2 py-0.5 rounded bg-[var(--brand-soft)] text-[var(--brand-text)] text-[10px] font-medium">
-                  {t('clozeBadge')}
+                  {(currentCard.clozeSiblingCount || 1) > 1
+                    ? t('clozeStepBadge', {
+                        index: currentCard.clozeCardIndex || 1,
+                        total: currentCard.clozeSiblingCount || 1,
+                      })
+                    : t('clozeBadge')}
                 </span>
               )}
               {isPreviewSession && (
@@ -663,58 +844,312 @@ export const ReviewerView: React.FC = () => {
             </div>
           ) : (
             <>
-              {currentCard.audioFiles && currentCard.audioFiles.length > 0 && (
-                <button
-                  onClick={() => appActions.playAudio(currentCard.audioFiles?.[0])}
-                  title="R"
-                  className={`h-8 px-3 rounded-lg border text-[11px] flex items-center gap-1.5 cursor-pointer transition-colors ${
-                    playingAudioFile
-                      ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)]'
-                      : headerBtnSurface
-                  }`}
-                >
-                  <svg className="w-3.5 h-3.5 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                  </svg>
-                  <span>{t('readAloud')}</span>
-                  {showShortcutHints && <kbd className="text-[10px] opacity-70 font-mono">R</kbd>}
-                </button>
-              )}
+              {/* Unified Audio Control: Split Pill when card side has audio, Compact Icon Trigger otherwise */}
+              <div ref={audioMenuRef} className="relative flex items-center">
+                {manualAudioFiles.length > 0 ? (
+                  <div
+                    className={`h-8 rounded-lg border inline-flex items-stretch overflow-hidden transition-colors ${
+                      playingAudioFile || audioPopoverOpen
+                        ? isDark
+                          ? 'bg-[#17181E] border-[var(--brand-border)]'
+                          : 'bg-white border-[var(--brand-border)] shadow-2xs'
+                        : isDark
+                        ? 'bg-[#17181E] border-white/[0.07]'
+                        : 'bg-white border-[#E5E5EA] shadow-2xs'
+                    }`}
+                  >
+                    <Tooltip variant="compact" content={t('readAloud')} shortcut="R" side="bottom">
+                      <button
+                        type="button"
+                        onClick={() => appActions.playAudio(manualAudioFiles)}
+                        className={`h-full px-2.5 text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
+                          playingAudioFile
+                            ? 'bg-[var(--brand-soft)] text-[var(--brand-text)]'
+                            : isDark
+                            ? 'text-[#8E8E93] hover:text-white hover:bg-white/[0.05]'
+                            : 'text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-black/[0.03]'
+                        }`}
+                      >
+                        <svg
+                          className="w-3.5 h-3.5 opacity-85 shrink-0"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                        </svg>
+                        <span>{t('readAloud')}</span>
+                        {showShortcutHints && <kbd className="text-[10px] opacity-70 font-mono">R</kbd>}
+                      </button>
+                    </Tooltip>
+
+                    <span
+                      aria-hidden="true"
+                      className={`w-px self-stretch shrink-0 transition-colors ${
+                        playingAudioFile || audioPopoverOpen
+                          ? 'bg-[var(--brand-border)]'
+                          : isDark
+                          ? 'bg-white/[0.08]'
+                          : 'bg-[#E5E5EA]'
+                      }`}
+                    />
+
+                    <Tooltip
+                      variant="compact"
+                      content={t('reviewAudioQuickBtn')}
+                      side="bottom"
+                      disabled={audioPopoverOpen}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFlagPopoverOpen(false);
+                          setDisplayPopoverOpen(false);
+                          setAudioPopoverOpen((prev) => !prev);
+                        }}
+                        aria-label={t('reviewAudioQuickBtn')}
+                        aria-expanded={audioPopoverOpen}
+                        className={`h-full px-2 flex items-center justify-center cursor-pointer transition-colors ${
+                          audioPopoverOpen
+                            ? 'bg-[var(--brand-soft)] text-[var(--brand-text)]'
+                            : isDark
+                            ? 'text-[#8E8E93] hover:text-white hover:bg-white/[0.05]'
+                            : 'text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-black/[0.03]'
+                        }`}
+                      >
+                        <svg
+                          className={`w-3.5 h-3.5 shrink-0 transition-opacity ${
+                            autoPlayFrontAudio || autoPlayBackAudio || audioPopoverOpen
+                              ? 'opacity-90'
+                              : 'opacity-45'
+                          }`}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <circle cx="12" cy="12" r="3" />
+                          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                        </svg>
+                      </button>
+                    </Tooltip>
+                  </div>
+                ) : (
+                  <Tooltip
+                    variant="compact"
+                    content={t('reviewAudioQuickBtn')}
+                    side="bottom"
+                    disabled={audioPopoverOpen}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFlagPopoverOpen(false);
+                        setDisplayPopoverOpen(false);
+                        setAudioPopoverOpen((prev) => !prev);
+                      }}
+                      aria-label={t('reviewAudioQuickBtn')}
+                      aria-expanded={audioPopoverOpen}
+                      className={`h-8 w-8 rounded-lg border flex items-center justify-center cursor-pointer transition-colors ${
+                        audioPopoverOpen
+                          ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)]'
+                          : headerBtnSurface
+                      }`}
+                    >
+                      {autoPlayFrontAudio || autoPlayBackAudio ? (
+                        <svg
+                          className="w-3.5 h-3.5 shrink-0"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                          <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="w-3.5 h-3.5 shrink-0 opacity-75"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                          <line x1="22" y1="9" x2="16" y2="15" />
+                          <line x1="16" y1="9" x2="22" y2="15" />
+                        </svg>
+                      )}
+                    </button>
+                  </Tooltip>
+                )}
+
+                {audioPopoverOpen && (
+                  <div
+                    className={`absolute end-0 top-10 z-50 w-[280px] rounded-2xl border shadow-2xl p-3.5 space-y-3 backdrop-blur-xl ${
+                      isDark
+                        ? 'bg-[#181922]/96 border-[#2E303E] text-white'
+                        : 'bg-white/96 border-[#E5E5EA] text-[#1D1D1F]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-semibold">{t('reviewAudioQuickTitle')}</span>
+                      <span className="text-[10px] font-mono text-[#8E8E93]">
+                        {autoPlayFrontAudio && autoPlayBackAudio
+                          ? 'Q + A'
+                          : autoPlayFrontAudio
+                          ? 'Q'
+                          : autoPlayBackAudio
+                          ? 'A'
+                          : 'OFF'}
+                      </span>
+                    </div>
+
+                    <div className={`divide-y ${isDark ? 'divide-white/[0.06]' : 'divide-[#E5E5EA]/70'}`}>
+                      <div className="pb-2.5 flex items-center justify-between gap-3">
+                        <span className="text-[12px] font-medium leading-snug">
+                          {t('autoPlayFrontAudioTitle')}
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={autoPlayFrontAudio}
+                          aria-label={t('autoPlayFrontAudioTitle')}
+                          onClick={() => {
+                            const next = !autoPlayFrontAudio;
+                            appActions.updatePreferences({ autoPlayFrontAudio: next });
+                            if (!next && !isCardFlipped) {
+                              appActions.stopAudio();
+                            }
+                          }}
+                          style={autoPlayFrontAudio ? { backgroundColor: brandHex } : undefined}
+                          className={`w-10 h-5.5 shrink-0 flex items-center rounded-full p-0.5 cursor-pointer transition-colors duration-200 ease-in-out ${
+                            autoPlayFrontAudio ? '' : isDark ? 'bg-[#3A3A48]' : 'bg-[#E5E5EA]'
+                          }`}
+                        >
+                          <div
+                            className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                              autoPlayFrontAudio ? 'translate-x-4.5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      <div className="pt-2.5 flex items-center justify-between gap-3">
+                        <span className="text-[12px] font-medium leading-snug">
+                          {t('autoPlayBackAudioTitle')}
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={autoPlayBackAudio}
+                          aria-label={t('autoPlayBackAudioTitle')}
+                          onClick={() => {
+                            const next = !autoPlayBackAudio;
+                            appActions.updatePreferences({ autoPlayBackAudio: next });
+                            if (!next && isCardFlipped) {
+                              appActions.stopAudio();
+                            }
+                          }}
+                          style={autoPlayBackAudio ? { backgroundColor: brandHex } : undefined}
+                          className={`w-10 h-5.5 shrink-0 flex items-center rounded-full p-0.5 cursor-pointer transition-colors duration-200 ease-in-out ${
+                            autoPlayBackAudio ? '' : isDark ? 'bg-[#3A3A48]' : 'bg-[#E5E5EA]'
+                          }`}
+                        >
+                          <div
+                            className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                              autoPlayBackAudio ? 'translate-x-4.5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="text-[10.5px] text-[#8E8E93] leading-relaxed">
+                      {t('autoPlayBackFallbackNote')}
+                    </div>
+
+                    <div className={`pt-2 border-t ${isDark ? 'border-white/[0.08]' : 'border-black/5'}`}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAudioPopoverOpen(false);
+                          setAppState({ settingsInitialTab: 'answer', settingsOpen: true });
+                        }}
+                        className={`w-full h-7.5 px-2.5 rounded-xl border text-[11px] font-medium flex items-center justify-between cursor-pointer transition-colors ${
+                          isDark
+                            ? 'bg-white/[0.04] border-white/[0.1] text-[#E5E5EA] hover:bg-white/[0.09]'
+                            : 'bg-[#F5F5F7] border-[#E5E5EA] text-[#1D1D1F] hover:bg-[#ECECF2]'
+                        }`}
+                      >
+                        <span>{t('openAnswerSettingsLink')}</span>
+                        <svg className="w-3 h-3 shrink-0 opacity-75" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* 7-Color Flag Quick Picker Button & Popover */}
               <div ref={flagMenuRef} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setFlagPopoverOpen((prev) => !prev)}
-                  title={`${t('flagFilterLabel')} (${formatShortcut('Cmd 1-7', platform)})`}
-                  style={
-                    activeFlagSpec
-                      ? {
-                          backgroundColor: activeFlagSpec.bgSoft,
-                          borderColor: activeFlagSpec.borderHex,
-                          color: activeFlagSpec.hex,
-                        }
-                      : undefined
-                  }
-                  className={`h-8 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
-                    activeFlagSpec ? '' : headerBtnSurface
-                  }`}
-                >
-                  <svg
-                    className="w-3.5 h-3.5 shrink-0"
-                    viewBox="0 0 24 24"
-                    fill={activeFlagSpec ? 'currentColor' : 'none'}
-                    stroke="currentColor"
-                    strokeWidth="2"
+                <Tooltip variant="compact" content={t('flagFilterLabel')} shortcut="Cmd 1-7" side="bottom">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDisplayPopoverOpen(false);
+                      setAudioPopoverOpen(false);
+                      setFlagPopoverOpen((prev) => !prev);
+                    }}
+                    aria-label={
+                      activeFlagSpec
+                        ? `${t('flagFilterLabel')}: ${t(`flagLabel_${activeFlagNum}` as any)}`
+                        : t('flagFilterLabel')
+                    }
+                    style={
+                      activeFlagSpec
+                        ? {
+                            backgroundColor: activeFlagSpec.bgSoft,
+                            borderColor: activeFlagSpec.borderHex,
+                            color: activeFlagSpec.hex,
+                          }
+                        : undefined
+                    }
+                    className={`h-8 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
+                      activeFlagSpec ? '' : headerBtnSurface
+                    }`}
                   >
-                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-                    <line x1="4" y1="22" x2="4" y2="15" />
-                  </svg>
-                  {activeFlagSpec && (
-                    <span>{t(`flagShort_${activeFlagNum}` as any)}</span>
-                  )}
-                </button>
+                    <svg
+                      className="w-3.5 h-3.5 shrink-0"
+                      viewBox="0 0 24 24"
+                      fill={activeFlagSpec ? 'currentColor' : 'none'}
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                      <line x1="4" y1="22" x2="4" y2="15" />
+                    </svg>
+                    {activeFlagSpec && (
+                      <span>{t(`flagShort_${activeFlagNum}` as any)}</span>
+                    )}
+                  </button>
+                </Tooltip>
 
                 {flagPopoverOpen && (
                   <div
@@ -776,61 +1211,252 @@ export const ReviewerView: React.FC = () => {
               </div>
 
               {currentCard.notetypeId && (
+                <Tooltip
+                  variant="compact"
+                  content={`${t('compatMode')} (${currentCard.noteTypeName || 'Basic'})`}
+                  side="bottom"
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      currentCard.notetypeId &&
+                      appActions.toggleNoteTypeSandbox(currentCard.notetypeId)
+                    }
+                    className={`h-8 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
+                      sandboxNoteTypeIds.includes(currentCard.notetypeId)
+                        ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)]'
+                        : headerBtnSurface
+                    }`}
+                  >
+                    <svg
+                      className="w-3.5 h-3.5 shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <rect x="3" y="3" width="18" height="18" rx="3" />
+                      <path d="M9 3v18" />
+                    </svg>
+                    <span>{t('compatMode')}</span>
+                  </button>
+                </Tooltip>
+              )}
+
+              {/* Display Settings (Aa): Content Scale + Card Stage Width */}
+              <div ref={displayMenuRef} className="relative">
+                <Tooltip variant="compact" content={t('reviewDisplayBtn')} side="bottom">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFlagPopoverOpen(false);
+                      setAudioPopoverOpen(false);
+                      setDisplayPopoverOpen((prev) => !prev);
+                    }}
+                    aria-label={t('reviewDisplayBtn')}
+                    aria-expanded={displayPopoverOpen}
+                    className={`h-8 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
+                      displayPopoverOpen || reviewContentScale !== 100 || reviewStageWidth !== 'auto'
+                        ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)]'
+                        : headerBtnSurface
+                    }`}
+                  >
+                    <span className="font-bold tracking-tight text-[12px]">Aa</span>
+                    {reviewContentScale !== 100 && (
+                      <span className="font-mono text-[10px] opacity-90">{reviewContentScale}%</span>
+                    )}
+                  </button>
+                </Tooltip>
+
+                {displayPopoverOpen && (
+                  <div
+                    className={`absolute end-0 top-10 z-50 w-[280px] rounded-2xl border shadow-2xl p-3.5 space-y-3.5 backdrop-blur-xl ${
+                      isDark
+                        ? 'bg-[#181922]/96 border-[#2E303E] text-white'
+                        : 'bg-white/96 border-[#E5E5EA] text-[#1D1D1F]'
+                    }`}
+                  >
+                    {/* Content Scale Stepper */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold">{t('reviewScaleTitle')}</span>
+                        <span className="font-mono text-[10px] text-[#8E8E93]">
+                          {formatShortcut('Cmd +', platform)} / {formatShortcut('Cmd -', platform)}
+                        </span>
+                      </div>
+                      <div
+                        className={`flex items-center justify-between p-1 rounded-xl border ${
+                          isDark
+                            ? 'bg-white/[0.04] border-white/[0.08]'
+                            : 'bg-[#F5F5F7] border-[#E5E5EA]'
+                        }`}
+                      >
+                        <Tooltip variant="compact" content={t('decreaseFontSizeBtn')} shortcut="Cmd -">
+                          <button
+                            type="button"
+                            onClick={() => stepReviewScale(-1)}
+                            disabled={resolvedScaleIdx <= 0}
+                            aria-label={t('decreaseFontSizeBtn')}
+                            className="h-7 px-3 rounded-lg text-[12px] font-semibold hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-35 cursor-pointer transition-colors"
+                          >
+                            A−
+                          </button>
+                        </Tooltip>
+                        <Tooltip variant="compact" content={t('reviewResetDefaultBtn')} shortcut="Cmd Shift 0">
+                          <button
+                            type="button"
+                            onClick={() => appActions.updatePreferences({ reviewContentScale: 100 })}
+                            aria-label={t('reviewResetDefaultBtn')}
+                            className={`h-7 px-3 rounded-lg text-[12px] font-mono font-semibold cursor-pointer transition-colors ${
+                              reviewContentScale === 100
+                                ? 'text-[var(--brand-text)]'
+                                : 'hover:bg-black/5 dark:hover:bg-white/10'
+                            }`}
+                          >
+                            {reviewContentScale}%
+                          </button>
+                        </Tooltip>
+                        <Tooltip variant="compact" content={t('increaseFontSizeBtn')} shortcut="Cmd +">
+                          <button
+                            type="button"
+                            onClick={() => stepReviewScale(1)}
+                            disabled={resolvedScaleIdx >= REVIEW_CONTENT_SCALES.length - 1}
+                            aria-label={t('increaseFontSizeBtn')}
+                            className="h-7 px-3 rounded-lg text-[12px] font-semibold hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-35 cursor-pointer transition-colors"
+                          >
+                            A+
+                          </button>
+                        </Tooltip>
+                      </div>
+                    </div>
+
+                    {/* Card Stage Width Pills */}
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold">{t('reviewWidthTitle')}</div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {(
+                          [
+                            { value: 'auto', labelKey: 'reviewWidthAuto', meta: '580/840' },
+                            { value: 'standard', labelKey: 'reviewWidthStandard', meta: '580px' },
+                            { value: 'wide', labelKey: 'reviewWidthWide', meta: '840px' },
+                            { value: 'full', labelKey: 'reviewWidthFull', meta: '1120px' },
+                          ] as Array<{ value: ReviewStageWidth; labelKey: any; meta: string }>
+                        ).map((opt) => {
+                          const active = reviewStageWidth === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => appActions.updatePreferences({ reviewStageWidth: opt.value })}
+                              aria-pressed={active}
+                              className={`px-2.5 py-1.5 rounded-xl border text-start transition-colors cursor-pointer flex items-center justify-between gap-1 ${
+                                active
+                                  ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)] font-semibold'
+                                  : isDark
+                                  ? 'bg-white/[0.03] border-white/[0.08] text-[#C8C8D2] hover:bg-white/[0.07]'
+                                  : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#F4F4F6]'
+                              }`}
+                            >
+                              <span className="text-[11px] truncate">{t(opt.labelKey)}</span>
+                              <span className="text-[9px] font-mono opacity-65 shrink-0">{opt.meta}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-black/5 dark:border-white/10 space-y-2">
+                      {(() => {
+                        const isCustomDisplay =
+                          reviewContentScale !== 100 || reviewStageWidth !== 'auto';
+                        return (
+                          <Tooltip
+                            variant="compact"
+                            content={t('reviewResetDefaultBtn')}
+                            shortcut="Cmd Shift 0"
+                            disabled={!isCustomDisplay}
+                          >
+                            <button
+                              type="button"
+                              disabled={!isCustomDisplay}
+                              onClick={() =>
+                                appActions.updatePreferences({
+                                  reviewContentScale: 100,
+                                  reviewStageWidth: 'auto',
+                                })
+                              }
+                              className={`w-full h-7.5 px-2.5 rounded-xl border text-[11px] font-medium flex items-center justify-between transition-colors ${
+                                isCustomDisplay
+                                  ? isDark
+                                    ? 'bg-white/[0.04] border-white/[0.1] text-[#E5E5EA] hover:bg-white/[0.09] cursor-pointer'
+                                    : 'bg-[#F5F5F7] border-[#E5E5EA] text-[#1D1D1F] hover:bg-[#ECECF2] cursor-pointer'
+                                  : isDark
+                                  ? 'bg-transparent border-white/[0.05] text-[#6E6E78] opacity-55 cursor-default'
+                                  : 'bg-transparent border-[#ECECF2] text-[#AEAEB2] opacity-65 cursor-default'
+                              }`}
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <svg
+                                  className="w-3 h-3 shrink-0"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                  <path d="M3 3v5h5" />
+                                </svg>
+                                <span>{t('reviewResetDefaultBtn')}</span>
+                              </span>
+                              <span className="text-[9px] font-mono opacity-75">100% · {t('reviewWidthAuto')}</span>
+                            </button>
+                          </Tooltip>
+                        );
+                      })()}
+                      <div className="text-[10px] text-[#8E8E93] leading-relaxed">
+                        {t('reviewImageZoomHint')}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Tooltip variant="compact" content={t('editCardTitle')} shortcut="E" side="bottom">
                 <button
                   type="button"
-                  onClick={() =>
-                    currentCard.notetypeId &&
-                    appActions.toggleNoteTypeSandbox(currentCard.notetypeId)
-                  }
-                  title={`${t('compatMode')} (${currentCard.noteTypeName || 'Basic'})`}
-                  className={`h-8 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
-                    sandboxNoteTypeIds.includes(currentCard.notetypeId)
+                  onClick={() => {
+                    if (currentCard) appActions.openCardEditor(currentCard);
+                  }}
+                  aria-label={t('editCardTitle')}
+                  className={`w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer transition-colors ${headerBtnSurface}`}
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                  </svg>
+                </button>
+              </Tooltip>
+
+              <Tooltip variant="compact" content={t('cardInfoTitle')} shortcut="Cmd I" side="bottom">
+                <button
+                  type="button"
+                  onClick={() => setAppState((prev) => ({ inspectorOpen: !prev.inspectorOpen }))}
+                  aria-label={t('cardInfoTitle')}
+                  className={`w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer transition-colors ${
+                    inspectorOpen
                       ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)]'
                       : headerBtnSurface
                   }`}
                 >
-                  <svg
-                    className="w-3.5 h-3.5 shrink-0"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <rect x="3" y="3" width="18" height="18" rx="3" />
-                    <path d="M9 3v18" />
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="1" />
+                    <circle cx="19" cy="12" r="1" />
+                    <circle cx="5" cy="12" r="1" />
                   </svg>
-                  <span>{t('compatMode')}</span>
                 </button>
-              )}
-
-              <button
-                onClick={() => {
-                  if (currentCard) appActions.openCardEditor(currentCard);
-                }}
-                title="E"
-                className={`w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer transition-colors ${headerBtnSurface}`}
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                </svg>
-              </button>
-
-              <button
-                onClick={() => setAppState((prev) => ({ inspectorOpen: !prev.inspectorOpen }))}
-                title={formatShortcut('Cmd I', platform)}
-                className={`w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer transition-colors ${
-                  inspectorOpen
-                    ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)]'
-                    : headerBtnSurface
-                }`}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="1" />
-                  <circle cx="19" cy="12" r="1" />
-                  <circle cx="5" cy="12" r="1" />
-                </svg>
-              </button>
+              </Tooltip>
             </>
           )}
         </div>
@@ -844,11 +1470,27 @@ export const ReviewerView: React.FC = () => {
             inspectorOpen ? 'ltr:-translate-x-28 rtl:translate-x-28' : ''
           }`}
         >
-          <div className="my-auto flex flex-col items-center w-full max-w-[580px]">
+          <div
+            style={
+              {
+                '--reviewer-img-max-h': `${inlineImgMaxHeightPx}px`,
+                '--reviewer-io-max-h': `${inlineIoMaxHeightPx}px`,
+              } as React.CSSProperties
+            }
+            className={`my-auto flex flex-col items-center w-full transition-[max-width] duration-200 ${stageMaxWidthClass}`}
+          >
             {/* Floating Zen Flashcard — Strict Light/Dark Adaptation + Card Enter (C2) */}
             <div
               key={currentCard.id}
-              onDoubleClick={() => {
+              onClick={handleCardMediaClick}
+              onDoubleClick={(e) => {
+                const target = e.target as HTMLElement | null;
+                if (
+                  (target && target.tagName === 'IMG') ||
+                  getClosestFromTarget(e.target, '.anki-io-wrap')
+                ) {
+                  return;
+                }
                 if (currentCard) appActions.openCardEditor(currentCard);
               }}
               className={`w-full rounded-[22px] border p-7 sm:p-8 relative transition-[background-color,border-color,box-shadow] duration-[var(--dur-base)] shadow-sm ui-card-enter ${cardContainerSurface}`}
@@ -911,12 +1553,21 @@ export const ReviewerView: React.FC = () => {
                   return (
                     <div
                       key={fieldKey}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${fieldKey}: ${t('clickToEdit')}`}
                       onClick={() => setActiveFieldKey(fieldKey)}
-                      className="cursor-text group"
+                      onKeyDown={(e) => {
+                        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                          e.preventDefault();
+                          setActiveFieldKey(fieldKey);
+                        }
+                      }}
+                      className="cursor-text group rounded-lg focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                     >
                       <div className="text-[11px] text-[#8E8E93] mb-1 flex items-center justify-between">
                         <span>{fieldKey}</span>
-                        <span className="text-[10px] opacity-0 group-hover:opacity-100 text-[var(--brand-text)]">
+                        <span className="text-[10px] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-[var(--dur-fast)] text-[var(--brand-text)]">
                           {t('clickToEdit')}
                         </span>
                       </div>
@@ -998,27 +1649,28 @@ export const ReviewerView: React.FC = () => {
                     </span>
 
                     {activeFlagSpec && (
-                      <button
-                        type="button"
-                        onClick={() => appActions.setCurrentReviewCardFlag(0, false)}
-                        title={t('flagNone')}
-                        style={{
-                          backgroundColor: activeFlagSpec.bgSoft,
-                          borderColor: activeFlagSpec.borderHex,
-                          color: activeFlagSpec.hex,
-                        }}
-                        className="px-2 py-0.5 rounded-md border text-[11px] font-medium flex items-center gap-1 cursor-pointer"
-                      >
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: activeFlagSpec.hex }}
-                        />
-                        <span>{t(`flagShort_${activeFlagNum}` as any)}</span>
-                      </button>
+                      <Tooltip variant="compact" content={t('clearFlagBtn')} shortcut="Cmd+0">
+                        <button
+                          type="button"
+                          onClick={() => appActions.setCurrentReviewCardFlag(0, false)}
+                          aria-label={t('clearFlagBtn')}
+                          style={{
+                            backgroundColor: activeFlagSpec.bgSoft,
+                            borderColor: activeFlagSpec.borderHex,
+                            color: activeFlagSpec.hex,
+                          }}
+                          className="px-2 py-0.5 rounded-md border text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: activeFlagSpec.hex }}
+                          />
+                          <span>{t(`flagShort_${activeFlagNum}` as any)}</span>
+                        </button>
+                      </Tooltip>
                     )}
 
-                    {currentCard.audioFiles &&
-                      currentCard.audioFiles.map((audioFile) => (
+                    {visibleAudioFiles.map((audioFile) => (
                         <button
                           key={audioFile}
                           onClick={(e) => {
@@ -1049,12 +1701,7 @@ export const ReviewerView: React.FC = () => {
                   </span>
                 </div>
 
-                {Boolean(
-                  (currentCard.needsSandbox ||
-                    (currentCard.notetypeId &&
-                      sandboxNoteTypeIds.includes(currentCard.notetypeId))) &&
-                    (currentCard.sandboxFrontHtml || currentCard.sandboxBackHtml)
-                ) ? (
+                {isSandboxCard ? (
                   <div className="my-2">
                     <SandboxCardFrame
                       cardId={currentCard.id}
@@ -1064,6 +1711,12 @@ export const ReviewerView: React.FC = () => {
                       isFlipped={isCardFlipped}
                       isDark={isDark}
                       audioFiles={currentCard.audioFiles}
+                      frontAudioFiles={currentCard.frontAudioFiles}
+                      backAudioFiles={currentCard.backAudioFiles}
+                      sandboxQuestionAudioFiles={currentCard.sandboxQuestionAudioFiles}
+                      sandboxAnswerAudioFiles={currentCard.sandboxAnswerAudioFiles}
+                      contentScale={scaleFactor}
+                      onImageZoom={(target) => setLightboxTarget({ mode: 'img', src: target.src, alt: target.alt })}
                     />
                   </div>
                 ) : (
@@ -1078,24 +1731,38 @@ export const ReviewerView: React.FC = () => {
                       );
                       const frontCleanText = (frontHtmlContent || '').replace(/<[^>]*>/g, '').trim();
                       const frontTextLen = frontCleanText.length;
+                      const frontBaseFontPx =
+                        isNativeStyledFront || frontTextLen > 80 ? 17 : frontTextLen > 35 ? 22 : 30;
                       const frontTypographyClass = isNativeStyledFront
                         ? 'w-full select-text break-words text-[17px] leading-relaxed'
                         : frontTextLen > 80
-                        ? 'text-[17px] font-semibold leading-relaxed tracking-normal whitespace-pre-wrap'
+                        ? 'font-semibold leading-relaxed tracking-normal whitespace-pre-wrap'
                         : frontTextLen > 35
-                        ? 'text-[22px] font-bold leading-snug tracking-tight whitespace-pre-wrap'
-                        : 'text-[30px] font-bold leading-tight tracking-tight whitespace-pre-wrap';
+                        ? 'font-bold leading-snug tracking-tight whitespace-pre-wrap'
+                        : 'font-bold leading-tight tracking-tight whitespace-pre-wrap';
 
                       return (
                         <div className="mb-6 select-text cursor-text">
                           <div
-                            className={`${frontTypographyClass} break-words [&_img]:max-h-64 [&_img]:rounded-xl [&_img]:my-2 [&_.anki-io-wrap_img]:!my-0 [&_.anki-io-wrap_img]:!max-h-80`}
+                            style={
+                              isNativeStyledFront
+                                ? scaleFactor !== 1
+                                  ? { zoom: scaleFactor }
+                                  : undefined
+                                : { fontSize: `${Math.round(frontBaseFontPx * scaleFactor * 10) / 10}px` }
+                            }
+                            className={`${frontTypographyClass} break-words [&_img]:max-h-[var(--reviewer-img-max-h)] [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-xl [&_img]:my-2 [&_img]:cursor-zoom-in [&_a_img]:cursor-pointer [&_button_img]:cursor-pointer [&_.anki-io-wrap]:cursor-zoom-in [&_.anki-io-wrap_img]:!my-0 [&_.anki-io-wrap_img]:!max-h-[var(--reviewer-io-max-h)]`}
                             dangerouslySetInnerHTML={{
                               __html: renderMathAndRichHtml(frontHtmlContent, !isCardFlipped),
                             }}
                           />
                           {currentCard.reading && !isNativeStyledFront && (
-                            <p className="text-[13px] text-[#8E8E98] mt-1.5">{currentCard.reading}</p>
+                            <p
+                              style={{ fontSize: `${Math.round(13 * scaleFactor * 10) / 10}px` }}
+                              className="text-[#8E8E98] mt-1.5"
+                            >
+                              {currentCard.reading}
+                            </p>
                           )}
                         </div>
                       );
@@ -1112,25 +1779,43 @@ export const ReviewerView: React.FC = () => {
                         )}
 
                         {/* Meaning */}
-                        <div
-                          className={`select-text cursor-text break-words ${
+                        {(() => {
+                          const backHtmlContent = currentCard.backHtml || currentCard.meaning;
+                          const isNativeStyledBack = Boolean(
                             (currentCard.backHtml || '').includes('anki-native-card')
-                              ? 'w-full text-[16px] leading-relaxed'
-                              : 'text-[17px] font-medium leading-relaxed whitespace-pre-wrap [&_img]:max-h-60 [&_img]:rounded-xl [&_img]:my-3'
-                          } [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[14px] ${
-                            isDark
-                              ? 'text-[#EFEFF5] [&_code]:bg-white/10'
-                              : 'text-[#1D1D1F] [&_code]:bg-[#F2F2F7]'
-                          }`}
-                          dangerouslySetInnerHTML={{
-                            __html: renderMathAndRichHtml(currentCard.backHtml || currentCard.meaning),
-                          }}
-                        />
+                          );
+                          return (
+                            <div
+                              style={
+                                isNativeStyledBack
+                                  ? scaleFactor !== 1
+                                    ? { zoom: scaleFactor }
+                                    : undefined
+                                  : { fontSize: `${Math.round(17 * scaleFactor * 10) / 10}px` }
+                              }
+                              className={`select-text cursor-text break-words ${
+                                isNativeStyledBack
+                                  ? 'w-full text-[16px] leading-relaxed [&_img]:max-h-[var(--reviewer-img-max-h)] [&_img]:w-auto [&_img]:max-w-full [&_img]:cursor-zoom-in [&_a_img]:cursor-pointer [&_button_img]:cursor-pointer'
+                                  : 'font-medium leading-relaxed whitespace-pre-wrap [&_img]:max-h-[var(--reviewer-img-max-h)] [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-xl [&_img]:my-3 [&_img]:cursor-zoom-in [&_a_img]:cursor-pointer [&_button_img]:cursor-pointer [&_.anki-io-wrap]:cursor-zoom-in [&_.anki-io-wrap_img]:!my-0 [&_.anki-io-wrap_img]:!max-h-[var(--reviewer-io-max-h)]'
+                              } [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[0.85em] ${
+                                isDark
+                                  ? 'text-[#EFEFF5] [&_code]:bg-white/10'
+                                  : 'text-[#1D1D1F] [&_code]:bg-[#F2F2F7]'
+                              }`}
+                              dangerouslySetInnerHTML={{
+                                __html: renderMathAndRichHtml(backHtmlContent),
+                              }}
+                            />
+                          );
+                        })()}
 
                         {/* Progressive Hints */}
                         <div className="mt-5 space-y-2.5">
                           {currentCard.etymology && (
-                            <div className="flex items-center gap-2.5 text-[13px]">
+                            <div
+                              style={{ fontSize: `${Math.round(13 * scaleFactor * 10) / 10}px` }}
+                              className="flex items-center gap-2.5"
+                            >
                               <span className="px-2 py-0.5 rounded bg-[var(--brand-soft)] text-[var(--brand-text)] text-[11px] font-medium shrink-0">
                                 {t('etymologyBadge')}
                               </span>
@@ -1144,7 +1829,10 @@ export const ReviewerView: React.FC = () => {
                           )}
 
                           {revealedHintsCount >= 2 && currentCard.example && (
-                            <div className="flex items-center gap-2.5 text-[13px]">
+                            <div
+                              style={{ fontSize: `${Math.round(13 * scaleFactor * 10) / 10}px` }}
+                              className="flex items-center gap-2.5"
+                            >
                               <span className="px-2 py-0.5 rounded bg-[var(--brand-soft)] text-[var(--brand-text)] text-[11px] font-medium shrink-0">
                                 {t('exampleBadge')}
                               </span>
@@ -1158,7 +1846,10 @@ export const ReviewerView: React.FC = () => {
                           )}
 
                           {revealedHintsCount >= 3 && currentCard.extraHint ? (
-                            <div className="flex items-center gap-2.5 text-[13px]">
+                            <div
+                              style={{ fontSize: `${Math.round(13 * scaleFactor * 10) / 10}px` }}
+                              className="flex items-center gap-2.5"
+                            >
                               <span className="px-2 py-0.5 rounded bg-[var(--status-success-soft)] text-[var(--status-success)] text-[11px] font-medium shrink-0">
                                 {t('collocationBadge')}
                               </span>
@@ -1196,28 +1887,35 @@ export const ReviewerView: React.FC = () => {
                   <div className="mt-6 pt-3.5 border-t border-black/[0.04] dark:border-white/[0.05] flex items-center justify-between gap-2 text-[11px] text-[#8E8E93]">
                     <div className="flex items-center gap-1.5 overflow-hidden">
                       {currentCard.tags.slice(0, 2).map((tag) => (
-                        <span
-                          key={tag}
-                          className={`px-2 py-0.5 rounded-md text-[10px] truncate max-w-[120px] ${
-                            isDark
-                              ? 'bg-white/[0.06] text-[#8E8E98]'
-                              : 'bg-[#F2F2F7] text-[#6E6E73]'
-                          }`}
-                        >
-                          #{tag}
-                        </span>
+                        <Tooltip key={tag} variant="compact" content={`#${tag}`} onlyWhenTruncated>
+                          <span
+                            tabIndex={0}
+                            className={`inline-block align-middle px-2 py-0.5 rounded-md text-[10px] truncate max-w-[120px] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 ${
+                              isDark
+                                ? 'bg-white/[0.06] text-[#8E8E98]'
+                                : 'bg-[#F2F2F7] text-[#6E6E73]'
+                            }`}
+                          >
+                            #{tag}
+                          </span>
+                        </Tooltip>
                       ))}
                       {currentCard.tags.length > 2 && (
-                        <span
-                          title={currentCard.tags.slice(2).map((tItem) => `#${tItem}`).join(', ')}
-                          className={`px-1.5 py-0.5 rounded-md text-[10px] cursor-default ${
-                            isDark
-                              ? 'bg-white/[0.04] text-[#7E7E86]'
-                              : 'bg-[#ECECF2] text-[#8E8E93]'
-                          }`}
+                        <Tooltip
+                          variant="compact"
+                          content={currentCard.tags.slice(2).map((tItem) => `#${tItem}`).join(', ')}
                         >
-                          +{currentCard.tags.length - 2}
-                        </span>
+                          <span
+                            tabIndex={0}
+                            className={`px-1.5 py-0.5 rounded-md text-[10px] cursor-default focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 ${
+                              isDark
+                                ? 'bg-white/[0.04] text-[#7E7E86]'
+                                : 'bg-[#ECECF2] text-[#8E8E93]'
+                            }`}
+                          >
+                            +{currentCard.tags.length - 2}
+                          </span>
+                        </Tooltip>
                       )}
                     </div>
                     {currentCard.reps > 0 && (
@@ -1408,12 +2106,16 @@ export const ReviewerView: React.FC = () => {
             <div className="space-y-5 overflow-y-auto pe-0.5">
               <div className="flex items-center justify-between">
                 <h3 className="text-[14px] font-semibold">{t('cardInfoTitle')}</h3>
-                <button
-                  onClick={() => setAppState({ inspectorOpen: false })}
-                  className="text-[#8E8E93] hover:text-[var(--brand-text)] text-sm cursor-pointer"
-                >
-                  ✕
-                </button>
+                <Tooltip variant="compact" content={t('close')} shortcut="Esc" side="bottom">
+                  <button
+                    type="button"
+                    aria-label={t('close')}
+                    onClick={() => setAppState({ inspectorOpen: false })}
+                    className="text-[#8E8E93] hover:text-[var(--brand-text)] text-sm cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 rounded"
+                  >
+                    ✕
+                  </button>
+                </Tooltip>
               </div>
 
               {/* 7-Color Flag Picker inside Inspector */}
@@ -1431,40 +2133,48 @@ export const ReviewerView: React.FC = () => {
                     const spec = ANKI_FLAG_PALETTE[fNum];
                     const isSel = activeFlagNum === fNum;
                     return (
-                      <button
+                      <Tooltip
                         key={fNum}
-                        type="button"
-                        onClick={() => appActions.setCurrentReviewCardFlag(fNum, true)}
-                        title={`${t(`flagLabel_${fNum}` as any)} (${formatShortcut(`Cmd+${fNum}`, platform)})`}
-                        className={`w-7 h-7 rounded-xl border flex items-center justify-center cursor-pointer transition-all ${
-                          isSel
-                            ? 'scale-110 ring-2 ring-offset-1 dark:ring-offset-[#121318]'
-                            : 'opacity-75 hover:opacity-100'
-                        }`}
-                        style={{
-                          backgroundColor: spec.bgSoft,
-                          borderColor: isSel ? spec.hex : spec.borderHex,
-                        }}
+                        variant="compact"
+                        content={t(`flagLabel_${fNum}` as any)}
+                        shortcut={`Cmd+${fNum}`}
                       >
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: spec.hex }}
-                        />
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => appActions.setCurrentReviewCardFlag(fNum, true)}
+                          aria-label={t(`flagLabel_${fNum}` as any)}
+                          className={`w-7 h-7 rounded-xl border flex items-center justify-center cursor-pointer transition-all focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
+                            isSel
+                              ? 'scale-110 ring-2 ring-offset-1 dark:ring-offset-[#121318]'
+                              : 'opacity-75 hover:opacity-100'
+                          }`}
+                          style={{
+                            backgroundColor: spec.bgSoft,
+                            borderColor: isSel ? spec.hex : spec.borderHex,
+                          }}
+                        >
+                          <span
+                            className="w-2.5 h-2.5 rounded-full"
+                            style={{ backgroundColor: spec.hex }}
+                          />
+                        </button>
+                      </Tooltip>
                     );
                   })}
-                  <button
-                    type="button"
-                    onClick={() => appActions.setCurrentReviewCardFlag(0, false)}
-                    title={`${t('flagNone')} (Cmd+0)`}
-                    className={`w-7 h-7 rounded-xl border text-[11px] flex items-center justify-center cursor-pointer transition-colors ${
-                      activeFlagNum === 0
-                        ? 'opacity-40'
-                        : 'text-[#8E8E93] hover:text-[var(--status-danger)] border-black/10 dark:border-white/10'
-                    }`}
-                  >
-                    ✕
-                  </button>
+                  <Tooltip variant="compact" content={t('clearFlagBtn')} shortcut="Cmd+0">
+                    <button
+                      type="button"
+                      onClick={() => appActions.setCurrentReviewCardFlag(0, false)}
+                      aria-label={t('clearFlagBtn')}
+                      className={`w-7 h-7 rounded-xl border text-[11px] flex items-center justify-center cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
+                        activeFlagNum === 0
+                          ? 'opacity-40'
+                          : 'text-[#8E8E93] hover:text-[var(--status-danger)] border-black/10 dark:border-white/10'
+                      }`}
+                    >
+                      ✕
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
 
@@ -1567,18 +2277,19 @@ export const ReviewerView: React.FC = () => {
               }`}
             >
               <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => appActions.buryCurrentReviewCard()}
-                  className={`h-8 rounded-xl border text-[11px] font-medium cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
-                    isDark
-                      ? 'bg-[#1A1B22] border-white/[0.08] text-[#C8C8D2] hover:bg-white/10'
-                      : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#EFEFF4]'
-                  }`}
-                  title={t('buryCardBtn')}
-                >
-                  {t('batchBury')}
-                </button>
+                <Tooltip variant="compact" content={t('buryCardBtn')}>
+                  <button
+                    type="button"
+                    onClick={() => appActions.buryCurrentReviewCard()}
+                    className={`h-8 rounded-xl border text-[11px] font-medium cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
+                      isDark
+                        ? 'bg-[#1A1B22] border-white/[0.08] text-[#C8C8D2] hover:bg-white/10'
+                        : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#EFEFF4]'
+                    }`}
+                  >
+                    {t('batchBury')}
+                  </button>
+                </Tooltip>
 
                 <button
                   type="button"
@@ -1588,7 +2299,6 @@ export const ReviewerView: React.FC = () => {
                       ? 'bg-[#1A1B22] border-white/[0.08] text-[#C8C8D2] hover:bg-white/10'
                       : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#EFEFF4]'
                   }`}
-                  title={t('suspendCardBtn')}
                 >
                   {currentCard.suspended ? t('unsuspendCardBtn') : t('suspendCardBtn')}
                 </button>
@@ -1615,6 +2325,41 @@ export const ReviewerView: React.FC = () => {
                   </button>
                 )}
               </div>
+
+              <CopyDebugInfoButton
+                key={currentCard.id}
+                label={t('copyDebugInfoBtn')}
+                copiedLabel={t('copiedBadge')}
+                tooltipText={t('copyDebugInfoTooltip')}
+                ariaLabel={t('copyDebugInfoBtn')}
+                copiedToast={t('debugInfoCopiedToast')}
+                failedToast={t('copyFailedToast')}
+                idleClassName={
+                  isDark
+                    ? 'bg-[#1A1B22] border-white/[0.08] text-[#9A9AA6] hover:text-white hover:bg-white/10'
+                    : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#EFEFF4]'
+                }
+                onCopyDebugInfo={() =>
+                  collectAndCopyCardDebugInfo({
+                    client: {
+                      sourceView: 'reviewer',
+                      envInfo,
+                      theme,
+                      accentColor,
+                      resolvedLang,
+                      sandboxNoteTypeIds,
+                      autoPlayFrontAudio,
+                      autoPlayBackAudio,
+                      reviewStageWidth,
+                      reviewContentScale,
+                      isPreviewSession,
+                      isCardFlipped,
+                      isSandboxCard,
+                    },
+                    card: cardDebugSnapshotFromReviewCard(currentCard),
+                  })
+                }
+              />
             </div>
           </aside>
         )}
@@ -1649,6 +2394,13 @@ export const ReviewerView: React.FC = () => {
             {t('sessionAccuracyLabel')}: {accuracyPct}%
           </span>
         </footer>
+      )}
+
+      {lightboxTarget && (
+        <ReviewerImageLightbox
+          target={lightboxTarget}
+          onClose={() => setLightboxTarget(null)}
+        />
       )}
     </div>
   );

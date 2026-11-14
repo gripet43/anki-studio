@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePresence } from '../../hooks/usePresence';
+import { Tooltip } from '../common/Tooltip';
 import { formatShortcut, translate } from '../../i18n/translations';
 import { useAppStore } from '../../stores/useAppStore';
 import { resolveMediaSrcValue } from '../../utils/mediaUrl';
@@ -495,14 +496,16 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('close')}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current cursor-pointer"
-          >
-            ✕
-          </button>
+          <Tooltip variant="compact" content={t('close')} shortcut="Esc" side="bottom">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('close')}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current cursor-pointer"
+            >
+              ✕
+            </button>
+          </Tooltip>
         </header>
 
         {/* Toolbar & Mode Controls */}
@@ -557,7 +560,6 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
               <button
                 type="button"
                 onClick={() => setMode('hide-all')}
-                title={t('ioModeHideAllBtn')}
                 className={`h-7 px-2.5 rounded-lg text-[11px] font-medium cursor-pointer transition-all ${
                   mode === 'hide-all'
                     ? 'bg-[var(--brand)] text-white shadow-2xs'
@@ -569,7 +571,6 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
               <button
                 type="button"
                 onClick={() => setMode('hide-one')}
-                title={t('ioModeHideOneBtn')}
                 className={`h-7 px-2.5 rounded-lg text-[11px] font-medium cursor-pointer transition-all ${
                   mode === 'hide-one'
                     ? 'bg-[var(--brand)] text-white shadow-2xs'
@@ -646,18 +647,20 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
                       </span>
 
                       {isSelected && (
-                        <button
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.stopPropagation();
-                            setRects((prev) => prev.filter((item) => item.id !== r.id));
-                            setSelectedRectId(null);
-                          }}
-                          title={t('batchDelete')}
-                          className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-[#EF4444] text-white text-[11px] font-bold flex items-center justify-center shadow-md cursor-pointer"
-                        >
-                          ×
-                        </button>
+                        <Tooltip variant="compact" content={t('batchDelete')} shortcut="Delete">
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              setRects((prev) => prev.filter((item) => item.id !== r.id));
+                              setSelectedRectId(null);
+                            }}
+                            aria-label={t('batchDelete')}
+                            className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-[#EF4444] text-white text-[11px] font-bold flex items-center justify-center shadow-md cursor-pointer"
+                          >
+                            ×
+                          </button>
+                        </Tooltip>
                       )}
                     </div>
                   );

@@ -17,16 +17,88 @@
   7. 构建产物里也包含该防御逻辑
   8. 挖空序列化必须用 innerHTML（否则 cloze 里的富文本被吃掉）
   9. 表格内联样式不得烘进界面主题（原生白底上表头会不可见）
+  10. 统一悬浮提示与信息浮卡护栏：禁止原生 JSX title=（仅 <iframe> 例外），校验 SSR/CSS tokens
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 SRC = ROOT / "frontend" / "src"
 HELPER = SRC / "utils" / "domTarget.ts"
+
+_RAW_TITLE_ATTR_RE = re.compile(r"(?<![A-Za-z0-9_.$:])title\s*=\s*(?:[\"'\x60]|\{)")
+_JSX_TAG_NAME_RE = re.compile(r"([A-Za-z][A-Za-z0-9_.-]*)\b")
+_COMMENT_BLOCK_RE = re.compile(r"\{\s*/\*[\s\S]*?\*/\s*\}|/\*[\s\S]*?\*/")
+_COMMENT_LINE_RE = re.compile(r"(?<![:/])//[^\n]*")
+_VAR_DECL_LINE_RE = re.compile(r"\b(?:const|let|var|type|interface)\s+$")
+
+
+def _mask_comments_preserve_lines(text: str) -> str:
+    """Replace JS/JSX comments with spaces while keeping line breaks intact."""
+    masked = _COMMENT_BLOCK_RE.sub(
+        lambda m: re.sub(r"[^\n]", " ", m.group(0)), text
+    )
+    return _COMMENT_LINE_RE.sub(lambda m: " " * len(m.group(0)), masked)
+
+
+def _enclosing_jsx_tag(text: str, attr_start: int) -> str | None:
+    """Walk backwards from a `title=` match to identify the enclosing JSX opening tag."""
+    line_start = text.rfind("\n", 0, attr_start) + 1
+    if _VAR_DECL_LINE_RE.search(text[line_start:attr_start]):
+        return None
+
+    brace_depth = 0
+    quote: str | None = None
+    pos = attr_start - 1
+    floor = max(0, attr_start - 4000)
+
+    while pos >= floor:
+        ch = text[pos]
+        if quote is not None:
+            if ch == quote and (pos == 0 or text[pos - 1] != "\\"):
+                quote = None
+            pos -= 1
+            continue
+
+        if ch in ('"', "'", "`"):
+            quote = ch
+            pos -= 1
+            continue
+
+        if ch == "}":
+            brace_depth += 1
+        elif ch == "{":
+            if brace_depth == 0:
+                return None
+            brace_depth -= 1
+        elif brace_depth == 0:
+            if ch in (">", ";"):
+                return None
+            if ch == "<":
+                m = _JSX_TAG_NAME_RE.match(text, pos + 1)
+                if m:
+                    after = pos + 1 + len(m.group(1))
+                    if after < attr_start and text[after].isspace():
+                        return m.group(1)
+                return None
+        pos -= 1
+    return None
+
+
+def find_raw_jsx_title_lines(text: str) -> list[int]:
+    """Return 1-based line numbers for raw JSX `title=` attributes outside `<iframe>`."""
+    masked = _mask_comments_preserve_lines(text)
+    lines: list[int] = []
+    for match in _RAW_TITLE_ATTR_RE.finditer(masked):
+        tag = _enclosing_jsx_tag(masked, match.start())
+        if tag is None or tag == "iframe":
+            continue
+        lines.append(masked.count("\n", 0, match.start()) + 1)
+    return lines
 
 
 def read(path: Path) -> str:
@@ -124,6 +196,50 @@ def main() -> int:
     check(
         "isDark" not in table_src,
         "表格样式里出现了 isDark：会把界面主题烘进笔记内容",
+    )
+
+    # ---- 统一悬浮提示与信息浮卡规范 ----
+    # 禁止 JSX UI 组件继续写原生 title=（唯一例外：<iframe> 无障碍标题）；
+    # 统一浮层原语与定位 hook 必须守卫 SSR（typeof document !== 'undefined'），且 index.css 提供语义 tokens。
+    floating_hook_src = read(SRC / "hooks" / "useFloatingPosition.ts")
+    tooltip_src = read(SRC / "components" / "common" / "Tooltip.tsx")
+    hovercard_src = read(SRC / "components" / "common" / "HoverCard.tsx")
+    css_src = read(SRC / "index.css")
+
+    check(bool(floating_hook_src), "缺少 frontend/src/hooks/useFloatingPosition.ts")
+    check(bool(tooltip_src), "缺少 frontend/src/components/common/Tooltip.tsx")
+    check(bool(hovercard_src), "缺少 frontend/src/components/common/HoverCard.tsx")
+    def has_ssr_guard(src: str) -> bool:
+        return (
+            "typeof document !== 'undefined'" in src
+            or "typeof document === 'undefined'" in src
+        )
+
+    check(
+        has_ssr_guard(floating_hook_src)
+        and has_ssr_guard(tooltip_src)
+        and has_ssr_guard(hovercard_src),
+        "统一 Tooltip/HoverCard/useFloatingPosition 缺少 typeof document SSR 守卫",
+    )
+    check(
+        "getClosestFromTarget" in hovercard_src,
+        "HoverCard.tsx 未使用 getClosestFromTarget 进行外部点击关闭判定",
+    )
+    check(
+        "--tooltip-bg" in css_src and "--z-tooltip" in css_src,
+        "frontend/src/index.css 缺少 --tooltip-bg 或 --z-tooltip 浮层语义 tokens",
+    )
+
+    raw_title_offenders: list[str] = []
+    for path in sorted(SRC.rglob("*.tsx")):
+        bad_lines = find_raw_jsx_title_lines(read(path))
+        if bad_lines:
+            rel = path.relative_to(ROOT)
+            raw_title_offenders.append(f"{rel}:{','.join(str(n) for n in bad_lines)}")
+    check(
+        not raw_title_offenders,
+        "存在未迁移的原生 JSX title= 属性（请改用 <Tooltip>，仅 <iframe> 例外）："
+        + "; ".join(raw_title_offenders),
     )
 
     if failures:

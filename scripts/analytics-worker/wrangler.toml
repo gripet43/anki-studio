@@ -10,6 +10,9 @@ database_id = "4357547b-d985-4e17-aac0-b9033f32bd6a"
 [triggers]
 crons = ["0 3 * * *"]
 
-# 部署后把自定义域名绑定到 Worker（大陆访问比 *.workers.dev 稳定）：
-#   wrangler routes add stats.example.com/*
+# 线上自定义域名（已在 Cloudflare Dashboard 绑定 anki.63096039.xyz，大陆访问比 *.workers.dev 稳定）；
+# 若自建部署，可取消注释下面配置并改成自己的域名后执行 `wrangler deploy`：
+# routes = [
+#   { pattern = "stats.example.com", custom_domain = true }
+# ]
 # 然后把 https://stats.example.com/v1/events 填进插件 config.json 的 analytics_endpoint。

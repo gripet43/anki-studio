@@ -37,7 +37,7 @@ class TestAnalyticsService(unittest.TestCase):
     def test_builtin_endpoint_is_configured(self):
         svc, _cfg = self._service()
         self.assertTrue(svc.enabled())
-        self.assertTrue(svc.endpoint().startswith("https://"))
+        self.assertEqual(svc.endpoint(), "https://anki.63096039.xyz/v1/events")
 
     def test_track_app_open_queues_anonymous_event(self):
         svc, cfg = self._service(

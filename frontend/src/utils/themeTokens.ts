@@ -350,6 +350,39 @@ export function getAccentScale(accent: AccentColor, theme: ThemeMode): AccentSca
   return isDark ? meta.dark : meta.light;
 }
 
+export interface StatusTextTokens {
+  /** High-contrast danger foreground (>= 4.5:1 on --bg-card & --tooltip-bg) */
+  dangerText: string;
+  /** High-contrast warning foreground (>= 4.5:1 on --bg-card & --tooltip-bg) */
+  warningText: string;
+  /** High-contrast success foreground (>= 4.5:1 on --bg-card & --tooltip-bg) */
+  successText: string;
+  /** High-contrast info foreground (>= 4.5:1 on --bg-card & --tooltip-bg) */
+  infoText: string;
+}
+
+const LIGHT_STATUS_TEXT: StatusTextTokens = {
+  dangerText: '#C43643',
+  warningText: '#A25810',
+  successText: '#1F7A4D',
+  infoText: '#2266A3',
+};
+
+const DARK_STATUS_TEXT: StatusTextTokens = {
+  dangerText: '#F27782',
+  warningText: '#F0A854',
+  successText: '#4CC38A',
+  infoText: '#66ACEA',
+};
+
+/**
+ * Returns WCAG AA (>= 4.5:1) semantic foreground colors calibrated for small
+ * (11px) numbers and badges rendered inside elevated `--tooltip-bg` surfaces.
+ */
+export function getStatusTextTokens(theme: ThemeMode): StatusTextTokens {
+  return theme === 'dark' || theme === 'oled' ? DARK_STATUS_TEXT : LIGHT_STATUS_TEXT;
+}
+
 /**
  * Computes inline CSS variable declarations for the root container and documentElement
  * so that all descendant components and modals automatically inherit the active theme.

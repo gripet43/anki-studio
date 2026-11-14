@@ -279,15 +279,15 @@ export function renderMathAndRichHtml(
       const isTargetOrd = activeClozeOrd === undefined || cNum === targetOrdStr;
       if (maskClozeAsQuestion) {
         if (!isTargetOrd) {
-          return cAns;
+          return `<span class="cloze-inactive" data-ordinal="${cNum}">${cAns}</span>`;
         }
         const label = cHint ? cHint : '...';
-        return `<span class="px-2 py-0.5 rounded bg-[var(--brand-soft-strong)] text-[var(--brand-text)] font-semibold border border-[var(--brand-border)]">[${label}]</span>`;
+        return `<span class="anki-cloze-question">[${label}]</span>`;
       }
       if (!isTargetOrd) {
-        return cAns;
+        return `<span class="cloze-inactive" data-ordinal="${cNum}">${cAns}</span>`;
       }
-      return `<span class="px-1.5 py-0.5 rounded bg-[var(--status-success-soft)] text-[var(--status-success)] font-semibold">${cAns}</span>`;
+      return `<span class="anki-cloze-answer">${cAns}</span>`;
     });
   }
 

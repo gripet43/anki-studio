@@ -7,5 +7,7 @@
   "accent_color": "indigo",
   "language": "auto",
   "collapsed_deck_ids": [],
-  "show_shortcut_hints": false
+  "show_shortcut_hints": false,
+  "auto_play_front_audio": false,
+  "auto_play_back_audio": true
 }

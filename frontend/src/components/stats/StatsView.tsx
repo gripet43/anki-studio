@@ -2,6 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { translate } from '../../i18n/translations';
 import { useAppStore } from '../../stores/useAppStore';
 import { getAccentScale } from '../../utils/themeTokens';
+import {
+  ChartTooltipContent,
+  ChartTooltipPortal,
+  type ChartTooltipRow,
+} from '../common/Tooltip';
 
 export const StatsView: React.FC = () => {
   const {
@@ -40,16 +45,20 @@ export const StatsView: React.FC = () => {
     animationDelay: `${Math.min(index, ENTER_STAGGER_MAX) * ENTER_STAGGER_MS}ms`,
   });
 
-  // Interactive hover state unified with DashboardView's `.dashboard-tooltip` popovers
+  // Interactive hover state unified with ChartTooltipPortal / ChartTooltipContent
   const [hoveredForecastIdx, setHoveredForecastIdx] = useState<number | null>(null);
+  const [forecastAnchorEl, setForecastAnchorEl] = useState<HTMLElement | null>(null);
   const [hoveredMaturitySeg, setHoveredMaturitySeg] = useState<{
     label: string;
     count: number;
     pctLabel: string;
-    color: string;
+    tone: ChartTooltipRow['tone'];
   } | null>(null);
+  const [maturityAnchorEl, setMaturityAnchorEl] = useState<HTMLElement | null>(null);
   const [hoveredRetentionIdx, setHoveredRetentionIdx] = useState<number | null>(null);
+  const [retentionAnchorEl, setRetentionAnchorEl] = useState<HTMLElement | null>(null);
   const [hoveredHourlyIdx, setHoveredHourlyIdx] = useState<number | null>(null);
+  const [hourlyAnchorEl, setHourlyAnchorEl] = useState<HTMLElement | null>(null);
 
   const {
     maturityBreakdown,
@@ -129,7 +138,16 @@ export const StatsView: React.FC = () => {
   const hoveredHourlyItem =
     hoveredHourlyIdx !== null ? hourlyDistribution[hoveredHourlyIdx] ?? null : null;
 
-  const maturitySegments = [
+  const maturitySegments: Array<{
+    key: string;
+    widthPct: number;
+    count: number;
+    pctLabel: string;
+    label: string;
+    className: string;
+    style?: React.CSSProperties;
+    tone: ChartTooltipRow['tone'];
+  }> = [
     {
       key: 'mature',
       widthPct: maturePct,
@@ -137,7 +155,7 @@ export const StatsView: React.FC = () => {
       pctLabel: formatPctLabel(maturityBreakdown.mature, maturePct),
       label: t('statsMatureCardsLegend'),
       className: 'bg-[var(--status-success)]',
-      color: 'var(--status-success)',
+      tone: 'success',
     },
     {
       key: 'young',
@@ -147,7 +165,7 @@ export const StatsView: React.FC = () => {
       label: t('statsYoungCardsLegend'),
       className: '',
       style: { backgroundColor: brandHex },
-      color: brandHex,
+      tone: 'brand',
     },
     {
       key: 'learning',
@@ -156,7 +174,7 @@ export const StatsView: React.FC = () => {
       pctLabel: formatPctLabel(maturityBreakdown.learning, learnPct),
       label: t('statsLearningCardsLegend'),
       className: 'bg-[var(--status-warning)]',
-      color: 'var(--status-warning)',
+      tone: 'warning',
     },
     {
       key: 'new',
@@ -165,7 +183,7 @@ export const StatsView: React.FC = () => {
       pctLabel: formatPctLabel(maturityBreakdown.newCards, newPct),
       label: t('statsUnseenCardsLegend'),
       className: 'bg-[var(--status-info)]',
-      color: 'var(--status-info)',
+      tone: 'info',
     },
     {
       key: 'suspended',
@@ -174,7 +192,7 @@ export const StatsView: React.FC = () => {
       pctLabel: formatPctLabel(maturityBreakdown.suspended, suspPct),
       label: t('statusSuspended'),
       className: 'bg-[#FF9F0A]',
-      color: '#FF9F0A',
+      tone: 'warning',
     },
     {
       key: 'buried',
@@ -183,7 +201,7 @@ export const StatsView: React.FC = () => {
       pctLabel: formatPctLabel(maturityBreakdown.buried || 0, buriedPct),
       label: t('statusBuried'),
       className: 'bg-[#8E8E93]/70',
-      color: '#8E8E93',
+      tone: 'muted',
     },
   ];
 
@@ -257,35 +275,42 @@ export const StatsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Unified baseline bar columns with Dashboard-aligned floating tooltip */}
+          {/* Unified baseline bar columns with unified ChartTooltipPortal */}
           <div
             className="h-[140px] flex items-end gap-1 px-1 relative"
-            onMouseLeave={() => setHoveredForecastIdx(null)}
+            onMouseLeave={() => {
+              setHoveredForecastIdx(null);
+              setForecastAnchorEl(null);
+            }}
           >
-            {hoveredForecastDay && hoveredForecastIdx !== null && (
-              <div
-                style={{
-                  left: `${Math.min(
-                    86,
-                    Math.max(14, (hoveredForecastIdx / Math.max(1, forecast30d.length - 1)) * 100)
-                  )}%`,
-                }}
-                className="dashboard-tooltip absolute -top-12 -translate-x-1/2 z-50 pointer-events-none px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all duration-75"
-              >
-                <div className="text-[10px] text-[var(--text-secondary)]">
-                  {hoveredForecastDay.label} · {hoveredForecastDay.total.toLocaleString()} {t('cardsUnit')}
-                </div>
-                <div className="text-[11px] font-semibold mt-0.5 flex items-center gap-1.5 tabular-nums">
-                  <span style={{ color: brandHex }}>
-                    {t('statsMatureCardsLegend')} {hoveredForecastDay.mature.toLocaleString()}
-                  </span>
-                  <span className="text-[var(--text-muted)]">·</span>
-                  <span style={{ color: accentScale.heatmap[2] }}>
-                    {t('statsYoungCardsLegend')} {hoveredForecastDay.young.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            )}
+            <ChartTooltipPortal
+              open={Boolean(hoveredForecastDay && forecastAnchorEl)}
+              anchorEl={forecastAnchorEl}
+              repositionKey={hoveredForecastIdx}
+              onClose={() => {
+                setHoveredForecastIdx(null);
+                setForecastAnchorEl(null);
+              }}
+              content={
+                hoveredForecastDay ? (
+                  <ChartTooltipContent
+                    eyebrow={`${hoveredForecastDay.label} · ${hoveredForecastDay.total.toLocaleString()} ${t('cardsUnit')}`}
+                    rows={[
+                      {
+                        label: t('statsMatureCardsLegend'),
+                        value: hoveredForecastDay.mature.toLocaleString(),
+                        tone: 'brand',
+                      },
+                      {
+                        label: t('statsYoungCardsLegend'),
+                        value: hoveredForecastDay.young.toLocaleString(),
+                        tone: 'info',
+                      },
+                    ]}
+                  />
+                ) : null
+              }
+            />
 
             {forecast30d.map((day, idx) => {
               const totalH =
@@ -298,9 +323,18 @@ export const StatsView: React.FC = () => {
                   tabIndex={0}
                   role="img"
                   aria-label={`${day.label}: ${day.total} (${day.mature} / ${day.young})`}
-                  onMouseEnter={() => setHoveredForecastIdx(idx)}
-                  onFocus={() => setHoveredForecastIdx(idx)}
-                  onBlur={() => setHoveredForecastIdx(null)}
+                  onMouseEnter={(e) => {
+                    setHoveredForecastIdx(idx);
+                    setForecastAnchorEl(e.currentTarget);
+                  }}
+                  onFocus={(e) => {
+                    setHoveredForecastIdx(idx);
+                    setForecastAnchorEl(e.currentTarget);
+                  }}
+                  onBlur={() => {
+                    setHoveredForecastIdx(null);
+                    setForecastAnchorEl(null);
+                  }}
                   className="flex-1 h-full flex flex-col justify-end items-center group cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 rounded-sm"
                 >
                   <div
@@ -349,41 +383,70 @@ export const StatsView: React.FC = () => {
           </div>
 
           <div className="my-4 space-y-3 relative">
-            {hoveredMaturitySeg && (
-              <div className="dashboard-tooltip absolute -top-13 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all duration-75">
-                <div className="text-[10px] text-[var(--text-secondary)]">
-                  {hoveredMaturitySeg.label}
-                </div>
-                <div className="text-[11px] font-semibold mt-0.5 flex items-center gap-1.5 tabular-nums">
-                  <span style={{ color: hoveredMaturitySeg.color }}>
-                    {hoveredMaturitySeg.count.toLocaleString()} {t('cardsUnit')}
-                  </span>
-                  <span className="text-[var(--text-muted)]">·</span>
-                  <span>{hoveredMaturitySeg.pctLabel}</span>
-                </div>
-              </div>
-            )}
+            <ChartTooltipPortal
+              open={Boolean(hoveredMaturitySeg && maturityAnchorEl)}
+              anchorEl={maturityAnchorEl}
+              repositionKey={hoveredMaturitySeg?.label}
+              onClose={() => {
+                setHoveredMaturitySeg(null);
+                setMaturityAnchorEl(null);
+              }}
+              content={
+                hoveredMaturitySeg ? (
+                  <ChartTooltipContent
+                    eyebrow={hoveredMaturitySeg.label}
+                    rows={[
+                      {
+                        label: hoveredMaturitySeg.pctLabel,
+                        value: `${hoveredMaturitySeg.count.toLocaleString()} ${t('cardsUnit')}`,
+                        tone: hoveredMaturitySeg.tone,
+                      },
+                    ]}
+                  />
+                ) : null
+              }
+            />
 
             {/* Seamless 100% full-width stacked progress bar */}
             <div
               role="img"
               aria-label={t('statsMaturityTitle')}
-              onMouseLeave={() => setHoveredMaturitySeg(null)}
+              onMouseLeave={() => {
+                setHoveredMaturitySeg(null);
+                setMaturityAnchorEl(null);
+              }}
               className="w-full h-3 rounded-full overflow-hidden flex bg-[#ECECF2] dark:bg-[#2A2C36]"
             >
               {maturitySegments.map((seg) => (
                 <div
                   key={seg.key}
+                  tabIndex={seg.count > 0 ? 0 : undefined}
+                  role="img"
+                  aria-label={`${seg.label}: ${seg.count.toLocaleString()} ${t('cardsUnit')} (${seg.pctLabel})`}
                   style={{ width: `${seg.widthPct}%`, ...(seg.style || {}) }}
-                  onMouseEnter={() =>
+                  onMouseEnter={(e) => {
                     setHoveredMaturitySeg({
                       label: seg.label,
                       count: seg.count,
                       pctLabel: seg.pctLabel,
-                      color: seg.color,
-                    })
-                  }
-                  className={`${seg.className} transition-all cursor-pointer hover:brightness-110`}
+                      tone: seg.tone,
+                    });
+                    setMaturityAnchorEl(e.currentTarget);
+                  }}
+                  onFocus={(e) => {
+                    setHoveredMaturitySeg({
+                      label: seg.label,
+                      count: seg.count,
+                      pctLabel: seg.pctLabel,
+                      tone: seg.tone,
+                    });
+                    setMaturityAnchorEl(e.currentTarget);
+                  }}
+                  onBlur={() => {
+                    setHoveredMaturitySeg(null);
+                    setMaturityAnchorEl(null);
+                  }}
+                  className={`${seg.className} transition-all cursor-pointer hover:brightness-110 outline-none focus-visible:brightness-125 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--text-primary)]`}
                 />
               ))}
             </div>
@@ -474,35 +537,40 @@ export const StatsView: React.FC = () => {
             </span>
           </div>
 
-          {/* Bars Container with Dashboard-aligned floating tooltip */}
+          {/* Bars Container with unified ChartTooltipPortal */}
           <div
             className="h-[135px] flex items-end gap-1.5 px-2 relative"
-            onMouseLeave={() => setHoveredRetentionIdx(null)}
+            onMouseLeave={() => {
+              setHoveredRetentionIdx(null);
+              setRetentionAnchorEl(null);
+            }}
           >
-            {hoveredRetentionPt && hoveredRetentionIdx !== null && (
-              <div
-                style={{
-                  left: `${Math.min(
-                    84,
-                    Math.max(16, (hoveredRetentionIdx / Math.max(1, retentionCurve.length - 1)) * 100)
-                  )}%`,
-                }}
-                className="dashboard-tooltip absolute -top-11 -translate-x-1/2 z-50 pointer-events-none px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all duration-75"
-              >
-                <div className="text-[10px] text-[var(--text-secondary)]">
-                  {hoveredRetentionPt.period}
-                </div>
-                <div className="text-[11px] font-semibold mt-0.5 flex items-center gap-1.5 tabular-nums">
-                  <span style={{ color: accentScale.heatmap[1] }}>
-                    {hoveredRetentionPt.reviews.toLocaleString()} {t('cardsUnit')}
-                  </span>
-                  <span className="text-[var(--text-muted)]">·</span>
-                  <span className="text-[var(--status-success)]">
-                    {hoveredRetentionPt.reviews > 0 ? `${hoveredRetentionPt.retentionRate}%` : '--'}
-                  </span>
-                </div>
-              </div>
-            )}
+            <ChartTooltipPortal
+              open={Boolean(hoveredRetentionPt && retentionAnchorEl)}
+              anchorEl={retentionAnchorEl}
+              repositionKey={hoveredRetentionIdx}
+              onClose={() => {
+                setHoveredRetentionIdx(null);
+                setRetentionAnchorEl(null);
+              }}
+              content={
+                hoveredRetentionPt ? (
+                  <ChartTooltipContent eyebrow={hoveredRetentionPt.period}>
+                    <div className="flex items-center gap-1.5 text-[11.5px] font-semibold tabular-nums whitespace-nowrap">
+                      <span className="text-[var(--brand-text)]">
+                        {hoveredRetentionPt.reviews.toLocaleString()} {t('cardsUnit')}
+                      </span>
+                      <span aria-hidden="true" className="text-[var(--text-muted)]">
+                        ·
+                      </span>
+                      <span className="text-[var(--status-success-text)]">
+                        {hoveredRetentionPt.reviews > 0 ? `${hoveredRetentionPt.retentionRate}%` : '--'}
+                      </span>
+                    </div>
+                  </ChartTooltipContent>
+                ) : null
+              }
+            />
 
             {retentionCurve.map((pt, idx) => {
               const barH =
@@ -521,9 +589,18 @@ export const StatsView: React.FC = () => {
                   tabIndex={0}
                   role="img"
                   aria-label={`${pt.period}: ${pt.reviews > 0 ? `${pt.retentionRate}%` : '--'} (${pt.reviews})`}
-                  onMouseEnter={() => setHoveredRetentionIdx(idx)}
-                  onFocus={() => setHoveredRetentionIdx(idx)}
-                  onBlur={() => setHoveredRetentionIdx(null)}
+                  onMouseEnter={(e) => {
+                    setHoveredRetentionIdx(idx);
+                    setRetentionAnchorEl(e.currentTarget);
+                  }}
+                  onFocus={(e) => {
+                    setHoveredRetentionIdx(idx);
+                    setRetentionAnchorEl(e.currentTarget);
+                  }}
+                  onBlur={() => {
+                    setHoveredRetentionIdx(null);
+                    setRetentionAnchorEl(null);
+                  }}
                   className="flex-1 min-w-0 h-full flex flex-col items-center justify-end group cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 rounded-sm"
                 >
                   <span
@@ -577,35 +654,40 @@ export const StatsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Bars Container with Dashboard-aligned floating tooltip */}
+          {/* Bars Container with unified ChartTooltipPortal */}
           <div
             className="h-[135px] flex items-end gap-1 px-2 relative"
-            onMouseLeave={() => setHoveredHourlyIdx(null)}
+            onMouseLeave={() => {
+              setHoveredHourlyIdx(null);
+              setHourlyAnchorEl(null);
+            }}
           >
-            {hoveredHourlyItem && hoveredHourlyIdx !== null && (
-              <div
-                style={{
-                  left: `${Math.min(
-                    86,
-                    Math.max(14, (hoveredHourlyIdx / Math.max(1, hourlyDistribution.length - 1)) * 100)
-                  )}%`,
-                }}
-                className="dashboard-tooltip absolute -top-11 -translate-x-1/2 z-50 pointer-events-none px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all duration-75"
-              >
-                <div className="text-[10px] text-[var(--text-secondary)]">
-                  {hoveredHourlyItem.hour}
-                </div>
-                <div className="text-[11px] font-semibold mt-0.5 flex items-center gap-1.5 tabular-nums">
-                  <span style={{ color: accentScale.heatmap[1] }}>
-                    {hoveredHourlyItem.count.toLocaleString()} {t('cardsUnit')}
-                  </span>
-                  <span className="text-[var(--text-muted)]">·</span>
-                  <span className="text-[var(--status-success)]">
-                    {hoveredHourlyItem.accuracy}%
-                  </span>
-                </div>
-              </div>
-            )}
+            <ChartTooltipPortal
+              open={Boolean(hoveredHourlyItem && hourlyAnchorEl)}
+              anchorEl={hourlyAnchorEl}
+              repositionKey={hoveredHourlyIdx}
+              onClose={() => {
+                setHoveredHourlyIdx(null);
+                setHourlyAnchorEl(null);
+              }}
+              content={
+                hoveredHourlyItem ? (
+                  <ChartTooltipContent eyebrow={hoveredHourlyItem.hour}>
+                    <div className="flex items-center gap-1.5 text-[11.5px] font-semibold tabular-nums whitespace-nowrap">
+                      <span className="text-[var(--brand-text)]">
+                        {hoveredHourlyItem.count.toLocaleString()} {t('cardsUnit')}
+                      </span>
+                      <span aria-hidden="true" className="text-[var(--text-muted)]">
+                        ·
+                      </span>
+                      <span className="text-[var(--status-success-text)]">
+                        {hoveredHourlyItem.accuracy}%
+                      </span>
+                    </div>
+                  </ChartTooltipContent>
+                ) : null
+              }
+            />
 
             {hourlyDistribution.map((item, idx) => {
               const hPct =
@@ -618,9 +700,18 @@ export const StatsView: React.FC = () => {
                   tabIndex={0}
                   role="img"
                   aria-label={`${item.hour}: ${item.count} (${item.accuracy}%)`}
-                  onMouseEnter={() => setHoveredHourlyIdx(idx)}
-                  onFocus={() => setHoveredHourlyIdx(idx)}
-                  onBlur={() => setHoveredHourlyIdx(null)}
+                  onMouseEnter={(e) => {
+                    setHoveredHourlyIdx(idx);
+                    setHourlyAnchorEl(e.currentTarget);
+                  }}
+                  onFocus={(e) => {
+                    setHoveredHourlyIdx(idx);
+                    setHourlyAnchorEl(e.currentTarget);
+                  }}
+                  onBlur={() => {
+                    setHoveredHourlyIdx(null);
+                    setHourlyAnchorEl(null);
+                  }}
                   className="flex-1 min-w-0 h-full flex flex-col items-center justify-end group cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1 rounded-sm"
                 >
                   <div

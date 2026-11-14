@@ -327,6 +327,10 @@ export interface EnvInfo {
   mediaHttpBaseUrl?: string;
 }
 
+export type ReviewStageWidth = 'standard' | 'auto' | 'wide' | 'full';
+export type ReviewContentScale = 90 | 100 | 115 | 130 | 150;
+export const REVIEW_CONTENT_SCALES: readonly ReviewContentScale[] = [90, 100, 115, 130, 150] as const;
+
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'oled';
   accentColor: 'indigo' | 'emerald' | 'cyan' | 'rose' | 'amber' | 'teal' | 'violet' | 'slate';
@@ -342,6 +346,14 @@ export interface UserPreferences {
   analyticsEnabled?: boolean;
   /** 答题按钮布局：'binary'（简洁双按钮，默认）或 'four'（原生四按钮）。 */
   answerButtonMode?: 'binary' | 'four';
+  /** 学习模式卡片显示正面时是否自动播放正面音频（默认关闭）。 */
+  autoPlayFrontAudio?: boolean;
+  /** 学习模式翻面显示答案时是否自动播放背面音频；无背面音频时回退播放正面音频（默认开启）。 */
+  autoPlayBackAudio?: boolean;
+  /** 学习模式卡片舞台宽度档位。 */
+  reviewStageWidth?: ReviewStageWidth;
+  /** 学习模式卡片内容流式缩放比例（%）。 */
+  reviewContentScale?: ReviewContentScale;
 }
 
 export interface SafetyWarning {
@@ -420,6 +432,8 @@ export interface ReviewCardItem {
   notetypeId?: string;
   noteTypeName?: string;
   isCloze?: boolean;
+  clozeCardIndex?: number;
+  clozeSiblingCount?: number;
   cardType?: 'new' | 'learning' | 'review';
   isPreviewOnly?: boolean;
   deckId: string;
@@ -441,6 +455,10 @@ export interface ReviewCardItem {
   /** 模板脚本依赖配套全局（如 gData）：后端自动标记，前端无需手动开兼容模式。 */
   needsSandbox?: boolean;
   audioFiles?: string[];
+  frontAudioFiles?: string[];
+  backAudioFiles?: string[];
+  sandboxQuestionAudioFiles?: string[];
+  sandboxAnswerAudioFiles?: string[];
   fields: Record<string, string>;
   fieldOrder?: string[];
   tags: string[];
@@ -480,11 +498,31 @@ export interface LibraryFacetCounts {
   tagAllCount: number;
 }
 
+export interface LibraryCardSibling {
+  id: string;
+  ord: number;
+  label: string;
+  status: 'due' | 'new' | 'suspended' | 'review' | 'buried' | 'completed';
+  suspended: boolean;
+  buried?: boolean;
+  dueText: string;
+  mastery: number;
+  reps: number;
+  lapses?: number;
+  intervalDays: number;
+  isCloze?: boolean;
+}
+
 export interface LibraryCardItem {
   id: string;
   noteId: string;
   /** 卡型 id：用来在 cardStyles 里挑对应的模板样式表（旧后端可能缺省）。 */
   notetypeId?: string;
+  noteTypeName?: string;
+  isCloze?: boolean;
+  siblingCardIds?: string[];
+  siblingCount?: number;
+  siblingCards?: LibraryCardSibling[];
   deckId: string;
   deckName: string;
   fullDeckName?: string;
@@ -495,6 +533,8 @@ export interface LibraryCardItem {
   /** 翻面时是否整页替换正面（与复习界面同源；Cloze / IO 恒为 false）。 */
   replaceFrontOnFlip?: boolean;
   audioFiles?: string[];
+  frontAudioFiles?: string[];
+  backAudioFiles?: string[];
   fields?: Record<string, string>;
   fieldOrder?: string[];
   reading?: string;
@@ -517,6 +557,82 @@ export interface LibraryCardItem {
   intervalDays: number;
   lastReviewText?: string;
   nextReviewText?: string;
+}
+
+export interface CardDebugAnomaly {
+  code: string;
+  message: string;
+}
+
+export interface CardDebugInfoResponse {
+  available: boolean;
+  reason?: string;
+  error?: string;
+  cardId?: string;
+  cardInfo?: {
+    id: string;
+    nid: string;
+    did: string;
+    ord: number;
+    type: number;
+    queue: number;
+    ivl: number;
+    due: number;
+    reps: number;
+    lapses: number;
+    flags: number;
+    data?: string;
+  };
+  noteInfo?: {
+    id: string;
+    mid: string;
+    tags: string[];
+    rawFields: Record<string, string>;
+  };
+  noteTypeInfo?: {
+    id: string;
+    name: string;
+    modelType: number | null;
+    modelTypeLabel: string;
+    css: string;
+    fieldNames: string[];
+    templateCount: number;
+    activeOrd: number;
+    activeTemplate: {
+      name: string;
+      qfmt: string;
+      afmt: string;
+    };
+    allTemplateNames: string[];
+    templateDetectionFlags?: {
+      needsScriptShim: boolean;
+      hasScriptTag: boolean;
+      hasGData: boolean;
+      hasImageOcclusionKeyword: boolean;
+    };
+  };
+  nativeRender?: {
+    questionHtml: string;
+    answerHtml: string;
+    error?: string | null;
+  };
+  clozeAndCharDiagnostics?: {
+    anomalies: CardDebugAnomaly[];
+    validClozeFields: string[];
+    brokenClozeCandidates: Array<{ field: string; index: number; snippet: string }>;
+    htmlInsideClozeFields: string[];
+    invisibleChars: Array<{ field: string; index: number; codepoint: string; context: string }>;
+    qfmtHasClozeFilter: boolean;
+    afmtHasClozeFilter: boolean;
+  };
+  runtime?: {
+    envInfo?: EnvInfo;
+    pythonVersion?: string;
+    osDetail?: string;
+    qtVersion?: string;
+    patchHealth?: Record<string, unknown>;
+    configSnapshot?: Record<string, unknown>;
+  };
 }
 
 export function isAnkiNativeEnv(): boolean {

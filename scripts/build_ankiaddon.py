@@ -211,12 +211,19 @@ def print_archive_digest(archive: Path) -> str:
 
 
 def copy_to_downloads(archive: Path) -> None:
-    """把产物复制到 ``~/Downloads/``，覆盖旧的同名包。
+    """把产物带版本号复制到 ``~/Downloads/``（如 ``anki_modern_os-v1.5.8.ankiaddon``）。
 
     只是构建便利，不是发布步骤：Downloads 不可写时只警告，绝不让打包失败。
     """
     target_dir = Path.home() / "Downloads"
-    target = target_dir / archive.name
+    version = ""
+    try:
+        manifest = json.loads((ADDON_ROOT / "manifest.json").read_text(encoding="utf-8"))
+        version = str(manifest.get("human_version") or manifest.get("version") or "").strip().lstrip("v")
+    except Exception:
+        version = ""
+    dest_name = f"{archive.stem}-v{version}{archive.suffix}" if version else archive.name
+    target = target_dir / dest_name
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(archive, target)

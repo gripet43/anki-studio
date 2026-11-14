@@ -17,8 +17,10 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .media_utils import (
+    CLOZE_RE,
     convert_furigana_to_ruby,
     get_media_dir,
+    is_custom_styled_cloze_model,
     plain_text_of,
     render_native_card_sides,
     render_native_image_occlusion,
@@ -26,11 +28,23 @@ from .media_utils import (
     resolve_media_img_src_for_webview,
     resolve_replace_front_on_flip,
     restore_rendered_io_rects,
+    split_card_side_audio,
+    style_native_cloze_spans,
 )
 
 
 SOUND_TAG_RE = re.compile(r"\[sound:([^\]]+)\]")
 CLOZE_RE = re.compile(r"\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}")
+
+_STATUS_PRIORITY = {
+    "due": 0,
+    "completed": 1,
+    "new": 2,
+    "review": 3,
+    "buried": 4,
+    "suspended": 5,
+}
+_DIFF_RANK = {"high": 2, "medium": 1, "low": 0}
 
 
 def _notetype_id(note) -> str:
@@ -92,8 +106,9 @@ class SearchService:
         difficulty_filter = data.get("difficulty", "all")
         sort_by = str(data.get("sortBy", "default") or "default").strip()
         include_facets = bool(data.get("includeFacets", True))
+        group_by_note = bool(data.get("groupByNote", True))
 
-        collection_total = self._get_collection_total(col)
+        collection_total = self._get_collection_total(col, group_by_note=group_by_note)
         anki_query = self._build_anki_search_query(
             col,
             raw_q=raw_q,
@@ -141,76 +156,11 @@ class SearchService:
             or sort_by != "default"
         )
 
-        all_matched_items: List[Dict[str, Any]] = []
-
-        for cid in cids:
-            item = self._serialize_library_card(
-                col, cid, media_dir, lang, card_styles, card_front_styles
-            )
-            if item is None:
-                continue
-            if is_completed_query:
-                item["status"] = "completed"
-                item["ratedToday"] = True
-                item["dueText"] = "今日已完成" if lang == "zh-CN" else "Completed Today"
-            if difficulty_filter in ("high", "medium", "low") and item["difficultyLevel"] != difficulty_filter:
-                continue
-            if flag_filter_raw == "flagged" and int(item.get("flags", 0)) <= 0:
-                continue
-            if flag_filter_raw in ("0", "1", "2", "3", "4", "5", "6", "7") and int(item.get("flags", 0)) != int(flag_filter_raw):
-                continue
-
-            if sort_by != "default":
-                all_matched_items.append(item)
-            else:
-                if matched_index >= offset:
-                    if len(cards_out) < limit:
-                        cards_out.append(item)
-                    else:
-                        has_more = True
-                        if not has_python_post_filter:
-                            break
-            matched_index += 1
-
-        if sort_by != "default":
-            if sort_by == "lapses_desc":
-                all_matched_items.sort(
-                    key=lambda x: (-int(x.get("lapses", 0)), int(x.get("intervalDays", 0)), int(x.get("id", 0)))
-                )
-            elif sort_by == "ivl_asc":
-                all_matched_items.sort(
-                    key=lambda x: (int(x.get("intervalDays", 0)), -int(x.get("lapses", 0)), int(x.get("id", 0)))
-                )
-            elif sort_by == "ivl_desc":
-                all_matched_items.sort(
-                    key=lambda x: (-int(x.get("intervalDays", 0)), int(x.get("id", 0)))
-                )
-            elif sort_by == "due_asc":
-                all_matched_items.sort(
-                    key=lambda x: (
-                        0 if x.get("status") == "due" else (1 if x.get("status") == "review" else 2),
-                        int(x.get("dueRaw", 999999)),
-                        int(x.get("id", 0)),
-                    )
-                )
-            elif sort_by == "stability_asc":
-                all_matched_items.sort(
-                    key=lambda x: (int(x.get("mastery", 0)), float(x.get("stability", 0.0)), int(x.get("id", 0)))
-                )
-            elif sort_by == "front_asc":
-                all_matched_items.sort(
-                    key=lambda x: (str(x.get("front", "")).lower(), int(x.get("id", 0)))
-                )
-            elif sort_by == "newest":
-                all_matched_items.sort(key=lambda x: -int(x.get("id", 0)))
-
-            cards_out = all_matched_items[offset : offset + limit]
-            has_more = (offset + len(cards_out)) < len(all_matched_items)
-
-        total_filtered = len(cids) if not has_python_post_filter else matched_index
-        all_tags = list(col.tags.all()) if hasattr(col, "tags") else []
-        facet_counts = (
-            self._compute_facet_counts(
+        # Compute facets cleanly with note-level deduplication when group_by_note=True
+        # and reuse its SQL card index scan so zero redundant queries run.
+        meta_index: Optional[Dict[str, Dict[int, Any]]] = None
+        if include_facets:
+            facet_counts, meta_index = self._compute_facet_counts(
                 col=col,
                 cids=cids,
                 raw_q=raw_q,
@@ -219,10 +169,118 @@ class SearchService:
                 flag_filter_raw=flag_filter_raw,
                 tag=tag,
                 deck_id=deck_id,
+                group_by_note=group_by_note,
+                return_index=True,
             )
-            if include_facets
-            else None
-        )
+        else:
+            facet_counts = None
+
+        if group_by_note:
+            if meta_index is None:
+                meta_index = self._load_card_index_meta(col, cids)
+            candidate_groups = self._group_cids_by_note(cids, meta_index)
+            candidate_entries = [
+                (self._pick_representative_cid(grp, meta_index), grp)
+                for _, grp in candidate_groups
+            ]
+        else:
+            candidate_entries = [(int(cid), [int(cid)]) for cid in cids]
+
+        all_matched_items: List[Dict[str, Any]] = []
+
+        if not has_python_post_filter:
+            total_filtered = len(candidate_entries)
+            page_entries = candidate_entries[offset : offset + limit]
+            has_more = (offset + len(page_entries)) < total_filtered
+            for rep_cid, matched_grp in page_entries:
+                item = self._serialize_library_card(
+                    col,
+                    rep_cid,
+                    media_dir,
+                    lang,
+                    card_styles,
+                    card_front_styles,
+                    matched_cids=matched_grp if group_by_note else None,
+                )
+                if item is None:
+                    continue
+                if is_completed_query:
+                    item["status"] = "completed"
+                    item["ratedToday"] = True
+                    item["dueText"] = "今日已完成" if lang == "zh-CN" else "Completed Today"
+                cards_out.append(item)
+        else:
+            for rep_cid, matched_grp in candidate_entries:
+                item = self._serialize_library_card(
+                    col,
+                    rep_cid,
+                    media_dir,
+                    lang,
+                    card_styles,
+                    card_front_styles,
+                    matched_cids=matched_grp if group_by_note else None,
+                )
+                if item is None:
+                    continue
+                if is_completed_query:
+                    item["status"] = "completed"
+                    item["ratedToday"] = True
+                    item["dueText"] = "今日已完成" if lang == "zh-CN" else "Completed Today"
+                if difficulty_filter in ("high", "medium", "low") and item["difficultyLevel"] != difficulty_filter:
+                    continue
+                if flag_filter_raw == "flagged" and int(item.get("flags", 0)) <= 0:
+                    continue
+                if flag_filter_raw in ("0", "1", "2", "3", "4", "5", "6", "7") and int(item.get("flags", 0)) != int(flag_filter_raw):
+                    continue
+
+                if sort_by != "default":
+                    all_matched_items.append(item)
+                else:
+                    if matched_index >= offset:
+                        if len(cards_out) < limit:
+                            cards_out.append(item)
+                        else:
+                            has_more = True
+                matched_index += 1
+
+            if sort_by != "default":
+                if sort_by == "lapses_desc":
+                    all_matched_items.sort(
+                        key=lambda x: (-int(x.get("lapses", 0)), int(x.get("intervalDays", 0)), int(x.get("id", 0)))
+                    )
+                elif sort_by == "ivl_asc":
+                    all_matched_items.sort(
+                        key=lambda x: (int(x.get("intervalDays", 0)), -int(x.get("lapses", 0)), int(x.get("id", 0)))
+                    )
+                elif sort_by == "ivl_desc":
+                    all_matched_items.sort(
+                        key=lambda x: (-int(x.get("intervalDays", 0)), int(x.get("id", 0)))
+                    )
+                elif sort_by == "due_asc":
+                    all_matched_items.sort(
+                        key=lambda x: (
+                            0 if x.get("status") == "due" else (1 if x.get("status") == "review" else 2),
+                            int(x.get("dueRaw", 999999)),
+                            int(x.get("id", 0)),
+                        )
+                    )
+                elif sort_by == "stability_asc":
+                    all_matched_items.sort(
+                        key=lambda x: (int(x.get("mastery", 0)), float(x.get("stability", 0.0)), int(x.get("id", 0)))
+                    )
+                elif sort_by == "front_asc":
+                    all_matched_items.sort(
+                        key=lambda x: (str(x.get("front", "")).lower(), int(x.get("id", 0)))
+                    )
+                elif sort_by == "newest":
+                    all_matched_items.sort(key=lambda x: -int(x.get("id", 0)))
+
+                cards_out = all_matched_items[offset : offset + limit]
+                has_more = (offset + len(cards_out)) < len(all_matched_items)
+
+            total_filtered = matched_index
+
+        all_tags = list(col.tags.all()) if hasattr(col, "tags") else []
 
         return {
             "total": len(cids),
@@ -239,8 +297,29 @@ class SearchService:
         }
 
     @staticmethod
-    def _get_collection_total(col) -> int:
+    def _get_collection_total(col, group_by_note: bool = True) -> int:
         try:
+            if group_by_note:
+                if not hasattr(col, "_cards") and hasattr(col, "db"):
+                    if hasattr(col.db, "scalar"):
+                        val = col.db.scalar("SELECT count(DISTINCT nid) FROM cards")
+                        if val is not None:
+                            return int(val)
+                    if hasattr(col.db, "first"):
+                        row = col.db.first("SELECT count(DISTINCT nid) FROM cards")
+                        if row is not None:
+                            return int(row[0] or 0)
+                if hasattr(col, "_cards"):
+                    return len(
+                        {
+                            int(getattr(c, "nid", c.id) or c.id)
+                            for c in col._cards.values()
+                        }
+                    )
+                if hasattr(col, "note_count"):
+                    return int(col.note_count())
+                if hasattr(col, "find_notes"):
+                    return len(list(col.find_notes("")))
             if hasattr(col, "card_count"):
                 return int(col.card_count())
             if hasattr(col, "find_cards"):
@@ -308,30 +387,36 @@ class SearchService:
             return "medium"
         return "low"
 
-    def _load_card_facet_meta(
+    def _load_card_index_meta(
         self, col, fallback_cids: List[int]
-    ) -> Tuple[Dict[int, str], Dict[int, int], Dict[int, List[str]]]:
-        """
-        Loads per-card (difficultyLevel, flags, tags) in a single SQL scan for fast
-        facet counting across the whole collection, falling back to col.get_card()
-        for in-memory mock collections used in unit tests.
-        """
+    ) -> Dict[str, Dict[int, Any]]:
+        """Loads per-card (nid, ord, due, status, difficultyLevel, flags, tags) in one SQL scan."""
+        nid_by_cid: Dict[int, int] = {}
+        ord_by_cid: Dict[int, int] = {}
+        due_by_cid: Dict[int, int] = {}
+        status_by_cid: Dict[int, str] = {}
         diff_by_cid: Dict[int, str] = {}
         flags_by_cid: Dict[int, int] = {}
         tags_by_cid: Dict[int, List[str]] = {}
+        today = int(getattr(getattr(col, "sched", None), "today", 0) or 0)
 
         if not hasattr(col, "_cards") and hasattr(col, "db") and hasattr(col.db, "all"):
             try:
                 rows = col.db.all(
-                    "SELECT c.id, c.flags, c.lapses, c.data, n.tags "
+                    "SELECT c.id, c.nid, c.ord, c.type, c.queue, c.due, c.lapses, c.flags, c.data, n.tags "
                     "FROM cards c LEFT JOIN notes n ON c.nid = n.id"
                 )
                 for row in rows:
                     cid = int(row[0])
-                    flags_val = int(row[1] or 0) & 7
-                    lapses_val = int(row[2] or 0)
-                    data_raw = row[3] or ""
-                    tags_raw = row[4] or ""
+                    nid = int(row[1] or cid)
+                    ord_val = int(row[2] or 0)
+                    ctype_val = int(row[3] or 0)
+                    queue_val = int(row[4] or 0)
+                    due_val = int(row[5] or 0)
+                    lapses_val = int(row[6] or 0)
+                    flags_val = int(row[7] or 0) & 7
+                    data_raw = row[8] or ""
+                    tags_raw = row[9] or ""
 
                     diff_val: Optional[float] = None
                     if data_raw and isinstance(data_raw, str) and data_raw.lstrip().startswith("{"):
@@ -345,10 +430,24 @@ class SearchService:
                     if diff_val is None:
                         diff_val = 7.5 if lapses_val > 1 else 4.8
 
+                    nid_by_cid[cid] = nid
+                    ord_by_cid[cid] = ord_val
+                    due_by_cid[cid] = due_val
+                    status_by_cid[cid] = self._determine_card_status_raw(
+                        today, ctype_val, queue_val, due_val
+                    )
                     diff_by_cid[cid] = self._resolve_difficulty_level(diff_val, lapses_val)
                     flags_by_cid[cid] = flags_val
                     tags_by_cid[cid] = [t for t in str(tags_raw).split() if t]
-                return diff_by_cid, flags_by_cid, tags_by_cid
+                return {
+                    "nid": nid_by_cid,
+                    "ord": ord_by_cid,
+                    "due": due_by_cid,
+                    "status": status_by_cid,
+                    "diff": diff_by_cid,
+                    "flags": flags_by_cid,
+                    "tags": tags_by_cid,
+                }
             except Exception:
                 pass
 
@@ -363,13 +462,90 @@ class SearchService:
                     if memory and hasattr(memory, "difficulty")
                     else (7.5 if lapses_val > 1 else 4.8)
                 )
-                diff_by_cid[int(cid)] = self._resolve_difficulty_level(diff_val, lapses_val)
-                flags_by_cid[int(cid)] = int(getattr(card, "flags", 0) or 0) & 7
-                tags_by_cid[int(cid)] = list(getattr(note, "tags", []) or [])
+                cid_int = int(cid)
+                nid_by_cid[cid_int] = int(getattr(card, "nid", None) or getattr(note, "id", cid_int) or cid_int)
+                ord_by_cid[cid_int] = int(getattr(card, "ord", 0) or 0)
+                due_by_cid[cid_int] = int(getattr(card, "due", 0) or 0)
+                status_by_cid[cid_int] = self._determine_card_status(col, card)
+                diff_by_cid[cid_int] = self._resolve_difficulty_level(diff_val, lapses_val)
+                flags_by_cid[cid_int] = int(getattr(card, "flags", 0) or 0) & 7
+                tags_by_cid[cid_int] = list(getattr(note, "tags", []) or [])
             except Exception:
                 continue
 
-        return diff_by_cid, flags_by_cid, tags_by_cid
+        return {
+            "nid": nid_by_cid,
+            "ord": ord_by_cid,
+            "due": due_by_cid,
+            "status": status_by_cid,
+            "diff": diff_by_cid,
+            "flags": flags_by_cid,
+            "tags": tags_by_cid,
+        }
+
+    def _load_card_facet_meta(
+        self, col, fallback_cids: List[int]
+    ) -> Tuple[Dict[int, str], Dict[int, int], Dict[int, List[str]]]:
+        """Compatibility wrapper returning (diff_by_cid, flags_by_cid, tags_by_cid)."""
+        meta = self._load_card_index_meta(col, fallback_cids)
+        return meta["diff"], meta["flags"], meta["tags"]
+
+    @staticmethod
+    def _group_cids_by_note(
+        cids: List[int], meta: Dict[str, Dict[int, Any]]
+    ) -> List[Tuple[int, List[int]]]:
+        """Group matching card IDs by note ID while preserving first-seen search order."""
+        nid_map = meta["nid"]
+        grouped: Dict[int, List[int]] = {}
+        for raw_cid in cids:
+            cid = int(raw_cid)
+            nid = int(nid_map.get(cid, cid))
+            bucket = grouped.get(nid)
+            if bucket is None:
+                grouped[nid] = [cid]
+            else:
+                bucket.append(cid)
+        return list(grouped.items())
+
+    @staticmethod
+    def _pick_representative_cid(
+        group_cids: List[int], meta: Dict[str, Dict[int, Any]]
+    ) -> int:
+        """Pick the most actionable sibling card in a note group (due > completed > new > review > buried > suspended)."""
+        if len(group_cids) <= 1:
+            return int(group_cids[0])
+        status_map = meta["status"]
+        due_map = meta["due"]
+        ord_map = meta["ord"]
+        return min(
+            group_cids,
+            key=lambda cid: (
+                _STATUS_PRIORITY.get(status_map.get(int(cid), "review"), 3),
+                int(due_map.get(int(cid), 0)),
+                int(ord_map.get(int(cid), 0)),
+                int(cid),
+            ),
+        )
+
+    @staticmethod
+    def _note_group_facets(
+        group_cids: List[int], meta: Dict[str, Dict[int, Any]]
+    ) -> Tuple[str, int, List[str]]:
+        """Aggregate (difficultyLevel, flag, tags) for a note group consistently with serialized rows."""
+        diff_map = meta["diff"]
+        flags_map = meta["flags"]
+        tags_map = meta["tags"]
+        note_diff = max(
+            (diff_map.get(int(c), "medium") for c in group_cids),
+            key=lambda d: _DIFF_RANK.get(d, 1),
+            default="medium",
+        )
+        note_flag = next(
+            (flags_map.get(int(c), 0) & 7 for c in group_cids if (flags_map.get(int(c), 0) & 7) > 0),
+            0,
+        )
+        note_tags = list(tags_map.get(int(group_cids[0]), ()))
+        return note_diff, note_flag, note_tags
 
     def _compute_facet_counts(
         self,
@@ -381,10 +557,12 @@ class SearchService:
         flag_filter_raw: str,
         tag: Any,
         deck_id: Any,
-    ) -> Dict[str, Any]:
+        group_by_note: bool = True,
+        return_index: bool = False,
+    ) -> Any:
         """
         Computes cross-faceted dropdown counts across the entire matching Anki collection
-        (not capped at pagination limit) so every dropdown count matches the exact result count.
+        (note-deduplicated when group_by_note=True so counts match grouped Library rows 1:1).
         """
         status_cids_by_key: Dict[str, List[int]] = {}
         for st_key in ("all", "due", "new", "completed", "review", "suspended", "buried"):
@@ -418,27 +596,44 @@ class SearchService:
         )
 
         fallback_pool = list(cids) + list(no_flag_cids) + list(no_tag_cids)
-        if difficulty_filter in ("high", "medium", "low"):
+        if difficulty_filter in ("high", "medium", "low") or group_by_note:
             for st_cids in status_cids_by_key.values():
                 fallback_pool.extend(st_cids)
 
-        diff_by_cid, flags_by_cid, tags_by_cid = self._load_card_facet_meta(col, fallback_pool)
-
+        meta = self._load_card_index_meta(col, fallback_pool)
+        diff_by_cid = meta["diff"]
+        flags_by_cid = meta["flags"]
+        tags_by_cid = meta["tags"]
         has_diff = difficulty_filter in ("high", "medium", "low")
+
+        def iter_facet_units(unit_cids: List[int]):
+            if not group_by_note:
+                for raw_c in unit_cids:
+                    c_int = int(raw_c)
+                    yield (
+                        diff_by_cid.get(c_int, "medium"),
+                        flags_by_cid.get(c_int, 0) & 7,
+                        tags_by_cid.get(c_int, ()),
+                    )
+                return
+            for _, grp in self._group_cids_by_note(unit_cids, meta):
+                yield self._note_group_facets(grp, meta)
 
         status_counts: Dict[str, int] = {}
         for st_key, st_cids in status_cids_by_key.items():
             if has_diff:
                 status_counts[st_key] = sum(
-                    1 for cid in st_cids if diff_by_cid.get(int(cid)) == difficulty_filter
+                    1 for u_diff, _, _ in iter_facet_units(st_cids) if u_diff == difficulty_filter
                 )
             else:
-                status_counts[st_key] = len(st_cids)
+                status_counts[st_key] = (
+                    len(self._group_cids_by_note(st_cids, meta)) if group_by_note else len(st_cids)
+                )
 
-        difficulty_counts: Dict[str, int] = {"all": len(cids), "high": 0, "medium": 0, "low": 0}
-        for cid in cids:
-            lvl = diff_by_cid.get(int(cid), "medium")
-            difficulty_counts[lvl] = difficulty_counts.get(lvl, 0) + 1
+        current_units = list(iter_facet_units(cids))
+        difficulty_counts: Dict[str, int] = {"all": len(current_units), "high": 0, "medium": 0, "low": 0}
+        for u_diff, _, _ in current_units:
+            difficulty_counts[u_diff] = difficulty_counts.get(u_diff, 0) + 1
 
         flag_counts: Dict[str, int] = {
             "all": 0,
@@ -451,52 +646,90 @@ class SearchService:
             "6": 0,
             "7": 0,
         }
-        for cid in no_flag_cids:
-            cid_int = int(cid)
-            if has_diff and diff_by_cid.get(cid_int) != difficulty_filter:
+        for u_diff, u_flag, _ in iter_facet_units(no_flag_cids):
+            if has_diff and u_diff != difficulty_filter:
                 continue
             flag_counts["all"] += 1
-            f_val = flags_by_cid.get(cid_int, 0) & 7
-            if f_val > 0:
+            if u_flag > 0:
                 flag_counts["flagged"] += 1
-                f_key = str(f_val)
+                f_key = str(u_flag)
                 flag_counts[f_key] = flag_counts.get(f_key, 0) + 1
 
         tag_counts: Dict[str, int] = {}
         tag_all_count = 0
-        for cid in no_tag_cids:
-            cid_int = int(cid)
-            if has_diff and diff_by_cid.get(cid_int) != difficulty_filter:
+        for u_diff, _, u_tags in iter_facet_units(no_tag_cids):
+            if has_diff and u_diff != difficulty_filter:
                 continue
             tag_all_count += 1
-            for tg in set(tags_by_cid.get(cid_int, ())):
+            for tg in set(u_tags):
                 tag_counts[tg] = tag_counts.get(tg, 0) + 1
 
-        return {
+        out = {
             "statusCounts": status_counts,
             "difficultyCounts": difficulty_counts,
             "flagCounts": flag_counts,
             "tagCounts": tag_counts,
             "tagAllCount": tag_all_count,
         }
+        return (out, meta) if return_index else out
+
+    @staticmethod
+    def _expand_note_card_ids(col, card_ids: List[int]) -> List[int]:
+        """Expand representative card IDs to all sibling card IDs on their notes, preserving order."""
+        seen = set()
+        expanded: List[int] = []
+        for raw_cid in card_ids:
+            cid = int(raw_cid)
+            siblings: List[int] = [cid]
+            try:
+                card = col.get_card(cid)
+                note = col.get_note(card.nid) if hasattr(col, "get_note") else card.note()
+                if note is not None and hasattr(note, "card_ids"):
+                    raw_sibs = [int(x) for x in note.card_ids()]
+                    if raw_sibs:
+                        siblings = []
+                        for scid in raw_sibs:
+                            try:
+                                sc = col.get_card(scid)
+                                if int(getattr(sc, "nid", note.id) or note.id) == int(note.id):
+                                    siblings.append(scid)
+                            except Exception:
+                                continue
+                        if cid not in siblings:
+                            siblings.insert(0, cid)
+            except Exception:
+                pass
+            for scid in siblings:
+                if scid not in seen:
+                    seen.add(scid)
+                    expanded.append(scid)
+        return expanded
 
     def batch_action(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Executes batch actions from the Library Floating Bar (Page 5 & Bug #10):
         - actionType: 'suspend' | 'unsuspend' | 'bury' | 'unbury' | 'setFlag' | 'addTag' | 'removeTag' | 'findReplace' | 'resetProgress' | 'moveDeck' | 'delete'
         - cardIds: list of card IDs
+        - applyToNote: default True — expand card-level actions to all siblings of selected notes
         """
         col = self.col
         action_type = data.get("actionType")
-        card_ids = [int(cid) for cid in data.get("cardIds", []) if str(cid).isdigit()]
+        raw_card_ids = [int(cid) for cid in data.get("cardIds", []) if str(cid).isdigit()]
 
-        if not col or not card_ids:
+        if not col or not raw_card_ids:
             return {
                 "success": False,
                 "affected": 0,
                 "actionType": action_type,
                 "error": "Collection unavailable or no valid card IDs",
             }
+
+        apply_to_note = bool(data.get("applyToNote", True))
+        card_ids = (
+            self._expand_note_card_ids(col, raw_card_ids)
+            if apply_to_note
+            else raw_card_ids
+        )
 
         if action_type == "suspend":
             col.sched.suspend_cards(card_ids)
@@ -700,6 +933,27 @@ class SearchService:
             "actionType": action_type,
         }
 
+    @classmethod
+    def _compute_card_memory_metrics(cls, card) -> Tuple[float, str, int]:
+        """Return (stability, difficultyLevel, mastery) for any Anki Card or MockCard."""
+        memory = getattr(card, "memory_state", None)
+        ivl = int(getattr(card, "ivl", 0) or 0)
+        lapses = int(getattr(card, "lapses", 0) or 0)
+        reps = int(getattr(card, "reps", 0) or 0)
+        stability = (
+            round(float(memory.stability), 1)
+            if memory and hasattr(memory, "stability")
+            else float(max(1, ivl or 3))
+        )
+        difficulty_val = (
+            float(memory.difficulty)
+            if memory and hasattr(memory, "difficulty")
+            else (7.5 if lapses > 1 else 4.8)
+        )
+        diff_level = cls._resolve_difficulty_level(difficulty_val, lapses)
+        mastery = min(98, max(0, round(min(stability / 25.0, 1.0) * 85 + (15 if reps > 0 else 0))))
+        return stability, diff_level, mastery
+
     def _serialize_library_card(
         self,
         col,
@@ -708,6 +962,7 @@ class SearchService:
         lang: str = "zh-CN",
         style_sink: Optional[Dict[str, str]] = None,
         front_style_sink: Optional[Dict[str, str]] = None,
+        matched_cids: Optional[List[int]] = None,
     ) -> Optional[Dict[str, Any]]:
         try:
             card = col.get_card(int(cid))
@@ -739,6 +994,20 @@ class SearchService:
                 # 与复习界面同源：背面走 Anki 模板引擎，取 flds[1] 会丢掉拓展字段。
                 # 列表本身不塞 <style>——几十张卡各带一份既浪费也会互相串味；
                 # 样式统一收进 cardStyles，由真正需要还原卡包外观的地方（Cmd+K 预览）注入。
+                try:
+                    _note_obj = card.note() if hasattr(card, "note") else None
+                    _lib_model = (
+                        _note_obj.note_type()
+                        if _note_obj is not None and hasattr(_note_obj, "note_type")
+                        else None
+                    ) or {}
+                except Exception:
+                    _lib_model = {}
+                _lib_is_cloze = int(_lib_model.get("type", 0) or 0) == 1
+                _use_custom_cloze = bool(
+                    _lib_is_cloze and is_custom_styled_cloze_model(_lib_model)
+                )
+
                 native = render_native_card_sides(card, media_dir)
                 if native.css and style_sink is not None:
                     style_sink.setdefault(model_id, native.css)
@@ -751,8 +1020,27 @@ class SearchService:
                     if native.question
                     else (next(iter(fields_dict), "") if fields_dict else "")
                 )
+                if (
+                    _lib_is_cloze
+                    and fields_dict
+                    and not CLOZE_RE.search(fields_dict.get(front_key, "") or "")
+                ):
+                    cloze_key = next(
+                        (
+                            k
+                            for k, v in fields_dict.items()
+                            if CLOZE_RE.search(str(v or ""))
+                        ),
+                        "",
+                    )
+                    if cloze_key:
+                        front_key = cloze_key
                 front_raw = fields_dict.get(front_key) or empty_title
                 back_raw = native.answer or (flds[1] if len(flds) > 1 else "")
+                if _use_custom_cloze and native and native.question and back_raw:
+                    back_raw = style_native_cloze_spans(
+                        back_raw, is_question_side=False
+                    )
                 if "Tiếng Việt" in fields_dict and fields_dict["Tiếng Việt"].strip():
                     tv_val = fields_dict["Tiếng Việt"].strip()
                     pa_val = fields_dict.get("Phiên âm", "").strip()
@@ -794,7 +1082,24 @@ class SearchService:
                 )
                 and "<" in native.question
             )
-            front_html_source = native.question if use_native_q_in_search else front_raw
+            _use_custom_cloze_q = False
+            if not io_front and native and native.question:
+                try:
+                    _q_note = card.note() if hasattr(card, "note") else None
+                    _q_model = (
+                        _q_note.note_type()
+                        if _q_note is not None and hasattr(_q_note, "note_type")
+                        else None
+                    ) or {}
+                    _use_custom_cloze_q = bool(is_custom_styled_cloze_model(_q_model))
+                except Exception:
+                    _use_custom_cloze_q = False
+
+            front_html_source = (
+                style_native_cloze_spans(native.question, is_question_side=True)
+                if _use_custom_cloze_q
+                else (native.question if use_native_q_in_search else front_raw)
+            )
             front_html, front_audio = self._rewrite_media_and_audio(
                 front_html_source,
                 media_dir,
@@ -816,33 +1121,99 @@ class SearchService:
             back_html, back_audio = self._rewrite_media_and_audio(
                 back_raw, media_dir, reveal_io_masks=True
             )
-            # 模板渲染已经把 [sound:] 剥进 answer_av_tags，这里补回来
+            # 模板渲染已经把 [sound:] 剥进 answer_av_tags，这里补回来并区分正反两面
             answer_audio = native.answer_audio if native else []
             question_audio = native.question_audio if native else []
-            back_audio = (
-                question_audio
-                + [a for a in answer_audio if a not in question_audio]
-                + [a for a in back_audio if a not in question_audio and a not in answer_audio]
+            front_audio_out, back_audio_out, merged_audio = split_card_side_audio(
+                question_audio,
+                front_audio,
+                answer_audio,
+                back_audio,
             )
 
-            memory = getattr(card, "memory_state", None)
-            stability = (
-                round(float(memory.stability), 1)
-                if memory and hasattr(memory, "stability")
-                else float(max(1, card.ivl or 3))
-            )
-            difficulty_val = (
-                float(memory.difficulty)
-                if memory and hasattr(memory, "difficulty")
-                else (7.5 if card.lapses > 1 else 4.8)
-            )
-            diff_level = self._resolve_difficulty_level(difficulty_val, int(card.lapses or 0))
-
-            mastery = min(98, max(0, round(min(stability / 25.0, 1.0) * 85 + (15 if card.reps > 0 else 0))))
+            stability, diff_level, mastery = self._compute_card_memory_metrics(card)
             due_text = self._format_due_text(col, card, lang)
 
             # Bug #9 Fix: Accurately distinguish 'due' vs 'review' (future undue cards)
             card_status = self._determine_card_status(col, card)
+            reps_total = int(card.reps or 0)
+            lapses_total = int(getattr(card, "lapses", 0) or 0)
+            interval_days = int(card.ivl or 0)
+            flags_val = int(getattr(card, "flags", 0) or 0) & 7
+
+            # Sibling card aggregation across the note (for multi-cloze / reversed notes)
+            raw_note_cids = (
+                [int(x) for x in note.card_ids()]
+                if hasattr(note, "card_ids")
+                else [int(card.id)]
+            )
+            if int(card.id) not in raw_note_cids:
+                raw_note_cids.insert(0, int(card.id))
+
+            real_siblings = []
+            for scid in raw_note_cids:
+                if int(scid) == int(card.id):
+                    real_siblings.append(card)
+                    continue
+                try:
+                    sc = col.get_card(int(scid))
+                    if sc is not None and int(getattr(sc, "nid", note.id) or note.id) == int(note.id):
+                        real_siblings.append(sc)
+                except Exception:
+                    continue
+
+            sibling_card_ids = [str(card.id)]
+            sibling_count = 1
+            sibling_cards_meta: Optional[List[Dict[str, Any]]] = None
+
+            if len(real_siblings) > 1:
+                real_siblings.sort(key=lambda sc: (int(getattr(sc, "ord", 0) or 0), int(sc.id)))
+                tmpls = model.get("tmpls") if isinstance(model, dict) else None
+                sibling_cards_meta = []
+                for idx, sc in enumerate(real_siblings):
+                    sc_ord = int(getattr(sc, "ord", 0) or 0)
+                    if is_cloze and not io_front:
+                        sc_label = f"c{sc_ord + 1}"
+                    elif isinstance(tmpls, list) and 0 <= sc_ord < len(tmpls) and isinstance(tmpls[sc_ord], dict):
+                        sc_label = str(tmpls[sc_ord].get("name") or f"#{idx + 1}")
+                    else:
+                        sc_label = f"#{idx + 1}"
+                    _, sc_diff, sc_mastery = self._compute_card_memory_metrics(sc)
+                    sibling_cards_meta.append(
+                        {
+                            "id": str(sc.id),
+                            "ord": sc_ord,
+                            "label": sc_label,
+                            "status": self._determine_card_status(col, sc),
+                            "suspended": int(getattr(sc, "queue", 0) or 0) == -1,
+                            "buried": int(getattr(sc, "queue", 0) or 0) in (-2, -3),
+                            "dueText": self._format_due_text(col, sc, lang),
+                            "mastery": sc_mastery,
+                            "difficultyLevel": sc_diff,
+                            "flags": int(getattr(sc, "flags", 0) or 0) & 7,
+                            "reps": int(getattr(sc, "reps", 0) or 0),
+                            "lapses": int(getattr(sc, "lapses", 0) or 0),
+                            "intervalDays": int(getattr(sc, "ivl", 0) or 0),
+                            "isCloze": bool(is_cloze and not io_front),
+                        }
+                    )
+
+                sibling_card_ids = [s["id"] for s in sibling_cards_meta]
+                sibling_count = len(sibling_cards_meta)
+                reps_total = sum(int(s["reps"]) for s in sibling_cards_meta)
+                lapses_total = sum(int(s["lapses"]) for s in sibling_cards_meta)
+                active_sibs = [s for s in sibling_cards_meta if not s["suspended"]] or sibling_cards_meta
+                mastery = round(sum(int(s["mastery"]) for s in active_sibs) / len(active_sibs))
+                interval_days = min(int(s["intervalDays"]) for s in active_sibs)
+                diff_level = max(
+                    (s["difficultyLevel"] for s in sibling_cards_meta),
+                    key=lambda d: _DIFF_RANK.get(d, 1),
+                )
+                matched_id_set = {str(x) for x in matched_cids} if matched_cids else set(sibling_card_ids)
+                matched_meta = [s for s in sibling_cards_meta if s["id"] in matched_id_set] or sibling_cards_meta
+                first_flagged = next((int(s["flags"]) for s in matched_meta if int(s["flags"]) > 0), 0)
+                if first_flagged > 0:
+                    flags_val = first_flagged
 
             # 与复习界面同源：编辑器/预览拿不到这个标志就只能按普通卡处理，
             # 翻面时会在下方重复展示一次正面。Cloze / IO 卡由 helper 统一排除。
@@ -854,10 +1225,14 @@ class SearchService:
                 is_image_occlusion=bool(io_front),
             )
 
-            return {
+            out: Dict[str, Any] = {
                 "id": str(card.id),
                 "noteId": str(note.id),
                 "notetypeId": model_id,
+                "noteTypeName": str(model.get("name", "Basic") or "Basic") if isinstance(model, dict) else "Basic",
+                "isCloze": is_cloze,
+                "siblingCardIds": sibling_card_ids,
+                "siblingCount": sibling_count,
                 "deckId": str(deck["id"]),
                 "deckName": deck["name"].split("::")[-1],
                 "fullDeckName": deck["name"],
@@ -866,7 +1241,9 @@ class SearchService:
                 "frontHtml": front_html,
                 "backHtml": back_html,
                 "replaceFrontOnFlip": replace_front_on_flip,
-                "audioFiles": front_audio + [a for a in back_audio if a not in front_audio],
+                "audioFiles": merged_audio,
+                "frontAudioFiles": front_audio_out,
+                "backAudioFiles": back_audio_out,
                 "fields": fields_dict,
                 "fieldOrder": list(fields_dict.keys()),
                 "tags": list(note.tags),
@@ -878,16 +1255,34 @@ class SearchService:
                 "status": card_status,
                 "suspended": card.queue == -1,
                 "buried": card.queue in (-2, -3),
-                "flags": int(getattr(card, "flags", 0) or 0) & 7,
-                "reps": int(card.reps or 0),
-                "lapses": int(getattr(card, "lapses", 0) or 0),
-                "intervalDays": int(card.ivl or 0),
+                "flags": flags_val,
+                "reps": reps_total,
+                "lapses": lapses_total,
+                "intervalDays": interval_days,
             }
+            if sibling_cards_meta is not None:
+                out["siblingCards"] = sibling_cards_meta
+            return out
         except Exception:
             return None
 
     @staticmethod
-    def _determine_card_status(col, card) -> str:
+    def _determine_card_status_raw(today: int, ctype: int, queue: int, due: int) -> str:
+        """Classify raw SQLite card fields into Library status."""
+        if queue == -1:
+            return "suspended"
+        if queue in (-2, -3):
+            return "buried"
+        if ctype == 0 or queue == 0:
+            return "new"
+        if queue in (1, 3):
+            return "due"
+        if queue == 2 and due <= today:
+            return "due"
+        return "review"
+
+    @classmethod
+    def _determine_card_status(cls, col, card) -> str:
         """
         Status classification:
         - queue == -1 -> 'suspended' (已暂停)
@@ -897,18 +1292,13 @@ class SearchService:
         - queue == 2 and due <= col.sched.today -> 'due'
         - otherwise (already studied review card due in the future) -> 'review'
         """
-        if card.queue == -1:
-            return "suspended"
-        if card.queue in (-2, -3):
-            return "buried"
-        if card.type == 0 or card.queue == 0:
-            return "new"
-        if card.queue in (1, 3):
-            return "due"
-        today = getattr(col.sched, "today", 0)
-        if card.queue == 2 and int(getattr(card, "due", 0)) <= int(today):
-            return "due"
-        return "review"
+        today = int(getattr(getattr(col, "sched", None), "today", 0) or 0)
+        return cls._determine_card_status_raw(
+            today,
+            int(getattr(card, "type", 0) or 0),
+            int(getattr(card, "queue", 0) or 0),
+            int(getattr(card, "due", 0) or 0),
+        )
 
     @staticmethod
     def _render_native_image_occlusion(note):
@@ -958,7 +1348,7 @@ class SearchService:
                     ),
                     s,
                 )
-        s = CLOZE_RE.sub(lambda m: f'<span class="text-[#5E5CE6] font-semibold">{m.group(2)}</span>', s)
+        s = CLOZE_RE.sub(lambda m: f'<span class="anki-cloze-lib">{m.group(2)}</span>', s)
         return s.strip(), audios
 
     @staticmethod

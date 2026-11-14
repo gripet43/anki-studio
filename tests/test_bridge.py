@@ -28,6 +28,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 import sys
 
 from _addon_bootstrap import ADDON_ROOT, ensure_importable  # noqa: E402
@@ -137,6 +138,10 @@ class MockNote:
         self._cids = cids or [201]
 
     def note_type(self):
+        if getattr(self, "_model", None) is not None:
+            import copy
+
+            return copy.deepcopy(self._model)
         return {
             "id": 2 if self._is_cloze else 1,
             "name": self._type_name or ("Cloze" if self._is_cloze else "Basic"),
@@ -672,16 +677,47 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 "customNickname": "Dr. Lee",
                 "collapsedDeckIds": ["1"],
                 "showShortcutHints": True,
+                "autoPlayFrontAudio": True,
+                "autoPlayBackAudio": False,
+                "reviewStageWidth": "wide",
+                "reviewContentScale": 130,
             },
         )
         self.assertEqual(prefs_res["status"], "success")
         self.assertEqual(prefs_res["data"]["preferences"]["language"], "en")
         self.assertEqual(prefs_res["data"]["preferences"]["customNickname"], "Dr. Lee")
         self.assertTrue(prefs_res["data"]["preferences"]["showShortcutHints"])
+        self.assertTrue(prefs_res["data"]["preferences"]["autoPlayFrontAudio"])
+        self.assertFalse(prefs_res["data"]["preferences"]["autoPlayBackAudio"])
+        self.assertEqual(prefs_res["data"]["preferences"]["reviewStageWidth"], "wide")
+        self.assertEqual(prefs_res["data"]["preferences"]["reviewContentScale"], 130)
 
         get_prefs = self._call("get_preferences", {})
         self.assertEqual(get_prefs["status"], "success")
         self.assertTrue(get_prefs["data"]["showShortcutHints"])
+        self.assertTrue(get_prefs["data"]["autoPlayFrontAudio"])
+        self.assertFalse(get_prefs["data"]["autoPlayBackAudio"])
+        self.assertEqual(get_prefs["data"]["reviewStageWidth"], "wide")
+        self.assertEqual(get_prefs["data"]["reviewContentScale"], 130)
+
+        dash_prefs = self._call("get_dashboard", {})["data"]["preferences"]
+        self.assertTrue(dash_prefs["autoPlayFrontAudio"])
+        self.assertFalse(dash_prefs["autoPlayBackAudio"])
+
+        # Invalid review display values & string-encoded bools must normalize cleanly
+        fallback_res = self._call(
+            "save_preferences",
+            {
+                "autoPlayFrontAudio": "false",
+                "autoPlayBackAudio": "1",
+                "reviewStageWidth": "invalid-width",
+                "reviewContentScale": 999,
+            },
+        )
+        self.assertFalse(fallback_res["data"]["preferences"]["autoPlayFrontAudio"])
+        self.assertTrue(fallback_res["data"]["preferences"]["autoPlayBackAudio"])
+        self.assertEqual(fallback_res["data"]["preferences"]["reviewStageWidth"], "auto")
+        self.assertEqual(fallback_res["data"]["preferences"]["reviewContentScale"], 100)
 
         batch_unsuspend = self._call("batch_action", {"actionType": "unsuspend", "cardIds": ["201"]})
         self.assertEqual(batch_unsuspend["status"], "success")
@@ -2565,6 +2601,807 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 "quick_add", {"deckId": "1", "imageOcclusion": broken}
             )
             self.assertEqual(bad["status"], "error")
+
+    def test_36_get_card_debug_info_forensics_and_anomaly_detection(self):
+        """get_card_debug_info 返回完整卡型/模板/原始字段/原生渲染，并自动捕获挖空与不可见字符异常。"""
+        note101 = self.mock_col.get_note(101)
+        note101["正面"] = "《{{c1::测}}试》\u200b 和 {{c2:未闭合"
+        self._call("toggle_notetype_sandbox", {"notetypeId": "1", "enabled": True})
+
+        res = self._call("get_card_debug_info", {"cardId": "201"})
+        self.assertEqual(res["status"], "success", res.get("message"))
+        data = res["data"]
+        self.assertTrue(data["available"])
+        self.assertEqual(data["cardInfo"]["id"], "201")
+        self.assertEqual(data["noteTypeInfo"]["modelType"], 0)
+        self.assertIn("activeTemplate", data["noteTypeInfo"])
+        self.assertIn("{{c1::测}}", data["noteInfo"]["rawFields"]["正面"])
+
+        codes = {a["code"] for a in data["clozeAndCharDiagnostics"]["anomalies"]}
+        self.assertIn("CLOZE_SYNTAX_IN_STANDARD_MODEL", codes)
+        self.assertIn("BROKEN_CLOZE_SYNTAX", codes)
+        self.assertIn("INVISIBLE_CHARS_DETECTED", codes)
+
+        cfg_snap = data["runtime"]["configSnapshot"]
+        self.assertTrue(cfg_snap["compatEnabledForCardNoteType"])
+        self.assertIn("1", cfg_snap["sandboxNoteTypeIds"])
+
+        # 不存在的卡号必须优雅降级，不抛异常
+        missing = self._call("get_card_debug_info", {"cardId": "999999999"})
+        self.assertEqual(missing["status"], "success")
+        self.assertFalse(missing["data"]["available"])
+        self.assertEqual(missing["data"]["reason"], "card_not_found")
+
+    def test_37_custom_standard_template_cloze_auto_converts_to_companion_model(self):
+        import copy
+        from types import SimpleNamespace
+
+        custom_css = (
+            ".card { font-family: Georgia, serif; font-size: 22px; background: #1e293b; color: #f8fafc; }\n"
+            ".custom-wrap { border-left: 4px solid #38bdf8; padding-left: 12px; }\n"
+        )
+        custom_model = {
+            "id": 9001,
+            "name": "My Custom Note",
+            "type": 0,
+            "css": custom_css,
+            "flds": [{"name": "Question", "ord": 0}, {"name": "Notes", "ord": 1}],
+            "tmpls": [
+                {
+                    "name": "Card 1",
+                    "ord": 0,
+                    "qfmt": '<div class="custom-wrap">{{Question}}</div>',
+                    "afmt": '{{FrontSide}}<hr id=answer><div class="extra">{{Notes}}</div>',
+                }
+            ],
+        }
+        models_store = {
+            9001: custom_model,
+            1: {"id": 1, "name": "Basic", "type": 0, "flds": [{"name": "正面"}, {"name": "释义"}]},
+            2: {"id": 2, "name": "Cloze", "type": 1, "flds": [{"name": "Text"}, {"name": "Back Extra"}]},
+        }
+        next_mid = [9002]
+        notes_store = {}
+        next_nid = [9200]
+
+        note_a = MockNote(9101, {"Question": "Mitochondria powers the cell", "Notes": "Bio"}, ["bio"], cids=[9501])
+        note_a._model = copy.deepcopy(custom_model)
+        note_b = MockNote(9102, {"Question": "Ribosome builds proteins", "Notes": "Keep standard"}, ["bio"], cids=[9502])
+        note_b._model = copy.deepcopy(custom_model)
+        notes_store[9101] = note_a
+        notes_store[9102] = note_b
+
+        class _StatefulCard(MockCard):
+            def render_output(self_card):
+                nt = self_card.note().note_type()
+                css_text = nt.get("css", "")
+                q_val = self_card.note()["Question"]
+                n_val = self_card.note()["Notes"]
+                if nt.get("type") == 1:
+                    q_cloze = re.sub(
+                        r"\{\{c\d+::([\s\S]*?)(?:::([\s\S]*?))?\}\}",
+                        lambda m: f'<span class="cloze">[{m.group(2) or "..."}]</span>',
+                        q_val,
+                    )
+                    a_cloze = re.sub(
+                        r"\{\{c\d+::([\s\S]*?)(?:::[\s\S]*?)?\}\}",
+                        lambda m: f'<span class="cloze">{m.group(1)}</span>',
+                        q_val,
+                    )
+                    return SimpleNamespace(
+                        question_text=f'<div class="custom-wrap">{q_cloze}</div>',
+                        answer_text=f'<div class="custom-wrap">{a_cloze}</div><hr id=answer><div class="extra">{n_val}</div>',
+                        css=css_text,
+                        question_av_tags=[],
+                        answer_av_tags=[],
+                    )
+                return SimpleNamespace(
+                    question_text=f'<div class="custom-wrap">{q_val}</div>',
+                    answer_text=f'<div class="custom-wrap">{q_val}</div><hr id=answer><div class="extra">{n_val}</div>',
+                    css=css_text,
+                    question_av_tags=[],
+                    answer_av_tags=[],
+                )
+
+        card_a = _StatefulCard(9501, note_a)
+        card_b = _StatefulCard(9502, note_b)
+        self.mock_col._cards[9501] = card_a
+        self.mock_col._cards[9502] = card_b
+
+        class _StatefulModels:
+            def all(self_m):
+                return [copy.deepcopy(m) for m in models_store.values()]
+
+            def current(self_m):
+                return copy.deepcopy(models_store[9001])
+
+            def get(self_m, mid):
+                return copy.deepcopy(models_store.get(int(mid)))
+
+            def by_name(self_m, name):
+                for m in models_store.values():
+                    if m.get("name") == name:
+                        return copy.deepcopy(m)
+                return None
+
+            def add_dict(self_m, m):
+                m_copy = copy.deepcopy(m)
+                if not m_copy.get("id"):
+                    m_copy["id"] = next_mid[0]
+                    next_mid[0] += 1
+                models_store[int(m_copy["id"])] = m_copy
+                m["id"] = m_copy["id"]
+                return m_copy
+
+            def add(self_m, m):
+                return self.add_dict(m)
+
+            def update_dict(self_m, m):
+                models_store[int(m["id"])] = copy.deepcopy(m)
+
+            def save(self_m, m):
+                self.update_dict(m)
+
+            def change_notetype_info(self_m, old_notetype_id, new_notetype_id):
+                req = SimpleNamespace(
+                    note_ids=[],
+                    new_fields=[f["name"] for f in models_store[int(new_notetype_id)]["flds"]],
+                    new_templates=[],
+                )
+                return SimpleNamespace(input=req)
+
+            def change_notetype_of_notes(self_m, req):
+                # Infer target cloze companion model by matching field schema
+                target = next(
+                    (
+                        m
+                        for m in models_store.values()
+                        if m.get("type") == 1
+                        and [f["name"] for f in m.get("flds", [])] == list(req.new_fields)
+                    ),
+                    None,
+                )
+                for nid in list(req.note_ids):
+                    if target is not None and int(nid) in notes_store:
+                        notes_store[int(nid)]._model = copy.deepcopy(target)
+                        notes_store[int(nid)]._is_cloze = True
+                        notes_store[int(nid)]._type_name = target["name"]
+
+        self.mock_col.models = _StatefulModels()
+        orig_get_note = self.mock_col.get_note
+        orig_update_note = self.mock_col.update_note
+        orig_new_note = self.mock_col.new_note
+        orig_add_note = self.mock_col.add_note
+
+        def _get_note(nid):
+            nid_int = int(nid)
+            if nid_int in notes_store:
+                return notes_store[nid_int]
+            return orig_get_note(nid)
+
+        def _update_note(note):
+            if int(note.id) in notes_store:
+                notes_store[int(note.id)] = note
+                return
+            orig_update_note(note)
+
+        def _new_note(model):
+            if int(model.get("id", 0)) >= 9001:
+                nid = next_nid[0]
+                next_nid[0] += 1
+                fmap = {f["name"]: "" for f in model.get("flds", [])}
+                n = MockNote(
+                    nid,
+                    fmap,
+                    [],
+                    is_cloze=(model.get("type") == 1),
+                    cids=[nid + 1000],
+                    type_name=model.get("name"),
+                )
+                n._model = copy.deepcopy(model)
+                return n
+            return orig_new_note(model)
+
+        def _add_note(note, did):
+            if int(note.note_type().get("id", 0)) >= 9001:
+                notes_store[note.id] = note
+                self.mock_col._cards[note._cids[0]] = _StatefulCard(note._cids[0], note)
+                return note.id
+            return orig_add_note(note, did)
+
+        self.mock_col.get_note = _get_note
+        self.mock_col.update_note = _update_note
+        self.mock_col.new_note = _new_note
+        self.mock_col.add_note = _add_note
+
+        # Enable sandbox compat mode on original custom model 9001
+        self.config_store["sandbox_notetype_ids"] = ["9001"]
+
+        # 1) Inline/modal edit adding {{c1::...}} on custom Standard note should auto-convert to "My Custom Note (Cloze)"
+        upd_resp = self._call(
+            "update_card_inline",
+            {
+                "cardId": "9501",
+                "noteId": "9101",
+                "fields": {
+                    "Question": "{{c1::Mitochondria}} powers the cell",
+                    "Notes": "Bio",
+                },
+                "front": "{{c1::Mitochondria}} powers the cell",
+                "meaning": "Bio",
+                "tags": ["bio"],
+            },
+        )
+        self.assertEqual(upd_resp["status"], "success")
+        upd_data = upd_resp["data"]
+        self.assertTrue(upd_data["saved"])
+        self.assertTrue(upd_data["convertedToCloze"])
+        self.assertTrue(upd_data["isCloze"])
+        self.assertEqual(upd_data["previousNotetypeId"], "9001")
+        self.assertEqual(upd_data["noteTypeName"], "My Custom Note (Cloze)")
+        companion_mid = upd_data["notetypeId"]
+        self.assertNotEqual(companion_mid, "9001")
+
+        # Companion model copied CSS, fields, and rewrote template to {{cloze:Question}}
+        companion_model = models_store[int(companion_mid)]
+        self.assertEqual(companion_model["type"], 1)
+        self.assertEqual([f["name"] for f in companion_model["flds"]], ["Question", "Notes"])
+        self.assertIn("#1e293b", companion_model["css"])
+        self.assertIn("{{cloze:Question}}", companion_model["tmpls"][0]["qfmt"])
+        self.assertIn("{{cloze:Question}}", companion_model["tmpls"][0]["afmt"])
+        self.assertIn("{{Notes}}", companion_model["tmpls"][0]["afmt"])
+        self.assertNotIn("{{FrontSide}}", companion_model["tmpls"][0]["afmt"])
+
+        # Sibling non-cloze note stayed untouched on original Standard model 9001
+        self.assertEqual(note_b.note_type()["id"], 9001)
+        self.assertEqual(note_b.note_type()["type"], 0)
+        self.assertEqual(note_b["Question"], "Ribosome builds proteins")
+
+        # Sandbox compatibility list migrated to include companion model ID
+        self.assertIn("9001", upd_data["sandboxNoteTypeIds"])
+        self.assertIn(companion_mid, upd_data["sandboxNoteTypeIds"])
+
+        # Returned serialized reviewCard + libraryCard preserve custom template CSS and styled cloze pills
+        review_card = upd_data["reviewCard"]
+        self.assertTrue(review_card["isCloze"])
+        self.assertEqual(review_card["notetypeId"], companion_mid)
+        self.assertEqual(review_card["noteTypeName"], "My Custom Note (Cloze)")
+        self.assertIn("anki-native-card", review_card["frontHtml"])
+        self.assertIn("#1e293b", review_card["frontHtml"])
+        self.assertIn("custom-wrap", review_card["frontHtml"])
+        self.assertIn("[...]", review_card["frontHtml"])
+        self.assertNotIn("{{c1::", review_card["frontHtml"])
+        self.assertIn("Mitochondria", review_card["frontAnswerHtml"])
+        self.assertIn("#1e293b", review_card["frontAnswerHtml"])
+        self.assertIn("extra", review_card["backHtml"])
+        self.assertIn("Bio", review_card["backHtml"])
+        self.assertIn("libraryCard", upd_data)
+        self.assertIn("custom-wrap", upd_data["libraryCard"]["frontHtml"])
+        self.assertIn(companion_mid, upd_data.get("cardStyles", {}))
+
+        # 2) QuickAdd with custom Standard model ID + {{c1::...}} reuses companion model and preserves custom fields
+        qa_resp = self._call(
+            "quick_add",
+            {
+                "deckId": "1",
+                "modelId": "9001",
+                "fields": {
+                    "Question": "The {{c1::cell}} membrane",
+                    "Notes": "Cell biology",
+                },
+                "front": "The {{c1::cell}} membrane",
+                "back": "Cell biology",
+                "tags": ["cell"],
+            },
+        )
+        self.assertEqual(qa_resp["status"], "success")
+        qa_data = qa_resp["data"]
+        self.assertTrue(qa_data["created"])
+        self.assertTrue(qa_data["isCloze"])
+        self.assertEqual(qa_data["notetypeId"], companion_mid)
+        self.assertEqual(qa_data["noteTypeName"], "My Custom Note (Cloze)")
+        created_note = notes_store[int(qa_data["noteId"])]
+        self.assertEqual(created_note["Question"], "The {{c1::cell}} membrane")
+        self.assertEqual(created_note["Notes"], "Cell biology")
+
+    def test_38_cloze_rendering_across_review_library_and_sandbox(self):
+        from pathlib import Path
+        from types import SimpleNamespace
+        from bridge.media_utils import render_sandbox_card_sides, style_native_cloze_spans
+
+        # 1. style_native_cloze_spans uses guaranteed compiled semantic classes and is idempotent
+        native_q = '54353453453哈哈哈哈哈哈 <span class="cloze" data-cloze="哈哈" data-ordinal="1">[...]</span> 哈哈低调<span class="cloze-inactive" data-ordinal="2">低调</span>'
+        styled_q = style_native_cloze_spans(native_q, is_question_side=True)
+        self.assertIn("anki-cloze-question", styled_q)
+        self.assertNotIn("bg-[#5E5CE6]", styled_q)
+        self.assertEqual(style_native_cloze_spans(styled_q, is_question_side=True), styled_q)
+
+        native_a = '54353453453哈哈哈哈哈哈 <span class="cloze" data-ordinal="1">哈哈</span>'
+        styled_a = style_native_cloze_spans(native_a, is_question_side=False)
+        self.assertIn("anki-cloze-answer", styled_a)
+        self.assertNotIn("bg-[#28CD41]", styled_a)
+
+        # 2. All semantic cloze classes exist in compiled web/assets/index.css
+        css_path = Path(__file__).resolve().parents[1] / "web" / "assets" / "index.css"
+        built_css = css_path.read_text(encoding="utf-8")
+        for cls_name in (".anki-cloze-question", ".anki-cloze-answer", ".anki-cloze-lib", ".cloze-inactive"):
+            self.assertIn(cls_name, built_css)
+
+        # 3. Standard model card containing literal {{c1::...}}{{c2::...}} (legacy/unconverted)
+        #    renders cleanly across Normal Mode, Card Library, and Compatibility Mode (Sandbox)
+        std_model = {
+            "id": 1001,
+            "name": "Basic",
+            "type": 0,
+            "css": ".card { font-family: arial; }",
+            "flds": [{"name": "Front", "ord": 0}, {"name": "Back", "ord": 1}],
+            "tmpls": [{"name": "Card 1", "ord": 0, "qfmt": "{{Front}}", "afmt": "{{FrontSide}}<hr id=answer>{{Back}}"}],
+        }
+        note_std = MockNote(
+            1201,
+            {"Front": "54353453453哈哈哈哈哈哈 {{c1::哈哈}} 哈哈低调{{c2::低调}}", "Back": "54353453445大萨达所大所"},
+            [],
+            cids=[2201],
+        )
+        note_std._model = std_model
+
+        class _LiteralCard(MockCard):
+            def render_output(self_card):
+                nt = self_card.note().note_type()
+                f = self_card.note()["Front"]
+                b = self_card.note()["Back"]
+                return SimpleNamespace(
+                    question_text=f"{f}<script>var keep='{{{{c1::no_touch}}}}';</script>",
+                    answer_text=f"{f}\n<hr id=answer>\n{b}",
+                    css=nt.get("css", ""),
+                    question_av_tags=[],
+                    answer_av_tags=[],
+                )
+
+        orig_get_note = self.mock_col.get_note
+        self.mock_col.get_note = lambda nid: note_std if int(nid) == 1201 else orig_get_note(nid)
+        self.mock_col._cards[2201] = _LiteralCard(2201, note_std)
+
+        rev = self.router.review_service
+        rc = rev._serialize_review_card(self.mock_col, 2201)
+        self.assertIsNotNone(rc)
+        # Normal mode question: active c1 masked with anki-cloze-question, inactive c2 plain cloze-inactive (no px-1.5 gap!)
+        self.assertIn('<span class="anki-cloze-question">[...]</span>', rc["frontHtml"])
+        self.assertIn('<span class="cloze-inactive" data-ordinal="2">低调</span>', rc["frontHtml"])
+        self.assertNotIn("px-1.5", rc["frontHtml"])
+        self.assertNotIn("bg-[#", rc["frontHtml"])
+        # Normal mode answer: active c1 highlighted with anki-cloze-answer, inactive c2 plain cloze-inactive
+        self.assertIn('<span class="anki-cloze-answer">哈哈</span>', rc["frontAnswerHtml"])
+        self.assertIn('<span class="cloze-inactive" data-ordinal="2">低调</span>', rc["frontAnswerHtml"])
+        # Sandbox mode: literal {{c1::哈哈}} and {{c2::低调}} rendered instead of raw braces; script preserved
+        self.assertNotIn("{{c1::哈哈}}", rc["sandboxFrontHtml"])
+        self.assertNotIn("{{c2::低调}}", rc["sandboxFrontHtml"])
+        self.assertIn('<span class="cloze" data-cloze="哈哈" data-ordinal="1">[...]</span>', rc["sandboxFrontHtml"])
+        self.assertIn('<span class="cloze-inactive" data-ordinal="2">低调</span>', rc["sandboxFrontHtml"])
+        self.assertIn("{{c1::no_touch}}", rc["sandboxFrontHtml"])
+        self.assertNotIn("{{c1::哈哈}}", rc["sandboxBackHtml"])
+        self.assertIn('<span class="cloze" data-ordinal="1">哈哈</span>', rc["sandboxBackHtml"])
+
+        # Library search serialization uses compiled anki-cloze-lib class and exposes model type metadata
+        srch = self.router.search_service
+        lib = srch._serialize_library_card(self.mock_col, 2201)
+        self.assertIn('<span class="anki-cloze-lib">哈哈</span>', lib["frontHtml"])
+        self.assertNotIn("text-[#", lib["frontHtml"])
+        self.assertIs(lib["isCloze"], False)
+        self.assertEqual(lib["noteTypeName"], "Basic")
+
+        # Converted cloze note reports isCloze=True and cloze model name in library serialization
+        cloze_model = {
+            "id": 1002,
+            "name": "Basic (Cloze)",
+            "type": 1,
+            "css": ".card { font-family: arial; }",
+            "flds": [{"name": "Front", "ord": 0}, {"name": "Back", "ord": 1}],
+            "tmpls": [{"name": "Cloze", "ord": 0, "qfmt": "{{cloze:Front}}", "afmt": "{{cloze:Front}}<hr id=answer>{{Back}}"}],
+        }
+        note_cloze = MockNote(
+            1202,
+            {"Front": "54353453453哈哈哈哈哈哈 {{c1::哈哈}} 哈哈低调{{c2::低调}}", "Back": "54353453445大萨达所大所"},
+            [],
+            cids=[2202],
+        )
+        note_cloze._model = cloze_model
+        self.mock_col.get_note = (
+            lambda nid: note_cloze if int(nid) == 1202 else (note_std if int(nid) == 1201 else orig_get_note(nid))
+        )
+        self.mock_col._cards[2202] = _LiteralCard(2202, note_cloze)
+        lib_cloze = srch._serialize_library_card(self.mock_col, 2202)
+        self.assertIs(lib_cloze["isCloze"], True)
+        self.assertEqual(lib_cloze["noteTypeName"], "Basic (Cloze)")
+
+        # IO card shape inside sandbox is untouched
+        io_out = SimpleNamespace(
+            question_text='{{c1::image-occlusion:rect:left=.1:top=.2:width=.3:height=.4:oi=1}}',
+            answer_text='{{c1::image-occlusion:rect:left=.1:top=.2:width=.3:height=.4:oi=1}}',
+            css="",
+        )
+        sb_io = render_sandbox_card_sides(None, raw_output=io_out)
+        self.assertIn("image-occlusion:rect", sb_io.question)
+
+    def test_39_note_grouped_library_search_facets_batch_and_cloze_prune(self):
+        """
+        Verify note-level Library grouping, facet counts, batch applyToNote vs single-subcard
+        suspension, and orphan cloze card pruning when switching split -> combined.
+        """
+        from bridge.search_service import SearchService
+
+        db = MockDB()
+        cur = db.conn.cursor()
+        cur.execute("DELETE FROM cards")
+        cur.execute("DELETE FROM notes")
+        cur.execute("DELETE FROM revlog")
+
+        # Note 501 (Cloze): 2 sibling cards (c1=5001 due today, c2=5002 review later)
+        # Note 502 (Basic): 1 card (5003 new)
+        cur.execute(
+            "INSERT INTO notes VALUES (501, 'g-501', 2, 0, 0, ' bio ', 'The {{c1::mitochondria}} makes {{c2::ATP}}\x1fEnergy', 'mitochondria', 0, 0, '')"
+        )
+        cur.execute(
+            "INSERT INTO notes VALUES (502, 'g-502', 1, 0, 0, ' chem ', 'Osmosis\x1fWater diffusion', 'Osmosis', 0, 0, '')"
+        )
+        cur.execute(
+            "INSERT INTO cards VALUES (5001, 501, 1, 0, 0, 0, 2, 2, 10, 4, 2500, 3, 2, 0, 0, 0, 1, '{\"d\": 7.4, \"s\": 4.0}')"
+        )
+        cur.execute(
+            "INSERT INTO cards VALUES (5002, 501, 1, 1, 0, 0, 2, 2, 25, 18, 2500, 5, 0, 0, 0, 0, 0, '{\"d\": 3.2, \"s\": 18.0}')"
+        )
+        cur.execute(
+            "INSERT INTO cards VALUES (5003, 502, 1, 0, 0, 0, 0, 0, 1, 0, 2500, 0, 0, 0, 0, 0, 0, '')"
+        )
+        db.conn.commit()
+
+        class GroupedCol:
+            def __init__(self, sql_db):
+                self.db = sql_db
+
+                class Sched:
+                    today = 10
+
+                    @staticmethod
+                    def suspend_cards(cids):
+                        for cid in cids:
+                            sql_db.conn.execute("UPDATE cards SET queue = -1 WHERE id = ?", (int(cid),))
+                        sql_db.conn.commit()
+
+                    @staticmethod
+                    def unsuspend_cards(cids):
+                        for cid in cids:
+                            sql_db.conn.execute("UPDATE cards SET queue = 2 WHERE id = ?", (int(cid),))
+                        sql_db.conn.commit()
+
+                class Decks:
+                    @staticmethod
+                    def get(did, default=False):
+                        return {"id": int(did), "name": "Science"}
+
+                class Tags:
+                    @staticmethod
+                    def all():
+                        return ["bio", "chem"]
+
+                self.sched = Sched()
+                self.decks = Decks()
+                self.tags = Tags()
+                self.cloze_model = {
+                    "id": 2,
+                    "name": "Cloze",
+                    "type": 1,
+                    "flds": [{"name": "Text", "ord": 0}, {"name": "Back Extra", "ord": 1}],
+                    "tmpls": [{"name": "Cloze", "ord": 0, "qfmt": "{{cloze:Text}}", "afmt": "{{cloze:Text}}<hr id=answer>{{Back Extra}}"}],
+                }
+                self.basic_model = {
+                    "id": 1,
+                    "name": "Basic",
+                    "type": 0,
+                    "flds": [{"name": "Front", "ord": 0}, {"name": "Back", "ord": 1}],
+                    "tmpls": [{"name": "Card 1", "ord": 0, "qfmt": "{{Front}}", "afmt": "{{FrontSide}}<hr id=answer>{{Back}}"}],
+                }
+
+            def find_cards(self, query):
+                rows = self.db.all(
+                    "SELECT c.id, c.type, c.queue, c.due, c.flags, n.tags "
+                    "FROM cards c JOIN notes n ON c.nid = n.id ORDER BY c.id ASC"
+                )
+                out = []
+                for cid, ctype, queue, due, flags, tags_str in rows:
+                    is_due_card = queue in (1, 3) or (queue == 2 and due <= 10)
+                    is_new_card = ctype == 0 or queue == 0
+                    if "is:suspended" in query and "-is:suspended" not in query and queue != -1:
+                        continue
+                    if "-is:suspended" in query and queue == -1:
+                        continue
+                    if "is:buried" in query and "-is:buried" not in query and queue not in (-2, -3):
+                        continue
+                    if "-is:buried" in query and queue in (-2, -3):
+                        continue
+                    if "(is:due OR is:learn)" in query and not is_due_card:
+                        continue
+                    if "is:new" in query and not is_new_card:
+                        continue
+                    if "is:review" in query and (is_new_card or is_due_card or queue in (-1, -2, -3)):
+                        continue
+                    if "rated:1" in query:
+                        continue
+                    out.append(int(cid))
+                return out
+
+            def get_card(self, cid):
+                row = self.db.first(
+                    "SELECT id, nid, did, ord, type, queue, due, ivl, reps, lapses, flags, data FROM cards WHERE id = ?",
+                    int(cid),
+                )
+                if not row:
+                    raise KeyError(cid)
+                note = self.get_note(row[1])
+                c = MockCard(row[0], note, queue=row[5], ctype=row[4], due=row[6], ivl=row[7])
+                c.ord = row[3]
+                c.reps = row[8]
+                c.lapses = row[9]
+                c.flags = row[10]
+                if row[11]:
+                    parsed = json.loads(row[11])
+                    c.memory_state = SimpleNamespace(difficulty=parsed["d"], stability=parsed["s"])
+                return c
+
+            def get_note(self, nid):
+                nrow = self.db.first("SELECT id, mid, flds, tags FROM notes WHERE id = ?", int(nid))
+                flds = nrow[2].split("\x1f")
+                cids = [int(r[0]) for r in self.db.all("SELECT id FROM cards WHERE nid = ? ORDER BY ord, id", int(nid))]
+                is_cloze = int(nrow[1]) == 2
+                keys = ("Text", "Back Extra") if is_cloze else ("Front", "Back")
+                n = MockNote(nrow[0], {keys[0]: flds[0], keys[1]: flds[1]}, nrow[3].split(), is_cloze=is_cloze, cids=cids)
+                n._model = self.cloze_model if is_cloze else self.basic_model
+                n.mid = int(nrow[1])
+                return n
+
+            def update_note(self, note):
+                flds = "\x1f".join(note.values())
+                self.db.conn.execute("UPDATE notes SET flds = ?, tags = ? WHERE id = ?", (flds, " ".join(note.tags), int(note.id)))
+                self.db.conn.commit()
+
+            def remove_cards_and_orphaned_notes(self, cids):
+                for cid in cids:
+                    self.db.conn.execute("DELETE FROM cards WHERE id = ?", (int(cid),))
+                self.db.conn.commit()
+
+        gcol = GroupedCol(db)
+        svc = SearchService(col_getter=lambda: gcol)
+
+        # 1. Library groups 3 SQL cards into 2 distinct Notes while keeping raw `total == 3`
+        res = svc.search_cards({"query": "", "status": "all", "offset": 0, "limit": 20})
+        self.assertEqual(res["total"], 3)
+        self.assertEqual(res["collectionTotal"], 2)
+        self.assertEqual(res["filteredCount"], 2)
+        self.assertEqual(len(res["cards"]), 2)
+        self.assertEqual(res["facetCounts"]["statusCounts"]["all"], 2)
+        self.assertEqual(res["facetCounts"]["statusCounts"]["due"], 1)
+        self.assertEqual(res["facetCounts"]["statusCounts"]["new"], 1)
+
+        cloze_item = next(c for c in res["cards"] if c["noteId"] == "501")
+        self.assertEqual(cloze_item["id"], "5001")  # most urgent sibling ('due' beats 'review')
+        self.assertEqual(cloze_item["siblingCount"], 2)
+        self.assertEqual(cloze_item["siblingCardIds"], ["5001", "5002"])
+        self.assertEqual(cloze_item["reps"], 8)  # 3 + 5
+        self.assertEqual(cloze_item["lapses"], 2)  # 2 + 0
+        self.assertEqual(cloze_item["difficultyLevel"], "high")  # max(high, low)
+        self.assertEqual(cloze_item["flags"], 1)
+        self.assertEqual(cloze_item["status"], "due")
+
+        # 2. batch_action with applyToNote=False suspends ONLY c2 (5002); applyToNote=True suspends both
+        sub_res = svc.batch_action({"actionType": "suspend", "cardIds": ["5002"], "applyToNote": False})
+        self.assertTrue(sub_res["success"])
+        self.assertEqual(sub_res["affected"], 1)
+        self.assertEqual(gcol.get_card(5001).queue, 2)
+        self.assertEqual(gcol.get_card(5002).queue, -1)
+
+        note_res = svc.batch_action({"actionType": "suspend", "cardIds": ["5001"], "applyToNote": True})
+        self.assertTrue(note_res["success"])
+        self.assertEqual(note_res["affected"], 2)
+        self.assertEqual(gcol.get_card(5001).queue, -1)
+        self.assertEqual(gcol.get_card(5002).queue, -1)
+
+        # 3. Switching Cloze note from split (c1+c2) back to combined (c1+c1) while editing card 5002
+        # cleanly prunes orphan card 5002 and resolves surviving cardId 5001.
+        svc.batch_action({"actionType": "unsuspend", "cardIds": ["5001"], "applyToNote": True})
+        from bridge.edit_service import EditService
+        esvc = EditService(col_getter=lambda: gcol)
+        upd = esvc.update_card_inline({
+            "noteId": "501",
+            "cardId": "5002",
+            "fields": {"Text": "The {{c1::mitochondria}} makes {{c1::ATP}}", "Back Extra": "Energy"},
+        })
+        self.assertTrue(upd["saved"])
+        self.assertEqual(upd["cardId"], "5001")
+        self.assertEqual(upd["prunedCardIds"], ["5002"])
+        self.assertEqual(db.first("SELECT count(*) FROM cards WHERE nid = 501")[0], 1)
+
+    def test_40_review_service_cloze_sibling_step_metadata(self):
+        """Review serialization reports clozeCardIndex and clozeSiblingCount for multi-card cloze notes."""
+        note_multi = MockNote(
+            1299,
+            {"Text": "A {{c1::first}} B {{c2::second}}", "Back Extra": "Info"},
+            [],
+            is_cloze=True,
+            cids=[2298, 2299],
+        )
+        c1 = MockCard(2298, note_multi)
+        c1.ord = 0
+        c2 = MockCard(2299, note_multi)
+        c2.ord = 1
+        orig_get_note = self.mock_col.get_note
+        orig_get_card = self.mock_col.get_card
+        self.mock_col._cards[2298] = c1
+        self.mock_col._cards[2299] = c2
+        self.mock_col.get_note = lambda nid: note_multi if int(nid) == 1299 else orig_get_note(nid)
+        self.mock_col.get_card = lambda cid: self.mock_col._cards[int(cid)] if int(cid) in (2298, 2299) else orig_get_card(cid)
+        try:
+            rc1 = self.router.review_service._serialize_review_card(self.mock_col, 2298)
+            rc2 = self.router.review_service._serialize_review_card(self.mock_col, 2299)
+            self.assertEqual(rc1["clozeCardIndex"], 1)
+            self.assertEqual(rc1["clozeSiblingCount"], 2)
+            self.assertEqual(rc2["clozeCardIndex"], 2)
+            self.assertEqual(rc2["clozeSiblingCount"], 2)
+        finally:
+            self.mock_col.get_note = orig_get_note
+            self.mock_col.get_card = orig_get_card
+
+    def test_41_review_audio_side_separation_and_queue_playback(self):
+        """Review & Library cards split front/back audio cleanly, avoid cloze spoiler on front, and queue multi-audio playback."""
+        from types import ModuleType
+        from bridge.media_utils import split_card_side_audio
+
+        # 1. Pure split helper deduplicates repeated question audio from answer templates
+        f_list, b_list, merged = split_card_side_audio(
+            ["q1.mp3"],
+            ["q1.mp3", "q2.mp3"],
+            ["q1.mp3", "a1.mp3"],
+            ["a1.mp3", "a2.mp3"],
+        )
+        self.assertEqual(f_list, ["q1.mp3", "q2.mp3"])
+        self.assertEqual(b_list, ["a1.mp3", "a2.mp3"])
+        self.assertEqual(merged, ["q1.mp3", "q2.mp3", "a1.mp3", "a2.mp3"])
+
+        # 2. Cloze card: hidden cloze sound appears only in answer_av_tags and must not leak to frontAudioFiles
+        cloze_note = MockNote(
+            1310,
+            {"Text": "Listen [sound:prompt.mp3] {{c1::answer [sound:hidden.mp3]}}", "Back Extra": "[sound:extra.mp3]"},
+            [],
+            is_cloze=True,
+            cids=[2310],
+        )
+        cloze_note._model = {
+            "id": 1010,
+            "name": "Cloze",
+            "type": 1,
+            "flds": [{"name": "Text", "ord": 0}, {"name": "Back Extra", "ord": 1}],
+            "tmpls": [{"name": "Cloze", "ord": 0, "qfmt": "{{cloze:Text}}", "afmt": "{{cloze:Text}}<br>{{Back Extra}}"}],
+        }
+
+        class _ClozeAudioCard(MockCard):
+            def render_output(self_card):
+                return SimpleNamespace(
+                    question_text="Listen [anki:play:q:0] [...]",
+                    answer_text="Listen [anki:play:a:0] answer [anki:play:a:1]<br>[anki:play:a:2]",
+                    css="",
+                    question_av_tags=[SimpleNamespace(filename="prompt.mp3")],
+                    answer_av_tags=[
+                        SimpleNamespace(filename="prompt.mp3"),
+                        SimpleNamespace(filename="hidden.mp3"),
+                        SimpleNamespace(filename="extra.mp3"),
+                    ],
+                )
+
+        # 3. Basic card with {{FrontSide}}: question sound in answer_av_tags is excluded from backAudioFiles
+        basic_note = MockNote(
+            1311,
+            {"Front": "Front word [sound:front_only.mp3]", "Back": "Back meaning [sound:back_only.mp3]"},
+            [],
+            cids=[2311],
+        )
+        basic_note._model = {
+            "id": 1011,
+            "name": "Basic",
+            "type": 0,
+            "flds": [{"name": "Front", "ord": 0}, {"name": "Back", "ord": 1}],
+            "tmpls": [{"name": "Card 1", "ord": 0, "qfmt": "{{Front}}", "afmt": "{{FrontSide}}<hr id=answer>{{Back}}"}],
+        }
+
+        class _BasicAudioCard(MockCard):
+            def render_output(self_card):
+                return SimpleNamespace(
+                    question_text="Front word [anki:play:q:0]",
+                    answer_text="Front word [anki:play:a:0]<hr id=answer>Back meaning [anki:play:a:1]",
+                    css="",
+                    question_av_tags=[SimpleNamespace(filename="front_only.mp3")],
+                    answer_av_tags=[
+                        SimpleNamespace(filename="front_only.mp3"),
+                        SimpleNamespace(filename="back_only.mp3"),
+                    ],
+                )
+
+        orig_get_note = self.mock_col.get_note
+        orig_get_card = self.mock_col.get_card
+        self.mock_col._cards[2310] = _ClozeAudioCard(2310, cloze_note)
+        self.mock_col._cards[2311] = _BasicAudioCard(2311, basic_note)
+        self.mock_col.get_note = (
+            lambda nid: cloze_note
+            if int(nid) == 1310
+            else (basic_note if int(nid) == 1311 else orig_get_note(nid))
+        )
+        self.mock_col.get_card = (
+            lambda cid: self.mock_col._cards[int(cid)] if int(cid) in (2310, 2311) else orig_get_card(cid)
+        )
+        try:
+            rc_cloze = self.router.review_service._serialize_review_card(self.mock_col, 2310)
+            self.assertEqual(rc_cloze["frontAudioFiles"], ["prompt.mp3"])
+            self.assertEqual(rc_cloze["backAudioFiles"], ["hidden.mp3", "extra.mp3"])
+            self.assertEqual(rc_cloze["sandboxQuestionAudioFiles"], ["prompt.mp3"])
+            self.assertEqual(rc_cloze["sandboxAnswerAudioFiles"], ["prompt.mp3", "hidden.mp3", "extra.mp3"])
+            self.assertEqual(rc_cloze["audioFiles"], ["prompt.mp3", "hidden.mp3", "extra.mp3"])
+
+            rc_basic = self.router.review_service._serialize_review_card(self.mock_col, 2311)
+            self.assertEqual(rc_basic["frontAudioFiles"], ["front_only.mp3"])
+            self.assertEqual(rc_basic["backAudioFiles"], ["back_only.mp3"])
+            self.assertEqual(rc_basic["audioFiles"], ["front_only.mp3", "back_only.mp3"])
+
+            lib_basic = self.router.search_service._serialize_library_card(self.mock_col, 2311)
+            self.assertEqual(lib_basic["frontAudioFiles"], ["front_only.mp3"])
+            self.assertEqual(lib_basic["backAudioFiles"], ["back_only.mp3"])
+        finally:
+            self.mock_col.get_note = orig_get_note
+            self.mock_col.get_card = orig_get_card
+
+        # 4. play_audio queues multiple files via AVPlayer.play_tags and uses play_file for single files
+        calls = []
+
+        class _FakeAVPlayer:
+            def stop_and_clear_queue(self):
+                calls.append(("stop",))
+
+            def play_tags(self, tags):
+                calls.append(("play_tags", [t.filename for t in tags]))
+
+            def play_file(self, fname):
+                calls.append(("play_file", fname))
+
+        fake_sound_mod = ModuleType("aqt.sound")
+        fake_sound_mod.av_player = _FakeAVPlayer()
+        fake_aqt_mod = ModuleType("aqt")
+        fake_aqt_mod.sound = fake_sound_mod
+
+        fake_anki_sound_mod = ModuleType("anki.sound")
+
+        class _FakeTag:
+            def __init__(self, filename=""):
+                self.filename = filename
+
+        fake_anki_sound_mod.SoundOrVideoTag = _FakeTag
+
+        saved_mods = {k: sys.modules.get(k) for k in ("aqt", "aqt.sound", "anki.sound")}
+        sys.modules["aqt"] = fake_aqt_mod
+        sys.modules["aqt.sound"] = fake_sound_mod
+        sys.modules["anki.sound"] = fake_anki_sound_mod
+        try:
+            res_multi = self._call("play_audio", {"filenames": ["first.mp3", "second.mp3", "first.mp3"]})
+            self.assertTrue(res_multi["data"]["played"])
+            self.assertEqual(res_multi["data"]["filenames"], ["first.mp3", "second.mp3"])
+            self.assertEqual(calls, [("stop",), ("play_tags", ["first.mp3", "second.mp3"])])
+
+            calls.clear()
+            res_single = self._call("play_audio", {"filename": "single.mp3"})
+            self.assertTrue(res_single["data"]["played"])
+            self.assertEqual(calls, [("play_file", "single.mp3")])
+        finally:
+            for k, orig in saved_mods.items():
+                if orig is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = orig
 
 
 if __name__ == "__main__":

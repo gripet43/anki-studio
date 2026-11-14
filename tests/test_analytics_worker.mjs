@@ -12,6 +12,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const src = readFileSync(path.join(root, "scripts/analytics-worker/worker.js"), "utf8");
@@ -30,14 +31,18 @@ function check(name, condition, detail = "") {
   }
 }
 
-function makeEnv() {
+function makeEnv(extra = {}) {
   const batches = [];
   return {
     batches,
+    ...extra,
     DB: {
       prepare: (sql) => ({ bind: (...args) => ({ sql, args }) }),
       batch: async (stmts) => {
         batches.push(stmts);
+        if (typeof extra.onBatch === "function") {
+          return extra.onBatch(stmts);
+        }
         return stmts;
       },
     },
@@ -113,6 +118,75 @@ const options = await worker.fetch(makeRequest("OPTIONS", EVENTS_PATH, null), ma
 check("OPTIONS 预检不受 UA 限制", options.status === 200);
 const get = await call("GET", EVENTS_PATH, "curl/8.7.1");
 check("GET 仍返回 404", get.status === 404, `status=${get.status}`);
+
+// 5. Real-time dashboard HTML & protected /v1/stats endpoint.
+const dashEnv = makeEnv();
+const dashRes = await worker.fetch(new Request("https://example.workers.dev/dashboard"), dashEnv);
+const dashHtml = await dashRes.text();
+check("/dashboard 返回 200 HTML 且不触达 D1", dashRes.status === 200 && dashRes.headers.get("content-type")?.includes("text/html") && dashEnv.batches.length === 0);
+const scriptMatch = dashHtml.match(/<script>([\s\S]*?)<\/script>/);
+let scriptSyntaxOk = false;
+if (scriptMatch) {
+  try {
+    new vm.Script(scriptMatch[1]);
+    scriptSyntaxOk = true;
+  } catch (err) {
+    console.error("Dashboard script syntax error:", err);
+  }
+}
+check("/dashboard 内嵌脚本语法有效", scriptSyntaxOk);
+
+const unconfiguredEnv = makeEnv();
+const unconfiguredRes = await worker.fetch(new Request("https://example.workers.dev/v1/stats"), unconfiguredEnv);
+check("未配置 DASHBOARD_TOKEN 时 /v1/stats 返回 503 且不查 D1", unconfiguredRes.status === 503 && unconfiguredEnv.batches.length === 0);
+
+const unauthorizedEnv = makeEnv({ DASHBOARD_TOKEN: "secret-123" });
+const noTokenRes = await worker.fetch(new Request("https://example.workers.dev/v1/stats"), unauthorizedEnv);
+const badTokenRes = await worker.fetch(
+  new Request("https://example.workers.dev/v1/stats", { headers: { Authorization: "Bearer wrong" } }),
+  unauthorizedEnv
+);
+check("缺密钥或错密钥访问 /v1/stats 返回 401 且不查 D1", noTokenRes.status === 401 && badTokenRes.status === 401 && unauthorizedEnv.batches.length === 0);
+
+const statsEnv = makeEnv({
+  DASHBOARD_TOKEN: "secret-123",
+  onBatch: (stmts) =>
+    stmts.map((_, idx) => {
+      if (idx === 0) {
+        return {
+          results: [{
+            active_15m: 3,
+            active_1h: 7,
+            dau_today: 12,
+            dau_yesterday: 10,
+            wau_7d: 40,
+            mau_30d: 90,
+            total_installs: 120,
+            events_today: 28,
+            total_events: 500,
+          }],
+        };
+      }
+      if (idx === 2) return { results: [{ country: "CN", installs: 10, events: 25 }] };
+      return { results: [] };
+    }),
+});
+const okStatsRes = await worker.fetch(
+  new Request("https://example.workers.dev/v1/stats?range=7d&tz=8", {
+    headers: { Authorization: "Bearer secret-123" },
+  }),
+  statsEnv
+);
+const okStats = await okStatsRes.json();
+check(
+  "合法密钥访问 /v1/stats 返回 200 及完整汇总字段",
+  okStatsRes.status === 200 &&
+    okStats.summary?.active_15m === 3 &&
+    okStats.summary?.dau_today === 12 &&
+    okStats.countries?.[0]?.country === "CN" &&
+    statsEnv.batches.length === 1,
+  JSON.stringify(okStats)
+);
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

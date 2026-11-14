@@ -21,7 +21,10 @@ import {
   LibraryFacetCounts,
   LibrarySortOption,
   RescueReceipt,
+  REVIEW_CONTENT_SCALES,
   ReviewCardItem,
+  ReviewContentScale,
+  ReviewStageWidth,
 } from '../bridge/pycmd';
 
 export type {
@@ -33,6 +36,8 @@ export type {
   LibrarySortOption,
   RescueReceipt,
   ReviewCardItem,
+  ReviewContentScale,
+  ReviewStageWidth,
 };
 import { EMPTY_ADVANCED_STATS, EMPTY_DASHBOARD } from '../data/mockData';
 import {
@@ -44,6 +49,12 @@ import {
   resolveLanguage,
   translate,
 } from '../i18n/translations';
+import { renderMathAndRichHtml } from '../utils/mathRenderer';
+import {
+  resolveAudioFilesToPlay,
+  resolveAutoPlayAudioFiles,
+  resolveManualPlayAudioFiles,
+} from '../utils/reviewAudio';
 
 export type NavTab = 'dashboard' | 'library' | 'stats' | 'decks' | 'design-system';
 export type ThemeMode = 'light' | 'dark' | 'oled';
@@ -86,7 +97,14 @@ export interface AppState {
   quickAddOpen: boolean;
   editingCardData: ReviewCardItem | LibraryCardItem | null;
   settingsOpen: boolean;
-  settingsInitialTab?: 'appearance' | 'shortcuts' | 'sync' | 'maintenance' | 'native' | 'about';
+  settingsInitialTab?:
+    | 'appearance'
+    | 'answer'
+    | 'shortcuts'
+    | 'sync'
+    | 'maintenance'
+    | 'native'
+    | 'about';
   vacationModalOpen: boolean;
   vacationModalTab: 'status' | 'history';
   icuModalOpen: boolean;
@@ -120,6 +138,14 @@ export interface AppState {
   analyticsEnabled: boolean;
   /** 答题按钮布局：二选一（默认）或原生四按钮。 */
   answerButtonMode: 'binary' | 'four';
+  /** 显示卡片正面时自动播放正面音频（默认关闭）。 */
+  autoPlayFrontAudio: boolean;
+  /** 翻面显示答案时自动播放背面音频；无背面音频时回退播一遍正面音频（默认开启）。 */
+  autoPlayBackAudio: boolean;
+  /** 学习模式卡片舞台宽度档位。 */
+  reviewStageWidth: ReviewStageWidth;
+  /** 学习模式卡片内容流式缩放比例（%）。 */
+  reviewContentScale: ReviewContentScale;
   envInfo: EnvInfo;
 
   // Dashboard, Decks & Statistics
@@ -233,6 +259,10 @@ const initialState: AppState = {
   tipsHiddenOn: '',
   analyticsEnabled: true,
   answerButtonMode: 'binary',
+  autoPlayFrontAudio: false,
+  autoPlayBackAudio: true,
+  reviewStageWidth: 'auto',
+  reviewContentScale: 100,
   envInfo: {
     platform: initialPlatform,
     osName: initialPlatform === 'mac' ? 'macOS' : initialPlatform === 'win' ? 'Windows' : 'Linux',
@@ -334,6 +364,19 @@ const LIBRARY_PAGE_SIZE = 200;
 let coldStartInProgress = false;
 let coldStartStartTs = 0;
 let analyticsStarted = false;
+let audioHighlightTimer: any = null;
+let reviewTransitionEpoch = 0;
+
+function autoPlayCardSide(card: ReviewCardItem | undefined | null, side: 'front' | 'back') {
+  if (!card || !state.inReviewMode || state.isSessionComplete) return;
+  const files = resolveAutoPlayAudioFiles(card, side, {
+    autoPlayFrontAudio: state.autoPlayFrontAudio,
+    autoPlayBackAudio: state.autoPlayBackAudio,
+  });
+  if (files.length > 0) {
+    appActions.playAudio(files, true);
+  }
+}
 
 function trackAnalytics(
   event: 'review_session' | 'feature_use',
@@ -375,6 +418,98 @@ function resetSyncIndicatorToSnapshot() {
         ? formatRelativeSyncLabel(state.lastSyncedTimestamp, state.resolvedLang)
         : tState('notSyncedShort'),
   });
+}
+
+/**
+ * Merge authoritative backend serialization (and converted companion notetype metadata)
+ * returned by `update_card_inline` into reviewer, library, Cmd+K, and sandbox stores.
+ */
+function applyInlineUpdateResponse(cardId: string, res: any) {
+  if (!res || typeof res !== 'object') return;
+  const reviewCard = res.reviewCard && typeof res.reviewCard === 'object' ? (res.reviewCard as ReviewCardItem) : null;
+  const libraryCard =
+    res.libraryCard && typeof res.libraryCard === 'object' ? (res.libraryCard as LibraryCardItem) : null;
+  const cardStyles =
+    res.cardStyles && typeof res.cardStyles === 'object' ? (res.cardStyles as Record<string, string>) : null;
+  const cardFrontStyles =
+    res.cardFrontStyles && typeof res.cardFrontStyles === 'object'
+      ? (res.cardFrontStyles as Record<string, string>)
+      : null;
+  const sandboxIds = Array.isArray(res.sandboxNoteTypeIds)
+    ? res.sandboxNoteTypeIds.map((x: unknown) => String(x))
+    : null;
+  const prunedSet = new Set<string>(
+    Array.isArray(res.prunedCardIds) ? res.prunedCardIds.map((x: unknown) => String(x)) : []
+  );
+
+  if (reviewCard || libraryCard || cardStyles || cardFrontStyles || sandboxIds || prunedSet.size > 0) {
+    setAppState((prev) => {
+      const patch: Partial<AppState> = {};
+      if (reviewCard || prunedSet.size > 0) {
+        const nextQueue: ReviewCardItem[] = [];
+        const seenReviewIds = new Set<string>();
+        for (const c of prev.reviewQueue) {
+          const isEditedRow = c.id === cardId || (reviewCard && c.id === String(reviewCard.id));
+          if (!isEditedRow && prunedSet.has(c.id)) {
+            continue;
+          }
+          const updatedRow =
+            isEditedRow && reviewCard
+              ? { ...reviewCard, isPreviewOnly: c.isPreviewOnly }
+              : c;
+          if (!seenReviewIds.has(updatedRow.id)) {
+            seenReviewIds.add(updatedRow.id);
+            nextQueue.push(updatedRow);
+          }
+        }
+        patch.reviewQueue = nextQueue;
+      }
+      if (libraryCard || prunedSet.size > 0) {
+        const mergeLibraryList = (list: LibraryCardItem[]): LibraryCardItem[] => {
+          const out: LibraryCardItem[] = [];
+          const seenKeys = new Set<string>();
+          for (const c of list) {
+            const isTarget =
+              c.id === cardId ||
+              (libraryCard &&
+                (c.id === String(libraryCard.id) ||
+                  (Boolean(libraryCard.noteId) && c.noteId === String(libraryCard.noteId))));
+            if (!isTarget && prunedSet.has(c.id)) {
+              continue;
+            }
+            const nextItem = isTarget && libraryCard ? libraryCard : c;
+            const dedupeKey = nextItem.noteId || nextItem.id;
+            if (!seenKeys.has(dedupeKey)) {
+              seenKeys.add(dedupeKey);
+              out.push(nextItem);
+            }
+          }
+          return out;
+        };
+        patch.libraryCards = mergeLibraryList(prev.libraryCards);
+        patch.cmdKResults = mergeLibraryList(prev.cmdKResults);
+      }
+      if (prunedSet.size > 0) {
+        patch.selectedCardIds = prev.selectedCardIds.filter((id) => !prunedSet.has(id));
+      }
+      if (cardStyles) {
+        patch.libraryCardStyles = { ...prev.libraryCardStyles, ...cardStyles };
+        patch.cmdKCardStyles = { ...prev.cmdKCardStyles, ...cardStyles };
+      }
+      if (cardFrontStyles) {
+        patch.libraryFrontCardStyles = { ...prev.libraryFrontCardStyles, ...cardFrontStyles };
+        patch.cmdKFrontCardStyles = { ...prev.cmdKFrontCardStyles, ...cardFrontStyles };
+      }
+      if (sandboxIds) {
+        patch.sandboxNoteTypeIds = sandboxIds;
+      }
+      return patch;
+    });
+  }
+
+  if (res.convertedToCloze && isAnkiNativeEnv()) {
+    callAnki('get_note_types', {}).catch(() => {});
+  }
 }
 
 // ---- Actions ----
@@ -484,6 +619,23 @@ export const appActions = {
         tipsHiddenOn: prefs?.tipsHiddenOn !== undefined ? prefs.tipsHiddenOn : state.tipsHiddenOn,
         analyticsEnabled: prefs?.analyticsEnabled !== undefined ? prefs.analyticsEnabled : state.analyticsEnabled,
         answerButtonMode: prefs?.answerButtonMode === 'four' ? 'four' : 'binary',
+        autoPlayFrontAudio:
+          prefs?.autoPlayFrontAudio !== undefined
+            ? Boolean(prefs.autoPlayFrontAudio)
+            : state.autoPlayFrontAudio,
+        autoPlayBackAudio:
+          prefs?.autoPlayBackAudio !== undefined
+            ? Boolean(prefs.autoPlayBackAudio)
+            : state.autoPlayBackAudio,
+        reviewStageWidth:
+          prefs?.reviewStageWidth && ['standard', 'auto', 'wide', 'full'].includes(prefs.reviewStageWidth)
+            ? prefs.reviewStageWidth
+            : state.reviewStageWidth,
+        reviewContentScale:
+          prefs?.reviewContentScale &&
+          REVIEW_CONTENT_SCALES.includes(prefs.reviewContentScale as ReviewContentScale)
+            ? (prefs.reviewContentScale as ReviewContentScale)
+            : state.reviewContentScale,
         debugModeUnlocked: Boolean(prefs?.debugMode) || state.debugModeUnlocked,
         envInfo: dash?.envInfo || state.envInfo,
         lastSyncedTimestamp: genuineSyncTs,
@@ -581,6 +733,10 @@ export const appActions = {
     tipsHiddenOn?: string;
     analyticsEnabled?: boolean;
     answerButtonMode?: 'binary' | 'four';
+    autoPlayFrontAudio?: boolean;
+    autoPlayBackAudio?: boolean;
+    reviewStageWidth?: ReviewStageWidth;
+    reviewContentScale?: ReviewContentScale;
   }) {
     const nextLangPref = patch.language !== undefined ? patch.language : state.languagePref;
     const nextResolvedLang = resolveLanguage(nextLangPref, state.dashboard.language);
@@ -595,6 +751,14 @@ export const appActions = {
       ...(patch.tipsHiddenOn !== undefined ? { tipsHiddenOn: patch.tipsHiddenOn } : {}),
       ...(patch.analyticsEnabled !== undefined ? { analyticsEnabled: patch.analyticsEnabled } : {}),
       ...(patch.answerButtonMode !== undefined ? { answerButtonMode: patch.answerButtonMode } : {}),
+      ...(patch.autoPlayFrontAudio !== undefined
+        ? { autoPlayFrontAudio: Boolean(patch.autoPlayFrontAudio) }
+        : {}),
+      ...(patch.autoPlayBackAudio !== undefined
+        ? { autoPlayBackAudio: Boolean(patch.autoPlayBackAudio) }
+        : {}),
+      ...(patch.reviewStageWidth !== undefined ? { reviewStageWidth: patch.reviewStageWidth } : {}),
+      ...(patch.reviewContentScale !== undefined ? { reviewContentScale: patch.reviewContentScale } : {}),
     });
 
     if (isAnkiNativeEnv()) {
@@ -725,7 +889,10 @@ export const appActions = {
         });
         if (res && Array.isArray(res.cards)) {
           const existingIds = new Set(state.libraryCards.map((c) => c.id));
-          const appended = res.cards.filter((c) => !existingIds.has(c.id));
+          const existingNotes = new Set(state.libraryCards.map((c) => c.noteId || c.id));
+          const appended = res.cards.filter(
+            (c) => !existingIds.has(c.id) && !existingNotes.has(c.noteId || c.id)
+          );
           setAppState((prev) => ({
             libraryCards: [...prev.libraryCards, ...appended],
             libraryFilteredCount: res.filteredCount ?? prev.libraryFilteredCount,
@@ -1164,6 +1331,8 @@ export const appActions = {
 
   async startCustomStudySession(params: CustomStudyParams) {
     const isPreview = params.isPreviewOnly !== false;
+    appActions.stopAudio();
+    const epoch = ++reviewTransitionEpoch;
     setAppState({ isLoading: true });
 
     try {
@@ -1176,6 +1345,11 @@ export const appActions = {
           totalMatched?: number;
           isPreviewOnly?: boolean;
         }>('start_custom_study', params);
+
+        if (epoch !== reviewTransitionEpoch) {
+          setAppState({ isLoading: false });
+          return { success: false, count: 0 };
+        }
 
         if (!res || res.success === false || !Array.isArray(res.cards) || res.cards.length === 0) {
           setAppState({ isLoading: false });
@@ -1203,6 +1377,7 @@ export const appActions = {
           slashMenuOpen: false,
         });
 
+        autoPlayCardSide(res.cards[0], 'front');
         showToast(`${tState('customStudyModalTitle')}: ${res.cards.length} ${tState('cardsUnit')}`);
         return { success: true, count: res.cards.length };
       }
@@ -1455,6 +1630,7 @@ export const appActions = {
   },
 
   setActiveTab(tab: NavTab) {
+    reviewTransitionEpoch += 1;
     if (state.inReviewMode) {
       appActions.stopAudio();
     }
@@ -1644,6 +1820,8 @@ export const appActions = {
     options?: { limit?: number; cardIds?: string[] }
   ) {
     const targetDeckId = deckId || state.activeDeckId || state.decks[0]?.id || '';
+    appActions.stopAudio();
+    const epoch = ++reviewTransitionEpoch;
     setAppState({
       activeDeckId: targetDeckId,
       reviewScopeDeckId: targetDeckId || 'all',
@@ -1673,6 +1851,9 @@ export const appActions = {
             ...(options?.cardIds ? { cardIds: options.cardIds } : {}),
           }
         );
+        if (epoch !== reviewTransitionEpoch || !state.inReviewMode) {
+          return;
+        }
         const cards = res?.cards || [];
         setAppState({
           reviewQueue: cards,
@@ -1681,8 +1862,14 @@ export const appActions = {
           isSessionComplete: cards.length === 0,
           cardShownAtMs: Date.now(),
         });
+        if (cards.length > 0) {
+          autoPlayCardSide(cards[0], startOnAnswerSide ? 'back' : 'front');
+        }
         return;
       } catch {
+        if (epoch !== reviewTransitionEpoch || !state.inReviewMode) {
+          return;
+        }
         setAppState({
           reviewQueue: [],
           currentCardIndex: 0,
@@ -1725,6 +1912,8 @@ export const appActions = {
       frontAnswerHtml: cardItem.frontHtml || cardItem.front,
       backHtml: cardItem.backHtml || cardItem.back,
       audioFiles: cardItem.audioFiles || [],
+      frontAudioFiles: cardItem.frontAudioFiles,
+      backAudioFiles: cardItem.backAudioFiles,
       fields: cardItem.fields || { 正面: cardItem.front, 释义: cardItem.back },
       fieldOrder: cardItem.fields ? Object.keys(cardItem.fields) : ['正面', '释义'],
       tags: cardItem.tags,
@@ -1752,6 +1941,9 @@ export const appActions = {
       isSessionComplete: synthesizedQueue.length === 0,
       cardShownAtMs: Date.now(),
     });
+    if (synthesizedQueue.length > 0 && epoch === reviewTransitionEpoch && state.inReviewMode) {
+      autoPlayCardSide(synthesizedQueue[0], startOnAnswerSide ? 'back' : 'front');
+    }
   },
 
   openCardInReviewerAndEdit(cardItem: LibraryCardItem, startEditing = true) {
@@ -1794,6 +1986,8 @@ export const appActions = {
       frontAnswerHtml: cardItem.frontHtml || cardItem.front,
       backHtml: cardItem.backHtml || cardItem.back,
       audioFiles: cardItem.audioFiles || [],
+      frontAudioFiles: cardItem.frontAudioFiles,
+      backAudioFiles: cardItem.backAudioFiles,
       fields: cardItem.fields || {
         正面: cardItem.front,
         释义: cardItem.back,
@@ -1834,6 +2028,7 @@ export const appActions = {
   },
 
   exitReview() {
+    reviewTransitionEpoch += 1;
     appActions.stopAudio();
     setAppState({
       inReviewMode: false,
@@ -1849,19 +2044,24 @@ export const appActions = {
   },
 
   flipCard() {
-    setAppState((prev) => {
-      const nextFlipped = !prev.isCardFlipped;
-      const currentCard = prev.reviewQueue[prev.currentCardIndex];
-      if (nextFlipped && currentCard?.audioFiles && currentCard.audioFiles.length > 0) {
-        appActions.playAudio(currentCard.audioFiles[0], true);
-      }
-      return { isCardFlipped: nextFlipped };
-    });
+    const currentCard = state.reviewQueue[state.currentCardIndex];
+    const nextFlipped = !state.isCardFlipped;
+    setAppState({ isCardFlipped: nextFlipped });
+    if (nextFlipped) {
+      autoPlayCardSide(currentCard, 'back');
+    } else {
+      appActions.stopAudio();
+    }
   },
 
-  async playAudio(filename?: string, silentToast = false) {
+  async playAudio(target?: string | string[], silentToast = false) {
     const currentCard = state.reviewQueue[state.currentCardIndex];
-    const targetFile = filename || currentCard?.audioFiles?.[0];
+    const explicitFiles = resolveAudioFilesToPlay(target);
+    const files =
+      explicitFiles.length > 0
+        ? explicitFiles
+        : resolveManualPlayAudioFiles(currentCard, state.isCardFlipped);
+    const targetFile = files[0];
     if (!targetFile) {
       if (!silentToast) {
         showToast(tState('readAloud'));
@@ -1869,23 +2069,36 @@ export const appActions = {
       return;
     }
 
+    if (audioHighlightTimer) {
+      clearTimeout(audioHighlightTimer);
+      audioHighlightTimer = null;
+    }
     setAppState({ playingAudioFile: targetFile });
     if (isAnkiNativeEnv()) {
       try {
-        await callAnki('play_audio', { filename: targetFile });
+        await callAnki('play_audio', { filename: targetFile, filenames: files });
       } catch {}
     }
 
     if (!silentToast) {
-      showToast(`${tState('readAloud')}: ${targetFile}`);
+      showToast(
+        files.length > 1
+          ? `${tState('readAloud')}: ${targetFile} (+${files.length - 1})`
+          : `${tState('readAloud')}: ${targetFile}`
+      );
     }
-    setTimeout(() => {
+    audioHighlightTimer = setTimeout(() => {
+      audioHighlightTimer = null;
       setAppState({ playingAudioFile: null });
     }, 900);
   },
 
   /** 停止 Anki 原生 AVPlayer 正在播放的音频（离开复习界面/切换卡片时调用）。 */
   stopAudio() {
+    if (audioHighlightTimer) {
+      clearTimeout(audioHighlightTimer);
+      audioHighlightTimer = null;
+    }
     setAppState({ playingAudioFile: null });
     if (isAnkiNativeEnv()) {
       callAnki('stop_audio', {}).catch(() => {});
@@ -1926,6 +2139,7 @@ export const appActions = {
 
     // 翻到下一张前先停掉上一张可能还在播的音频（原生复习界面同样会停）
     appActions.stopAudio();
+    const epoch = ++reviewTransitionEpoch;
 
     const realElapsedMs = Math.max(500, Math.min(60000, Date.now() - state.cardShownAtMs));
     const isPreview = Boolean(state.isPreviewSession || currentCard.isPreviewOnly);
@@ -2037,10 +2251,17 @@ export const appActions = {
     }));
 
     if (continuation) {
+      if (epoch === reviewTransitionEpoch && state.inReviewMode && !state.isSessionComplete) {
+        autoPlayCardSide(state.reviewQueue[state.currentCardIndex], 'front');
+      }
       // 一批学完了但调度器还有卡：明确告诉用户是「本批完成、继续下一批」，
       // 而不是让他误以为今日已学完（也不能显示今日完成）。
       showToast(tState('batchContinueToast', { n: nextQueue.length }));
       return;
+    }
+
+    if (epoch === reviewTransitionEpoch && state.inReviewMode && !state.isSessionComplete) {
+      autoPlayCardSide(state.reviewQueue[state.currentCardIndex], 'front');
     }
 
     const dynamicIvl =
@@ -2063,6 +2284,8 @@ export const appActions = {
   },
 
   async undoLastReview() {
+    appActions.stopAudio();
+    reviewTransitionEpoch += 1;
     if (state.undoStack.length === 0) {
       if (isAnkiNativeEnv()) {
         try {
@@ -2105,6 +2328,8 @@ export const appActions = {
     const currentCard = state.reviewQueue[state.currentCardIndex];
     if (!currentCard) return;
 
+    appActions.stopAudio();
+    const epoch = ++reviewTransitionEpoch;
     if (isAnkiNativeEnv()) {
       try {
         await callAnki('delete_cards', {
@@ -2135,6 +2360,9 @@ export const appActions = {
       cardShownAtMs: Date.now(),
     }));
 
+    if (epoch === reviewTransitionEpoch && state.inReviewMode && !state.isSessionComplete) {
+      autoPlayCardSide(state.reviewQueue[state.currentCardIndex], 'front');
+    }
     showToast(`${tState('deleteCardBtn')}: ${currentCard.front}`);
   },
 
@@ -2143,6 +2371,10 @@ export const appActions = {
     if (!currentCard) return;
 
     const nextSuspended = !currentCard.suspended;
+    if (nextSuspended) {
+      appActions.stopAudio();
+    }
+    const epoch = ++reviewTransitionEpoch;
     if (isAnkiNativeEnv()) {
       try {
         await callAnki('toggle_suspend', {
@@ -2174,6 +2406,9 @@ export const appActions = {
         isCardFlipped: false,
         cardShownAtMs: Date.now(),
       });
+      if (epoch === reviewTransitionEpoch && state.inReviewMode && !state.isSessionComplete) {
+        autoPlayCardSide(state.reviewQueue[state.currentCardIndex], 'front');
+      }
       showToast(`${tState('suspendCardBtn')}: ${currentCard.front}`);
     } else {
       await appActions.saveInlineCardUpdate({ suspended: false });
@@ -2186,6 +2421,8 @@ export const appActions = {
     const currentCard = state.reviewQueue[state.currentCardIndex];
     if (!currentCard) return;
 
+    appActions.stopAudio();
+    const epoch = ++reviewTransitionEpoch;
     if (isAnkiNativeEnv()) {
       try {
         await callAnki('toggle_bury', {
@@ -2216,6 +2453,9 @@ export const appActions = {
       isCardFlipped: false,
       cardShownAtMs: Date.now(),
     });
+    if (epoch === reviewTransitionEpoch && state.inReviewMode && !state.isSessionComplete) {
+      autoPlayCardSide(state.reviewQueue[state.currentCardIndex], 'front');
+    }
     showToast(`${tState('buryCardBtn')}: ${currentCard.front}`);
   },
 
@@ -2308,22 +2548,48 @@ export const appActions = {
       fields: mergedFields,
     };
 
+    const hasInlineCloze =
+      /\{\{c\d+::/i.test(updatedCard.front || '') ||
+      /\{\{c\d+::/i.test(updatedCard.meaning || '') ||
+      Object.values(updatedCard.fields || {}).some((v) => /\{\{c\d+::/i.test(String(v || '')));
+    const nextUpdatedCard: ReviewCardItem = hasInlineCloze
+      ? {
+          ...updatedCard,
+          isCloze: true,
+          frontHtml: /\{\{c\d+::/i.test(updatedCard.frontHtml || '')
+            ? renderMathAndRichHtml(updatedCard.frontHtml, true)
+            : updatedCard.frontHtml?.includes('anki-native-card')
+              ? updatedCard.frontHtml
+              : renderMathAndRichHtml(updatedCard.front, true),
+          frontAnswerHtml: /\{\{c\d+::/i.test(
+            updatedCard.frontAnswerHtml || updatedCard.frontHtml || ''
+          )
+            ? renderMathAndRichHtml(
+                updatedCard.frontAnswerHtml || updatedCard.frontHtml,
+                false
+              )
+            : updatedCard.frontAnswerHtml?.includes('anki-native-card')
+              ? updatedCard.frontAnswerHtml
+              : renderMathAndRichHtml(updatedCard.front, false),
+        }
+      : updatedCard;
+
     const nextQueue = [...state.reviewQueue];
-    nextQueue[state.currentCardIndex] = updatedCard;
+    nextQueue[state.currentCardIndex] = nextUpdatedCard;
 
     const nextLib = state.libraryCards.map((c) =>
       c.id === currentCard.id
         ? {
             ...c,
-            front: updatedCard.front,
-            back: updatedCard.meaning,
-            frontHtml: updatedCard.frontHtml,
-            backHtml: updatedCard.backHtml,
-            fields: updatedCard.fields,
-            tags: updatedCard.tags,
-            suspended: updatedCard.suspended,
-            deckId: updatedCard.deckId,
-            deckName: updatedCard.deckName,
+            front: nextUpdatedCard.front,
+            back: nextUpdatedCard.meaning,
+            frontHtml: nextUpdatedCard.frontHtml,
+            backHtml: nextUpdatedCard.backHtml,
+            fields: nextUpdatedCard.fields,
+            tags: nextUpdatedCard.tags,
+            suspended: nextUpdatedCard.suspended,
+            deckId: nextUpdatedCard.deckId,
+            deckName: nextUpdatedCard.deckName,
           }
         : c
     );
@@ -2336,18 +2602,19 @@ export const appActions = {
 
     if (isAnkiNativeEnv()) {
       try {
-        await callAnki('update_card_inline', {
-          cardId: updatedCard.id,
-          noteId: updatedCard.noteId,
-          fields: updatedCard.fields,
-          front: updatedCard.front,
-          meaning: updatedCard.meaning,
-          example: updatedCard.example,
-          tags: updatedCard.tags,
-          suspended: updatedCard.suspended,
-          deckId: updatedCard.deckId,
-          deckName: updatedCard.deckName,
+        const res = await callAnki<any>('update_card_inline', {
+          cardId: nextUpdatedCard.id,
+          noteId: nextUpdatedCard.noteId,
+          fields: nextUpdatedCard.fields,
+          front: nextUpdatedCard.front,
+          meaning: nextUpdatedCard.meaning,
+          example: nextUpdatedCard.example,
+          tags: nextUpdatedCard.tags,
+          suspended: nextUpdatedCard.suspended,
+          deckId: nextUpdatedCard.deckId,
+          deckName: nextUpdatedCard.deckName,
         });
+        applyInlineUpdateResponse(nextUpdatedCard.id, res);
       } catch {}
     }
     showToast(tState('autoSaved'));
@@ -2420,7 +2687,17 @@ export const appActions = {
     tags: string[];
     fields?: Record<string, string>;
   }) {
-    const isCloze = payload.front.includes('{{c1::') || payload.back.includes('{{c1::');
+    const isCloze =
+      /\{\{c\d+::/i.test(payload.front) ||
+      /\{\{c\d+::/i.test(payload.back) ||
+      Object.values(payload.fields || {}).some((v) => /\{\{c\d+::/i.test(String(v || '')));
+    const optimisticFrontHtml = /\{\{c\d+::/i.test(payload.front)
+      ? renderMathAndRichHtml(payload.front, true)
+      : payload.front;
+    const optimisticFrontAnswerHtml = /\{\{c\d+::/i.test(payload.front)
+      ? renderMathAndRichHtml(payload.front, false)
+      : payload.front;
+
     const qIdx = state.reviewQueue.findIndex((c) => c.id === payload.cardId);
     const updatedQueue = [...state.reviewQueue];
     if (qIdx >= 0) {
@@ -2431,7 +2708,8 @@ export const appActions = {
         deckName: payload.deckName,
         front: payload.front,
         meaning: payload.back,
-        frontHtml: payload.front,
+        frontHtml: optimisticFrontHtml,
+        frontAnswerHtml: optimisticFrontAnswerHtml,
         backHtml: payload.back,
         tags: payload.tags,
         isCloze,
@@ -2447,7 +2725,7 @@ export const appActions = {
             deckName: payload.deckName,
             front: payload.front,
             back: payload.back,
-            frontHtml: payload.front,
+            frontHtml: optimisticFrontHtml,
             backHtml: payload.back,
             tags: payload.tags,
             fields: payload.fields ? { ...c.fields, ...payload.fields } : c.fields,
@@ -2478,7 +2756,7 @@ export const appActions = {
 
     if (isAnkiNativeEnv()) {
       try {
-        await callAnki('update_card_inline', {
+        const res = await callAnki<any>('update_card_inline', {
           cardId: payload.cardId,
           noteId: payload.noteId,
           deckId: payload.deckId,
@@ -2488,6 +2766,7 @@ export const appActions = {
           tags: payload.tags,
           fields: payload.fields,
         });
+        applyInlineUpdateResponse(payload.cardId, res);
         await appActions.initFromAnki(false);
       } catch {}
     }
@@ -2632,6 +2911,7 @@ export const appActions = {
       replaceText?: string;
       fieldScope?: 'all' | 'front' | 'back';
       ignoreCase?: boolean;
+      applyToNote?: boolean;
     },
     overrideIds?: string[]
   ) {
@@ -2651,23 +2931,55 @@ export const appActions = {
           replaceText: payload?.replaceText,
           fieldScope: payload?.fieldScope,
           ignoreCase: payload?.ignoreCase,
+          applyToNote: payload?.applyToNote ?? true,
         });
       } catch {}
     }
 
     if (actionType === 'suspend' || actionType === 'unsuspend') {
       const shouldSuspend = actionType === 'suspend';
+      const applyToNote = payload?.applyToNote !== false;
+      const idSet = new Set(ids);
       setAppState((prev) => ({
-        libraryCards: prev.libraryCards.map((c) =>
-          ids.includes(c.id)
-            ? {
-                ...c,
-                suspended: shouldSuspend,
-                status: (shouldSuspend ? 'suspended' : 'due') as LibraryCardItem['status'],
-                dueText: shouldSuspend ? tState('statusSuspended') : tState('statusDue'),
-              }
-            : c
-        ),
+        libraryCards: prev.libraryCards.map((c) => {
+          const cardTargeted =
+            idSet.has(c.id) || Boolean(c.siblingCardIds?.some((sid) => idSet.has(sid)));
+          if (!cardTargeted) return c;
+          if (!applyToNote && c.siblingCards && c.siblingCards.length > 1) {
+            const nextSibs = c.siblingCards.map((s) =>
+              idSet.has(s.id)
+                ? {
+                    ...s,
+                    suspended: shouldSuspend,
+                    status: (shouldSuspend ? 'suspended' : 'due') as LibraryCardItem['status'],
+                    dueText: shouldSuspend ? tState('statusSuspended') : tState('statusDue'),
+                  }
+                : s
+            );
+            const allSuspended = nextSibs.every((s) => s.suspended);
+            const firstActive = nextSibs.find((s) => !s.suspended) || nextSibs[0];
+            return {
+              ...c,
+              siblingCards: nextSibs,
+              suspended: allSuspended,
+              status: firstActive.status,
+              dueText: firstActive.dueText,
+            };
+          }
+          const nextSibs = c.siblingCards?.map((s) => ({
+            ...s,
+            suspended: shouldSuspend,
+            status: (shouldSuspend ? 'suspended' : 'due') as LibraryCardItem['status'],
+            dueText: shouldSuspend ? tState('statusSuspended') : tState('statusDue'),
+          }));
+          return {
+            ...c,
+            suspended: shouldSuspend,
+            status: (shouldSuspend ? 'suspended' : 'due') as LibraryCardItem['status'],
+            dueText: shouldSuspend ? tState('statusSuspended') : tState('statusDue'),
+            ...(nextSibs ? { siblingCards: nextSibs } : {}),
+          };
+        }),
       }));
       showToast(`${shouldSuspend ? tState('batchSuspend') : tState('batchUnsuspend')} (${ids.length})`);
     } else if (actionType === 'bury' || actionType === 'unbury') {

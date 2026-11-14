@@ -433,13 +433,16 @@ assert(
 // Item #27: Sync Status Pill & Settings Sync Card must follow Scheme B (no permanent glowing green dot; factual snapshot time; Intl.RelativeTimeFormat + WCAG 1.4.13 Escape dismiss)
 const syncStateIconSrc = readText(
   path.resolve(ADDON_ROOT, 'frontend/src/components/common/SyncStateIcon.tsx'));
+const hoverCardSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/common/HoverCard.tsx'));
 assert(
   syncStateIconSrc.includes("'snapshot'") &&
     syncStateIconSrc.includes("'unsynced'") &&
     syncPillSrc.includes('<SyncStateIcon') &&
     !syncPillSrc.includes('shadow-[0_0_6px_rgba(47,148,97,0.4)]') &&
     syncPillSrc.includes('<time') &&
-    syncPillSrc.includes("e.key === 'Escape'") &&
+    (syncPillSrc.includes("e.key === 'Escape'") ||
+      (syncPillSrc.includes('<HoverCard') && hoverCardSrc.includes("event.key === 'Escape'"))) &&
     settingsSrc.includes('<SyncStateIcon') &&
     !settingsSrc.includes('w-2.5 h-2.5 rounded-full bg-[var(--status-success)]') &&
     !settingsSrc.includes('实时同步') &&
@@ -755,10 +758,13 @@ assert(
     dashboardSrc.includes('dashboard-stat-pill') &&
     dashboardSrc.includes('dashboard-deck-grid') &&
     dashboardSrc.includes('dashboard-heatmap-viewport') &&
-    dashboardSrc.includes('dashboard-tooltip') &&
+    (dashboardSrc.includes('ChartTooltipPortal') || dashboardSrc.includes('<Tooltip')) &&
+    dashboardSrc.includes('<HoverCard') &&
     dashboardSrc.includes("'--deck-brand-soft'") &&
     dashboardSrc.includes("'--deck-brand-text'") &&
     dashboardCssSrc.includes('--dashboard-shadow-card') &&
+    dashboardCssSrc.includes('--tooltip-bg') &&
+    dashboardCssSrc.includes('.dashboard-tooltip') &&
     dashboardCssSrc.includes('.dashboard-surface') &&
     dashboardCssSrc.includes('.dashboard-deck-grid') &&
     dashboardCssSrc.includes('.dashboard-heatmap-viewport') &&
@@ -767,7 +773,7 @@ assert(
     statsViewSrc.includes('hoveredMaturitySeg') &&
     statsViewSrc.includes('hoveredRetentionIdx') &&
     statsViewSrc.includes('hoveredHourlyIdx') &&
-    statsViewSrc.includes('dashboard-tooltip') &&
+    (statsViewSrc.includes('ChartTooltipPortal') || statsViewSrc.includes('<Tooltip')) &&
     wysiwygSrc.includes('STUDY_EMOJIS') &&
     wysiwygSrc.includes('savedRangeRef') &&
     wysiwygSrc.includes("toggleDropdown('emoji')") &&
@@ -778,8 +784,10 @@ assert(
     cssBundle.includes('dashboard-surface') &&
     cssBundle.includes('dashboard-deck-grid') &&
     cssBundle.includes('dashboard-heatmap-viewport') &&
-    syncPillSrc.includes('dashboard-tooltip'),
-  'Item #36: Dashboard must use semantic surface tokens, Level-2 tonal deck study button, unified StatsView tooltips, unclipped WYSIWYG emoji picker, and 3-tier CustomStudyModal hierarchy'
+    cssBundle.includes('dashboard-tooltip') &&
+    cssBundle.includes('--tooltip-bg') &&
+    syncPillSrc.includes('<HoverCard'),
+  'Item #36: Dashboard must use semantic surface tokens, Level-2 tonal deck study button, unified Tooltip/HoverCard primitives, unclipped WYSIWYG emoji picker, and 3-tier CustomStudyModal hierarchy'
 );
 
 // Item #37: 卡片库排序层级 + 同步云图标 + 顶栏角标移除 + 编辑器 Esc 作用域 + 火焰暖光晕
@@ -1118,6 +1126,192 @@ assert(
     legacyClozeDescs.every((phrase) => !allDictText.includes(phrase)) &&
     translationsSrc.includes('notePresetClozeDesc: "使用 {{c1::挖空词}} 将关键概念隐去，支持多处挖空"'),
   'Item #46: 新建卡片的「选择卡型」下拉必须过滤 Image Occlusion 卡型（名字 + 字段双判），提交侧要有兜底，且 16 语言 Cloze 描述不得再承诺图片遮挡'
+);
+
+// Item #47: 「复制卡片调试信息」功能守卫（隐藏在省略号详情抽屉内，不占用主界面顶栏）
+// 确保 Python 端提供 get_card_debug_info 底层透视、剪贴板工具不剥离调试荷载里的 HTML 标签，
+// 且 CopyDebugInfoButton 仅挂载于复习页「•••」Inspector 抽屉内部，不默认暴露在复习顶栏或编辑器主栏。
+const clipboardSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/clipboard.ts'));
+const debugUtilSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/cardDebugInfo.ts'));
+const debugBtnSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/common/CopyDebugInfoButton.tsx'));
+const routerPySrc = readText(
+  path.resolve(ADDON_ROOT, 'bridge/router.py'));
+const inspectorMarkerIdx = reviewerSrc.indexOf('{inspectorOpen && (');
+const debugBtnMountIdx = reviewerSrc.indexOf('<CopyDebugInfoButton');
+assert(
+  routerPySrc.includes('def action_get_card_debug_info') &&
+    reviewSrc.includes('def get_card_debug_info') &&
+    clipboardSrc.includes('stripHtml') &&
+    debugUtilSrc.includes('stripHtml: false') &&
+    debugUtilSrc.includes('buildCardDebugReport') &&
+    debugUtilSrc.includes('scanFieldAnomalies') &&
+    debugBtnSrc.includes('CopyDebugInfoButton') &&
+    inspectorMarkerIdx > 0 &&
+    debugBtnMountIdx > inspectorMarkerIdx &&
+    !editorSrc.includes('<CopyDebugInfoButton') &&
+    translationsSrc.includes('copyDebugInfoBtn:') &&
+    translationsSrc.includes('debugInfoCopiedToast:'),
+  'Item #47: 必须具备后端 get_card_debug_info 透视、无剥离 HTML 剪贴板复制、且 CopyDebugInfoButton 仅收敛在复习页「•••」详情抽屉内（不得默认挂在主界面顶栏或编辑器主栏）'
+);
+
+// Item #48: Cloze 同卡合并默认模式 + 分步切换 + 卡片库按笔记自动聚合 + 学习步长角标
+const clozeCssSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/index.css'));
+const clozeModeSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/clozeMode.ts'));
+const searchPySrc = readText(
+  path.resolve(ADDON_ROOT, 'bridge/search_service.py'));
+const editPySrc = readText(
+  path.resolve(ADDON_ROOT, 'bridge/edit_service.py'));
+assert(
+  clozeCssSrc.includes('.tower-cloze-hide-prefix .anki-cloze-prefix') &&
+    clozeModeSrc.includes('export function rewriteClozeModeInFieldMap') &&
+    wysiwygSrc.includes("clozeMode = 'combined'") &&
+    wysiwygSrc.includes('tower-cloze-hide-prefix') &&
+    editorSrc.includes('clozeModeCombinedOption') &&
+    editorSrc.includes('clozeModeSplitOption') &&
+    librarySrc.includes('subCardsCountBadge') &&
+    librarySrc.includes('applyToNote: false') &&
+    cmdKSrc.includes('siblingCount') &&
+    reviewerSrc.includes('clozeStepBadge') &&
+    searchPySrc.includes('_group_cids_by_note') &&
+    searchPySrc.includes('_expand_note_card_ids') &&
+    editPySrc.includes('_prune_orphan_cloze_cards'),
+  'Item #48: 必须具备 Cloze 默认合并考/前缀隐藏/切换分步考、后端孤卡清理、按笔记聚合卡库、子卡单卡暂停，以及复习分步角标'
+);
+
+// Item #49: 统一悬浮提示与信息浮卡规范（Tooltip & HoverCard Standard）
+// 1) index.css、编译产物 web/assets/index.css 与 themeTokens.ts 暴露统一浮层 tokens、高对比状态文本与减动画/高对比规则；
+// 2) Tooltip / ChartTooltipPortal / HoverCard / useFloatingPosition 保持 Portal 定位、SSR 守卫、键盘模态、快捷键格式化、RTL 与 getClosestFromTarget 护栏；
+// 3) 全量 TSX 组件禁用原生 HTML `title=`（仅 <iframe> 无障碍容器标题例外），DesignSystemView 展示统一 Tooltip & HoverCard。
+const floatingHookSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/hooks/useFloatingPosition.ts'));
+const tooltipSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/common/Tooltip.tsx'));
+const themeTokensSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/themeTokens.ts'));
+
+function findRawJsxTitleLines(src) {
+  const masked = src
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}|\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    .replace(/(?<![:/])\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
+  const rawTitleRe = /(?<![A-Za-z0-9_.$:])title\s*=\s*(?:["'`]|\{)/g;
+  const varDeclLineRe = /\b(?:const|let|var|type|interface)\s+$/;
+  const lines = [];
+  let match;
+  while ((match = rawTitleRe.exec(masked)) !== null) {
+    const lineStart = masked.lastIndexOf('\n', match.index - 1) + 1;
+    if (varDeclLineRe.test(masked.slice(lineStart, match.index))) {
+      continue;
+    }
+    let braceDepth = 0;
+    let quote = null;
+    let tagName = null;
+    const floor = Math.max(0, match.index - 4000);
+    for (let pos = match.index - 1; pos >= floor; pos -= 1) {
+      const ch = masked[pos];
+      if (quote !== null) {
+        if (ch === quote && (pos === 0 || masked[pos - 1] !== '\\')) {
+          quote = null;
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === '`') {
+        quote = ch;
+        continue;
+      }
+      if (ch === '}') {
+        braceDepth += 1;
+      } else if (ch === '{') {
+        if (braceDepth === 0) break;
+        braceDepth -= 1;
+      } else if (braceDepth === 0) {
+        if (ch === '>' || ch === ';') break;
+        if (ch === '<') {
+          const m = /^([A-Za-z][A-Za-z0-9_.-]*)\b/.exec(masked.slice(pos + 1));
+          if (m && pos + 1 + m[1].length < match.index && /\s/.test(masked[pos + 1 + m[1].length])) {
+            tagName = m[1];
+          }
+          break;
+        }
+      }
+    }
+    if (tagName && tagName !== 'iframe') {
+      lines.push(masked.slice(0, match.index).split('\n').length);
+    }
+  }
+  return lines;
+}
+
+const rawTitleOffenders = [];
+for (const file of tsxFiles) {
+  const badLines = findRawJsxTitleLines(readText(file));
+  if (badLines.length > 0) {
+    rawTitleOffenders.push(`${path.relative(ADDON_ROOT, file)}:${badLines.join(',')}`);
+  }
+}
+
+const requiredTooltipCssTokens = [
+  '--tooltip-bg',
+  '--tooltip-border',
+  '--tooltip-shadow',
+  '--tooltip-kbd-bg',
+  '--status-warning-text',
+  '--z-tooltip',
+  '.ui-tooltip',
+  '.ui-hovercard',
+  '.ui-tooltip-kbd',
+  '.dashboard-tooltip',
+];
+for (const token of requiredTooltipCssTokens) {
+  assert(
+    dashboardCssSrc.includes(token),
+    `Item #49: frontend/src/index.css is missing unified tooltip token/class: ${token}`
+  );
+  assert(
+    cssBundle.includes(token.replace(/^\./, '')),
+    `Item #49: Compiled web/assets/index.css is missing unified tooltip token/class: ${token} (run \`cd frontend && npm run build\`)`
+  );
+}
+
+assert(
+  themeTokensSrc.includes('export function getStatusTextTokens') &&
+    themeTokensSrc.includes('export interface StatusTextTokens') &&
+    floatingHookSrc.includes('export function useFloatingPosition') &&
+    floatingHookSrc.includes('export function renderAnchoredTrigger') &&
+    floatingHookSrc.includes('export function isElementFocusVisible') &&
+    floatingHookSrc.includes("'aria-describedby'") &&
+    floatingHookSrc.includes("dir === 'rtl'") &&
+    floatingHookSrc.includes("typeof document === 'undefined'") &&
+    !floatingHookSrc.includes('.closest(') &&
+    tooltipSrc.includes('export function Tooltip') &&
+    tooltipSrc.includes('export function ChartTooltipPortal') &&
+    tooltipSrc.includes('export function ChartTooltipContent') &&
+    tooltipSrc.includes('createPortal') &&
+    tooltipSrc.includes('document.body') &&
+    tooltipSrc.includes('formatShortcut') &&
+    tooltipSrc.includes('showShortcutHints') &&
+    tooltipSrc.includes('ui-tooltip-kbd') &&
+    tooltipSrc.includes('ariaDescribedBy:') &&
+    tooltipSrc.includes("role={isDuplicateAriaLabel ? undefined : 'tooltip'}") &&
+    tooltipSrc.includes('onlyWhenTruncated') &&
+    tooltipSrc.includes("typeof document !== 'undefined'") &&
+    hoverCardSrc.includes('export function HoverCard') &&
+    hoverCardSrc.includes('createPortal') &&
+    hoverCardSrc.includes('document.body') &&
+    hoverCardSrc.includes('getClosestFromTarget') &&
+    hoverCardSrc.includes("event.key === 'Escape'") &&
+    hoverCardSrc.includes('aria-expanded') &&
+    hoverCardSrc.includes("typeof document !== 'undefined'") &&
+    designSystemSrc.includes('<Tooltip') &&
+    designSystemSrc.includes('<HoverCard') &&
+    rawTitleOffenders.length === 0,
+  `Item #49: 统一 Tooltip/HoverCard 规范校验失败（请确保完成全量迁移并重新执行 npm run build）：${
+    rawTitleOffenders.length > 0 ? `残留原生 title=: ${rawTitleOffenders.join('; ')}` : 'DesignSystemView 或浮层原语契约缺失'
+  }`
 );
 
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

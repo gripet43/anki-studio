@@ -5,6 +5,7 @@ import { AnkiStudioLogo } from '../common/AnkiStudioLogo';
 import { getDeckColorByHash } from '../../utils/mathRenderer';
 import { getAccentScale } from '../../utils/themeTokens';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
+import { Tooltip } from '../common/Tooltip';
 
 export const Sidebar: React.FC = () => {
   const {
@@ -121,20 +122,20 @@ export const Sidebar: React.FC = () => {
         onDoubleClick={handleWindowDoubleClick}
         className={`px-5 ${envInfo.platform === 'mac' ? 'pt-1 pb-4' : 'pt-5 pb-4'} flex items-center gap-3 cursor-default select-none`}
       >
-        <button
-          type="button"
-          onClick={() => appActions.setActiveTab('dashboard')}
-          // 父级在 mousedown 上挂了窗口拖拽，不拦截的话点击会被拖拽逻辑吃掉
-          onMouseDown={(e) => e.stopPropagation()}
-          title={t('navDashboard')}
-          aria-label={t('navDashboard')}
-          className="w-9 h-9 rounded-xl flex items-center justify-center shadow-xs transition-colors duration-200 border border-black/5 dark:border-white/10 bg-black/[0.025] dark:bg-white/[0.05] hover:bg-[var(--brand-soft)] hover:border-[var(--brand-border)] cursor-pointer"
-        >
-          <AnkiStudioLogo size={22} />
-        </button>
+        <Tooltip variant="compact" content={t('navDashboard')} side="right">
+          <button
+            type="button"
+            onClick={() => appActions.setActiveTab('dashboard')}
+            // 父级在 mousedown 上挂了窗口拖拽，不拦截的话点击会被拖拽逻辑吃掉
+            onMouseDown={(e) => e.stopPropagation()}
+            aria-label={t('navDashboard')}
+            className="w-9 h-9 rounded-xl flex items-center justify-center shadow-xs transition-colors duration-200 border border-black/5 dark:border-white/10 bg-black/[0.025] dark:bg-white/[0.05] hover:bg-[var(--brand-soft)] hover:border-[var(--brand-border)] cursor-pointer"
+          >
+            <AnkiStudioLogo size={22} />
+          </button>
+        </Tooltip>
         <div
           onClick={handleVersionBadgeClick}
-          title="Anki Studio"
           className="font-semibold text-[15px] leading-tight tracking-tight cursor-default select-none"
         >
           Anki Studio
@@ -143,40 +144,42 @@ export const Sidebar: React.FC = () => {
 
       {/* Quick Add Button (+ 快速制卡) — Secondary Hierarchy per UX requirements */}
       <div className="px-4 mb-4">
-        <button
-          onClick={() => setAppState({ quickAddOpen: true })}
-          className={`btn-secondary w-full ${
-            showShortcutHints ? 'justify-between' : 'justify-center'
-          }`}
-          title={t('quickAddTooltip')}
-        >
-          <span className="flex items-center gap-2">
-            <svg
-              className="w-3.5 h-3.5 text-[var(--brand-text)] shrink-0"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span>{t('quickAddBtn')}</span>
-          </span>
-          {showShortcutHints && (
-            <kbd
-              className={`px-1.5 py-0.5 text-[10px] rounded font-mono ${
-                isDark
-                  ? 'bg-white/10 text-[#8E8E93] border border-white/10'
-                  : 'bg-black/5 text-[#8E8E93] border border-black/5'
-              }`}
-            >
-              N
-            </kbd>
-          )}
-        </button>
+        <Tooltip variant="compact" content={t('quickAddTooltipLabel')} shortcut="N" side="right">
+          <button
+            type="button"
+            onClick={() => setAppState({ quickAddOpen: true })}
+            className={`btn-secondary w-full ${
+              showShortcutHints ? 'justify-between' : 'justify-center'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <svg
+                className="w-3.5 h-3.5 text-[var(--brand-text)] shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>{t('quickAddBtn')}</span>
+            </span>
+            {showShortcutHints && (
+              <kbd
+                className={`px-1.5 py-0.5 text-[10px] rounded font-mono ${
+                  isDark
+                    ? 'bg-white/10 text-[#8E8E93] border border-white/10'
+                    : 'bg-black/5 text-[#8E8E93] border border-black/5'
+                }`}
+              >
+                N
+              </kbd>
+            )}
+          </button>
+        </Tooltip>
       </div>
 
       {/* Study Navigation Section */}
@@ -286,60 +289,65 @@ export const Sidebar: React.FC = () => {
                       />
                     </span>
                   )}
-                  <button
-                    onClick={() => appActions.startReview(deck.id)}
-                    className="truncate text-start flex-1 cursor-pointer"
-                  >
-                    {deck.name}
-                  </button>
+                  <Tooltip variant="compact" content={deck.name} onlyWhenTruncated side="right">
+                    <button
+                      type="button"
+                      onClick={() => appActions.startReview(deck.id)}
+                      className="truncate text-start flex-1 min-w-0 cursor-pointer"
+                    >
+                      {deck.name}
+                    </button>
+                  </Tooltip>
                 </div>
                 {(deck.dueReview + deck.dueNew) > 0 && (
                   <span
-                    className={`text-[11px] font-mono ${mutedText} group-hover/deck:hidden`}
+                    className={`text-[11px] font-mono ${mutedText} group-hover/deck:hidden group-focus-within/deck:hidden`}
                   >
                     {deck.dueReview + deck.dueNew}
                   </span>
                 )}
-                {/* 悬停时把待复习数字换成「查看 / 学习」两个动作 */}
-                <div className="hidden group-hover/deck:flex items-center gap-0.5 shrink-0">
-                  <button
-                    type="button"
-                    title={t('viewInLibraryBtn')}
-                    aria-label={t('viewInLibraryBtn')}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setAppState({ activeTab: 'library' });
-                      appActions.searchLibraryDebounced({ deckId: deck.id });
-                    }}
-                    className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-[var(--brand-soft)] transition-colors cursor-pointer"
-                  >
-                    <svg
-                      className="w-3 h-3"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                {/* 悬停或键盘聚焦时把待复习数字换成「查看 / 学习」两个动作 */}
+                <div className="flex items-center gap-0.5 shrink-0 opacity-0 pointer-events-none w-0 overflow-hidden group-hover/deck:w-auto group-hover/deck:opacity-100 group-hover/deck:pointer-events-auto group-hover/deck:overflow-visible group-focus-within/deck:w-auto group-focus-within/deck:opacity-100 group-focus-within/deck:pointer-events-auto group-focus-within/deck:overflow-visible transition-opacity duration-150">
+                  <Tooltip variant="compact" content={t('viewInLibraryBtn')} side="top">
+                    <button
+                      type="button"
+                      aria-label={t('viewInLibraryBtn')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAppState({ activeTab: 'library' });
+                        appActions.searchLibraryDebounced({ deckId: deck.id });
+                      }}
+                      className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-[var(--brand-soft)] focus-visible:outline-2 focus-visible:outline-[var(--brand)] transition-colors cursor-pointer"
                     >
-                      <rect x="3" y="4" width="18" height="16" rx="2" />
-                      <line x1="3" y1="9" x2="21" y2="9" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    title={t('navStudy')}
-                    aria-label={t('startTodayStudy')}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      appActions.startReview(deck.id);
-                    }}
-                    className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-[var(--brand-soft)] transition-colors cursor-pointer"
-                  >
-                    <svg className="w-2.5 h-2.5 fill-current ms-0.5" viewBox="0 0 24 24">
-                      <polygon points="5 3 19 12 5 21 5 3" />
-                    </svg>
-                  </button>
+                      <svg
+                        className="w-3 h-3"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect x="3" y="4" width="18" height="16" rx="2" />
+                        <line x1="3" y1="9" x2="21" y2="9" />
+                      </svg>
+                    </button>
+                  </Tooltip>
+                  <Tooltip variant="compact" content={t('startTodayStudy')} side="top">
+                    <button
+                      type="button"
+                      aria-label={t('startTodayStudy')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        appActions.startReview(deck.id);
+                      }}
+                      className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-[var(--brand-soft)] focus-visible:outline-2 focus-visible:outline-[var(--brand)] transition-colors cursor-pointer"
+                    >
+                      <svg className="w-2.5 h-2.5 fill-current ms-0.5" viewBox="0 0 24 24">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                      </svg>
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
             );
@@ -357,44 +365,45 @@ export const Sidebar: React.FC = () => {
           }`}
         >
           {/* 1. 休假模式 (Vacation Mode) */}
-          <button
-            type="button"
-            onClick={() => appActions.openVacationModal('status')}
-            className={`py-1.5 px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
-              dashboard.vacation?.isActive
-                ? 'bg-[var(--status-success-soft)] text-[var(--status-success)] font-semibold shadow-2xs'
-                : isDark
-                ? 'text-[#9A9CA6] hover:text-white hover:bg-white/[0.06] hover:shadow-2xs'
-                : 'text-[#5C5E66] hover:text-[#111215] hover:bg-white hover:shadow-2xs'
-            }`}
-            title={t('vacationBtnTooltip')}
-          >
-            <svg
-              className="w-3.5 h-3.5 shrink-0 opacity-80"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+          <Tooltip variant="compact" content={t('vacationBtnTooltip')} side="right">
+            <button
+              type="button"
+              onClick={() => appActions.openVacationModal('status')}
+              className={`py-1.5 px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
+                dashboard.vacation?.isActive
+                  ? 'bg-[var(--status-success-soft)] text-[var(--status-success)] font-semibold shadow-2xs'
+                  : isDark
+                  ? 'text-[#9A9CA6] hover:text-white hover:bg-white/[0.06] hover:shadow-2xs'
+                  : 'text-[#5C5E66] hover:text-[#111215] hover:bg-white hover:shadow-2xs'
+              }`}
             >
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-              <line x1="10" y1="14" x2="10" y2="18" />
-              <line x1="14" y1="14" x2="14" y2="18" />
-            </svg>
-            <span className="truncate">
-              {dashboard.vacation?.isActive
-                ? t('vacationActiveShort', { n: dashboard.vacation.remainingDays })
-                : t('vacationBtn')}
-            </span>
-            {dashboard.vacation?.isActive && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] shrink-0" />
-            )}
-          </button>
+              <svg
+                className="w-3.5 h-3.5 shrink-0 opacity-80"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+                <line x1="10" y1="14" x2="10" y2="18" />
+                <line x1="14" y1="14" x2="14" y2="18" />
+              </svg>
+              <span className="truncate">
+                {dashboard.vacation?.isActive
+                  ? t('vacationActiveShort', { n: dashboard.vacation.remainingDays })
+                  : t('vacationBtn')}
+              </span>
+              {dashboard.vacation?.isActive && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] shrink-0" />
+              )}
+            </button>
+          </Tooltip>
 
           {/* 2. 进度减负 (Backlog Relief)
               注意：这里**不能**给整格铺底色。它和「休假模式」同处一个分段容器，
@@ -406,82 +415,84 @@ export const Sidebar: React.FC = () => {
               该报警），去掉的只是那层会冒充「选中态」的底色。
               文字色分两档实色而非直接用 --status-warning：后者不分明暗，作为
               11px 正文压在浅色底上只有 3.0:1，低于 4.5:1 门槛。 */}
-          <button
-            type="button"
-            onClick={() => appActions.openIcuModal('rescue')}
-            className={`py-1.5 px-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
-              dashboard.backlog?.hasAvalanche
-                ? `font-semibold ${
-                    isDark
-                      ? 'text-[#D98A3C] hover:bg-white/[0.06]'
-                      : 'text-[#9A5B12] hover:bg-white'
-                  }`
-                : `font-medium ${
-                    isDark
-                      ? 'text-[#9A9CA6] hover:text-white hover:bg-white/[0.06] hover:shadow-2xs'
-                      : 'text-[#5C5E66] hover:text-[#111215] hover:bg-white hover:shadow-2xs'
-                  }`
-            }`}
-            title={t('backlogRescueTooltip')}
-          >
-            <svg
-              className="w-3.5 h-3.5 shrink-0 opacity-80"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+          <Tooltip variant="compact" content={t('backlogRescueTooltip')} side="right">
+            <button
+              type="button"
+              onClick={() => appActions.openIcuModal('rescue')}
+              className={`py-1.5 px-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
+                dashboard.backlog?.hasAvalanche
+                  ? `font-semibold ${
+                      isDark
+                        ? 'text-[#D98A3C] hover:bg-white/[0.06]'
+                        : 'text-[#9A5B12] hover:bg-white'
+                    }`
+                  : `font-medium ${
+                      isDark
+                        ? 'text-[#9A9CA6] hover:text-white hover:bg-white/[0.06] hover:shadow-2xs'
+                        : 'text-[#5C5E66] hover:text-[#111215] hover:bg-white hover:shadow-2xs'
+                    }`
+              }`}
             >
-              <path d="M12 2L2 7l10 5 10-5-10-5z" />
-              <path d="M2 17l10 5 10-5" />
-              <path d="M2 12l10 5 10-5" />
-            </svg>
-            <span className="truncate">{t('backlogRescueBtn')}</span>
-            {dashboard.backlog?.hasAvalanche && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)] shrink-0" />
-            )}
-          </button>
+              <svg
+                className="w-3.5 h-3.5 shrink-0 opacity-80"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5" />
+                <path d="M2 12l10 5 10-5" />
+              </svg>
+              <span className="truncate">{t('backlogRescueBtn')}</span>
+              {dashboard.backlog?.hasAvalanche && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)] shrink-0" />
+              )}
+            </button>
+          </Tooltip>
         </div>
       </div>
 
       {/* Unified User Profile & Settings Entrance */}
       <div className={`p-3 border-t ${isDark ? 'border-[#252730]' : 'border-[#F0F0F5]'}`}>
-        <button
-          type="button"
-          onClick={() => setAppState({ settingsOpen: true })}
-          title={t('openSettingsTooltip')}
-          className={`w-full px-2.5 py-2 rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
-            settingsOpen
-              ? navActiveBg
-              : isDark
-              ? 'hover:bg-white/5'
-              : 'hover:bg-[#F4F4F6]'
-          }`}
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0 shadow-xs transition-colors duration-200"
-              style={{ backgroundColor: brandHex }}
-            >
-              {userDisplay.slice(0, 1).toUpperCase()}
-            </div>
-            <div className="min-w-0 text-start">
-              <div className="text-[13px] font-medium leading-tight truncate">
-                {userDisplay}
+        <Tooltip variant="compact" content={t('openSettingsTooltip')} side="right">
+          <button
+            type="button"
+            onClick={() => setAppState({ settingsOpen: true })}
+            className={`w-full px-2.5 py-2 rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
+              settingsOpen
+                ? navActiveBg
+                : isDark
+                ? 'hover:bg-white/5'
+                : 'hover:bg-[#F4F4F6]'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0 shadow-xs transition-colors duration-200"
+                style={{ backgroundColor: brandHex }}
+              >
+                {userDisplay.slice(0, 1).toUpperCase()}
               </div>
-              <div className={`text-[11px] ${mutedText} mt-0.5`}>
-                {t('navSettings')}
+              <div className="min-w-0 text-start">
+                <div className="text-[13px] font-medium leading-tight truncate">
+                  {userDisplay}
+                </div>
+                <div className={`text-[11px] ${mutedText} mt-0.5`}>
+                  {t('navSettings')}
+                </div>
               </div>
             </div>
-          </div>
 
-          <svg className="w-4 h-4 text-[#8E8E93]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-          </svg>
-        </button>
+            <svg className="w-4 h-4 text-[#8E8E93]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            </svg>
+          </button>
+        </Tooltip>
       </div>
     </aside>
   );

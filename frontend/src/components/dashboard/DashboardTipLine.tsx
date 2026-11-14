@@ -3,6 +3,7 @@ import { LEARNING_TIPS, resolveTipLocale } from '../../content/learningTips';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { translate } from '../../i18n/translations';
 import { localDateKey } from '../../utils/localDate';
+import { Tooltip } from '../common/Tooltip';
 
 const ROTATE_MS = 10000;
 
@@ -64,47 +65,50 @@ export const DashboardTipLine: React.FC = () => {
         <path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V18h6v-1.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z" />
       </svg>
 
-      <span
-        className={`min-w-0 truncate text-[11.5px] leading-relaxed text-[#8E8E93] dark:text-[#8E8E93] transition-opacity duration-150 ${
-          textVisible ? 'opacity-100' : 'opacity-0'
-        }`}
-        title={tip.text[locale]}
-      >
-        {tip.text[locale]}
-      </span>
+      <Tooltip variant="compact" content={tip.text[locale]} onlyWhenTruncated repositionKey={index}>
+        <span
+          className={`min-w-0 truncate text-[11.5px] leading-relaxed text-[#8E8E93] dark:text-[#8E8E93] transition-opacity duration-150 ${
+            textVisible ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          {tip.text[locale]}
+        </span>
+      </Tooltip>
 
       <span className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/tip:opacity-100 group-focus-within/tip:opacity-100 transition-opacity duration-150">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            switchTip(1);
-          }}
-          title={translate(resolvedLang, 'tipShuffle')}
-          aria-label={translate(resolvedLang, 'tipShuffle')}
-          className="w-5 h-5 rounded-md flex items-center justify-center cursor-pointer text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-black/[0.04] dark:hover:bg-white/[0.08] transition-colors"
-        >
-          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-            <path d="M3 3v5h5" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.currentTarget.blur();
-            appActions.updatePreferences({ tipsHiddenOn: today });
-          }}
-          title={translate(resolvedLang, 'tipHideToday')}
-          aria-label={translate(resolvedLang, 'tipHideToday')}
-          className="w-5 h-5 rounded-md flex items-center justify-center cursor-pointer text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-black/[0.04] dark:hover:bg-white/[0.08] transition-colors"
-        >
-          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19" />
-            <path d="M6.61 6.61A18.5 18.5 0 0 0 2 12s3 8 10 8a9.12 9.12 0 0 0 5.39-1.61" />
-            <path d="m2 2 20 20" />
-          </svg>
-        </button>
+        <Tooltip variant="compact" content={translate(resolvedLang, 'tipShuffle')}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.currentTarget.blur();
+              switchTip(1);
+            }}
+            aria-label={translate(resolvedLang, 'tipShuffle')}
+            className="w-5 h-5 rounded-md flex items-center justify-center cursor-pointer text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-black/[0.04] dark:hover:bg-white/[0.08] transition-colors"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+          </button>
+        </Tooltip>
+        <Tooltip variant="compact" content={translate(resolvedLang, 'tipHideToday')}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.currentTarget.blur();
+              appActions.updatePreferences({ tipsHiddenOn: today });
+            }}
+            aria-label={translate(resolvedLang, 'tipHideToday')}
+            className="w-5 h-5 rounded-md flex items-center justify-center cursor-pointer text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-black/[0.04] dark:hover:bg-white/[0.08] transition-colors"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19" />
+              <path d="M6.61 6.61A18.5 18.5 0 0 0 2 12s3 8 10 8a9.12 9.12 0 0 0 5.39-1.61" />
+              <path d="m2 2 20 20" />
+            </svg>
+          </button>
+        </Tooltip>
       </span>
     </div>
   );

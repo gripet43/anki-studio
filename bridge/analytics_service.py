@@ -35,9 +35,9 @@ import urllib.request
 import uuid
 from typing import Any, Callable, Dict, List, Optional
 
-# 线上正式端点（Cloudflare Worker，见 scripts/analytics-worker/）。
+# 线上正式端点（Cloudflare Worker 自定义域，见 scripts/analytics-worker/）。
 # 用户可在配置里把 analytics_endpoint 改成自建地址，或设为空串彻底停发。
-DEFAULT_ENDPOINT = "https://anki-studio-analytics.congtoubyby.workers.dev/v1/events"
+DEFAULT_ENDPOINT = "https://anki.63096039.xyz/v1/events"
 
 MAX_QUEUE = 100
 REQUEST_TIMEOUT = 6

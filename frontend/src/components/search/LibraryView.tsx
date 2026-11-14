@@ -14,6 +14,8 @@ import {
   useAppStore,
 } from '../../stores/useAppStore';
 import { formatCardPreviewHtml, getDeckColorByHash } from '../../utils/mathRenderer';
+import { Tooltip } from '../common/Tooltip';
+import { getClosestFromTarget } from '../../utils/domTarget';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
 
 export const LibraryView: React.FC = () => {
@@ -71,6 +73,7 @@ export const LibraryView: React.FC = () => {
     'none' | 'addTag' | 'removeTag' | 'findReplace' | 'moveDeck' | 'setFlag' | 'confirmDelete'
   >('none');
   const [cardMenuId, setCardMenuId] = useState<string | null>(null);
+  const [subcardPopoverId, setSubcardPopoverId] = useState<string | null>(null);
   const [cardMenuTagDraft, setCardMenuTagDraft] = useState('');
   const [cardMenuDeleteConfirmId, setCardMenuDeleteConfirmId] = useState<string | null>(null);
   const [batchTagInput, setBatchTagInput] = useState('');
@@ -107,6 +110,10 @@ export const LibraryView: React.FC = () => {
       }
       if (sortDropdownRef.current && !sortDropdownRef.current.contains(e.target as Node)) {
         setSortDropdownOpen(false);
+      }
+      if (!getClosestFromTarget(e.target, '.library-card-menu, .library-card-edit-btn, .library-subcard-row, .library-subcard-trigger')) {
+        setCardMenuId(null);
+        setSubcardPopoverId(null);
       }
     };
     document.addEventListener('mousedown', onDocClick);
@@ -512,41 +519,49 @@ export const LibraryView: React.FC = () => {
                 isDark ? 'bg-[#15161C] border-[#2A2C36]' : 'bg-[#F4F4F6] border-[#E5E5EA]'
               }`}
             >
-              <button
-                onClick={() => setAppState({ libraryViewMode: 'gallery' })}
-                className={`w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${
-                  libraryViewMode === 'gallery'
-                    ? isDark
-                      ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] shadow-xs'
-                      : 'bg-white text-[var(--brand-text)] shadow-xs'
-                    : 'text-[#8E8E93] hover:text-[var(--brand-text)]'
-                }`}
-                title="Gallery View"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                  <rect x="3" y="3" width="7" height="7" rx="1" />
-                  <rect x="14" y="3" width="7" height="7" rx="1" />
-                  <rect x="14" y="14" width="7" height="7" rx="1" />
-                  <rect x="3" y="14" width="7" height="7" rx="1" />
-                </svg>
-              </button>
-              <button
-                onClick={() => setAppState({ libraryViewMode: 'table' })}
-                className={`w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${
-                  libraryViewMode === 'table'
-                    ? isDark
-                      ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] shadow-xs'
-                      : 'bg-white text-[var(--brand-text)] shadow-xs'
-                    : 'text-[#8E8E93] hover:text-[var(--brand-text)]'
-                }`}
-                title="Table View"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                  <line x1="4" y1="6" x2="20" y2="6" />
-                  <line x1="4" y1="12" x2="20" y2="12" />
-                  <line x1="4" y1="18" x2="20" y2="18" />
-                </svg>
-              </button>
+              <Tooltip variant="compact" content={t('galleryViewBtn')} side="bottom">
+                <button
+                  type="button"
+                  onClick={() => setAppState({ libraryViewMode: 'gallery' })}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${
+                    libraryViewMode === 'gallery'
+                      ? isDark
+                        ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] shadow-xs'
+                        : 'bg-white text-[var(--brand-text)] shadow-xs'
+                      : 'text-[#8E8E93] hover:text-[var(--brand-text)]'
+                  }`}
+                  aria-label={t('galleryViewBtn')}
+                  aria-pressed={libraryViewMode === 'gallery'}
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="14" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                  </svg>
+                </button>
+              </Tooltip>
+              <Tooltip variant="compact" content={t('tableViewBtn')} side="bottom">
+                <button
+                  type="button"
+                  onClick={() => setAppState({ libraryViewMode: 'table' })}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${
+                    libraryViewMode === 'table'
+                      ? isDark
+                        ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] shadow-xs'
+                        : 'bg-white text-[var(--brand-text)] shadow-xs'
+                      : 'text-[#8E8E93] hover:text-[var(--brand-text)]'
+                  }`}
+                  aria-label={t('tableViewBtn')}
+                  aria-pressed={libraryViewMode === 'table'}
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <line x1="4" y1="6" x2="20" y2="6" />
+                    <line x1="4" y1="12" x2="20" y2="12" />
+                    <line x1="4" y1="18" x2="20" y2="18" />
+                  </svg>
+                </button>
+              </Tooltip>
             </div>
           </div>
         </header>
@@ -1392,32 +1407,41 @@ export const LibraryView: React.FC = () => {
                         <div className={`library-card-face library-card-face-front ${faceSurface}`}>
                           <header className="library-card-header">
                             <div className="library-card-head-left">
-                              <span
-                                className="library-card-deck"
-                                title={card.fullDeckName || card.deckName}
+                              <Tooltip
+                                variant="compact"
+                                content={card.fullDeckName || card.deckName}
+                                onlyWhenTruncated={!card.fullDeckName || card.fullDeckName === card.deckName}
+                                disabled={!librarySelectionMode}
                               >
-                                <span
-                                  className="library-card-deck-dot"
-                                  style={{ backgroundColor: topBarColor }}
-                                />
-                                <span className="truncate">{card.deckName}</span>
-                              </span>
+                                <span className="library-card-deck">
+                                  <span
+                                    className="library-card-deck-dot"
+                                    style={{ backgroundColor: topBarColor }}
+                                  />
+                                  <span className="truncate">{card.deckName}</span>
+                                </span>
+                              </Tooltip>
 
                               {cardFlagSpec && (
-                                <span
-                                  title={t(`flagLabel_${cardFlagNum}` as any)}
-                                  style={{
-                                    backgroundColor: cardFlagSpec.bgSoft,
-                                    color: cardFlagSpec.hex,
-                                  }}
-                                  className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 shrink-0"
+                                <Tooltip
+                                  variant="compact"
+                                  content={t(`flagLabel_${cardFlagNum}` as any)}
+                                  disabled={!librarySelectionMode}
                                 >
                                   <span
-                                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                                    style={{ backgroundColor: cardFlagSpec.hex }}
-                                  />
-                                  <span>{t(`flagShort_${cardFlagNum}` as any)}</span>
-                                </span>
+                                    style={{
+                                      backgroundColor: cardFlagSpec.bgSoft,
+                                      color: cardFlagSpec.hex,
+                                    }}
+                                    className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1 shrink-0"
+                                  >
+                                    <span
+                                      className="w-1.5 h-1.5 rounded-full shrink-0"
+                                      style={{ backgroundColor: cardFlagSpec.hex }}
+                                    />
+                                    <span>{t(`flagShort_${cardFlagNum}` as any)}</span>
+                                  </span>
+                                </Tooltip>
                               )}
 
                               {isSuspended ? (
@@ -1433,6 +1457,20 @@ export const LibraryView: React.FC = () => {
                                   {t('statusNew')}
                                 </span>
                               ) : null}
+                              {(card.siblingCount || 1) > 1 && (
+                                <Tooltip
+                                  variant="compact"
+                                  content={t('subCardsCountBadge', { n: card.siblingCount || 1 })}
+                                  disabled={!librarySelectionMode}
+                                >
+                                  <span
+                                    tabIndex={0}
+                                    className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--brand-soft)] text-[var(--brand-text)] shrink-0"
+                                  >
+                                    ×{card.siblingCount}
+                                  </span>
+                                </Tooltip>
+                              )}
                             </div>
 
                             {librarySelectionMode && (
@@ -1473,12 +1511,19 @@ export const LibraryView: React.FC = () => {
                           </header>
 
                           <div className="library-card-title-wrap">
-                            <h3
-                              className="library-card-title text-[#1D1D1F] dark:text-[#F2F3F7] select-text cursor-text"
-                              dangerouslySetInnerHTML={{
-                                __html: frontPreviewHtml,
-                              }}
-                            />
+                            <Tooltip
+                              variant="compact"
+                              content={card.front}
+                              onlyWhenTruncated
+                              disabled={!librarySelectionMode || !card.front.trim()}
+                            >
+                              <h3
+                                className="library-card-title text-[#1D1D1F] dark:text-[#F2F3F7] select-text cursor-text"
+                                dangerouslySetInnerHTML={{
+                                  __html: frontPreviewHtml,
+                                }}
+                              />
+                            </Tooltip>
                           </div>
 
                           <footer className="library-card-foot">
@@ -1491,7 +1536,6 @@ export const LibraryView: React.FC = () => {
                                     ? 'is-soon'
                                     : ''
                                 }`}
-                                title={card.dueText}
                               >
                                 <svg
                                   width="13"
@@ -1509,41 +1553,44 @@ export const LibraryView: React.FC = () => {
                                 <span className="num">{card.dueText}</span>
                               </span>
 
-                              <span
-                                className="library-card-stat"
-                                title={`${t('masteryLabel')} ${card.mastery}%`}
+                              <Tooltip
+                                variant="compact"
+                                content={`${t('masteryLabel')} ${card.mastery}%`}
+                                disabled={!librarySelectionMode}
                               >
-                                <svg
-                                  className="library-card-ring"
-                                  width="13"
-                                  height="13"
-                                  viewBox="0 0 16 16"
-                                  aria-hidden="true"
-                                >
-                                  <circle
-                                    className="ring-track"
-                                    cx="8"
-                                    cy="8"
-                                    r="6"
-                                    fill="none"
-                                    strokeWidth="2.4"
-                                  />
-                                  <circle
-                                    cx="8"
-                                    cy="8"
-                                    r="6"
-                                    fill="none"
-                                    strokeWidth="2.4"
-                                    strokeLinecap="round"
-                                    stroke={masteryColor}
-                                    strokeDasharray="37.7"
-                                    strokeDashoffset={
-                                      37.7 * (1 - Math.min(100, Math.max(0, card.mastery)) / 100)
-                                    }
-                                  />
-                                </svg>
-                                <span className="num">{card.mastery}%</span>
-                              </span>
+                                <span className="library-card-stat">
+                                  <svg
+                                    className="library-card-ring"
+                                    width="13"
+                                    height="13"
+                                    viewBox="0 0 16 16"
+                                    aria-hidden="true"
+                                  >
+                                    <circle
+                                      className="ring-track"
+                                      cx="8"
+                                      cy="8"
+                                      r="6"
+                                      fill="none"
+                                      strokeWidth="2.4"
+                                    />
+                                    <circle
+                                      cx="8"
+                                      cy="8"
+                                      r="6"
+                                      fill="none"
+                                      strokeWidth="2.4"
+                                      strokeLinecap="round"
+                                      stroke={masteryColor}
+                                      strokeDasharray="37.7"
+                                      strokeDashoffset={
+                                        37.7 * (1 - Math.min(100, Math.max(0, card.mastery)) / 100)
+                                      }
+                                    />
+                                  </svg>
+                                  <span className="num">{card.mastery}%</span>
+                                </span>
+                              </Tooltip>
                             </div>
                           </footer>
                         </div>
@@ -1568,80 +1615,165 @@ export const LibraryView: React.FC = () => {
                           {card.tags.length > 0 && (
                             <div className="library-card-tags">
                               {card.tags.map((tg) => (
-                                <button
+                                <Tooltip
                                   key={tg}
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    appActions.searchLibraryDebounced({ tag: tg });
-                                  }}
-                                  title={`#${tg}`}
-                                  className="library-card-tag"
+                                  variant="compact"
+                                  content={`#${tg}`}
+                                  onlyWhenTruncated
                                 >
-                                  #{tg}
-                                </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      appActions.searchLibraryDebounced({ tag: tg });
+                                    }}
+                                    className="library-card-tag"
+                                  >
+                                    #{tg}
+                                  </button>
+                                </Tooltip>
                               ))}
                             </div>
                           )}
 
                           <footer className="library-card-foot library-card-foot-back">
                             <div className="library-card-actions">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  appActions.openCardEditor(card);
-                                }}
-                                aria-label={t('editCardTitle')}
-                                title={t('editCardTitle')}
-                                className="library-card-edit-btn"
-                              >
-                                <svg
-                                  width="14"
-                                  height="14"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  aria-hidden="true"
+                              <Tooltip variant="compact" content={t('editCardTitle')}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    appActions.openCardEditor(card);
+                                  }}
+                                  aria-label={t('editCardTitle')}
+                                  className="library-card-edit-btn"
                                 >
-                                  <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" />
-                                  <path d="m13.5 6.5 4 4" />
-                                </svg>
-                                <span>{t('editBtnShort')}</span>
-                              </button>
+                                  <svg
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    aria-hidden="true"
+                                  >
+                                    <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" />
+                                    <path d="m13.5 6.5 4 4" />
+                                  </svg>
+                                  <span>{t('editBtnShort')}</span>
+                                </button>
+                              </Tooltip>
 
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setCardMenuDeleteConfirmId(null);
-                                  setCardMenuTagDraft('');
-                                  setCardMenuId((prev) => (prev === card.id ? null : card.id));
-                                }}
-                                aria-label={t('moreCardActions')}
-                                title={t('moreCardActions')}
-                                className="library-card-edit-btn"
-                              >
-                                <svg
-                                  width="14"
-                                  height="14"
-                                  viewBox="0 0 24 24"
-                                  fill="currentColor"
-                                  aria-hidden="true"
+                              {(card.siblingCount || 1) > 1 && card.siblingCards && (
+                                <Tooltip variant="compact" content={t('subCardsManageTitle')}>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCardMenuId(null);
+                                      setSubcardPopoverId((prev) =>
+                                        prev === card.id ? null : card.id
+                                      );
+                                    }}
+                                    aria-expanded={subcardPopoverId === card.id}
+                                    className="library-card-edit-btn library-subcard-trigger"
+                                  >
+                                    <span>{t('subCardsCountBadge', { n: card.siblingCount || 1 })}</span>
+                                  </button>
+                                </Tooltip>
+                              )}
+
+                              <Tooltip variant="compact" content={t('moreCardActions')}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSubcardPopoverId(null);
+                                    setCardMenuDeleteConfirmId(null);
+                                    setCardMenuTagDraft('');
+                                    setCardMenuId((prev) => (prev === card.id ? null : card.id));
+                                  }}
+                                  aria-label={t('moreCardActions')}
+                                  className="library-card-edit-btn"
                                 >
-                                  <circle cx="5" cy="12" r="1.6" />
-                                  <circle cx="12" cy="12" r="1.6" />
-                                  <circle cx="19" cy="12" r="1.6" />
-                                </svg>
-                              </button>
+                                  <svg
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 24 24"
+                                    fill="currentColor"
+                                    aria-hidden="true"
+                                  >
+                                    <circle cx="5" cy="12" r="1.6" />
+                                    <circle cx="12" cy="12" r="1.6" />
+                                    <circle cx="19" cy="12" r="1.6" />
+                                  </svg>
+                                </button>
+                              </Tooltip>
                             </div>
                           </footer>
                         </div>
                       </div>
                     </div>
+
+                    {subcardPopoverId === card.id && card.siblingCards && card.siblingCards.length > 1 && (
+                      <div
+                        className="library-card-menu !w-[238px] max-w-[92%]"
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <div className="px-2 py-1 text-[10px] font-semibold text-[#8E8E93] flex items-center justify-between">
+                          <span>{t('subCardsManageTitle')}</span>
+                          <span>×{card.siblingCards.length}</span>
+                        </div>
+                        <div className="max-h-44 overflow-y-auto space-y-1">
+                          {card.siblingCards.map((sib, sIdx) => (
+                            <div
+                              key={sib.id}
+                              className={`px-2 py-1.5 rounded-lg flex items-center justify-between gap-2 text-[11px] ${
+                                isDark ? 'bg-white/[0.04]' : 'bg-[#F5F6F8]'
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="font-semibold truncate flex items-center gap-1.5">
+                                  <span>
+                                    {sib.isCloze
+                                      ? t('clozeCardIndexLabel', { n: sIdx + 1 })
+                                      : sib.label}
+                                  </span>
+                                  <span className="text-[10px] font-normal text-[#8E8E93]">
+                                    {sib.mastery}%
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-[#8E8E93] truncate">
+                                  {sib.suspended ? t('statusSuspended') : sib.dueText}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  appActions.executeBatchAction(
+                                    sib.suspended ? 'unsuspend' : 'suspend',
+                                    { applyToNote: false },
+                                    [sib.id]
+                                  );
+                                }}
+                                className={`h-6 px-2 rounded-md text-[10px] font-semibold shrink-0 cursor-pointer transition-colors ${
+                                  sib.suspended
+                                    ? 'bg-[var(--brand-soft)] text-[var(--brand-text)]'
+                                    : isDark
+                                    ? 'bg-white/10 text-[#D1D1D6] hover:bg-white/15'
+                                    : 'bg-black/5 text-[#48484A] hover:bg-black/10'
+                                }`}
+                              >
+                                {sib.suspended ? t('subCardResumeBtn') : t('subCardPauseBtn')}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {cardMenuId === card.id && (
                       <div
@@ -1805,8 +1937,8 @@ export const LibraryView: React.FC = () => {
                     const cardFlagSpec = cardFlagNum !== 0 ? ANKI_FLAG_PALETTE[cardFlagNum] : null;
                     const topBarColor = getDeckColorByHash(card.deckId || card.deckName);
                     return (
+                      <React.Fragment key={card.id}>
                       <tr
-                        key={card.id}
                         onClick={(e) => {
                           if (librarySelectionMode || e.metaKey || e.ctrlKey) {
                             appActions.toggleCardSelection(card.id);
@@ -1833,14 +1965,42 @@ export const LibraryView: React.FC = () => {
                           </td>
                         )}
                         <td className="py-3 px-4 font-semibold">
-                          <div
-                            className="library-table-preview select-text cursor-text"
-                            dangerouslySetInnerHTML={{
-                              __html: formatCardPreviewHtml(card.frontHtml || card.front, {
-                                singleLine: true,
-                              }),
-                            }}
-                          />
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Tooltip
+                              variant="compact"
+                              content={card.front}
+                              onlyWhenTruncated
+                              disabled={!card.front.trim()}
+                            >
+                              <div
+                                tabIndex={0}
+                                className="library-table-preview select-text cursor-text flex-1 min-w-0 rounded focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                                dangerouslySetInnerHTML={{
+                                  __html: formatCardPreviewHtml(card.frontHtml || card.front, {
+                                    singleLine: true,
+                                  }),
+                                }}
+                              />
+                            </Tooltip>
+                            {(card.siblingCount || 1) > 1 && card.siblingCards && (
+                              <Tooltip variant="compact" content={t('subCardsManageTitle')}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSubcardPopoverId((prev) =>
+                                      prev === card.id ? null : card.id
+                                    );
+                                  }}
+                                  aria-expanded={subcardPopoverId === card.id}
+                                  aria-label={t('subCardsManageTitle')}
+                                  className="library-subcard-trigger shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[var(--brand-soft)] text-[var(--brand-text)] hover:bg-[var(--brand-soft-strong)] cursor-pointer transition-colors"
+                                >
+                                  ×{card.siblingCount}
+                                </button>
+                              </Tooltip>
+                            )}
+                          </div>
                         </td>
                         <td className={`py-3 px-4 ${subText}`}>
                           <div
@@ -1853,10 +2013,19 @@ export const LibraryView: React.FC = () => {
                           />
                         </td>
                         <td className="py-3 px-4 text-[12px]">
-                          <span className="flex items-center gap-1.5 min-w-0 max-w-full" title={card.fullDeckName || card.deckName}>
-                            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: topBarColor }} />
-                            <span className="truncate">{card.deckName}</span>
-                          </span>
+                          <Tooltip
+                            variant="compact"
+                            content={card.fullDeckName || card.deckName}
+                            onlyWhenTruncated={!card.fullDeckName || card.fullDeckName === card.deckName}
+                          >
+                            <span
+                              tabIndex={0}
+                              className="flex items-center gap-1.5 min-w-0 max-w-full rounded focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: topBarColor }} />
+                              <span className="truncate">{card.deckName}</span>
+                            </span>
+                          </Tooltip>
                         </td>
                         <td className="py-3 px-4 text-[11px] text-[var(--brand-text)]">
                           <div className="flex items-center gap-1 flex-wrap">
@@ -1881,12 +2050,17 @@ export const LibraryView: React.FC = () => {
                               </span>
                             ))}
                             {card.tags.length > 2 && (
-                              <span
-                                className="px-1.5 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.07] text-[#6E6E73] dark:text-[#A1A1A6]"
-                                title={card.tags.join(' ')}
+                              <Tooltip
+                                variant="compact"
+                                content={card.tags.slice(2).map((tItem) => `#${tItem}`).join(', ')}
                               >
-                                {t('moreTagsLabel', { n: card.tags.length - 2 })}
-                              </span>
+                                <span
+                                  tabIndex={0}
+                                  className="px-1.5 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.07] text-[#6E6E73] dark:text-[#A1A1A6] cursor-default focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-1"
+                                >
+                                  {t('moreTagsLabel', { n: card.tags.length - 2 })}
+                                </span>
+                              </Tooltip>
                             )}
                           </div>
                         </td>
@@ -1945,6 +2119,61 @@ export const LibraryView: React.FC = () => {
                           </button>
                         </td>
                       </tr>
+                      {subcardPopoverId === card.id && card.siblingCards && card.siblingCards.length > 1 && (
+                        <tr
+                          key={`${card.id}-subcards`}
+                          className={`library-subcard-row border-b ${
+                            isDark ? 'border-[#252730] bg-white/[0.02]' : 'border-[#F0F0F5] bg-[#FAFAFC]'
+                          }`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <td colSpan={librarySelectionMode ? 8 : 7} className="px-4 py-2.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[11px] font-semibold text-[#8E8E93] me-1">
+                                {t('subCardsManageTitle')}:
+                              </span>
+                              {card.siblingCards.map((sib, sIdx) => (
+                                <div
+                                  key={sib.id}
+                                  className={`px-2.5 py-1 rounded-lg border flex items-center gap-2 text-[11px] ${
+                                    isDark ? 'bg-[#1D1E28] border-[#2E3040]' : 'bg-white border-[#E5E5EA]'
+                                  }`}
+                                >
+                                  <span className="font-semibold">
+                                    {sib.isCloze
+                                      ? t('clozeCardIndexLabel', { n: sIdx + 1 })
+                                      : sib.label}
+                                  </span>
+                                  <span className="text-[#8E8E93]">
+                                    {sib.suspended ? t('statusSuspended') : sib.dueText}
+                                  </span>
+                                  <span className="text-[#8E8E93] font-mono text-[10px]">
+                                    {sib.mastery}%
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      appActions.executeBatchAction(
+                                        sib.suspended ? 'unsuspend' : 'suspend',
+                                        { applyToNote: false },
+                                        [sib.id]
+                                      );
+                                    }}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold cursor-pointer ${
+                                      sib.suspended
+                                        ? 'bg-[var(--brand-soft)] text-[var(--brand-text)]'
+                                        : 'bg-black/5 dark:bg-white/10 text-[#636366] dark:text-[#D1D1D6]'
+                                    }`}
+                                  >
+                                    {sib.suspended ? t('subCardResumeBtn') : t('subCardPauseBtn')}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
@@ -1983,24 +2212,25 @@ export const LibraryView: React.FC = () => {
               {([1, 2, 3, 4, 5, 6, 7] as Array<Exclude<CardFlagColor, 0>>).map((fNum) => {
                 const spec = ANKI_FLAG_PALETTE[fNum];
                 return (
-                  <button
-                    key={fNum}
-                    type="button"
-                    onClick={() => {
-                      appActions.executeBatchAction('setFlag', { flag: fNum });
-                      setActiveBatchModal('none');
-                    }}
-                    title={t(`flagLabel_${fNum}` as any)}
-                    style={{
-                      backgroundColor: spec.bgSoft,
-                      borderColor: spec.borderHex,
-                      color: spec.hex,
-                    }}
-                    className="h-7 px-2.5 rounded-xl border text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer hover:scale-105 transition-transform"
-                  >
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: spec.hex }} />
-                    <span>{t(`flagShort_${fNum}` as any)}</span>
-                  </button>
+                  <Tooltip key={fNum} variant="compact" content={t(`flagLabel_${fNum}` as any)}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        appActions.executeBatchAction('setFlag', { flag: fNum });
+                        setActiveBatchModal('none');
+                      }}
+                      aria-label={t(`flagLabel_${fNum}` as any)}
+                      style={{
+                        backgroundColor: spec.bgSoft,
+                        borderColor: spec.borderHex,
+                        color: spec.hex,
+                      }}
+                      className="h-7 px-2.5 rounded-xl border text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer hover:scale-105 transition-transform focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: spec.hex }} />
+                      <span>{t(`flagShort_${fNum}` as any)}</span>
+                    </button>
+                  </Tooltip>
                 );
               })}
               <button
@@ -2043,12 +2273,16 @@ export const LibraryView: React.FC = () => {
               >
                 {t('confirm')}
               </button>
-              <button
-                onClick={() => setActiveBatchModal('none')}
-                className="text-xs text-[#8E8E93] cursor-pointer px-1"
-              >
-                ✕
-              </button>
+              <Tooltip variant="compact" content={t('close')} shortcut="Esc">
+                <button
+                  type="button"
+                  aria-label={t('close')}
+                  onClick={() => setActiveBatchModal('none')}
+                  className="text-xs text-[#8E8E93] cursor-pointer px-1 rounded focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                >
+                  ✕
+                </button>
+              </Tooltip>
             </div>
           )}
 
@@ -2080,12 +2314,16 @@ export const LibraryView: React.FC = () => {
                 >
                   {t('confirm')}
                 </button>
-                <button
-                  onClick={() => setActiveBatchModal('none')}
-                  className="text-xs text-[#8E8E93] cursor-pointer px-1"
-                >
-                  ✕
-                </button>
+                <Tooltip variant="compact" content={t('close')} shortcut="Esc">
+                  <button
+                    type="button"
+                    aria-label={t('close')}
+                    onClick={() => setActiveBatchModal('none')}
+                    className="text-xs text-[#8E8E93] cursor-pointer px-1 rounded focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                  >
+                    ✕
+                  </button>
+                </Tooltip>
               </div>
               {selectedCardTags.length > 0 && (
                 <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
@@ -2114,12 +2352,16 @@ export const LibraryView: React.FC = () => {
                 <span className="text-[12px] font-semibold">
                   {t('batchFindReplace')} ({t('selectedCountBadge', { n: selectedCardIds.length })})
                 </span>
-                <button
-                  onClick={() => setActiveBatchModal('none')}
-                  className="text-xs text-[#8E8E93] cursor-pointer px-1"
-                >
-                  ✕
-                </button>
+                <Tooltip variant="compact" content={t('close')} shortcut="Esc">
+                  <button
+                    type="button"
+                    aria-label={t('close')}
+                    onClick={() => setActiveBatchModal('none')}
+                    className="text-xs text-[#8E8E93] cursor-pointer px-1 rounded focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                  >
+                    ✕
+                  </button>
+                </Tooltip>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -2219,12 +2461,16 @@ export const LibraryView: React.FC = () => {
               >
                 {t('confirm')}
               </button>
-              <button
-                onClick={() => setActiveBatchModal('none')}
-                className="text-xs text-[#8E8E93] cursor-pointer px-1"
-              >
-                ✕
-              </button>
+              <Tooltip variant="compact" content={t('close')} shortcut="Esc">
+                <button
+                  type="button"
+                  aria-label={t('close')}
+                  onClick={() => setActiveBatchModal('none')}
+                  className="text-xs text-[#8E8E93] cursor-pointer px-1 rounded focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                >
+                  ✕
+                </button>
+              </Tooltip>
             </div>
           )}
 

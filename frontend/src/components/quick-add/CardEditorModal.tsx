@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { callAnki, isAnkiNativeEnv } from '../../bridge/pycmd';
+import { Tooltip } from '../common/Tooltip';
 import { usePresence } from '../../hooks/usePresence';
 import { formatShortcut, translate } from '../../i18n/translations';
 import { appActions, LibraryCardItem, ReviewCardItem, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
@@ -18,6 +19,13 @@ import {
   buildImageOcclusionHtml,
 } from './ImageOcclusionEditorModal';
 import { TowerWysiwygEditor } from './TowerWysiwygEditor';
+import {
+  type ClozeGroupingMode,
+  countTotalClozeSpans,
+  getClozeGroupingMode,
+  getDistinctClozeOrdinals,
+  rewriteClozeModeInFieldMap,
+} from '../../utils/clozeMode';
 
 const FRONT_ALIASES = [
   '正面',
@@ -427,39 +435,58 @@ export const CardEditorModal: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [deckDropdownOpen, noteTypeDropdownOpen]);
 
-  // Real-time Duplicate Detection
+  // Real-time Duplicate Detection (pre-indexed by normalized front so keystrokes & cloze toggles stay O(1))
+  const libraryDupIndex = useMemo(() => {
+    const map = new Map<string, Array<{ noteId: string; front: string }>>();
+    for (const c of libraryCards) {
+      const k = normalizeTextForDup(c.frontHtml || c.front);
+      if (!k) continue;
+      let bucket = map.get(k);
+      if (!bucket) {
+        bucket = [];
+        map.set(k, bucket);
+      }
+      bucket.push({ noteId: c.noteId, front: c.front });
+    }
+    return map;
+  }, [libraryCards]);
+
+  const normalizedFrontForDup = useMemo(() => normalizeTextForDup(front), [front]);
+  const latestFrontRef = useRef(front);
+  latestFrontRef.current = front;
+
   const localDuplicateInfo = useMemo(() => {
-    const norm = normalizeTextForDup(front);
-    if (!norm || norm.length < 1) {
+    if (!normalizedFrontForDup) {
       return { count: 0, matchedTerm: '' };
     }
     const excludeNid = editingCardData?.noteId;
-    const matches = libraryCards.filter((c) => {
-      if (excludeNid && c.noteId === excludeNid) return false;
-      return normalizeTextForDup(c.frontHtml || c.front) === norm;
-    });
+    const bucket = libraryDupIndex.get(normalizedFrontForDup);
+    if (!bucket || bucket.length === 0) {
+      return { count: 0, matchedTerm: '' };
+    }
+    const matches = excludeNid ? bucket.filter((c) => c.noteId !== excludeNid) : bucket;
     return {
       count: matches.length,
-      matchedTerm: matches[0]?.front || norm,
+      matchedTerm: matches[0]?.front || normalizedFrontForDup,
     };
-  }, [front, libraryCards, editingCardData]);
+  }, [normalizedFrontForDup, libraryDupIndex, editingCardData?.noteId]);
 
   useEffect(() => {
     if (!quickAddOpen) return;
-    const norm = normalizeTextForDup(front);
-    if (!norm || !isAnkiNativeEnv()) {
+    if (!normalizedFrontForDup || !isAnkiNativeEnv()) {
       setBackendDupCount(0);
       setBackendDupPreview('');
       return;
     }
+    const excludeNoteId = editingCardData?.noteId || '';
     const timer = setTimeout(() => {
       callAnki<{
         isDuplicate: boolean;
         duplicateCount: number;
         matchedPreview: string;
       }>('check_duplicate', {
-        front,
-        excludeNoteId: editingCardData?.noteId || '',
+        front: latestFrontRef.current,
+        excludeNoteId,
       })
         .then((res) => {
           if (res) {
@@ -470,7 +497,7 @@ export const CardEditorModal: React.FC = () => {
         .catch(() => {});
     }, 220);
     return () => clearTimeout(timer);
-  }, [front, quickAddOpen, editingCardData]);
+  }, [normalizedFrontForDup, quickAddOpen, editingCardData?.noteId]);
 
   const effectiveDuplicateCount = Math.max(localDuplicateInfo.count, backendDupCount);
   const duplicateSearchTerm = useMemo(() => {
@@ -515,18 +542,77 @@ export const CardEditorModal: React.FC = () => {
     originalFieldsMap,
   ]);
 
-  // Cloze indicator & distinct cloze ordinals (c1, c2, c3...)
-  const clozeOrdinals = useMemo(() => {
-    const combined = `${front}\n${back}`;
-    const ords = new Set<number>();
-    const re = /\{\{c(\d+)::/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(combined)) !== null) {
-      const n = parseInt(m[1], 10);
-      if (Number.isFinite(n) && n >= 1) ords.add(n);
+  // Cloze indicator, span count, distinct ordinals (c1, c2...) & grouping mode ('combined' vs 'split')
+  const fieldValuesForCloze = useMemo(() => {
+    if (readOnlyImageOcclusion) return [];
+    if (isMultiFieldEdit) return Object.values(allFieldsMap);
+    return [front, back, ...Object.values(additionalFields)];
+  }, [readOnlyImageOcclusion, isMultiFieldEdit, allFieldsMap, front, back, additionalFields]);
+
+  const clozeOrdinals = useMemo(
+    () => getDistinctClozeOrdinals(fieldValuesForCloze),
+    [fieldValuesForCloze]
+  );
+
+  const clozeSpanCount = useMemo(
+    () => countTotalClozeSpans(fieldValuesForCloze),
+    [fieldValuesForCloze]
+  );
+
+  const clozeGroupingMode = useMemo<ClozeGroupingMode>(
+    () => getClozeGroupingMode(fieldValuesForCloze),
+    [fieldValuesForCloze]
+  );
+
+  const nextSplitClozeOrd = useMemo(
+    () => (clozeOrdinals.length > 0 ? clozeOrdinals[clozeOrdinals.length - 1] + 1 : 1),
+    [clozeOrdinals]
+  );
+
+  const handleSwitchClozeMode = (targetMode: ClozeGroupingMode) => {
+    if (readOnlyImageOcclusion || clozeSpanCount < 2) return;
+    if (targetMode === clozeGroupingMode && !(targetMode === 'combined' && clozeOrdinals.some((o) => o !== 1))) {
+      return;
     }
-    return Array.from(ords).sort((a, b) => a - b);
-  }, [front, back]);
+
+    if (isMultiFieldEdit) {
+      const converted = rewriteClozeModeInFieldMap(allFieldsMap, targetMode, noteFieldOrder);
+      setAllFieldsMap(converted);
+      setFront(converted[frontFieldName] ?? '');
+      setBack(converted[backFieldName] ?? '');
+      setAdditionalFields((prev) => {
+        const next = { ...prev };
+        for (const k of Object.keys(next)) {
+          if (k in converted) next[k] = converted[k];
+        }
+        return next;
+      });
+    } else {
+      const extraKeys = Object.keys(additionalFields);
+      const inputMap: Record<string, string> = {
+        __front__: front,
+        __back__: back,
+        ...additionalFields,
+      };
+      const converted = rewriteClozeModeInFieldMap(
+        inputMap,
+        targetMode,
+        ['__front__', '__back__', ...extraKeys]
+      );
+      setFront(converted.__front__ ?? '');
+      setBack(converted.__back__ ?? '');
+      if (extraKeys.length > 0) {
+        const nextExtra: Record<string, string> = {};
+        for (const k of extraKeys) {
+          nextExtra[k] = converted[k] ?? '';
+        }
+        setAdditionalFields(nextExtra);
+      }
+    }
+
+    setPreviewClozeOrd(1);
+    setPreviewFlipped(false);
+  };
 
   const isCloze = useMemo(() => {
     return (
@@ -626,7 +712,8 @@ export const CardEditorModal: React.FC = () => {
       }
       const rendered = renderMathAndRichHtml(
         resolveMediaInHtml(val, effectiveMediaBaseUrl),
-        false
+        false,
+        clozeOrdinals.length > 0 ? activePreviewClozeOrd : undefined
       ).trim();
       return Boolean(rendered);
     });
@@ -684,12 +771,27 @@ export const CardEditorModal: React.FC = () => {
     }
   };
 
+  // 既有非挖空模板里已经写了 {{c1::...}} 时，真实数据库仍只有 1 张普通卡；
+  // 必须明确提示“待保存转挖空”，避免用户误以为已经转换成多张挖空卡。
+  const needsClozeSaveConversion = Boolean(
+    isEditMode &&
+      !readOnlyImageOcclusion &&
+      clozeOrdinals.length > 0 &&
+      editingCardData?.isCloze === false
+  );
+
   const activePresetLabel = useMemo(() => {
     if (front.includes('anki-io-wrap')) {
       return t('ioButtonLabel');
     }
     if (selectedPreset === 'reversed') {
       return t('notePresetReversedTitle');
+    }
+    if (needsClozeSaveConversion) {
+      const baseName = editingCardData?.noteTypeName?.trim();
+      return baseName
+        ? `${baseName} · ${t('pendingClozeConvertBadge')}`
+        : t('pendingClozeConvertBadge');
     }
     if (isCloze) {
       return t('clozeBadge');
@@ -699,7 +801,15 @@ export const CardEditorModal: React.FC = () => {
       return foundCustom.name;
     }
     return t('notePresetBasicTitle');
-  }, [front, selectedPreset, isCloze, customNoteTypes, resolvedLang]);
+  }, [
+    front,
+    selectedPreset,
+    needsClozeSaveConversion,
+    editingCardData,
+    isCloze,
+    customNoteTypes,
+    resolvedLang,
+  ]);
 
   const filteredDecks = useMemo(() => {
     const q = deckSearchQuery.trim().toLowerCase();
@@ -920,7 +1030,7 @@ export const CardEditorModal: React.FC = () => {
   return (
     <div
       data-state={presence.state}
-      className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[6px] flex items-center justify-center p-3 sm:p-6 select-none ui-modal-backdrop modal-contain-scroll"
+      className="fixed inset-0 z-50 bg-black/52 flex items-center justify-center p-3 sm:p-6 select-none ui-modal-backdrop modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-labelledby="card-editor-title"
@@ -963,7 +1073,9 @@ export const CardEditorModal: React.FC = () => {
                 <svg className="w-3.5 h-3.5 opacity-70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
                 </svg>
-                <span className="max-w-[125px] truncate">{currentDeck.name}</span>
+                <Tooltip variant="compact" content={currentDeck.name} onlyWhenTruncated>
+                  <span className="max-w-[125px] truncate">{currentDeck.name}</span>
+                </Tooltip>
                 <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="m6 9 6 6 6-6" />
                 </svg>
@@ -972,7 +1084,7 @@ export const CardEditorModal: React.FC = () => {
               {/* Deck Selector Popover Menu */}
               {deckDropdownOpen && (
                 <div
-                  className={`absolute start-0 top-8.5 z-50 w-[240px] rounded-xl border shadow-xl p-1.5 space-y-1 backdrop-blur-xl ${
+                  className={`absolute start-0 top-8.5 z-50 w-[240px] rounded-xl border shadow-xl p-1.5 space-y-1 ${
                     isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
                   }`}
                 >
@@ -1005,7 +1117,9 @@ export const CardEditorModal: React.FC = () => {
                             : 'hover:bg-black/5 text-[#3A3A3C]'
                         }`}
                       >
-                        <span className="truncate">{d.name}</span>
+                        <Tooltip variant="compact" content={d.name} onlyWhenTruncated>
+                          <span className="truncate">{d.name}</span>
+                        </Tooltip>
                         {d.id === selectedDeckId && (
                           <svg className="w-3 h-3 text-white shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <polyline points="20 6 9 17 4 12" />
@@ -1020,38 +1134,41 @@ export const CardEditorModal: React.FC = () => {
 
             {/* Note Type / Creation Mode Selector Popover */}
             <div ref={noteTypeDropdownRef} className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isEditMode) {
-                    setNoteTypeDropdownOpen((prev) => !prev);
-                    setDeckDropdownOpen(false);
-                  }
-                }}
-                className={`h-7 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 transition-colors ${
-                  isEditMode ? 'cursor-default' : 'cursor-pointer'
-                } ${
-                  front.includes('anki-io-wrap')
-                    ? 'bg-[#F59E0B]/15 text-[#F59E0B] border-[#F59E0B]/35'
-                    : isCloze || selectedPreset === 'reversed'
-                    ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
-                    : isDark
-                    ? 'border-[#343644] bg-[#21222E] hover:border-[var(--brand-border)] text-[#D8D8E0]'
-                    : 'border-[#E0E0E6] bg-[#F4F4F6] hover:border-[var(--brand-border)] text-[#3A3A3C]'
-                }`}
-                title={activePresetLabel}
-              >
-                <span className="max-w-[140px] truncate">{activePresetLabel}</span>
-                {!isEditMode && (
-                  <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                )}
-              </button>
+              <Tooltip variant="compact" content={activePresetLabel} onlyWhenTruncated>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isEditMode) {
+                      setNoteTypeDropdownOpen((prev) => !prev);
+                      setDeckDropdownOpen(false);
+                    }
+                  }}
+                  className={`h-7 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 transition-colors ${
+                    isEditMode ? 'cursor-default' : 'cursor-pointer'
+                  } ${
+                    front.includes('anki-io-wrap') || needsClozeSaveConversion
+                      ? 'bg-[#F59E0B]/15 text-[#F59E0B] border-[#F59E0B]/35'
+                      : isCloze || selectedPreset === 'reversed'
+                      ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
+                      : isDark
+                      ? 'border-[#343644] bg-[#21222E] hover:border-[var(--brand-border)] text-[#D8D8E0]'
+                      : 'border-[#E0E0E6] bg-[#F4F4F6] hover:border-[var(--brand-border)] text-[#3A3A3C]'
+                  }`}
+                >
+                  <span className={`${needsClozeSaveConversion ? 'max-w-[220px]' : 'max-w-[140px]'} truncate`}>
+                    {activePresetLabel}
+                  </span>
+                  {!isEditMode && (
+                    <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  )}
+                </button>
+              </Tooltip>
 
               {!isEditMode && noteTypeDropdownOpen && (
                 <div
-                  className={`absolute start-0 top-8.5 z-50 w-[265px] rounded-xl border shadow-xl p-1.5 space-y-1 backdrop-blur-xl ${
+                  className={`absolute start-0 top-8.5 z-50 w-[265px] rounded-xl border shadow-xl p-1.5 space-y-1 ${
                     isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
                   }`}
                 >
@@ -1121,7 +1238,9 @@ export const CardEditorModal: React.FC = () => {
                               }`}
                             >
                               <div className="text-[12px] font-semibold flex items-center justify-between">
-                                <span className="truncate">{m.name}</span>
+                                <Tooltip variant="compact" content={m.name} onlyWhenTruncated>
+                                  <span className="truncate">{m.name}</span>
+                                </Tooltip>
                                 <span className={`text-[10px] font-mono ${isSel ? 'text-white/80' : 'text-[#8E8E93]'}`}>
                                   {m.fields.length}
                                 </span>
@@ -1182,15 +1301,16 @@ export const CardEditorModal: React.FC = () => {
             </button>
             )}
 
-            <button
-              type="button"
-              onClick={handleAttemptClose}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 text-xs cursor-pointer transition-colors"
-              title={t('close')}
-              aria-label={t('close')}
-            >
-              ✕
-            </button>
+            <Tooltip variant="compact" content={t('close')} shortcut="Esc" side="bottom">
+              <button
+                type="button"
+                onClick={handleAttemptClose}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 text-xs cursor-pointer transition-colors"
+                aria-label={t('close')}
+              >
+                ✕
+              </button>
+            </Tooltip>
           </div>
         </div>
 
@@ -1241,14 +1361,76 @@ export const CardEditorModal: React.FC = () => {
               </div>
             )}
 
+            {!readOnlyImageOcclusion && clozeSpanCount >= 2 && (() => {
+              const splitCardCount =
+                clozeGroupingMode === 'split' && clozeOrdinals.length > 1
+                  ? clozeOrdinals.length
+                  : clozeSpanCount;
+              return (
+                <div
+                  className={`px-3.5 py-2.5 rounded-xl border flex flex-wrap items-center justify-between gap-2.5 ${
+                    isDark
+                      ? 'bg-[#1D1E2A]/85 border-[#2E3040]'
+                      : 'bg-[#F7F8FA] border-[#E6E8EF]'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-[12px] font-semibold flex items-center gap-1.5">
+                      <span>{t('clozeModeLabel')}</span>
+                      <span className="text-[11px] font-normal text-[#8E8E93]">
+                        · {clozeGroupingMode === 'combined'
+                          ? t('clozeModeCombinedHint')
+                          : t('clozeModeSplitHint', { n: splitCardCount })}
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    role="radiogroup"
+                    aria-label={t('clozeModeLabel')}
+                    className={`h-7 p-0.5 rounded-lg border inline-flex items-center gap-0.5 shrink-0 ${
+                      isDark ? 'bg-[#14151E] border-[#2E3040]' : 'bg-white border-[#E4E4EA]'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={clozeGroupingMode === 'combined'}
+                      onClick={() => handleSwitchClozeMode('combined')}
+                      className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-all ${
+                        clozeGroupingMode === 'combined'
+                          ? 'bg-[var(--brand)] text-white shadow-2xs'
+                          : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white'
+                      }`}
+                    >
+                      {t('clozeModeCombinedOption')}
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={clozeGroupingMode === 'split'}
+                      onClick={() => handleSwitchClozeMode('split')}
+                      className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-all ${
+                        clozeGroupingMode === 'split'
+                          ? 'bg-[var(--brand)] text-white shadow-2xs'
+                          : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white'
+                      }`}
+                    >
+                      {t('clozeModeSplitOption', { n: splitCardCount })}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
             {isMultiFieldEdit ? (
               (() => {
-                const populatedFieldKeys = noteFieldOrder.filter((k) =>
-                  Boolean((allFieldsMap[k] || '').trim())
-                );
-                const emptyFieldKeys = noteFieldOrder.filter(
-                  (k) => !(allFieldsMap[k] || '').trim()
-                );
+                // 按打开弹窗时的字段快照 + 主字段分组，避免编辑过程中因清空/首字符输入而跨区卸载重挂载编辑器
+                const isPrimarySectionField = (k: string) =>
+                  k === frontFieldName ||
+                  k === backFieldName ||
+                  Boolean((originalFieldsMap[k] || '').trim());
+                const populatedFieldKeys = noteFieldOrder.filter(isPrimarySectionField);
+                const emptyFieldKeys = noteFieldOrder.filter((k) => !isPrimarySectionField(k));
 
                 const renderNoteField = (fKey: string) => {
                   const fVal = allFieldsMap[fKey] || '';
@@ -1277,6 +1459,8 @@ export const CardEditorModal: React.FC = () => {
                         onPasteImage={appActions.pasteImageFromClipboard}
                         onKeyDownShortcut={handleEditorKeyDown}
                         showCloze={true}
+                        clozeMode={clozeGroupingMode}
+                        nextClozeOrd={nextSplitClozeOrd}
                         onOpenImageOcclusion={
                           IMAGE_OCCLUSION_AUTHORING_ENABLED && fKey === frontFieldName
                             ? () => setIoEditorOpen(true)
@@ -1405,6 +1589,8 @@ export const CardEditorModal: React.FC = () => {
                   onPasteImage={appActions.pasteImageFromClipboard}
                   onKeyDownShortcut={handleEditorKeyDown}
                   showCloze={true}
+                  clozeMode={clozeGroupingMode}
+                  nextClozeOrd={nextSplitClozeOrd}
                   onOpenImageOcclusion={
                     IMAGE_OCCLUSION_AUTHORING_ENABLED ? () => setIoEditorOpen(true) : undefined
                   }
@@ -1428,6 +1614,8 @@ export const CardEditorModal: React.FC = () => {
                   onPasteImage={appActions.pasteImageFromClipboard}
                   onKeyDownShortcut={handleEditorKeyDown}
                   showCloze={true}
+                  clozeMode={clozeGroupingMode}
+                  nextClozeOrd={nextSplitClozeOrd}
                 />
 
                 {/* Additional Fields (New card / 2-field presets) */}
@@ -1514,13 +1702,16 @@ export const CardEditorModal: React.FC = () => {
                     }`}
                   >
                     <span>#{tg}</span>
-                    <button
-                      type="button"
-                      onClick={() => setTags(tags.filter((tItem) => tItem !== tg))}
-                      className="opacity-50 hover:opacity-100 hover:text-[var(--status-danger)] cursor-pointer ms-0.5"
-                    >
-                      ×
-                    </button>
+                    <Tooltip variant="compact" content={t('batchRemoveTag')}>
+                      <button
+                        type="button"
+                        onClick={() => setTags(tags.filter((tItem) => tItem !== tg))}
+                        aria-label={`${t('batchRemoveTag')} #${tg}`}
+                        className="opacity-50 hover:opacity-100 hover:text-[var(--status-danger)] cursor-pointer ms-0.5"
+                      >
+                        ×
+                      </button>
+                    </Tooltip>
                   </span>
                 ))}
 
@@ -1567,7 +1758,7 @@ export const CardEditorModal: React.FC = () => {
                     {/* Smart Tag Autocomplete Dropdown */}
                     {tagAutocompleteMatches.length > 0 && (
                       <div
-                        className={`absolute start-0 top-8.5 z-50 w-44 max-h-40 overflow-y-auto rounded-xl border shadow-xl p-1 backdrop-blur-xl ${
+                        className={`absolute start-0 top-8.5 z-50 w-44 max-h-40 overflow-y-auto rounded-xl border shadow-xl p-1 ${
                           isDark ? 'bg-[#1F202A] border-[#343646]' : 'bg-white border-[#E5E5EA]'
                         }`}
                       >
@@ -1627,24 +1818,25 @@ export const CardEditorModal: React.FC = () => {
                       isDark ? 'bg-[#1A1B24] border-[#2E3040]' : 'bg-white border-[#E4E4EA]'
                     }`}
                   >
-                    {clozeOrdinals.map((ord) => {
+                    {clozeOrdinals.map((ord, idx) => {
                       const active = activePreviewClozeOrd === ord;
                       return (
-                        <button
-                          key={ord}
-                          type="button"
-                          onClick={() => {
-                            setPreviewClozeOrd(ord);
-                            setPreviewFlipped(false);
-                          }}
-                          className={`h-5.5 px-2 rounded-[6px] text-[11px] font-mono font-bold cursor-pointer transition-all ${
-                            active
-                              ? 'bg-[var(--brand)] text-white shadow-2xs'
-                              : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white'
-                          }`}
-                        >
-                          c{ord}
-                        </button>
+                        <Tooltip key={ord} variant="compact" content={`c${ord}`}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewClozeOrd(ord);
+                              setPreviewFlipped(false);
+                            }}
+                            className={`h-5.5 px-2 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-all ${
+                              active
+                                ? 'bg-[var(--brand)] text-white shadow-2xs'
+                                : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white'
+                            }`}
+                          >
+                            {t('clozeCardIndexLabel', { n: idx + 1 })}
+                          </button>
+                        </Tooltip>
                       );
                     })}
                   </div>
@@ -1752,9 +1944,11 @@ export const CardEditorModal: React.FC = () => {
                     {previewFlipped ? t('answerSideBadge') : t('questionSideBadge')}
                   </span>
 
-                  {clozeOrdinals.length > 0 && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-black/5 dark:bg-white/10 text-[#6E6E73] dark:text-[#A0A2B2]">
-                      c{activePreviewClozeOrd}
+                  {clozeOrdinals.length > 1 && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-black/5 dark:bg-white/10 text-[#6E6E73] dark:text-[#A0A2B2]">
+                      {t('clozeCardIndexLabel', {
+                        n: Math.max(1, clozeOrdinals.indexOf(activePreviewClozeOrd) + 1),
+                      })}
                     </span>
                   )}
                 </div>
@@ -1776,7 +1970,10 @@ export const CardEditorModal: React.FC = () => {
 
               {/* Main Card Body */}
               <div className="my-auto flex flex-col items-center justify-center w-full py-2">
-                {isEditMode && !hasChanges && editingCardData?.backHtml ? (
+                {isEditMode &&
+                !hasChanges &&
+                editingCardData?.backHtml &&
+                (readOnlyImageOcclusion || (!isCloze && clozeOrdinals.length === 0)) ? (
                   (() => {
                     const nativeReplace = Boolean((editingCardData as ReviewCardItem).replaceFrontOnFlip);
                     const rawFrontHtml = editingCardData.frontHtml || '';
@@ -1901,7 +2098,8 @@ export const CardEditorModal: React.FC = () => {
                                   dangerouslySetInnerHTML={{
                                     __html: renderMathAndRichHtml(
                                       resolveMediaInHtml(fVal, effectiveMediaBaseUrl),
-                                      false
+                                      false,
+                                      clozeOrdinals.length > 0 ? activePreviewClozeOrd : undefined
                                     ),
                                   }}
                                 />
@@ -1942,13 +2140,21 @@ export const CardEditorModal: React.FC = () => {
             isDark ? 'bg-[#13141C]' : 'bg-[#FAFAFC]'
           }`}
         >
-          {/* Left Status (Unsaved changes badge only — no duplicate preview button) */}
+          {/* Left Status (Unsaved changes or pending cloze conversion hint) */}
           <div className="flex items-center gap-3 text-[11px] text-[#8E8E93]">
-            {isEditMode && hasChanges && (
+            {isEditMode && needsClozeSaveConversion ? (
               <span className="text-[var(--status-warning)] font-medium flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]" />
-                <span>{t('unsavedChangesBadge')}</span>
+                <span>{t('pendingClozeConvertHint', { count: clozeOrdinals.length })}</span>
               </span>
+            ) : (
+              isEditMode &&
+              hasChanges && (
+                <span className="text-[var(--status-warning)] font-medium flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]" />
+                  <span>{t('unsavedChangesBadge')}</span>
+                </span>
+              )
             )}
           </div>
 
@@ -1985,7 +2191,7 @@ export const CardEditorModal: React.FC = () => {
         {confirmDiscardOpen && (
           <div
             onClick={(e) => e.stopPropagation()}
-            className="absolute inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+            className="absolute inset-0 z-50 bg-black/65 flex items-center justify-center p-4 animate-in fade-in duration-150"
           >
             <div
               className={`w-[360px] max-w-full rounded-2xl border p-5 shadow-2xl space-y-3 ${

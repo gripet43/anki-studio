@@ -23,6 +23,7 @@ from _addon_bootstrap import ADDON_ROOT, ensure_importable  # noqa: E402
 
 ensure_importable()
 
+from anki_modern_os import AnkiModernHost  # noqa: E402
 from anki_modern_os.bridge.media_utils import (  # noqa: E402
     card_template_dict,
     convert_furigana_to_ruby,
@@ -833,3 +834,76 @@ class TestScriptTemplateSandboxAutoDetect(unittest.TestCase):
     def test_template_without_scripts_is_not_auto_sandboxed(self):
         model = self._model("Basic", "<div>{{Front}}</div>")
         self.assertFalse(self._service()._template_needs_script_shim(model))
+
+
+class TestResizeFilterGeometryGuard(unittest.TestCase):
+    """验证 Windows Resize/LayoutRequest 几何同步只在边界变化时调用 setGeometry。"""
+
+    class _FakeRect:
+        def __init__(self, x: int, y: int, width: int, height: int) -> None:
+            self._x = x
+            self._y = y
+            self._width = width
+            self._height = height
+
+        def x(self) -> int:
+            return self._x
+
+        def y(self) -> int:
+            return self._y
+
+        def width(self) -> int:
+            return self._width
+
+        def height(self) -> int:
+            return self._height
+
+    class _FakeTarget:
+        def __init__(self, width: int, height: int) -> None:
+            self._width = width
+            self._height = height
+
+        def width(self) -> int:
+            return self._width
+
+        def height(self) -> int:
+            return self._height
+
+    class _FakeWebView:
+        def __init__(self, rect) -> None:
+            self._rect = rect
+            self.calls: list[tuple[int, int, int, int]] = []
+
+        def geometry(self):
+            return self._rect
+
+        def setGeometry(self, x: int, y: int, width: int, height: int) -> None:
+            self.calls.append((x, y, width, height))
+            self._rect = TestResizeFilterGeometryGuard._FakeRect(x, y, width, height)
+
+    def test_skips_set_geometry_when_bounds_already_match(self):
+        webview = self._FakeWebView(self._FakeRect(0, 0, 1280, 800))
+        target = self._FakeTarget(1280, 800)
+        AnkiModernHost._sync_webview_rect(webview, target)
+        self.assertEqual(webview.calls, [])
+
+    def test_updates_set_geometry_when_bounds_or_origin_differ(self):
+        webview = self._FakeWebView(self._FakeRect(0, 0, 1200, 800))
+        AnkiModernHost._sync_webview_rect(webview, self._FakeTarget(1280, 800))
+        self.assertEqual(webview.calls, [(0, 0, 1280, 800)])
+
+        shifted = self._FakeWebView(self._FakeRect(8, 0, 1280, 800))
+        AnkiModernHost._sync_webview_rect(shifted, self._FakeTarget(1280, 800))
+        self.assertEqual(shifted.calls, [(0, 0, 1280, 800)])
+
+    def test_ignores_invalid_targets_and_updates_when_geometry_missing(self):
+        webview = self._FakeWebView(None)
+        AnkiModernHost._sync_webview_rect(webview, self._FakeTarget(0, 800))
+        self.assertEqual(webview.calls, [])
+
+        AnkiModernHost._sync_webview_rect(webview, self._FakeTarget(1024, 768))
+        self.assertEqual(webview.calls, [(0, 0, 1024, 768)])
+        # Second call with unchanged target size should be a no-op.
+        AnkiModernHost._sync_webview_rect(webview, self._FakeTarget(1024, 768))
+        self.assertEqual(webview.calls, [(0, 0, 1024, 768)])
+

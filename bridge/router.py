@@ -211,6 +211,8 @@ class BridgeRouter:
 
     def action_get_preferences(self, data: Dict[str, Any]) -> Dict[str, Any]:
         cfg = self._get_config()
+        review_stage_width, review_content_scale = self.deck_service._normalize_review_display_prefs(cfg)
+        auto_play_front_audio, auto_play_back_audio = self.deck_service._normalize_review_audio_prefs(cfg)
         return {
             "theme": cfg.get("theme", "light"),
             "accentColor": cfg.get("accent_color", "indigo"),
@@ -221,6 +223,11 @@ class BridgeRouter:
             "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
             "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
             "tipsHiddenOn": self._tips_hidden_on(cfg),
+            "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),
+            "autoPlayFrontAudio": auto_play_front_audio,
+            "autoPlayBackAudio": auto_play_back_audio,
+            "reviewStageWidth": review_stage_width,
+            "reviewContentScale": review_content_scale,
             "envInfo": self.deck_service._resolve_platform_and_version(),
         }
 
@@ -245,6 +252,27 @@ class BridgeRouter:
         if "answerButtonMode" in data:
             mode = str(data["answerButtonMode"] or "binary").strip()
             patch["answer_button_mode"] = mode if mode in ("binary", "four") else "binary"
+        if "autoPlayFrontAudio" in data:
+            patch["auto_play_front_audio"] = self.deck_service._coerce_bool(
+                data["autoPlayFrontAudio"], False
+            )
+        if "autoPlayBackAudio" in data:
+            patch["auto_play_back_audio"] = self.deck_service._coerce_bool(
+                data["autoPlayBackAudio"], True
+            )
+        if "reviewStageWidth" in data:
+            width_mode = str(data["reviewStageWidth"] or "auto").strip()
+            patch["review_stage_width"] = (
+                width_mode if width_mode in ("standard", "auto", "wide", "full") else "auto"
+            )
+        if "reviewContentScale" in data:
+            try:
+                scale_val = int(data["reviewContentScale"])
+            except (TypeError, ValueError):
+                scale_val = 100
+            patch["review_content_scale"] = (
+                scale_val if scale_val in (90, 100, 115, 130, 150) else 100
+            )
         if "tipsHiddenOn" in data:
             hidden_on = str(data["tipsHiddenOn"] or "").strip()
             if hidden_on:
@@ -255,6 +283,8 @@ class BridgeRouter:
             patch["dashboard_tips_hidden_on"] = hidden_on
 
         saved = self._write_config(patch)
+        review_stage_width, review_content_scale = self.deck_service._normalize_review_display_prefs(saved)
+        auto_play_front_audio, auto_play_back_audio = self.deck_service._normalize_review_audio_prefs(saved)
         return {
             "saved": True,
             "preferences": {
@@ -269,6 +299,10 @@ class BridgeRouter:
                 "tipsHiddenOn": str(saved.get("dashboard_tips_hidden_on") or ""),
                 "analyticsEnabled": bool(saved.get("analytics_enabled", True)),
                 "answerButtonMode": str(saved.get("answer_button_mode") or "binary"),
+                "autoPlayFrontAudio": auto_play_front_audio,
+                "autoPlayBackAudio": auto_play_back_audio,
+                "reviewStageWidth": review_stage_width,
+                "reviewContentScale": review_content_scale,
             },
         }
 
@@ -333,6 +367,57 @@ class BridgeRouter:
     def action_stop_audio(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.review_service.stop_audio(data)
 
+    def action_get_card_debug_info(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Collects raw note/model/template/render diagnostics for a single card."""
+        import platform as py_platform
+
+        result = self.review_service.get_card_debug_info(data)
+        cfg = self._get_config() or {}
+        sandbox_ids = [str(x) for x in (cfg.get("sandbox_notetype_ids") or []) if str(x).strip()]
+        review_stage_width, review_content_scale = self.deck_service._normalize_review_display_prefs(cfg)
+        auto_play_front_audio, auto_play_back_audio = self.deck_service._normalize_review_audio_prefs(cfg)
+
+        qt_version = "unknown"
+        try:
+            from aqt.qt import QT_VERSION_STR
+
+            qt_version = str(QT_VERSION_STR or "unknown")
+        except Exception:
+            pass
+
+        patch_health: Dict[str, Any] = {}
+        try:
+            raw_health = self._get_health()
+            if isinstance(raw_health, dict):
+                patch_health = {
+                    "state": raw_health.get("state"),
+                    "warnings": raw_health.get("warnings", []),
+                }
+        except Exception:
+            pass
+
+        nt_id = str((result.get("noteTypeInfo") or {}).get("id") or "")
+        result["runtime"] = {
+            "envInfo": self.deck_service._resolve_platform_and_version(),
+            "pythonVersion": py_platform.python_version(),
+            "osDetail": py_platform.platform(),
+            "qtVersion": qt_version,
+            "patchHealth": patch_health,
+            "configSnapshot": {
+                "theme": cfg.get("theme", "light"),
+                "accentColor": cfg.get("accent_color", "indigo"),
+                "resolvedLanguage": self.deck_service._resolve_language(cfg.get("language")),
+                "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),
+                "autoPlayFrontAudio": auto_play_front_audio,
+                "autoPlayBackAudio": auto_play_back_audio,
+                "reviewStageWidth": review_stage_width,
+                "reviewContentScale": review_content_scale,
+                "sandboxNoteTypeIds": sandbox_ids,
+                "compatEnabledForCardNoteType": bool(nt_id and nt_id in sandbox_ids),
+            },
+        }
+        return result
+
     # ---- Anonymous Usage Analytics ----
 
     def action_analytics_start(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -365,7 +450,68 @@ class BridgeRouter:
         return self.edit_service.check_duplicate_note(data)
 
     def action_update_card_inline(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        return self.edit_service.update_card_inline(data)
+        res = self.edit_service.update_card_inline(data)
+        if not isinstance(res, dict) or not res.get("saved"):
+            return res
+
+        if res.get("convertedToCloze"):
+            prev_mid = str(res.get("previousNotetypeId") or "").strip()
+            new_mid = str(res.get("notetypeId") or "").strip()
+            if prev_mid and new_mid and prev_mid != new_mid:
+                try:
+                    cfg = self._get_config() or {}
+                    existing_ids = [
+                        str(x).strip()
+                        for x in (cfg.get("sandbox_notetype_ids") or [])
+                        if str(x).strip()
+                    ]
+                    if prev_mid in existing_ids and new_mid not in existing_ids:
+                        existing_ids.append(new_mid)
+                        updated_cfg = self._write_config(
+                            {"sandbox_notetype_ids": existing_ids}
+                        )
+                        res["sandboxNoteTypeIds"] = updated_cfg.get(
+                            "sandbox_notetype_ids", existing_ids
+                        )
+                except Exception:
+                    pass
+
+        cid_raw = str(res.get("cardId") or "").strip()
+        if cid_raw.isdigit():
+            try:
+                col = self._get_col()
+                if col is not None:
+                    cid = int(cid_raw)
+                    cfg = self._get_config() or {}
+                    lang = self.deck_service._resolve_language(
+                        data.get("lang") or cfg.get("language") or "zh-CN"
+                    )
+                    review_card = self.review_service._serialize_review_card(
+                        col, cid, lang=lang
+                    )
+                    if review_card:
+                        res["reviewCard"] = review_card
+                    media_dir = self.review_service._get_media_dir(col)
+                    style_sink: Dict[str, str] = {}
+                    front_style_sink: Dict[str, str] = {}
+                    library_card = self.search_service._serialize_library_card(
+                        col,
+                        cid,
+                        media_dir=media_dir,
+                        lang=lang,
+                        style_sink=style_sink,
+                        front_style_sink=front_style_sink,
+                    )
+                    if library_card:
+                        res["libraryCard"] = library_card
+                    if style_sink:
+                        res["cardStyles"] = style_sink
+                    if front_style_sink:
+                        res["cardFrontStyles"] = front_style_sink
+            except Exception:
+                pass
+
+        return res
 
     def action_save_pasted_image(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.edit_service.save_pasted_image(data)

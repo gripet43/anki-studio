@@ -50,6 +50,21 @@
     --status-info: #2B7ABF;
     --status-info-soft: #EBF4FC;
 
+    /* High-contrast semantic foreground tokens (WCAG AA >= 4.5:1 on --tooltip-bg & --bg-card) */
+    --status-danger-text: #C43643;
+    --status-warning-text: #A25810;
+    --status-success-text: #1F7A4D;
+    --status-info-text: #2266A3;
+
+    /* Unified Tooltip & Hovercard Surface Tokens (strictly below Toast 9999, above modals/lightbox) */
+    --tooltip-bg: #FFFFFF;
+    --tooltip-border: rgba(20, 24, 32, 0.10);
+    --tooltip-shadow: 0 10px 28px -6px rgba(20, 24, 32, 0.14), 0 2px 6px -1px rgba(20, 24, 32, 0.06);
+    --tooltip-kbd-bg: rgba(20, 24, 32, 0.06);
+    --tooltip-kbd-border: rgba(20, 24, 32, 0.12);
+    --tooltip-kbd-text: #4B4D54;
+    --z-tooltip: 9500;
+
     /* Design System Light Tokens */
     --bg-canvas: #F4F4F6;
     --bg-card: #FFFFFF;
@@ -82,6 +97,16 @@
     --text-primary: #F2F3F7;
     --text-secondary: #B8BAC6;
     --text-muted: #A4A6B4;
+    --status-danger-text: #F27782;
+    --status-warning-text: #F0A854;
+    --status-success-text: #4CC38A;
+    --status-info-text: #66ACEA;
+    --tooltip-bg: #23252E;
+    --tooltip-border: rgba(255, 255, 255, 0.11);
+    --tooltip-shadow: 0 14px 34px -6px rgba(0, 0, 0, 0.48), 0 4px 10px -2px rgba(0, 0, 0, 0.28);
+    --tooltip-kbd-bg: rgba(255, 255, 255, 0.09);
+    --tooltip-kbd-border: rgba(255, 255, 255, 0.15);
+    --tooltip-kbd-text: #D2D5E0;
     --dashboard-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.16);
     --dashboard-shadow-raised: 0 14px 34px rgba(0, 0, 0, 0.34);
     --dashboard-track: #2A2C36;
@@ -96,6 +121,16 @@
     --text-primary: #F4F4F6;
     --text-secondary: #B4B6C2;
     --text-muted: #9E9FAD;
+    --status-danger-text: #F27782;
+    --status-warning-text: #F0A854;
+    --status-success-text: #4CC38A;
+    --status-info-text: #66ACEA;
+    --tooltip-bg: #181A22;
+    --tooltip-border: rgba(255, 255, 255, 0.12);
+    --tooltip-shadow: 0 14px 34px -6px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    --tooltip-kbd-bg: rgba(255, 255, 255, 0.10);
+    --tooltip-kbd-border: rgba(255, 255, 255, 0.16);
+    --tooltip-kbd-text: #D6D9E4;
     --dashboard-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.24);
     --dashboard-shadow-raised: 0 12px 28px rgba(0, 0, 0, 0.52);
     --dashboard-track: #22232B;
@@ -207,6 +242,10 @@ progress {
   text-decoration: underline;
 }
 
+.tower-cloze-hide-prefix .anki-cloze-prefix {
+  display: none;
+}
+
 .anki-cloze-body[data-empty="true"]::after,
 mark[data-empty="true"]::after {
   content: '...';
@@ -214,6 +253,60 @@ mark[data-empty="true"]::after {
   pointer-events: none;
   user-select: none;
   font-weight: 500;
+}
+
+/* Rendered Cloze pills & inline states (shared across Study Mode, Preview, and Library) */
+.anki-cloze-question {
+  display: inline;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background-color: var(--brand-soft-strong);
+  color: var(--brand-text);
+  border: 1px solid var(--brand-border);
+  font-weight: 600;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.anki-cloze-answer {
+  display: inline;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background-color: var(--status-success-soft);
+  color: var(--status-success);
+  font-weight: 600;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.anki-cloze-lib {
+  color: var(--brand-text);
+  font-weight: 600;
+}
+
+.cloze-inactive {
+  font-weight: inherit;
+  color: inherit;
+}
+
+.dark .anki-native-card .anki-cloze-question,
+.oled .anki-native-card .anki-cloze-question {
+  background-color: rgba(var(--brand-rgb), 0.14);
+  color: var(--brand);
+  color: color-mix(in srgb, var(--brand) 78%, #000000);
+  border-color: rgba(var(--brand-rgb), 0.35);
+}
+
+.dark .anki-native-card .anki-cloze-answer,
+.oled .anki-native-card .anki-cloze-answer {
+  background-color: #EAF6F0;
+  color: #2F9461;
+}
+
+.dark .anki-native-card .anki-cloze-lib,
+.oled .anki-native-card .anki-cloze-lib {
+  color: var(--brand);
+  color: color-mix(in srgb, var(--brand) 78%, #000000);
 }
 
 /* 卡包模板渲染出来的正文（复习背面 / Cmd+K 预览）。
@@ -440,10 +533,10 @@ ruby rt {
 }
 
 .dashboard-tooltip {
-  background-color: var(--bg-card);
-  border-color: var(--border-subtle);
+  background-color: var(--tooltip-bg);
+  border-color: var(--tooltip-border);
   color: var(--text-primary);
-  box-shadow: var(--dashboard-shadow-raised);
+  box-shadow: var(--tooltip-shadow);
 }
 
 .dashboard-stat-pill {
@@ -495,6 +588,10 @@ ruby rt {
 @media (prefers-reduced-transparency: reduce) {
   .dashboard-header {
     background: var(--bg-canvas);
+  }
+
+  .dashboard-header,
+  .ui-modal-backdrop {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
@@ -764,7 +861,8 @@ ruby rt {
 
 .ui-modal-panel[data-state="entered"] {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  /* 入场结束后撤掉常驻 transform 合成层，避免 Windows QtWebEngine 在内容编辑/选区期间与背景遮罩互抢合成层导致频闪 */
+  transform: none;
 }
 
 .ui-modal-panel[data-state="leaving"] {
@@ -799,6 +897,81 @@ ruby rt {
   pointer-events: none;
 }
 
+/* Unified Tooltip & HoverCard Surfaces */
+.ui-tooltip,
+.ui-hovercard {
+  position: fixed;
+  z-index: var(--z-tooltip, 9500);
+  background-color: var(--tooltip-bg);
+  border: 1px solid var(--tooltip-border);
+  color: var(--text-primary);
+  box-shadow: var(--tooltip-shadow);
+  transition-property: opacity, transform;
+  transition-duration: var(--dur-fast, 120ms);
+  transition-timing-function: var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1));
+  will-change: opacity, transform;
+}
+
+.ui-tooltip[data-state="entering"],
+.ui-hovercard[data-state="entering"] {
+  opacity: 0;
+}
+
+.ui-tooltip[data-state="entering"][data-side="top"],
+.ui-hovercard[data-state="entering"][data-side="top"] {
+  transform: translate3d(0, 2px, 0);
+}
+
+.ui-tooltip[data-state="entering"][data-side="bottom"],
+.ui-hovercard[data-state="entering"][data-side="bottom"] {
+  transform: translate3d(0, -2px, 0);
+}
+
+.ui-tooltip[data-state="entering"][data-side="left"],
+.ui-hovercard[data-state="entering"][data-side="left"] {
+  transform: translate3d(2px, 0, 0);
+}
+
+.ui-tooltip[data-state="entering"][data-side="right"],
+.ui-hovercard[data-state="entering"][data-side="right"] {
+  transform: translate3d(-2px, 0, 0);
+}
+
+.ui-tooltip[data-state="entered"],
+.ui-hovercard[data-state="entered"] {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.ui-tooltip[data-state="leaving"],
+.ui-hovercard[data-state="leaving"] {
+  opacity: 0;
+  transform: translate3d(0, 0, 0);
+  transition-duration: 80ms;
+  transition-timing-function: var(--ease-std, cubic-bezier(0.4, 0, 0.2, 1));
+  pointer-events: none;
+}
+
+.ui-tooltip-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-family: var(--font-sans, inherit);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  background-color: var(--tooltip-kbd-bg);
+  border: 1px solid var(--tooltip-kbd-border);
+  color: var(--tooltip-kbd-text);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Theme & Accent Color Smooth Cross-Fade (F) */
 .theme-switching,
 .theme-switching * {
@@ -823,10 +996,28 @@ ruby rt {
     animation: none !important;
     background: rgba(142, 142, 147, 0.12);
   }
+
+  .ui-tooltip,
+  .ui-hovercard,
+  .ui-tooltip[data-state="entering"][data-side],
+  .ui-hovercard[data-state="entering"][data-side] {
+    transform: none !important;
+  }
 }
 
 @media (forced-colors: active) {
   .sync-pill-forced-border {
+    border: 1px solid ButtonBorder !important;
+  }
+
+  .ui-tooltip,
+  .ui-hovercard,
+  .dashboard-tooltip {
+    border: 1px solid CanvasText !important;
+    box-shadow: none !important;
+  }
+
+  .ui-tooltip-kbd {
     border: 1px solid ButtonBorder !important;
   }
 }

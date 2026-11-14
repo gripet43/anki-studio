@@ -4,6 +4,7 @@ import { usePresence } from '../../hooks/usePresence';
 import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { getAccentScale } from '../../utils/themeTokens';
+import { Tooltip } from '../common/Tooltip';
 
 export const DecksView: React.FC = () => {
   const {
@@ -132,7 +133,6 @@ export const DecksView: React.FC = () => {
             type="button"
             onClick={() => appActions.openSettings('maintenance')}
             className="btn-secondary !h-10 !px-3.5 flex items-center gap-1.5"
-            title={t('importExportMaintBtn')}
           >
             <svg className="w-3.5 h-3.5 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -341,7 +341,9 @@ export const DecksView: React.FC = () => {
                     ) : (
                       <div className="min-w-0">
                         <div className="font-semibold text-[14px] flex items-center gap-2 truncate">
-                          <span className="truncate">{deck.name}</span>
+                          <Tooltip variant="compact" content={deck.name} onlyWhenTruncated>
+                            <span className="truncate">{deck.name}</span>
+                          </Tooltip>
                           {deck.isChild && (
                             <span className="px-2 py-0.5 rounded bg-[var(--brand-soft)] text-[var(--brand-text)] text-[10px] font-medium shrink-0">
                               {t('subdeckBadge')}
@@ -367,24 +369,25 @@ export const DecksView: React.FC = () => {
 
                   {/* Daily Limits & FSRS Retention Summary Pill */}
                   <div className="col-span-2 pe-3">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenDeckOptions(deck)}
-                      title={t('deckOptionsTitle')}
-                      className={`px-2.5 py-1 rounded-xl border text-[11px] flex items-center gap-1.5 cursor-pointer transition-colors ${
-                        isDark
-                          ? 'bg-[#14151C] border-[#2A2C36] hover:border-[var(--brand-border)] text-[#C8C8D2]'
-                          : 'bg-[#F8F8FA] border-[#E5E5EA] hover:border-[var(--brand-border)] text-[#4A4A52]'
-                      }`}
-                    >
-                      <span className="font-mono font-semibold text-[var(--brand-text)]">
-                        {opts ? `${opts.newPerDay}/${opts.revPerDay}` : '20/200'}
-                      </span>
-                      <span className="opacity-40">·</span>
-                      <span>
-                        FSRS {opts ? `${Math.round(opts.desiredRetention * 100)}%` : '90%'}
-                      </span>
-                    </button>
+                    <Tooltip variant="compact" content={t('deckOptionsTitle')}>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDeckOptions(deck)}
+                        className={`px-2.5 py-1 rounded-xl border text-[11px] flex items-center gap-1.5 cursor-pointer transition-colors ${
+                          isDark
+                            ? 'bg-[#14151C] border-[#2A2C36] hover:border-[var(--brand-border)] text-[#C8C8D2]'
+                            : 'bg-[#F8F8FA] border-[#E5E5EA] hover:border-[var(--brand-border)] text-[#4A4A52]'
+                        }`}
+                      >
+                        <span className="font-mono font-semibold text-[var(--brand-text)]">
+                          {opts ? `${opts.newPerDay}/${opts.revPerDay}` : '20/200'}
+                        </span>
+                        <span className="opacity-40">·</span>
+                        <span>
+                          FSRS {opts ? `${Math.round(opts.desiredRetention * 100)}%` : '90%'}
+                        </span>
+                      </button>
+                    </Tooltip>
                   </div>
 
                   {/* Actions */}
@@ -409,37 +412,39 @@ export const DecksView: React.FC = () => {
                       </div>
                     ) : (
                       <>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150">
+                          <Tooltip variant="compact" content={t('customStudyEntryBtn')}>
+                            <button
+                              type="button"
+                              onClick={() => appActions.openCustomStudyModal('mistakes', deck.id)}
+                              className="btn-ghost !border !border-black/10 dark:!border-white/10 !h-8 !px-2.5 !text-[11px]"
+                            >
+                              {t('deckActionCram')}
+                            </button>
+                          </Tooltip>
+                          <Tooltip variant="compact" content={t('deckOptionsTitle')}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDeckOptions(deck)}
+                              className="btn-ghost !border !border-black/10 dark:!border-white/10 !h-8 !px-2.5 !text-[11px]"
+                            >
+                              {t('deckActionOptions')}
+                            </button>
+                          </Tooltip>
                           <button
                             type="button"
-                            onClick={() => appActions.openCustomStudyModal('mistakes', deck.id)}
-                            className="btn-ghost !border !border-black/10 dark:!border-white/10 !h-8 !px-2.5 !text-[11px]"
-                            title={t('customStudyEntryBtn')}
-                          >
-                            {t('deckActionCram')}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenDeckOptions(deck)}
-                            className="btn-ghost !border !border-black/10 dark:!border-white/10 !h-8 !px-2.5 !text-[11px]"
-                            title={t('deckOptionsTitle')}
-                          >
-                            {t('deckActionOptions')}
-                          </button>
-                          <button
                             onClick={() => {
                               setRenamingDeckId(deck.id);
                               setRenameValue(deck.fullName);
                             }}
                             className="btn-ghost !border !border-black/10 dark:!border-white/10 !h-8 !px-2.5 !text-[11px]"
-                            title={t('deckActionRename')}
                           >
                             {t('deckActionRename')}
                           </button>
                           <button
+                            type="button"
                             onClick={() => setDeletingDeckId(deck.id)}
                             className="btn-ghost !text-[var(--status-danger)] hover:!bg-[var(--status-danger-soft)] !h-8 !px-2 !text-[11px]"
-                            title={t('batchDelete')}
                           >
                             {t('batchDelete')}
                           </button>

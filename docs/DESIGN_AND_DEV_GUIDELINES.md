@@ -1,6 +1,6 @@
 # Anki Studio — 设计规范与开发工程标准手册
 
-> - **版本**：v1.4.6（与 `manifest.json` 的 `human_version` 对齐，改版时同步更新）
+> - **版本**：v1.5.8（与 `manifest.json` 的 `human_version` 对齐，改版时同步更新）
 > - **适用范围**：Anki Studio 全局前端、Python 运行时、插件桥接与构建打包流水线
 > - **核心原则**：保持 Apple 人机交互设计（HIG）质感、系统级流畅度与绝对代码健壮性。
 
@@ -15,6 +15,7 @@
   - [3. 容器、卡片与排版间距](#3-容器卡片与排版间距)
   - [4. 图标与 Emoji 防滥用规范](#4-图标与-emoji-防滥用规范)
   - [5. 动效与全局编排流水线（Two-Phase Motion）](#5-动效与全局编排流水线two-phase-motion)
+  - [6. 悬浮提示与信息浮卡规范（Tooltip & HoverCard Standard）](#6-悬浮提示与信息浮卡规范tooltip--hovercard-standard)
 - [三、前端开发与工程标准](#三前端开发与工程标准)
   - [1. 0 毫秒首帧绘制与防闪白架构（Zero White Flash）](#1-0-毫秒首帧绘制与防闪白架构zero-white-flash)
   - [2. 状态管理单一真实源（useSyncExternalStore）](#2-状态管理单一真实源usesyncexternalstore)
@@ -52,12 +53,28 @@ Anki Studio 不做表层“换皮”，而是以现代桌面 OS（macOS Sonoma /
 
 | 语义角色 | Light 模式 | Dark 模式 | OLED 纯黑模式 |
 | :--- | :--- | :--- | :--- |
-| **画布底色（App Canvas）** | `#F4F4F6` | `#16161A` | `#08080A` |
-| **主卡片背景（Card Surface）** | `#FFFFFF` | `#1C1C22` | `#121216` |
-| **侧边栏背景（Sidebar Surface）** | `#FFFFFF` | `#131317` | `#08080A` |
-| **卡片发丝边框（Card Border）** | `#EBEBF0` | `#2C2C35` | `#22222A` |
-| **次级说明文字（Muted Text）** | `#8E8E93` | `#8E8E93` | `#8E8E93` |
-| **高亮主文本（Primary Text）** | `#1D1D1F` | `#F5F5F7` | `#FFFFFF` |
+| **画布底色（`--bg-canvas`）** | `#F4F4F6` | `#131418` | `#09090C` |
+| **主卡片背景（`--bg-card`）** | `#FFFFFF` | `#1A1B21` | `#111216` |
+| **次级表面（`--bg-subtle`）** | `#F7F7F9` | `#20222A` | `#17181E` |
+| **发丝边框（`--border-subtle`）** | `#EAECEF` | `#2A2C36` | `#22232B` |
+| **高亮主文本（`--text-primary`）** | `#1D1D1F` | `#F2F3F7` | `#F4F4F6` |
+| **正文次文本（`--text-secondary`）** | `#6E6E73` | `#B8BAC6` | `#B4B6C2` |
+| **弱化说明文字（`--text-muted`）** | `#8E8E93` | `#A4A6B4` | `#9E9FAD` |
+
+**浮层表面与高对比状态文本 Tokens（`index.css` / `themeTokens.ts`）**：
+
+| Token | Light 模式 | Dark 模式 | OLED 纯黑模式 | 说明 |
+| :--- | :--- | :--- | :--- | :--- |
+| `--tooltip-bg` | `#FFFFFF` | `#23252E` | `#181A22` | 浮层抬升背景（高于 `--bg-card`） |
+| `--tooltip-border` | `rgba(20, 24, 32, 0.10)` | `rgba(255, 255, 255, 0.11)` | `rgba(255, 255, 255, 0.12)` | 浮层描边 |
+| `--tooltip-kbd-bg` / `-text` | `rgba(20, 24, 32, 0.06)` / `#4B4D54` | `rgba(255, 255, 255, 0.09)` / `#D2D5E0` | `rgba(255, 255, 255, 0.10)` / `#D6D9E4` | `<kbd>` 快捷键胶囊 |
+| `--z-tooltip` | `9500` | `9500` | `9500` | 位于弹窗之上、Toast `9999` 之下 |
+| `--status-danger-text` | `#C43643` | `#F27782` | `#F27782` | 小字高对比（>= 4.5:1） |
+| `--status-warning-text` | `#A25810` | `#F0A854` | `#F0A854` | 小字高对比（>= 4.5:1） |
+| `--status-success-text` | `#1F7A4D` | `#4CC38A` | `#4CC38A` | 小字高对比（>= 4.5:1） |
+| `--status-info-text` | `#2266A3` | `#66ACEA` | `#66ACEA` | 小字高对比（>= 4.5:1） |
+
+> JS 侧需读取状态文本色值时调用 `getStatusTextTokens(theme)`（`frontend/src/utils/themeTokens.ts`），保持 `buildThemeCssVars()` 返回集合稳定。
 
 **强调色（Accent Colors，共 8 套，唯一真实源为 `frontend/src/utils/themeTokens.ts`）**：
 
@@ -84,10 +101,10 @@ Anki Studio 不做表层“换皮”，而是以现代桌面 OS（macOS Sonoma /
 
 ```mermaid
 flowchart LR
-  L1["L1: btn-primary<br>主行动推进 (40px, 品牌色实底)"]
-  L2["L2: btn-secondary<br>高频工具入口 (36px, 浅底细边框)"]
-  L3["L3: btn-ghost<br>次级管理与跳转 (文字+悬浮底色)"]
-  L4["L4: btn-icon-circle<br>圆形图标点选 (圆形弹性动效)"]
+  L1["L1: btn-primary<br>主行动推进 (36px, 品牌色实底)"]
+  L2["L2: btn-secondary<br>高频工具入口 (36px, 透明底细边框)"]
+  L3["L3: btn-ghost<br>次级管理与跳转 (32px, 文字+悬浮底色)"]
+  L4["L4: 圆形图标按钮 (Tailwind rounded-full)<br>独立点选与紧凑圆钮"]
 
   L1 -.->|搭配次要操作| L2
   L2 -.->|搭配辅助跳转| L3
@@ -95,30 +112,29 @@ flowchart LR
 
 #### L1 Primary Button (`.btn-primary`)
 - **使用场景**：每个页面的核心推进动作（如「▶ 开始今日学习」、「+ 新建牌组」、「保存卡片」）。
-- **规格**：`height: 40px (h-10)`，`padding-inline: 20px (px-5)`，`border-radius: 12px (rounded-xl)`，`font-weight: 600`，字号 `13px`。
-- **视觉**：品牌强调色实底 + 白色文字 + `box-shadow: 0 2px 8px rgba(94, 92, 230, 0.22)`。
-- **微动效**：悬浮微上浮 `translate: 0 -1px` + 投影放大；点击按压 `scale: 0.98` 回弹。
+- **规格**：`height: 2.25rem (36px)`，`padding: 0 1rem (16px)`，`border-radius: 0.75rem (12px)`，`font-weight: 600`，字号 `0.75rem (12px)`。
+- **视觉**：品牌强调色实底（`var(--brand)`）+ 白色文字 + `box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08)`。
+- **微动效**：悬浮提亮（`var(--brand-hover)` / `brightness(1.03)`）；点击按压 `scale: 0.98` 回弹；禁用降透明 `opacity: 0.45`。
 
 #### L2 Secondary Button (`.btn-secondary`)
 - **使用场景**：高频工具操作但非唯一核心（如侧边栏「+ 快速制卡」、空态「浏览卡片库」、弹窗「取消」）。
-- **规格**：`height: 36px (h-9)`，`padding-inline: 16px (px-4)`，`border-radius: 12px (rounded-xl)`，`font-weight: 500`，字号 `13px`。
-- **视觉**：浅色 `#F6F6F9`（深色 `rgba(255, 255, 255, 0.06)`）+ `1px` 微弱边框，文字为当前主题正文色。
-- **微动效**：悬浮柔和加深背景；点击按压 `scale: 0.98`。
+- **规格**：`height: 2.25rem (36px)`，`padding: 0 0.875rem (14px)`，`border-radius: 0.75rem (12px)`，`font-weight: 500`，字号 `0.75rem (12px)`。
+- **视觉**：`background-color: transparent` + `border: 1px solid var(--border-subtle)`，文字为 `var(--text-primary)`。
+- **微动效**：悬浮转为 `var(--brand-soft)` 底、`var(--brand-border)` 描边与 `var(--brand-text)`；点击按压 `scale: 0.98`。
 
 #### L3 Ghost / Text Button (`.btn-ghost`)
 - **使用场景**：辅助管理、列表右侧操作（如「全部牌组管理 ›」、「牌组重命名/删除」）。
-- **规格**：默认无底色无描边，内衬垫 `padding: 4px 10px (px-2.5 py-1)`，`border-radius: 8px (rounded-lg)`，字号 `12px`。
-- **视觉**：默认次级灰 `#8E8E93`；悬浮后背景淡出浅紫/浅灰，文字转为品牌高亮。
-- **微动效**：点击按压 `scale: 0.97`。
+- **规格**：`height: 2rem (32px)`，`padding: 0 0.625rem (10px)`，`border-radius: 0.5rem (8px)`，`font-weight: 500`，字号 `0.75rem (12px)`。
+- **视觉**：默认透明底 + `var(--text-muted)`；悬浮后淡出 `var(--brand-soft)`，文字转为 `var(--brand-text)`。
+- **微动效**：点击按压 `scale: 0.98`。
 
-#### L4 Icon Circle Button (`.btn-icon-circle`)
-- **使用场景**：卡片右下角的播放按钮、独立圆钮。
-- **规格**：`28px` 或 `30px`，`border-radius: 9999px (全圆)`。
-- **微动效**：悬浮放大 `scale: 1.1`，点击按压 `scale: 0.92`。
+#### L4 圆形图标按钮（组合模式，无独立 `.btn-icon-circle` CSS 类）
+- **使用场景**：卡片右下角播放钮、独立图标圆钮、弹窗角落关闭钮。
+- **规格**：尺寸通常为 `28px`～`32px`，采用 `<button type="button">` 搭配 `rounded-full` 等 Tailwind 工具类实现，并必须配对 `aria-label` 与 `<Tooltip variant="compact">`。
 
 > **规范红线**：
 > 1. 按钮状态切换必须使用 `:hover:not(:disabled)`，严禁为 disabled 状态触发悬浮动效。
-> 2. 必须保留 `:focus-visible` 统一双层焦点环（`outline: 2px solid var(--brand); outline-offset: 2px;`），保障键盘无障碍导航。**颜色必须走 `var(--brand)` 变量，不要写字面色值** —— accent 是用户可切换的 8 套色板之一（见 `frontend/src/themeTokens.ts`），写死任何十六进制都会在换色后与界面其他部分脱节。
+> 2. 必须保留 `:focus-visible` 统一双层焦点环（`outline: 2px solid var(--brand); outline-offset: 2px;`），保障键盘无障碍导航。**颜色必须走 `var(--brand)` 变量，不要写字面色值** —— accent 是用户可切换的 8 套色板之一（见 `frontend/src/utils/themeTokens.ts`），写死任何十六进制都会在换色后与界面其他部分脱节。
 
 ---
 
@@ -173,7 +189,37 @@ sequenceDiagram
 ```
 
 - **合成器线程铁律**：所有平主动效仅针对 `opacity`、`translate` 和 `scale` 属性进行动画，杜绝引发重排（Reflow）。
-- **无障碍保护**：针对系统开启“减弱动态效果”的用户，在 `@media (prefers-reduced-motion: reduce)` 下强制将过渡时间降为 0，直接以静态高对比呈现。
+- **无障碍保护**：针对系统开启“减弱动态效果”的用户，在 `@media (prefers-reduced-motion: reduce)` 下强制将 `animation-duration` 与 `transition-duration` 压缩为 `0.01ms !important`（避免 `transitionend` 监听挂起），并禁用浮层位移动画（`transform: none !important`），以静态高对比呈现。
+
+---
+
+### 6. 悬浮提示与信息浮卡规范（Tooltip & HoverCard Standard）
+
+全界面悬浮提示与信息浮卡收敛为一套统一 Portal 基础设施（`frontend/src/hooks/useFloatingPosition.ts`、`frontend/src/components/common/Tooltip.tsx`、`frontend/src/components/common/HoverCard.tsx`），禁止各业务组件再手写离散定位浮层或依赖原生 `title=`。
+
+#### （1）两类原语 · 三级视觉规范
+
+| 层级 | 组件与调用方式 | 适用场景 | 样式规格（`TOOLTIP_VARIANT_CLASSES` / `HOVERCARD_SIZE_CLASSES`） | 默认时序与指针行为 |
+| :--- | :--- | :--- | :--- | :--- |
+| **Compact** | `<Tooltip variant="compact">` | 图标按钮、快捷键说明、截断文本（配合 `onlyWhenTruncated`） | `rounded-[10px] px-2.5 py-1.5 text-[11px] font-medium leading-[1.35] max-w-[260px]`；可选 `<kbd className="ui-tooltip-kbd">` | `openDelay: 350ms`（300ms 热切换窗口内 `80ms`），`closeDelay: 80ms`，`closeOnClick: true`，`pointer-events-none` |
+| **Chart** | `<Tooltip variant="chart">` / `<ChartTooltipPortal>` + `<ChartTooltipContent>` | 热力图（182 格建议单 Portal `ChartTooltipPortal`）、周节奏、预测/分布/留存/时段统计图 | `rounded-xl px-3 py-2 text-[11px] leading-[1.45] tabular-nums`；`ChartTooltipContent` 提供 `eyebrow`/`heading`/`rows`/`footer` | `openDelay: 0ms`，`closeDelay: 60ms`，`closeOnClick: false`，`pointer-events-none` |
+| **HoverCard** | `<HoverCard size="sm \| md \| lg \| auto">` | 今日进度环、连胜说明、牌组熟练度拆解、同步状态详情等富交互浮卡 | `rounded-xl p-3 text-[11px] leading-[1.6]`；预设宽度 `sm: 220px` / `md: 248px` / `lg: 280px` | `openDelay: 180ms`（`:focus-visible` 与点击 `0ms`），`closeDelay: 150ms` 移入宽限，`toggleOnClick: true`，`pointer-events-auto` |
+
+#### （2）Portal 分层、视口定位与 QtWebEngine 约束
+- **Portal 与层级**：所有浮层统一通过 `createPortal(..., document.body)` 挂载，`z-index` 读取 `--z-tooltip: 9500`，严格高于 Modal（`z-50` / `z-[60]`）且低于全局 Toast（`z-[9999]`）与 `#fatal-error-overlay`（`999999`）。
+- **测量与避让（`useFloatingPosition`）**：基于 `anchor.getBoundingClientRect()` 实测坐标，首帧先隐式布局再显示（无跳变），空间不足自动翻转对侧、钳位保留 `8px` 视口边距，监听 `ResizeObserver`、锚点断连（`isConnected`）及捕获阶段 `scroll`/`resize`。RTL 下自动识别 `dir="rtl"`（显式沿 `parentElement` 向上查找，**禁止 `.closest(`**）并映射 `start`/`end`。
+- **QtWebEngine (Chrome/140) 兼容性**：Anki `26.09.4+` 内嵌 `Chrome/140`，**严禁**依赖 HTML `interestfor`（Chrome 149+）、`popover="hint"`（Chrome 151+）或 CSS `@container anchored(...)`（Chrome 143+）；所有定位、悬停热窗与外部点击关闭均由 `useFloatingPosition` / `HoverCard` + `getClosestFromTarget` 兜底。
+
+#### （3）色彩对比、快捷键与无障碍红线（WCAG 1.4.13）
+- **文本高对比**：`--tooltip-bg` 上展示 `11px` 数字或状态标签时，**禁止**直接使用低对比背景色标（如 `accentScale.heatmap[1]/[2]`、`brandHex` 或 `#FF9F0A`）作为文字色；必须使用 `ChartTooltipContent` 的 `tone` 映射或 `--text-primary` / `--text-secondary` / `--brand-text` / `--status-*-text`（Light `#A25810` 等，>= 4.5:1）。
+- **快捷键格式**：必须向 `<Tooltip shortcut="...">` 传逻辑键（如 `"Cmd+K"`、`"Esc"`），由组件内部调用 `formatShortcut(..., envInfo.platform)` 并尊重 `useAppStore().showShortcutHints`；**禁止**在多语言字典或提示里硬编码单平台 `Cmd`（`test_frontend_bundle.mjs` Item #40）。
+- **键盘模态与播报去重**：
+  - 通过 `ensureInputModalityListener` / `isElementFocusVisible` 区分键盘 Tab 聚焦与鼠标点击，杜绝鼠标点击按钮后残留焦点 Tooltip；`Escape` 可不移动焦点直接关闭任何浮层；`HoverCard` 点击可钉住并支持外部指针点击关闭（须经 `domTarget.ts` 的 `getClosestFromTarget`）。
+  - `Tooltip` 默认 `ariaLabelMode="auto"`：当子元素已有与纯文本 `content` 完全一致的 `aria-label` 且无额外 `<kbd>` 时，浮层自动标 `aria-hidden="true"` 避免重复朗读；其余补充场景附带 `role="tooltip"` + `aria-describedby`。
+  - 弹窗关闭按钮 `✕` 统一规范为 `<Tooltip variant="compact" content={t('close')} shortcut="Esc">` 搭配 `aria-label={t('close')}`；原生 `disabled` 按钮由 `renderAnchoredTrigger` 自动外包 `<span>` 并在内层设置 `pointerEvents: 'none'` 以保留提示。
+- **原生 `title=` 与 SSR 铁律**：
+  - 前端 `.tsx` 组件**严禁**残留原生 `title=`（仅 `<iframe title=...>` 无障碍容器标题例外，如 `SandboxCardFrame.tsx`；Python/Qt 宿主菜单与原生工具栏 `setToolTip` / `tip=` 在 `__init__.py` 单独本地化管理）。
+  - 所有定位与浮层组件必须守卫 `typeof document !== 'undefined'` / `typeof window !== 'undefined'`，保障 `tests/frontend/run.mjs` 的 `renderToStaticMarkup` SSR 渲染零异常。
 
 ---
 
@@ -210,7 +256,7 @@ sequenceDiagram
 
 - **语义化标签**：进度展示采用 `<div role="progressbar" aria-valuenow={...}>`，按钮严格采用 `<button type="button">`。
 - **弹窗与覆盖层**：使用 `overscroll-behavior: contain` 阻断弹窗背后的页面滚动穿透。
-- **浮动提示层（Tooltip）**：热力图与周节奏柱状图使用绝对定位与实时感知计算（`pointer-events-none`），悬浮即现、移出即消，不引入复杂第三方大体积依赖。
+- **浮动提示层（Tooltip & HoverCard）**：严禁使用原生 HTML `title=`；全界面统一采用基于 `document.body` Portal + `getBoundingClientRect()` 的 `<Tooltip>` / `<ChartTooltipPortal>` / `<HoverCard>`（见 [二.6 悬浮提示与信息浮卡规范](#6-悬浮提示与信息浮卡规范tooltip--hovercard-standard)），兼容 QtWebEngine `Chrome/140`，不引入第三方浮层重依赖。
 
 ---
 
@@ -283,7 +329,9 @@ python3 scripts/build_ankiaddon.py
 >
 > **已知盲区**：组件的交互（点击、拖拽、弹窗焦点、iframe 沙盒通信）目前只有
 > `tests/scenarios/` 的场景库 + 手工目视，没有自动化 DOM 测试；新增交互逻辑时请在
-> `tests/frontend/specs/render.spec.tsx` 至少补一条静态渲染断言。
+> `tests/frontend/specs/render.spec.tsx` 至少补一条静态渲染断言（如 `<Tooltip>` / `<HoverCard>`
+> SSR 冒烟），并确保通过 `frontend_audit.py` 的原生 `title=` 回归检查与 `test_frontend_bundle.mjs`
+> 统一浮层护栏（Item #36 / #49）。
 
 ---
 

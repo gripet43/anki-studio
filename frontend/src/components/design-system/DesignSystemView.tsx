@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Info, RefreshCw, Terminal } from 'lucide-react';
 import {
   getLanguageMeta,
   LanguageOption,
@@ -7,6 +8,8 @@ import {
 } from '../../i18n/translations';
 import { appActions, showToast, ThemeMode, useAppStore } from '../../stores/useAppStore';
 import { ACCENT_COLOR_LIST, ACCENT_THEMES, getAccentScale } from '../../utils/themeTokens';
+import { ChartTooltipContent, Tooltip } from '../common/Tooltip';
+import { HoverCard } from '../common/HoverCard';
 
 export const DesignSystemView: React.FC = () => {
   const { theme, accentColor, languagePref, resolvedLang, customNickname, dashboard } =
@@ -149,37 +152,163 @@ export const DesignSystemView: React.FC = () => {
                 const shortLabel = t(`accentShort_${a.id}` as any);
                 const fullLabel = t(`accentName_${a.id}` as any);
                 return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => {
-                      appActions.setAccentColor(a.id);
-                      showToast(t('savedAccentToast', { name: shortLabel }));
-                    }}
-                    title={fullLabel}
-                    className={`px-2 py-1.5 rounded-xl border text-[11px] flex items-center gap-1.5 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
-                      active
-                        ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold shadow-2xs'
-                        : 'border-black/10 dark:border-white/10 opacity-85 hover:opacity-100'
-                    }`}
-                  >
-                    <span
-                      style={{ backgroundColor: modeScale.brand }}
-                      className="w-3.5 h-3.5 rounded-full shrink-0 ring-1 ring-black/10 dark:ring-white/10"
-                    />
-                    <span className="truncate">{shortLabel}</span>
-                    {a.isOfficial && (
-                      <span className="text-[9px] font-semibold px-1 py-0.2 rounded bg-[var(--brand-softStrong)] text-[var(--brand-text)] shrink-0">
-                        {t('officialBrandBadge')}
-                      </span>
-                    )}
-                  </button>
+                  <Tooltip key={a.id} variant="compact" content={fullLabel}>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => {
+                        appActions.setAccentColor(a.id);
+                        showToast(t('savedAccentToast', { name: shortLabel }));
+                      }}
+                      className={`px-2 py-1.5 rounded-xl border text-[11px] flex items-center gap-1.5 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
+                        active
+                          ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold shadow-2xs'
+                          : 'border-black/10 dark:border-white/10 opacity-85 hover:opacity-100'
+                      }`}
+                    >
+                      <span
+                        style={{ backgroundColor: modeScale.brand }}
+                        className="w-3.5 h-3.5 rounded-full shrink-0 ring-1 ring-black/10 dark:ring-white/10"
+                      />
+                      <span className="truncate">{shortLabel}</span>
+                      {a.isOfficial && (
+                        <span className="text-[9px] font-semibold px-1 py-0.2 rounded bg-[var(--brand-softStrong)] text-[var(--brand-text)] shrink-0">
+                          {t('officialBrandBadge')}
+                        </span>
+                      )}
+                    </button>
+                  </Tooltip>
                 );
               })}
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Unified Tooltip & HoverCard Showcase */}
+      <section className={`rounded-2xl border p-7 shadow-xs ${cardSurface}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[var(--border-subtle)]">
+          <div>
+            <h2 className="text-[15px] font-bold tracking-tight">
+              {t('dsTooltipSectionTitle')}
+            </h2>
+            <p className={`text-[12px] ${subText} mt-0.5`}>
+              {t('dsTooltipSectionDesc')}
+            </p>
+          </div>
+          <span className={`text-[11px] ${subText}`}>{t('dsTooltipDemoHint')}</span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-5">
+          {/* Tier 1: Compact Action + Shortcut Tooltip */}
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-subtle)] p-4 flex flex-col justify-between gap-3">
+            <div className="text-[12px] font-semibold text-[var(--text-primary)]">
+              {t('dsTooltipCompactTitle')}
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Tooltip variant="compact" content={t('dsTooltipDemoAction')}>
+                <button
+                  type="button"
+                  aria-label={t('dsTooltipDemoAction')}
+                  className="btn-secondary !w-9 !px-0"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </Tooltip>
+              <Tooltip
+                variant="compact"
+                content={t('dsTooltipDemoShortcut')}
+                shortcut="Cmd+K"
+              >
+                <button type="button" className="btn-secondary">
+                  <Terminal className="w-3.5 h-3.5" />
+                  <span>{t('dsTooltipDemoShortcut')}</span>
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+
+          {/* Tier 2: Chart Data Tooltip (0ms instant, tabular-nums, AA status tones) */}
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-subtle)] p-4 flex flex-col justify-between gap-3">
+            <div className="text-[12px] font-semibold text-[var(--text-primary)]">
+              {t('dsTooltipChartTitle')}
+            </div>
+            <div className="flex items-end gap-2 h-11">
+              {[
+                { count: 18, heightClass: 'h-5', bg: currentScale.heatmap[1], tone: 'muted' as const },
+                { count: 32, heightClass: 'h-7', bg: currentScale.heatmap[2], tone: 'warning' as const },
+                { count: 48, heightClass: 'h-9', bg: currentScale.heatmap[3], tone: 'brand' as const },
+                { count: 64, heightClass: 'h-11', bg: currentScale.brand, tone: 'success' as const },
+              ].map((bar, idx) => (
+                <Tooltip
+                  key={idx}
+                  variant="chart"
+                  content={
+                    <ChartTooltipContent
+                      eyebrow={t('dsTooltipDemoMetricDate')}
+                      heading={`${t('dsTooltipDemoMetricLabel')} · ${bar.count}`}
+                      rows={[
+                        {
+                          label: t('dsTooltipDemoMetricLabel'),
+                          value: `${bar.count}`,
+                          tone: bar.tone,
+                        },
+                      ]}
+                    />
+                  }
+                >
+                  <button
+                    type="button"
+                    aria-label={`${t('dsTooltipDemoMetricLabel')} ${bar.count}`}
+                    style={{ backgroundColor: bar.bg }}
+                    className={`w-7 ${bar.heightClass} rounded-md cursor-pointer transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]`}
+                  />
+                </Tooltip>
+              ))}
+            </div>
+          </div>
+
+          {/* Tier 3: Rich Interactive HoverCard */}
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-subtle)] p-4 flex flex-col justify-between gap-3">
+            <div className="text-[12px] font-semibold text-[var(--text-primary)]">
+              {t('dsTooltipHoverCardTitle')}
+            </div>
+            <div className="flex items-center">
+              <HoverCard
+                size="sm"
+                side="bottom"
+                align="start"
+                content={
+                  <div className="space-y-1.5">
+                    <div className="font-semibold text-[var(--text-primary)]">
+                      {t('dsTooltipDemoCardTitle')}
+                    </div>
+                    <p className="text-[var(--text-secondary)]">
+                      {t('dsTooltipDemoCardBody')}
+                    </p>
+                    <div className="flex items-center gap-2 pt-1 tabular-nums font-semibold">
+                      <span className="text-[var(--status-success-text)]">94.2%</span>
+                      <span className="text-[var(--status-warning-text)]">4.1%</span>
+                      <span className="text-[var(--brand-text)]">1.7%</span>
+                    </div>
+                  </div>
+                }
+              >
+                <button type="button" className="btn-secondary">
+                  <Info className="w-3.5 h-3.5" />
+                  <span>{t('dsTooltipDemoCardTitle')}</span>
+                </button>
+              </HoverCard>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-3.5 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--text-secondary)]">
+          <span className="font-semibold text-[var(--text-primary)]">
+            {t('dsTooltipRulesTitle')}
+          </span>
+          <span>{t('dsTooltipRulesBody')}</span>
         </div>
       </section>
 

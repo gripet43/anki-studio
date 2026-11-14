@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { formatShortcut, translate } from '../../i18n/translations';
+import { Tooltip } from '../common/Tooltip';
 import { useAppStore } from '../../stores/useAppStore';
 import { resolveMediaInHtml } from '../../utils/mediaUrl';
 import {
@@ -8,6 +9,7 @@ import {
   tableWrapperStyle,
 } from '../../utils/editorTable';
 import { serializeFromWysiwyg } from '../../utils/wysiwygField';
+import type { ClozeGroupingMode } from '../../utils/clozeMode';
 
 export interface TowerWysiwygEditorProps {
   label: string;
@@ -22,6 +24,8 @@ export interface TowerWysiwygEditorProps {
   onPasteImage?: (file: File) => Promise<string | null>;
   onKeyDownShortcut?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   showCloze?: boolean;
+  clozeMode?: ClozeGroupingMode;
+  nextClozeOrd?: number;
   onOpenImageOcclusion?: () => void;
   hasImageOcclusion?: boolean;
 }
@@ -114,6 +118,8 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
   onPasteImage,
   onKeyDownShortcut,
   showCloze = true,
+  clozeMode = 'combined',
+  nextClozeOrd,
   onOpenImageOcclusion,
   hasImageOcclusion = false,
 }) => {
@@ -210,16 +216,31 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
       inUl = Boolean(findClosestElement(anchor, 'ul', editorRef.current));
     }
 
-    setActiveFormats({
-      heading: headingTag,
-      bold: inBold,
-      italic: inItalic,
-      orderedList: inOl,
-      unorderedList: inUl,
-      blockquote: inBlockquote,
-      code: inCode,
-      cloze: inCloze,
-      mark: inMark,
+    setActiveFormats((prev) => {
+      if (
+        prev.heading === headingTag &&
+        prev.bold === inBold &&
+        prev.italic === inItalic &&
+        prev.orderedList === inOl &&
+        prev.unorderedList === inUl &&
+        prev.blockquote === inBlockquote &&
+        prev.code === inCode &&
+        prev.cloze === inCloze &&
+        prev.mark === inMark
+      ) {
+        return prev;
+      }
+      return {
+        heading: headingTag,
+        bold: inBold,
+        italic: inItalic,
+        orderedList: inOl,
+        unorderedList: inUl,
+        blockquote: inBlockquote,
+        code: inCode,
+        cloze: inCloze,
+        mark: inMark,
+      };
     });
   };
 
@@ -377,9 +398,18 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
   useEffect(() => {
     if (!editorRef.current || isComposingRef.current) return;
-    const currentSerialized = serializeFromWysiwyg(editorRef.current);
     const mediaBaseChanged =
       Boolean(mediaBaseUrl) && mediaBaseUrl !== lastLoadedMediaBaseRef.current;
+    // 本编辑器自身通过 handleInput() 回传的 value 会先写入 lastLoadedValueRef；
+    // React 回声到达时直接跳过，避免每次击键/挖空克隆整棵 DOM，并防止 Windows IME 时序差导致 innerHTML 闪刷。
+    if (
+      lastLoadedValueRef.current !== null &&
+      value === lastLoadedValueRef.current &&
+      !mediaBaseChanged
+    ) {
+      return;
+    }
+    const currentSerialized = serializeFromWysiwyg(editorRef.current);
     if (lastLoadedValueRef.current === null || value !== currentSerialized || mediaBaseChanged) {
       editorRef.current.innerHTML = deserializeToWysiwyg(value, mediaBaseUrl);
       lastLoadedValueRef.current = value;
@@ -605,7 +635,12 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
       const ord = parseInt(p.getAttribute('data-cloze-ord') || '0', 10);
       if (ord > maxIdx) maxIdx = ord;
     });
-    const nextIdx = reuseLastOrd && maxIdx >= 1 ? maxIdx : maxIdx + 1;
+    const nextIdx =
+      clozeMode === 'combined'
+        ? 1
+        : reuseLastOrd && maxIdx >= 1
+        ? maxIdx
+        : Math.max(maxIdx + 1, nextClozeOrd ?? 1);
 
     const pill = document.createElement('span');
     pill.className = 'anki-cloze-pill';
@@ -770,6 +805,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
     const prefixEl = target ? findClosestElement(target, '.anki-cloze-prefix', editorRef.current) : null;
     if (prefixEl) {
       e.preventDefault();
+      if (clozeMode === 'combined') return;
       const pill = findClosestElement(prefixEl, '.anki-cloze-pill', editorRef.current);
       if (pill) {
         const allPills = editorRef.current.querySelectorAll('.anki-cloze-pill');
@@ -1102,24 +1138,26 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
           <div className="flex flex-wrap items-center gap-0.5">
             {/* Heading Dropdown (#) */}
             <div className="relative">
-              <button
-                type="button"
-                tabIndex={-1}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => toggleDropdown('heading')}
-                title={t('slashInsertBtn')}
-                aria-expanded={headingOpen}
-                className={`${iconBtnClass} ${
-                  headingOpen || activeFormats.heading ? activeIconBtnClass : ''
-                }`}
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="4" y1="9" x2="20" y2="9" />
-                  <line x1="4" y1="15" x2="20" y2="15" />
-                  <line x1="10" y1="3" x2="8" y2="21" />
-                  <line x1="16" y1="3" x2="14" y2="21" />
-                </svg>
-              </button>
+              <Tooltip variant="compact" content={t('slashInsertBtn')}>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => toggleDropdown('heading')}
+                  aria-label={t('slashInsertBtn')}
+                  aria-expanded={headingOpen}
+                  className={`${iconBtnClass} ${
+                    headingOpen || activeFormats.heading ? activeIconBtnClass : ''
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="4" y1="9" x2="20" y2="9" />
+                    <line x1="4" y1="15" x2="20" y2="15" />
+                    <line x1="10" y1="3" x2="8" y2="21" />
+                    <line x1="16" y1="3" x2="14" y2="21" />
+                  </svg>
+                </button>
+              </Tooltip>
 
               {headingOpen && (
                 <div
@@ -1179,22 +1217,24 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
             {/* Emoji Picker */}
             <div className="relative">
-              <button
-                type="button"
-                tabIndex={-1}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => toggleDropdown('emoji')}
-                title={t('editorToolEmoji')}
-                aria-expanded={emojiOpen}
-                className={`${iconBtnClass} ${emojiOpen ? activeIconBtnClass : ''}`}
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                  <line x1="9" y1="9" x2="9.01" y2="9" />
-                  <line x1="15" y1="9" x2="15.01" y2="9" />
-                </svg>
-              </button>
+              <Tooltip variant="compact" content={t('editorToolEmoji')}>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => toggleDropdown('emoji')}
+                  aria-label={t('editorToolEmoji')}
+                  aria-expanded={emojiOpen}
+                  className={`${iconBtnClass} ${emojiOpen ? activeIconBtnClass : ''}`}
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                    <line x1="9" y1="9" x2="9.01" y2="9" />
+                    <line x1="15" y1="9" x2="15.01" y2="9" />
+                  </svg>
+                </button>
+              </Tooltip>
 
               {emojiOpen && (
                 <div
@@ -1221,140 +1261,156 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
             <span className="w-[1px] h-3.5 bg-black/10 dark:bg-white/10 mx-1" />
 
             {/* Bold */}
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => execCmd('bold')}
-              title={t('editorToolBold', { key: boldShortcutStr })}
-              aria-pressed={activeFormats.bold}
-              className={`${iconBtnClass} font-bold text-[13px] ${activeFormats.bold ? activeIconBtnClass : ''}`}
-            >
-              B
-            </button>
-
-            {/* Italic */}
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => execCmd('italic')}
-              title={t('editorToolItalic', { key: italicShortcutStr })}
-              aria-pressed={activeFormats.italic}
-              className={`${iconBtnClass} font-serif italic text-[13px] ${activeFormats.italic ? activeIconBtnClass : ''}`}
-            >
-              I
-            </button>
-
-            <span className="w-[1px] h-3.5 bg-black/10 dark:bg-white/10 mx-1" />
-
-            {/* Ordered List */}
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => execCmd('insertOrderedList')}
-              title={t('editorToolOrderedList')}
-              aria-pressed={activeFormats.orderedList}
-              className={`${iconBtnClass} ${activeFormats.orderedList ? activeIconBtnClass : ''}`}
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="10" y1="6" x2="21" y2="6" />
-                <line x1="10" y1="12" x2="21" y2="12" />
-                <line x1="10" y1="18" x2="21" y2="18" />
-                <path d="M4 6h1v4" />
-                <path d="M4 10h2" />
-                <path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" />
-              </svg>
-            </button>
-
-            {/* Unordered List */}
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => execCmd('insertUnorderedList')}
-              title={t('editorToolUnorderedList')}
-              aria-pressed={activeFormats.unorderedList}
-              className={`${iconBtnClass} ${activeFormats.unorderedList ? activeIconBtnClass : ''}`}
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="9" y1="6" x2="20" y2="6" />
-                <line x1="9" y1="12" x2="20" y2="12" />
-                <line x1="9" y1="18" x2="20" y2="18" />
-                <circle cx="4" cy="6" r="1.5" fill="currentColor" />
-                <circle cx="4" cy="12" r="1.5" fill="currentColor" />
-                <circle cx="4" cy="18" r="1.5" fill="currentColor" />
-              </svg>
-            </button>
-
-            {/* Blockquote */}
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => toggleBlockTag('blockquote')}
-              title={t('editorToolQuote')}
-              aria-pressed={activeFormats.blockquote}
-              className={`${iconBtnClass} ${activeFormats.blockquote ? activeIconBtnClass : ''}`}
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
-                <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
-              </svg>
-            </button>
-
-            {/* Image Upload Button */}
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => fileInputRef.current?.click()}
-              title={t('ioUploadImageBtn')}
-              className={iconBtnClass}
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-                <circle cx="9" cy="9" r="2" />
-                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-              </svg>
-            </button>
-
-            {/* Code Block */}
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => toggleBlockTag('pre')}
-              title={t('editorToolCode')}
-              aria-pressed={activeFormats.code}
-              className={`${iconBtnClass} ${activeFormats.code ? activeIconBtnClass : ''}`}
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="16 18 22 12 16 6" />
-                <polyline points="8 6 2 12 8 18" />
-              </svg>
-            </button>
-
-            {/* Table Insertion */}
-            <div className="relative">
+            <Tooltip variant="compact" content={t('editorToolBoldLabel')} shortcut="Cmd+B">
               <button
                 type="button"
                 tabIndex={-1}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => toggleDropdown('table')}
-                title={t('editorToolTable')}
-                aria-expanded={tableOpen}
-                className={`${iconBtnClass} ${tableOpen ? activeIconBtnClass : ''}`}
+                onClick={() => execCmd('bold')}
+                aria-label={t('editorToolBoldLabel')}
+                aria-pressed={activeFormats.bold}
+                className={`${iconBtnClass} font-bold text-[13px] ${activeFormats.bold ? activeIconBtnClass : ''}`}
+              >
+                B
+              </button>
+            </Tooltip>
+
+            {/* Italic */}
+            <Tooltip variant="compact" content={t('editorToolItalicLabel')} shortcut="Cmd+I">
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => execCmd('italic')}
+                aria-label={t('editorToolItalicLabel')}
+                aria-pressed={activeFormats.italic}
+                className={`${iconBtnClass} font-serif italic text-[13px] ${activeFormats.italic ? activeIconBtnClass : ''}`}
+              >
+                I
+              </button>
+            </Tooltip>
+
+            <span className="w-[1px] h-3.5 bg-black/10 dark:bg-white/10 mx-1" />
+
+            {/* Ordered List */}
+            <Tooltip variant="compact" content={t('editorToolOrderedList')}>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => execCmd('insertOrderedList')}
+                aria-label={t('editorToolOrderedList')}
+                aria-pressed={activeFormats.orderedList}
+                className={`${iconBtnClass} ${activeFormats.orderedList ? activeIconBtnClass : ''}`}
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="18" height="18" x="3" y="3" rx="2" />
-                  <path d="M3 9h18" />
-                  <path d="M3 15h18" />
-                  <path d="M9 3v18" />
-                  <path d="M15 3v18" />
+                  <line x1="10" y1="6" x2="21" y2="6" />
+                  <line x1="10" y1="12" x2="21" y2="12" />
+                  <line x1="10" y1="18" x2="21" y2="18" />
+                  <path d="M4 6h1v4" />
+                  <path d="M4 10h2" />
+                  <path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" />
                 </svg>
               </button>
+            </Tooltip>
+
+            {/* Unordered List */}
+            <Tooltip variant="compact" content={t('editorToolUnorderedList')}>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => execCmd('insertUnorderedList')}
+                aria-label={t('editorToolUnorderedList')}
+                aria-pressed={activeFormats.unorderedList}
+                className={`${iconBtnClass} ${activeFormats.unorderedList ? activeIconBtnClass : ''}`}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="9" y1="6" x2="20" y2="6" />
+                  <line x1="9" y1="12" x2="20" y2="12" />
+                  <line x1="9" y1="18" x2="20" y2="18" />
+                  <circle cx="4" cy="6" r="1.5" fill="currentColor" />
+                  <circle cx="4" cy="12" r="1.5" fill="currentColor" />
+                  <circle cx="4" cy="18" r="1.5" fill="currentColor" />
+                </svg>
+              </button>
+            </Tooltip>
+
+            {/* Blockquote */}
+            <Tooltip variant="compact" content={t('editorToolQuote')}>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => toggleBlockTag('blockquote')}
+                aria-label={t('editorToolQuote')}
+                aria-pressed={activeFormats.blockquote}
+                className={`${iconBtnClass} ${activeFormats.blockquote ? activeIconBtnClass : ''}`}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
+                  <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
+                </svg>
+              </button>
+            </Tooltip>
+
+            {/* Image Upload Button */}
+            <Tooltip variant="compact" content={t('ioUploadImageBtn')}>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => fileInputRef.current?.click()}
+                aria-label={t('ioUploadImageBtn')}
+                className={iconBtnClass}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                  <circle cx="9" cy="9" r="2" />
+                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                </svg>
+              </button>
+            </Tooltip>
+
+            {/* Code Block */}
+            <Tooltip variant="compact" content={t('editorToolCode')}>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => toggleBlockTag('pre')}
+                aria-label={t('editorToolCode')}
+                aria-pressed={activeFormats.code}
+                className={`${iconBtnClass} ${activeFormats.code ? activeIconBtnClass : ''}`}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="16 18 22 12 16 6" />
+                  <polyline points="8 6 2 12 8 18" />
+                </svg>
+              </button>
+            </Tooltip>
+
+            {/* Table Insertion */}
+            <div className="relative">
+              <Tooltip variant="compact" content={t('editorToolTable')}>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => toggleDropdown('table')}
+                  aria-label={t('editorToolTable')}
+                  aria-expanded={tableOpen}
+                  className={`${iconBtnClass} ${tableOpen ? activeIconBtnClass : ''}`}
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="18" height="18" x="3" y="3" rx="2" />
+                    <path d="M3 9h18" />
+                    <path d="M3 15h18" />
+                    <path d="M9 3v18" />
+                    <path d="M15 3v18" />
+                  </svg>
+                </button>
+              </Tooltip>
 
               {tableOpen && (
                 <div
@@ -1392,36 +1448,40 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
             </div>
 
             {/* Divider */}
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => execCmd('insertHorizontalRule')}
-              title={t('editorToolDivider')}
-              className={iconBtnClass}
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="3" y1="12" x2="21" y2="12" />
-              </svg>
-            </button>
-
-            {/* Alignment Dropdown */}
-            <div className="relative">
+            <Tooltip variant="compact" content={t('editorToolDivider')}>
               <button
                 type="button"
                 tabIndex={-1}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => toggleDropdown('align')}
-                title={t('editorToolAlign')}
-                aria-expanded={alignOpen}
-                className={`${iconBtnClass} ${alignOpen ? activeIconBtnClass : ''}`}
+                onClick={() => execCmd('insertHorizontalRule')}
+                aria-label={t('editorToolDivider')}
+                className={iconBtnClass}
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="3" y1="6" x2="21" y2="6" />
-                  <line x1="3" y1="12" x2="15" y2="12" />
-                  <line x1="3" y1="18" x2="18" y2="18" />
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="12" x2="21" y2="12" />
                 </svg>
               </button>
+            </Tooltip>
+
+            {/* Alignment Dropdown */}
+            <div className="relative">
+              <Tooltip variant="compact" content={t('editorToolAlign')}>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => toggleDropdown('align')}
+                  aria-label={t('editorToolAlign')}
+                  aria-expanded={alignOpen}
+                  className={`${iconBtnClass} ${alignOpen ? activeIconBtnClass : ''}`}
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="3" y1="12" x2="15" y2="12" />
+                    <line x1="3" y1="18" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </Tooltip>
 
               {alignOpen && (
                 <div
@@ -1471,134 +1531,144 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
             </div>
 
             {/* Indent / Outdent */}
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => execCmd('outdent')}
-              title={t('editorToolOutdent')}
-              className={iconBtnClass}
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="7 8 3 12 7 16" />
-                <line x1="21" y1="12" x2="11" y2="12" />
-                <line x1="21" y1="6" x2="11" y2="6" />
-                <line x1="21" y1="18" x2="11" y2="18" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => execCmd('indent')}
-              title={t('editorToolIndent')}
-              className={iconBtnClass}
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="17 8 21 12 17 16" />
-                <line x1="3" y1="12" x2="13" y2="12" />
-                <line x1="3" y1="6" x2="13" y2="6" />
-                <line x1="3" y1="18" x2="13" y2="18" />
-              </svg>
-            </button>
+            <Tooltip variant="compact" content={t('editorToolOutdent')}>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => execCmd('outdent')}
+                aria-label={t('editorToolOutdent')}
+                className={iconBtnClass}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="7 8 3 12 7 16" />
+                  <line x1="21" y1="12" x2="11" y2="12" />
+                  <line x1="21" y1="6" x2="11" y2="6" />
+                  <line x1="21" y1="18" x2="11" y2="18" />
+                </svg>
+              </button>
+            </Tooltip>
+            <Tooltip variant="compact" content={t('editorToolIndent')}>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => execCmd('indent')}
+                aria-label={t('editorToolIndent')}
+                className={iconBtnClass}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="17 8 21 12 17 16" />
+                  <line x1="3" y1="12" x2="13" y2="12" />
+                  <line x1="3" y1="6" x2="13" y2="6" />
+                  <line x1="3" y1="18" x2="13" y2="18" />
+                </svg>
+              </button>
+            </Tooltip>
 
             <span className="w-[1px] h-3.5 bg-black/10 dark:bg-white/10 mx-1.5 shrink-0" />
 
             {/* Anki Cloze Pill Button */}
             {showCloze && (
-              <button
-                type="button"
-                tabIndex={-1}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={(e) => insertClozeBadge(e.altKey)}
-                title={t('clozeShortcutBtn', { key: clozeShortcutStr })}
-                aria-pressed={activeFormats.cloze}
-                className={`h-7 px-2 rounded-lg text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0 ${
-                  activeFormats.cloze
-                    ? 'bg-[var(--brand)] text-white ring-2 ring-[var(--brand)]/30'
-                    : 'bg-[var(--brand-soft)] hover:bg-[var(--brand-soft-strong)] text-[var(--brand-text)]'
-                }`}
-              >
-                <span>[ ... ]</span>
-                <span className="text-[11px] font-sans font-semibold">
-                  {t('editorClozeBtnLabel')}
-                </span>
-              </button>
+              <Tooltip variant="compact" content={t('clozeShortcutLabel')} shortcut="Cmd+Shift+C">
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => insertClozeBadge(e.altKey)}
+                  aria-pressed={activeFormats.cloze}
+                  className={`h-7 px-2 rounded-lg text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0 ${
+                    activeFormats.cloze
+                      ? 'bg-[var(--brand)] text-white ring-2 ring-[var(--brand)]/30'
+                      : 'bg-[var(--brand-soft)] hover:bg-[var(--brand-soft-strong)] text-[var(--brand-text)]'
+                  }`}
+                >
+                  <span>[ ... ]</span>
+                  <span className="text-[11px] font-sans font-semibold">
+                    {t('editorClozeBtnLabel')}
+                  </span>
+                </button>
+              </Tooltip>
             )}
 
             {/* Image Occlusion Button (Integrated in Toolbar Row) */}
             {onOpenImageOcclusion && (
+              <Tooltip variant="compact" content={t('ioStudioTitle')}>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={onOpenImageOcclusion}
+                  className={`h-7 px-2 rounded-lg text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors shrink-0 ${
+                    hasImageOcclusion
+                      ? 'bg-[#F59E0B]/15 border border-[#F59E0B]/40 text-[#F59E0B] hover:bg-[#F59E0B]/25'
+                      : isDark
+                      ? 'bg-white/5 hover:bg-white/10 text-[#D8D8E0]'
+                      : 'bg-black/5 hover:bg-black/10 text-[#3A3A3C]'
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="3" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <path d="m21 15-5-5L5 21" />
+                  </svg>
+                  <span>
+                    {hasImageOcclusion ? t('ioEditButtonLabel') : t('ioButtonLabel')}
+                  </span>
+                </button>
+              </Tooltip>
+            )}
+
+            {/* LaTeX Math Formula f(x) */}
+            <Tooltip variant="compact" content={t('editorToolMath')}>
               <button
                 type="button"
                 tabIndex={-1}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={onOpenImageOcclusion}
-                title={t('ioStudioTitle')}
-                className={`h-7 px-2 rounded-lg text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors shrink-0 ${
-                  hasImageOcclusion
-                    ? 'bg-[#F59E0B]/15 border border-[#F59E0B]/40 text-[#F59E0B] hover:bg-[#F59E0B]/25'
-                    : isDark
-                    ? 'bg-white/5 hover:bg-white/10 text-[#D8D8E0]'
-                    : 'bg-black/5 hover:bg-black/10 text-[#3A3A3C]'
-                }`}
+                onClick={insertMath}
+                aria-label={t('editorToolMath')}
+                className="h-7 px-2 rounded-lg text-[12px] font-serif italic text-[var(--status-info)] hover:bg-[var(--status-info-soft)] cursor-pointer transition-colors shrink-0"
               >
-                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="3" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <path d="m21 15-5-5L5 21" />
-                </svg>
-                <span>
-                  {hasImageOcclusion ? t('ioEditButtonLabel') : t('ioButtonLabel')}
-                </span>
+                f(x)
               </button>
-            )}
-
-            {/* LaTeX Math Formula f(x) */}
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={insertMath}
-              title={t('editorToolMath')}
-              className="h-7 px-2 rounded-lg text-[12px] font-serif italic text-[var(--status-info)] hover:bg-[var(--status-info-soft)] cursor-pointer transition-colors shrink-0"
-            >
-              f(x)
-            </button>
+            </Tooltip>
 
             {/* Mark Highlight */}
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={insertMark}
-              title={t('editorToolMark')}
-              aria-pressed={activeFormats.mark}
-              className={`h-7 px-2 rounded-lg text-[11px] font-semibold cursor-pointer transition-colors shrink-0 ${
-                activeFormats.mark
-                  ? 'bg-[var(--status-warning)] text-white'
-                  : 'text-[var(--status-warning)] hover:bg-[var(--status-warning-soft)]'
-              }`}
-            >
-              {t('editorMarkBtnLabel')}
-            </button>
+            <Tooltip variant="compact" content={t('editorToolMark')}>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={insertMark}
+                aria-pressed={activeFormats.mark}
+                className={`h-7 px-2 rounded-lg text-[11px] font-semibold cursor-pointer transition-colors shrink-0 ${
+                  activeFormats.mark
+                    ? 'bg-[var(--status-warning)] text-white'
+                    : 'text-[var(--status-warning)] hover:bg-[var(--status-warning-soft)]'
+                }`}
+              >
+                {t('editorMarkBtnLabel')}
+              </button>
+            </Tooltip>
           </div>
 
           {/* Right Corner: Quick Shortcut Help (?) */}
           <div className="relative ms-auto shrink-0 ps-1">
-            <button
-              type="button"
-              tabIndex={-1}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => toggleDropdown('help')}
-              title={t('editorHelpTitle')}
-              aria-label={t('editorHelpTitle')}
-              aria-expanded={helpOpen}
-              className={`w-5 h-5 rounded-full border text-[11px] font-bold flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white border-black/15 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer ${
-                helpOpen ? 'bg-[var(--brand-soft)] !text-[var(--brand-text)] !border-[var(--brand-border)]' : ''
-              }`}
-            >
-              ?
-            </button>
+            <Tooltip variant="compact" content={t('editorHelpTitle')}>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => toggleDropdown('help')}
+                aria-label={t('editorHelpTitle')}
+                aria-expanded={helpOpen}
+                className={`w-5 h-5 rounded-full border text-[11px] font-bold flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white border-black/15 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer ${
+                  helpOpen ? 'bg-[var(--brand-soft)] !text-[var(--brand-text)] !border-[var(--brand-border)]' : ''
+                }`}
+              >
+                ?
+              </button>
+            </Tooltip>
 
             {helpOpen && (
               <div
@@ -1656,7 +1726,9 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
           onKeyDown={handleKeyDown}
           style={{ minHeight: `${minHeight}px` }}
           data-placeholder={placeholder || t('editorDefaultPlaceholder')}
-          className="p-3.5 sm:p-4 rounded-b-[11px] outline-none leading-relaxed text-[15px] select-text break-words cursor-text empty:before:content-[attr(data-placeholder)] empty:before:text-[#8E8E93]/60 empty:before:pointer-events-none [&_blockquote]:border-s-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:ps-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:my-2 [&_h1]:text-[20px] [&_h1]:font-bold [&_h1]:my-2 [&_h2]:text-[17px] [&_h2]:font-bold [&_h2]:my-1.5 [&_h3]:text-[15px] [&_h3]:my-1 [&_h3]:font-semibold [&_img]:max-h-60 [&_img]:rounded-xl [&_img]:my-2 [&_img]:shadow-xs [&_hr]:border-t [&_hr]:border-black/10 dark:[&_hr]:border-white/10 [&_hr]:my-3"
+          className={`${
+            clozeMode === 'combined' ? 'tower-cloze-hide-prefix ' : ''
+          }p-3.5 sm:p-4 rounded-b-[11px] outline-none leading-relaxed text-[15px] select-text break-words cursor-text empty:before:content-[attr(data-placeholder)] empty:before:text-[#8E8E93]/60 empty:before:pointer-events-none [&_blockquote]:border-s-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:ps-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px] [&_pre]:my-2 [&_h1]:text-[20px] [&_h1]:font-bold [&_h1]:my-2 [&_h2]:text-[17px] [&_h2]:font-bold [&_h2]:my-1.5 [&_h3]:text-[15px] [&_h3]:my-1 [&_h3]:font-semibold [&_img]:max-h-60 [&_img]:rounded-xl [&_img]:my-2 [&_img]:shadow-xs [&_hr]:border-t [&_hr]:border-black/10 dark:[&_hr]:border-white/10 [&_hr]:my-3`}
         />
       </div>
     </div>

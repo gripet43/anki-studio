@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { appActions } from '../../stores/useAppStore';
+import { getSandboxPlayAudioFile } from '../../utils/reviewAudio';
 
 interface SandboxCardFrameProps {
   cardId: string;
@@ -9,6 +10,12 @@ interface SandboxCardFrameProps {
   isFlipped: boolean;
   isDark: boolean;
   audioFiles?: string[];
+  frontAudioFiles?: string[];
+  backAudioFiles?: string[];
+  sandboxQuestionAudioFiles?: string[];
+  sandboxAnswerAudioFiles?: string[];
+  contentScale?: number;
+  onImageZoom?: (target: { src: string; alt?: string }) => void;
 }
 
 export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
@@ -19,19 +26,28 @@ export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
   isFlipped,
   isDark,
   audioFiles,
+  frontAudioFiles,
+  backAudioFiles,
+  sandboxQuestionAudioFiles,
+  sandboxAnswerAudioFiles,
+  contentScale = 1,
+  onImageZoom,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [frameHeight, setFrameHeight] = useState<number>(280);
   const initialSideHtmlRef = useRef<string>(isFlipped ? backHtml : frontHtml);
+  const initialScaleRef = useRef<number>(contentScale);
   const prevCardIdRef = useRef<string>(cardId);
 
   if (prevCardIdRef.current !== cardId) {
     prevCardIdRef.current = cardId;
     initialSideHtmlRef.current = isFlipped ? backHtml : frontHtml;
+    initialScaleRef.current = contentScale;
   }
 
   const srcDocHtml = useMemo(() => {
     const initialBody = initialSideHtmlRef.current || '';
+    const initialZoom = initialScaleRef.current || 1;
     const themeClass = isDark ? 'nightMode night_mode' : '';
     const textColor = isDark ? '#EFEFF5' : '#1D1D1F';
 
@@ -56,9 +72,48 @@ export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
     width: 100%;
     overflow-wrap: break-word;
   }
+  #qa {
+    zoom: ${initialZoom};
+  }
   img {
     max-width: 100%;
     height: auto;
+    cursor: zoom-in;
+  }
+  a img, button img, [onclick] img {
+    cursor: pointer;
+  }
+  .cloze {
+    font-weight: 600;
+    color: #235F9F;
+    background: #D9E8F6;
+    padding: 1px 6px;
+    border-radius: 5px;
+  }
+  .cloze[data-cloze] {
+    border: 1px solid #B0D0EF;
+  }
+  .cloze:not([data-cloze]) {
+    color: #2F9461;
+    background: #EAF6F0;
+  }
+  .nightMode .cloze,
+  .night_mode .cloze {
+    color: #98CCFD;
+    background: rgba(62, 138, 217, 0.24);
+  }
+  .nightMode .cloze[data-cloze],
+  .night_mode .cloze[data-cloze] {
+    border-color: rgba(152, 204, 253, 0.38);
+  }
+  .nightMode .cloze:not([data-cloze]),
+  .night_mode .cloze:not([data-cloze]) {
+    color: #3FAE78;
+    background: rgba(63, 174, 120, 0.16);
+  }
+  .cloze-inactive {
+    font-weight: inherit;
+    color: inherit;
   }
 </style>
 <style id="anki-model-css">
@@ -118,13 +173,21 @@ ${cssText || ''}
     var body = document.body;
     var docEl = document.documentElement;
     if (!body || !docEl) return;
-    var h = Math.max(
+    var rawH = Math.max(
       qa ? qa.scrollHeight : 0,
       qa ? qa.offsetHeight : 0,
       body.scrollHeight,
       body.offsetHeight
     );
-    var clamped = Math.max(120, Math.min(2600, Math.ceil(h + 8)));
+    var currentZoom = parseFloat((qa && qa.style && qa.style.zoom) || '${initialZoom}') || 1;
+    var h = rawH * (currentZoom > 1 ? 1 : 1);
+    if (qa) {
+      var rect = qa.getBoundingClientRect();
+      if (rect && rect.height) {
+        h = Math.max(h, rect.height);
+      }
+    }
+    var clamped = Math.max(120, Math.min(4200, Math.ceil(h + 8)));
     if (Math.abs(clamped - lastReportedHeight) >= 2) {
       lastReportedHeight = clamped;
       parent.postMessage({
@@ -147,7 +210,19 @@ ${cssText || ''}
 
   window.addEventListener('message', function(ev) {
     var data = ev.data;
-    if (!data || data.type !== 'anki-sandbox-flip' || data.cardId !== ${JSON.stringify(cardId)}) return;
+    if (!data || data.cardId !== ${JSON.stringify(cardId)}) return;
+    if (data.type === 'anki-sandbox-scale') {
+      var qaEl = document.getElementById('qa');
+      if (qaEl) {
+        qaEl.style.zoom = String(data.scale || 1);
+        requestAnimationFrame(function() {
+          reportHeight();
+          setTimeout(reportHeight, 60);
+        });
+      }
+      return;
+    }
+    if (data.type !== 'anki-sandbox-flip') return;
     var qa = document.getElementById('qa');
     if (!qa) return;
     qa.innerHTML = data.html || '';
@@ -165,6 +240,7 @@ ${cssText || ''}
       return;
     }
     var k = e.key;
+    var c = e.code || '';
     if (
       k === ' ' ||
       k === 'Enter' ||
@@ -176,13 +252,24 @@ ${cssText || ''}
       k === '4' ||
       k.toLowerCase() === 'r' ||
       k.toLowerCase() === 'e' ||
-      ((e.metaKey || e.ctrlKey) && (k.toLowerCase() === 'z' || k.toLowerCase() === 'i' || /^[0-7]$/.test(k)))
+      ((e.metaKey || e.ctrlKey) && (
+        k.toLowerCase() === 'z' ||
+        k.toLowerCase() === 'i' ||
+        /^[0-7]$/.test(k) ||
+        k === '=' ||
+        k === '+' ||
+        k === '-' ||
+        k === '_' ||
+        k === ')' ||
+        c === 'Digit0'
+      ))
     ) {
       e.preventDefault();
       parent.postMessage({
         type: 'anki-sandbox-key',
         cardId: ${JSON.stringify(cardId)},
         key: k,
+        code: c,
         altKey: Boolean(e.altKey),
         metaKey: Boolean(e.metaKey),
         ctrlKey: Boolean(e.ctrlKey),
@@ -207,7 +294,31 @@ ${cssText || ''}
       });
       mo.observe(qa, { childList: true, subtree: true, attributes: true });
     }
-    document.addEventListener('click', function() {
+    document.addEventListener('click', function(e) {
+      var clickedEl = e.target;
+      var interactiveAncestor = null;
+      var walk = clickedEl;
+      while (walk && walk.nodeType === 1) {
+        var walkTag = walk.tagName;
+        if (walkTag === 'A' || walkTag === 'BUTTON' || (walk.hasAttribute && walk.hasAttribute('onclick'))) {
+          interactiveAncestor = walk;
+          break;
+        }
+        walk = walk.parentElement;
+      }
+      if (clickedEl && clickedEl.tagName === 'IMG' && !interactiveAncestor) {
+        var imgSrc = clickedEl.currentSrc || clickedEl.src || '';
+        if (imgSrc) {
+          e.preventDefault();
+          parent.postMessage({
+            type: 'anki-sandbox-img-zoom',
+            cardId: ${JSON.stringify(cardId)},
+            src: imgSrc,
+            alt: clickedEl.alt || ''
+          }, '*');
+          return;
+        }
+      }
       setTimeout(reportHeight, 30);
       setTimeout(reportHeight, 150);
     });
@@ -242,14 +353,30 @@ ${cssText || ''}
     );
   }, [cardId, isFlipped, frontHtml, backHtml]);
 
-  // Listen for height updates, pycmd whitelist commands, and forwarded keyboard shortcuts
+  // Update internal #qa scale live without reloading the iframe
+  useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage(
+      {
+        type: 'anki-sandbox-scale',
+        cardId,
+        scale: contentScale,
+      },
+      '*'
+    );
+  }, [cardId, contentScale]);
+
+  // Listen for height updates, pycmd whitelist commands, image zoom, and forwarded keyboard shortcuts
   useEffect(() => {
     const onMessage = (ev: MessageEvent) => {
       const data = ev.data;
       if (!data || data.cardId !== cardId) return;
 
       if (data.type === 'anki-sandbox-height' && typeof data.height === 'number') {
-        setFrameHeight(Math.max(120, Math.min(2600, Math.round(data.height))));
+        setFrameHeight(Math.max(120, Math.min(4200, Math.round(data.height))));
+      } else if (data.type === 'anki-sandbox-img-zoom' && data.src) {
+        onImageZoom?.({ src: String(data.src), alt: data.alt ? String(data.alt) : undefined });
       } else if (data.type === 'anki-sandbox-pycmd') {
         const cmd = String(data.cmd || '').trim();
         if (cmd === 'ans' || cmd === 'flip') {
@@ -259,13 +386,25 @@ ${cssText || ''}
           appActions.answerCurrentCard(easeNum);
         } else if (cmd.startsWith('play:')) {
           const parts = cmd.split(':');
+          const sidePart = parts[1] || 'a';
           const idx = parseInt(parts[2] || '0', 10) || 0;
-          const targetAudio = audioFiles && audioFiles[idx] ? audioFiles[idx] : audioFiles?.[0];
+          const targetAudio = getSandboxPlayAudioFile(
+            {
+              audioFiles,
+              frontAudioFiles,
+              backAudioFiles,
+              sandboxQuestionAudioFiles,
+              sandboxAnswerAudioFiles,
+            },
+            sidePart,
+            idx
+          );
           appActions.playAudio(targetAudio);
         }
       } else if (data.type === 'anki-sandbox-key') {
         const synthetic = new KeyboardEvent('keydown', {
           key: data.key,
+          code: data.code || '',
           altKey: Boolean(data.altKey),
           metaKey: Boolean(data.metaKey),
           ctrlKey: Boolean(data.ctrlKey),
@@ -279,7 +418,15 @@ ${cssText || ''}
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [cardId, audioFiles]);
+  }, [
+    cardId,
+    audioFiles,
+    frontAudioFiles,
+    backAudioFiles,
+    sandboxQuestionAudioFiles,
+    sandboxAnswerAudioFiles,
+    onImageZoom,
+  ]);
 
   return (
     <iframe

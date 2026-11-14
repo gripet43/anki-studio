@@ -18,11 +18,14 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .media_utils import (
+    CLOZE_RE,
     NativeRender,
     SandboxRender,
+    _av_filenames,
     convert_furigana_to_ruby,
     get_media_dir,
     get_media_http_base_url,
+    is_custom_styled_cloze_model,
     plain_text_of,
     render_native_card_sides,
     render_native_image_occlusion,
@@ -31,12 +34,26 @@ from .media_utils import (
     resolve_media_img_src_for_webview,
     resolve_replace_front_on_flip,
     restore_rendered_io_rects,
+    sanitize_rendered_card_html,
+    split_card_side_audio,
+    split_native_cloze_answer,
+    style_native_cloze_spans,
     wrap_card_with_styles,
 )
 
 
 SOUND_TAG_RE = re.compile(r"\[sound:([^\]]+)\]")
 CLOZE_RE = re.compile(r"\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}")
+CLOZE_START_CANDIDATE_RE = re.compile(r"\{\{[\s\u200b\u200c\u200d\ufeff\u2060\u00ad]*c\d*", flags=re.I)
+INVISIBLE_CHAR_NAMES: Dict[str, str] = {
+    "\u200b": "U+200B ZERO WIDTH SPACE",
+    "\u200c": "U+200C ZERO WIDTH NON-JOINER",
+    "\u200d": "U+200D ZERO WIDTH JOINER",
+    "\ufeff": "U+FEFF ZERO WIDTH NO-BREAK SPACE",
+    "\u2060": "U+2060 WORD JOINER",
+    "\u00ad": "U+00AD SOFT HYPHEN",
+    "\u180e": "U+180E MONGOLIAN VOWEL SEPARATOR",
+}
 IO_RECT_SPAN_RE = re.compile(
     r'<span\b([^>]*?\bclass\s*=\s*["\'][^"\']*\banki-io-rect\b[^"\']*["\'][^>]*)>\s*\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}\s*</span>',
     flags=re.I,
@@ -488,11 +505,22 @@ class ReviewService:
         }
 
     def play_audio(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Plays an audio file from Anki's collection.media using aqt.sound."""
-        filename = str((data or {}).get("filename", "")).strip()
-        if not filename:
+        """Plays one or more audio files sequentially from Anki's collection.media using aqt.sound."""
+        payload = data or {}
+        raw_list = payload.get("filenames")
+        filenames: List[str] = []
+        if isinstance(raw_list, list):
+            for item in raw_list:
+                clean = str(item or "").strip()
+                if clean and clean not in filenames:
+                    filenames.append(clean)
+        single = str(payload.get("filename", "") or "").strip()
+        if single and not filenames:
+            filenames.append(single)
+        if not filenames:
             return {"played": False, "message": "No audio filename provided"}
 
+        filename = filenames[0]
         col = self.col
         media_dir = self._get_media_dir(col)
         full_path = os.path.join(media_dir, filename) if media_dir else filename
@@ -500,9 +528,23 @@ class ReviewService:
         played = False
         try:
             import aqt.sound
-            if hasattr(aqt.sound, "av_player") and aqt.sound.av_player:
-                aqt.sound.av_player.play_file(filename)
-                played = True
+
+            player = getattr(aqt.sound, "av_player", None)
+            if player is not None:
+                if len(filenames) > 1 and hasattr(player, "play_tags"):
+                    try:
+                        from anki.sound import SoundOrVideoTag
+
+                        tags = [SoundOrVideoTag(filename=f) for f in filenames]
+                        if hasattr(player, "stop_and_clear_queue"):
+                            player.stop_and_clear_queue()
+                        player.play_tags(tags)
+                        played = True
+                    except Exception:
+                        played = False
+                if not played and hasattr(player, "play_file"):
+                    player.play_file(filename)
+                    played = True
             elif hasattr(aqt.sound, "play"):
                 aqt.sound.play(filename)
                 played = True
@@ -512,6 +554,7 @@ class ReviewService:
         return {
             "played": played,
             "filename": filename,
+            "filenames": filenames,
             "fileUrl": Path(full_path).as_uri() if os.path.isabs(full_path) else filename,
         }
 
@@ -636,11 +679,12 @@ class ReviewService:
 
             def _cloze_replacer(match):
                 c_num, c_ans, c_hint = match.group(1), match.group(2), match.group(3)
-                if is_question_side and c_num == target_idx:
-                    hint_label = c_hint if c_hint else "..."
-                    return f'<span class="px-2 py-0.5 rounded bg-[#5E5CE6]/25 text-[#8684FF] font-semibold border border-[#5E5CE6]/50">[{hint_label}]</span>'
-                else:
-                    return f'<span class="px-1.5 py-0.5 rounded bg-[#28CD41]/20 text-[#32D74B] font-semibold">{c_ans}</span>'
+                if c_num == target_idx:
+                    if is_question_side:
+                        hint_label = c_hint if c_hint else "..."
+                        return f'<span class="anki-cloze-question">[{hint_label}]</span>'
+                    return f'<span class="anki-cloze-answer">{c_ans}</span>'
+                return f'<span class="cloze-inactive" data-ordinal="{c_num}">{c_ans}</span>'
 
             processed = CLOZE_RE.sub(_cloze_replacer, processed)
 
@@ -708,17 +752,40 @@ class ReviewService:
             # Cloze 与原生遮挡卡例外：它们的 frontAnswerHtml 已经负责补全/揭底，
             # 再叠一份完整答案会让同一句话在翻转时出现两次。
             raw_output = None
-            if not io_front and not is_cloze:
+            if not io_front:
                 try:
                     raw_output = card.render_output()
                 except Exception:
                     raw_output = None
 
+            try:
+                _note_obj = card.note() if hasattr(card, "note") else None
+                _card_model = (
+                    _note_obj.note_type()
+                    if _note_obj is not None and hasattr(_note_obj, "note_type")
+                    else None
+                ) or {}
+            except Exception:
+                _card_model = {}
+
+            use_custom_cloze = bool(
+                is_cloze
+                and not io_front
+                and raw_output is not None
+                and is_custom_styled_cloze_model(_card_model)
+            )
+
             native = (
-                NativeRender("", "", [], [], "")
-                if (io_front or is_cloze or raw_output is None)
-                else render_native_card_sides(
-                    card, media_dir, strip_front_side=False, raw_output=raw_output
+                render_native_card_sides(
+                    card, media_dir, strip_front_side=True, raw_output=raw_output
+                )
+                if use_custom_cloze
+                else (
+                    NativeRender("", "", [], [], "")
+                    if (io_front or is_cloze or raw_output is None)
+                    else render_native_card_sides(
+                        card, media_dir, strip_front_side=False, raw_output=raw_output
+                    )
                 )
             )
             native_back, native_back_audio, native_back_css = (
@@ -729,6 +796,20 @@ class ReviewService:
             # 正面用「保留 display:none」的样式表：柯林斯这类词库模板把详解、扩展例句
             # 和 {{hint}} 内容默认藏起来，原生正面只显示入口；背面才需要揭开它们。
             native_front_css = native.question_css or native_back_css
+            native_front_answer, native_back_only, custom_cloze_replace = ("", "", True)
+            if use_custom_cloze:
+                _raw_ans_val = getattr(raw_output, "answer_text", "") or ""
+                if callable(_raw_ans_val):
+                    _raw_ans_val = _raw_ans_val()
+                native_front_answer, native_back_only, custom_cloze_replace = (
+                    split_native_cloze_answer(
+                        sanitize_rendered_card_html(
+                            str(_raw_ans_val or ""), reveal_hints=True
+                        ),
+                        native.question,
+                    )
+                )
+
             if io_front:
                 front_raw, back_raw = io_front, io_back
             else:
@@ -739,21 +820,42 @@ class ReviewService:
                     if native.question
                     else (field_keys[0] if field_keys else "")
                 )
+                if (
+                    is_cloze
+                    and fields_dict
+                    and not CLOZE_RE.search(fields_dict.get(front_key, "") or "")
+                ):
+                    cloze_key = next(
+                        (
+                            k
+                            for k, v in fields_dict.items()
+                            if CLOZE_RE.search(str(v or ""))
+                        ),
+                        "",
+                    )
+                    if cloze_key:
+                        front_key = cloze_key
                 front_raw = fields_dict.get(front_key, "") if front_key else ""
-                back_raw = native.answer or (
-                    fields_dict.get(field_keys[1], "") if len(field_keys) > 1 else ""
-                )
-                # HSK1-6 等卡包在字段中存了 Phiên âm / Tiếng Việt，但背面模板只写了图片与词典表；
-                # 若背面未出现越南语释义，将其补在背面顶部，保证翻面即可看到核心拼音与释义。
-                if "Tiếng Việt" in fields_dict and fields_dict["Tiếng Việt"].strip():
-                    tv_val = fields_dict["Tiếng Việt"].strip()
-                    pa_val = fields_dict.get("Phiên âm", "").strip()
-                    if 'class="Tiếng Việt"' not in (back_raw or "") and "class='Tiếng Việt'" not in (back_raw or ""):
-                        header_parts = []
-                        if pa_val:
-                            header_parts.append(f'<div class="Phiên âm">{pa_val}</div>')
-                        header_parts.append(f'<div class="Tiếng Việt"><b>{tv_val}</b></div>')
-                        back_raw = "".join(header_parts) + (back_raw or "")
+                if use_custom_cloze:
+                    back_raw = style_native_cloze_spans(
+                        native_back_only or native_front_answer or native.question,
+                        is_question_side=False,
+                    )
+                else:
+                    back_raw = native.answer or (
+                        fields_dict.get(field_keys[1], "") if len(field_keys) > 1 else ""
+                    )
+                    # HSK1-6 等卡包在字段中存了 Phiên âm / Tiếng Việt，但背面模板只写了图片与词典表；
+                    # 若背面未出现越南语释义，将其补在背面顶部，保证翻面即可看到核心拼音与释义。
+                    if "Tiếng Việt" in fields_dict and fields_dict["Tiếng Việt"].strip():
+                        tv_val = fields_dict["Tiếng Việt"].strip()
+                        pa_val = fields_dict.get("Phiên âm", "").strip()
+                        if 'class="Tiếng Việt"' not in (back_raw or "") and "class='Tiếng Việt'" not in (back_raw or ""):
+                            header_parts = []
+                            if pa_val:
+                                header_parts.append(f'<div class="Phiên âm">{pa_val}</div>')
+                            header_parts.append(f'<div class="Tiếng Việt"><b>{tv_val}</b></div>')
+                            back_raw = "".join(header_parts) + (back_raw or "")
 
             front_plain_probe = plain_text_of(front_raw)
             native_q_plain = plain_text_of(native.question) if native.question else ""
@@ -773,32 +875,62 @@ class ReviewService:
             )
 
             show_front_ruby = "<ruby" in (native.question or "").lower()
-            front_source_html = native.question if use_native_question_html else front_raw
-            front_rich_q, front_audio = self._resolve_rich_html_and_audio(
-                front_source_html,
-                media_dir,
-                cloze_ord=cloze_ord,
-                is_question_side=True,
-                strip_furigana_reading=(not show_front_ruby and bool(native.question)),
-            )
-            front_rich_a, _ = self._resolve_rich_html_and_audio(
-                front_source_html,
-                media_dir,
-                cloze_ord=cloze_ord,
-                is_question_side=False,
-                strip_furigana_reading=False,
-            )
-            if use_native_question_html and native_back_css:
-                front_rich_q = wrap_card_with_styles(front_rich_q, native_front_css, front=True)
-                front_rich_a = wrap_card_with_styles(front_rich_a, native_front_css, front=True)
+            if use_custom_cloze:
+                front_source_q = style_native_cloze_spans(
+                    native.question, is_question_side=True
+                )
+                front_source_a = style_native_cloze_spans(
+                    native_front_answer or native.question, is_question_side=False
+                )
+                front_rich_q, front_audio = self._resolve_rich_html_and_audio(
+                    front_source_q,
+                    media_dir,
+                    cloze_ord=cloze_ord,
+                    is_question_side=True,
+                    strip_furigana_reading=(not show_front_ruby and bool(native.question)),
+                )
+                front_rich_a, _ = self._resolve_rich_html_and_audio(
+                    front_source_a,
+                    media_dir,
+                    cloze_ord=cloze_ord,
+                    is_question_side=False,
+                    strip_furigana_reading=False,
+                )
+                if native_front_css:
+                    front_rich_q = wrap_card_with_styles(
+                        front_rich_q, native_front_css, front=True
+                    )
+                    front_rich_a = wrap_card_with_styles(
+                        front_rich_a, native_front_css, front=True
+                    )
+                replace_front_on_flip = custom_cloze_replace
+            else:
+                front_source_html = native.question if use_native_question_html else front_raw
+                front_rich_q, front_audio = self._resolve_rich_html_and_audio(
+                    front_source_html,
+                    media_dir,
+                    cloze_ord=cloze_ord,
+                    is_question_side=True,
+                    strip_furigana_reading=(not show_front_ruby and bool(native.question)),
+                )
+                front_rich_a, _ = self._resolve_rich_html_and_audio(
+                    front_source_html,
+                    media_dir,
+                    cloze_ord=cloze_ord,
+                    is_question_side=False,
+                    strip_furigana_reading=False,
+                )
+                if use_native_question_html and native_back_css:
+                    front_rich_q = wrap_card_with_styles(front_rich_q, native_front_css, front=True)
+                    front_rich_a = wrap_card_with_styles(front_rich_a, native_front_css, front=True)
 
-            replace_front_on_flip = resolve_replace_front_on_flip(
-                card,
-                front_plain_probe,
-                native.answer,
-                is_cloze=bool(is_cloze),
-                is_image_occlusion=bool(io_front),
-            )
+                replace_front_on_flip = resolve_replace_front_on_flip(
+                    card,
+                    front_plain_probe,
+                    native.answer,
+                    is_cloze=bool(is_cloze),
+                    is_image_occlusion=bool(io_front),
+                )
 
             # Chinese Grammar Wiki (CGW-ValidExample / CGW-InvalidExample) 在正面模板顶部有
             # `<div class="header">Is this sentence grammatically correct?</div>` 提问提示语，
@@ -822,20 +954,31 @@ class ReviewService:
             back_rich, back_audio = self._resolve_rich_html_and_audio(
                 back_raw, media_dir, cloze_ord=cloze_ord, is_question_side=False
             )
-            # 原生渲染已经把 [sound:] 剥进 answer_av_tags，这里补回来
-            back_audio = (
-                native.question_audio
-                + [f for f in front_audio if f not in native.question_audio]
-                + [f for f in native_back_audio if f not in native.question_audio and f not in front_audio]
-                + [f for f in back_audio if f not in native.question_audio and f not in front_audio and f not in native_back_audio]
+            raw_q_audio = (
+                _av_filenames(getattr(raw_output, "question_av_tags", None))
+                if raw_output is not None
+                else []
+            )
+            raw_a_audio = (
+                _av_filenames(getattr(raw_output, "answer_av_tags", None))
+                if raw_output is not None
+                else []
+            )
+            # 内置 Cloze 题面音频可能在 `{{c1::[sound:...]}}` 里：若渲染明确把它放进答案侧而非题面侧，不要提前在正面播放造成剧透
+            answer_only_from_render = [f for f in raw_a_audio if f not in raw_q_audio]
+            effective_parsed_front_audio = (
+                [f for f in front_audio if f not in answer_only_from_render]
+                if (is_cloze and answer_only_from_render)
+                else front_audio
+            )
+            front_audio_files, back_audio_files, all_audio = split_card_side_audio(
+                raw_q_audio if (is_cloze and raw_q_audio) else native.question_audio,
+                effective_parsed_front_audio,
+                raw_a_audio if (is_cloze and raw_a_audio) else native_back_audio,
+                back_audio,
             )
             # 模板 HTML 与模板 CSS 必须成对出现：只搬 HTML 会让卡包背面变成无样式纯文本
             back_rich = wrap_card_with_styles(back_rich, native_back_css)
-
-            all_audio: List[str] = []
-            for f in back_audio:
-                if f not in all_audio:
-                    all_audio.append(f)
 
             for fk in field_keys[2:]:
                 _, extra_aud = self._resolve_rich_html_and_audio(fields_dict.get(fk, ""), media_dir)
@@ -909,12 +1052,26 @@ class ReviewService:
                 and (sandbox_render.question or sandbox_render.answer)
             )
 
+            sibling_cids = (
+                [int(x) for x in note.card_ids()]
+                if (is_cloze and not io_front and hasattr(note, "card_ids"))
+                else []
+            )
+            cloze_sibling_count = len(sibling_cids) if len(sibling_cids) > 1 else 1
+            cloze_card_index = (
+                sibling_cids.index(int(card.id)) + 1
+                if cloze_sibling_count > 1 and int(card.id) in sibling_cids
+                else 1
+            )
+
             return {
                 "id": str(card.id),
                 "noteId": str(note.id),
                 "notetypeId": notetype_id,
                 "noteTypeName": str(model.get("name", "Basic")),
                 "isCloze": is_cloze,
+                "clozeCardIndex": cloze_card_index,
+                "clozeSiblingCount": cloze_sibling_count,
                 "cardType": card_type_str,
                 "isPreviewOnly": is_preview_only,
                 "deckId": str(deck["id"]),
@@ -935,6 +1092,10 @@ class ReviewService:
                 "sandboxCss": sandbox_render.css,
                 "needsSandbox": needs_sandbox,
                 "audioFiles": all_audio,
+                "frontAudioFiles": front_audio_files,
+                "backAudioFiles": back_audio_files,
+                "sandboxQuestionAudioFiles": raw_q_audio,
+                "sandboxAnswerAudioFiles": raw_a_audio,
                 "fields": fields_dict,
                 "fieldOrder": field_keys,
                 "tags": list(note.tags),
@@ -1148,3 +1309,230 @@ class ReviewService:
         if ivl == 0:
             return "当天" if lang == "zh-CN" else "Same day"
         return f"{ivl}天" if lang == "zh-CN" else f"{ivl}d"
+
+    @staticmethod
+    def _analyze_cloze_and_chars(
+        raw_fields: Dict[str, str],
+        qfmt: str,
+        afmt: str,
+        model_type: Any,
+    ) -> Dict[str, Any]:
+        """Scans raw card fields and templates for cloze/model mismatches and invisible chars."""
+        invisible_hits: List[Dict[str, Any]] = []
+        valid_cloze_fields: List[str] = []
+        broken_cloze_fields: List[Dict[str, Any]] = []
+        html_inside_cloze_fields: List[str] = []
+
+        for field_name, field_val in raw_fields.items():
+            text = str(field_val or "")
+            for idx, ch in enumerate(text):
+                label = INVISIBLE_CHAR_NAMES.get(ch)
+                if label is not None or ord(ch) in (0x200E, 0x200F, 0x202A, 0x202B, 0x202C, 0x202D, 0x202E):
+                    invisible_hits.append(
+                        {
+                            "field": field_name,
+                            "index": idx,
+                            "codepoint": label or f"U+{ord(ch):04X}",
+                            "context": text[max(0, idx - 12) : idx + 13],
+                        }
+                    )
+
+            matches = list(CLOZE_RE.finditer(text))
+            if matches:
+                valid_cloze_fields.append(field_name)
+                if any("<" in (m.group(2) or "") or "<" in (m.group(3) or "") for m in matches):
+                    html_inside_cloze_fields.append(field_name)
+
+            # Collect start offsets of valid matches so broken {{c...}} openers stand out.
+            matched_spans = [(m.start(), m.end()) for m in matches]
+            for cand in CLOZE_START_CANDIDATE_RE.finditer(text):
+                pos = cand.start()
+                if not any(s <= pos < e for s, e in matched_spans):
+                    broken_cloze_fields.append(
+                        {
+                            "field": field_name,
+                            "index": pos,
+                            "snippet": text[max(0, pos - 8) : pos + 32],
+                        }
+                    )
+
+        anomalies: List[Dict[str, str]] = []
+        has_valid_cloze = bool(valid_cloze_fields)
+        is_cloze_model = model_type == 1
+
+        if has_valid_cloze and not is_cloze_model:
+            anomalies.append(
+                {
+                    "code": "CLOZE_SYNTAX_IN_STANDARD_MODEL",
+                    "message": (
+                        f"Field(s) {', '.join(valid_cloze_fields)} contain {{cN::...}} syntax, "
+                        f"but noteType model.type={model_type!r} (expected 1 for Cloze)."
+                    ),
+                }
+            )
+        if is_cloze_model and qfmt and "{{cloze:" not in qfmt.lower():
+            anomalies.append(
+                {
+                    "code": "CLOZE_MODEL_MISSING_CLOZE_FILTER_IN_QFMT",
+                    "message": "Note type has model.type=1, but front template qfmt lacks {{cloze:...}}.",
+                }
+            )
+        if broken_cloze_fields:
+            anomalies.append(
+                {
+                    "code": "BROKEN_CLOZE_SYNTAX",
+                    "message": (
+                        f"Found {len(broken_cloze_fields)} unclosed or malformed cloze opener(s) "
+                        f"in field(s): {', '.join(dict.fromkeys(x['field'] for x in broken_cloze_fields))}."
+                    ),
+                }
+            )
+        if invisible_hits:
+            anomalies.append(
+                {
+                    "code": "INVISIBLE_CHARS_DETECTED",
+                    "message": (
+                        f"Detected {len(invisible_hits)} zero-width/invisible character(s) across "
+                        f"{', '.join(dict.fromkeys(x['field'] for x in invisible_hits))}."
+                    ),
+                }
+            )
+
+        return {
+            "anomalies": anomalies,
+            "validClozeFields": valid_cloze_fields,
+            "brokenClozeCandidates": broken_cloze_fields,
+            "htmlInsideClozeFields": html_inside_cloze_fields,
+            "invisibleChars": invisible_hits,
+            "qfmtHasClozeFilter": "{{cloze:" in (qfmt or "").lower(),
+            "afmtHasClozeFilter": "{{cloze:" in (afmt or "").lower(),
+        }
+
+    def get_card_debug_info(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Collects complete Anki card, note, template, and render forensics for bug reports."""
+        data = data or {}
+        col = self.col
+        raw_card_id = data.get("cardId")
+        if col is None:
+            return {"available": False, "reason": "no_collection", "cardId": str(raw_card_id or "")}
+
+        try:
+            card_id = int(raw_card_id)
+            card = col.get_card(card_id)
+        except Exception as exc:
+            return {
+                "available": False,
+                "reason": "card_not_found",
+                "cardId": str(raw_card_id or ""),
+                "error": str(exc),
+            }
+
+        note = card.note()
+        model: Dict[str, Any] = {}
+        try:
+            if hasattr(card, "note_type"):
+                model = card.note_type() or {}
+            elif hasattr(note, "note_type"):
+                model = note.note_type() or {}
+            elif hasattr(col, "models") and hasattr(col.models, "get"):
+                model = col.models.get(getattr(note, "mid", 0)) or {}
+        except Exception:
+            model = {}
+
+        raw_fields: Dict[str, str] = {}
+        if hasattr(note, "items"):
+            try:
+                raw_fields = {str(k): str(v or "") for k, v in note.items()}
+            except Exception:
+                raw_fields = {}
+        if not raw_fields:
+            flds_meta = [f.get("name", f"Field{i}") for i, f in enumerate(model.get("flds") or [])]
+            note_vals = list(getattr(note, "fields", []) or [])
+            for i, val in enumerate(note_vals):
+                key = flds_meta[i] if i < len(flds_meta) else f"Field{i}"
+                raw_fields[str(key)] = str(val or "")
+
+        tmpls = model.get("tmpls") or []
+        ord_idx = int(getattr(card, "ord", 0) or 0)
+        active_tmpl = (
+            tmpls[ord_idx]
+            if 0 <= ord_idx < len(tmpls) and isinstance(tmpls[ord_idx], dict)
+            else (tmpls[0] if tmpls and isinstance(tmpls[0], dict) else {})
+        )
+        qfmt = str(active_tmpl.get("qfmt", "") or "")
+        afmt = str(active_tmpl.get("afmt", "") or "")
+
+        native_q = ""
+        native_a = ""
+        native_err: Optional[str] = None
+        try:
+            if hasattr(card, "render_output"):
+                rendered = card.render_output()
+                native_q = str(getattr(rendered, "question_text", "") or "")
+                native_a = str(getattr(rendered, "answer_text", "") or "")
+        except Exception as exc:
+            native_err = str(exc)
+
+        model_type = model.get("type")
+        tmpl_blob = f"{qfmt}\n{afmt}".lower()
+        diagnostics = self._analyze_cloze_and_chars(raw_fields, qfmt, afmt, model_type)
+
+        return {
+            "available": True,
+            "cardInfo": {
+                "id": str(getattr(card, "id", card_id)),
+                "nid": str(getattr(card, "nid", getattr(note, "id", ""))),
+                "did": str(getattr(card, "did", "")),
+                "ord": ord_idx,
+                "type": int(getattr(card, "type", 0) or 0),
+                "queue": int(getattr(card, "queue", 0) or 0),
+                "ivl": int(getattr(card, "ivl", 0) or 0),
+                "due": int(getattr(card, "due", 0) or 0),
+                "reps": int(getattr(card, "reps", 0) or 0),
+                "lapses": int(getattr(card, "lapses", 0) or 0),
+                "flags": int(getattr(card, "flags", 0) or 0),
+                "data": str(getattr(card, "data", "") or ""),
+            },
+            "noteInfo": {
+                "id": str(getattr(note, "id", "")),
+                "mid": str(getattr(note, "mid", model.get("id", ""))),
+                "tags": list(getattr(note, "tags", []) or []),
+                "rawFields": raw_fields,
+            },
+            "noteTypeInfo": {
+                "id": str(model.get("id", "")),
+                "name": str(model.get("name", "")),
+                "modelType": model_type,
+                "modelTypeLabel": "Cloze (1)" if model_type == 1 else f"Standard ({model_type})",
+                "css": str(model.get("css", "") or ""),
+                "fieldNames": [
+                    str(f.get("name", "")) for f in (model.get("flds") or []) if isinstance(f, dict)
+                ],
+                "templateCount": len(tmpls),
+                "activeOrd": ord_idx,
+                "activeTemplate": {
+                    "name": str(active_tmpl.get("name", "")),
+                    "qfmt": qfmt,
+                    "afmt": afmt,
+                },
+                "allTemplateNames": [
+                    str(t.get("name", "")) for t in tmpls if isinstance(t, dict)
+                ],
+                "templateDetectionFlags": {
+                    "needsScriptShim": self._template_needs_script_shim(model),
+                    "hasScriptTag": "<script" in tmpl_blob,
+                    "hasGData": "gdata" in tmpl_blob,
+                    "hasImageOcclusionKeyword": (
+                        "image-occlusion" in tmpl_blob
+                        or "image_occlusion" in tmpl_blob
+                        or "image occlusion" in str(model.get("name", "") or "").lower()
+                    ),
+                },
+            },
+            "nativeRender": {
+                "questionHtml": native_q,
+                "answerHtml": native_a,
+                "error": native_err,
+            },
+            "clozeAndCharDiagnostics": diagnostics,
+        }

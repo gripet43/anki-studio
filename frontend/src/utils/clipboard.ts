@@ -1,13 +1,22 @@
 import { callAnki, isAnkiNativeEnv } from '../bridge/pycmd';
 
+export interface CopyClipboardOptions {
+  /** Strip HTML tags when copying plain card text (default: true). */
+  stripHtml?: boolean;
+}
+
 /**
  * Universal cross-platform copy to clipboard for Anki Studio.
  * Tier 1: Native Anki Qt QGuiApplication.clipboard() (100% reliable in Anki WebEngine).
  * Tier 2: Modern Browser navigator.clipboard.writeText().
  * Tier 3: Classic document.execCommand('copy') with invisible textarea.
  */
-export async function copyTextToClipboard(text: string): Promise<boolean> {
-  const cleanText = text.replace(/<[^>]+>/g, '').trim();
+export async function copyTextToClipboard(
+  text: string,
+  options: CopyClipboardOptions = {}
+): Promise<boolean> {
+  const { stripHtml = true } = options;
+  const cleanText = stripHtml ? text.replace(/<[^>]+>/g, '').trim() : text;
 
   // Tier 1: Native Qt Python Bridge
   if (isAnkiNativeEnv()) {
@@ -40,7 +49,7 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
     document.body.appendChild(ta);
     ta.focus();
     ta.select();
-    ta.setSelectionRange(0, 99999);
+    ta.setSelectionRange(0, Math.max(cleanText.length, 99999));
     const success = document.execCommand('copy');
     document.body.removeChild(ta);
     return success;

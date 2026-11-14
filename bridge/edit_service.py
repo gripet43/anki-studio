@@ -9,13 +9,113 @@ and Cloze note templates, tag management, deck relocation, card suspension/delet
 from __future__ import annotations
 
 import base64
+import copy
 import os
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
-from .media_utils import get_media_dir, normalize_media_html_for_storage
+from .media_utils import (
+    CLOZE_RE,
+    HR_ANSWER_RE,
+    IO_SHAPE_RE,
+    get_media_dir,
+    normalize_media_html_for_storage,
+)
+
+_TEMPLATE_TOKEN_RE = re.compile(r"\{\{([^{}]+)\}\}")
+_KNOWN_CLOZE_FILTER_PREFIXES = {"text", "type", "cloze", "hint", "furigana", "kanji", "kana"}
+_SPECIAL_TEMPLATE_TAGS = {"frontside", "tags", "type", "deck", "subdeck", "card", "cardflag", "notetype"}
+_FRONTSIDE_RE = re.compile(r"\{\{\s*FrontSide\s*\}\}", flags=re.I)
+_CLOZE_TOKEN_CHECK_RE = re.compile(r"\{\{[^}]*\bcloze:", flags=re.I)
+_EXISTING_CLOZE_FIELD_RE = re.compile(r"\{\{\s*(?:[^}]*:)?cloze:([^:}]+)\}\}", flags=re.I)
+_STOCK_BASIC_NAMES = {"basic", "问答题", "基础"}
+_IO_RECT_SPAN_STRIP_RE = re.compile(
+    r'<span\b[^>]*\bclass\s*=\s*["\'][^"\']*\banki-io-rect\b[^"\']*["\'][^>]*>[\s\S]*?</span\s*>',
+    flags=re.I,
+)
+
+
+def _find_cloze_field_names(field_items: Any) -> List[str]:
+    """返回包含合法文本挖空 ``{{cN::...}}`` 的字段名（跳过 Image Occlusion 结构指令/遮罩）。"""
+    cloze_fields: List[str] = []
+    for k, v in field_items:
+        text = str(v or "")
+        if not text or IO_SHAPE_RE.search(text):
+            continue
+        cleaned = _IO_RECT_SPAN_STRIP_RE.sub("", text)
+        if CLOZE_RE.search(cleaned):
+            cloze_fields.append(str(k))
+    return cloze_fields
+
+
+def _is_image_occlusion_model(model: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(model, dict):
+        return False
+    name = str(model.get("name", "") or "").strip().lower()
+    if "image occlusion" in name:
+        return True
+    fld_names = {
+        str(f.get("name", "") or "").strip().lower()
+        for f in (model.get("flds") or [])
+        if isinstance(f, dict)
+    }
+    return "occlusion" in fld_names and "image" in fld_names
+
+
+def _convert_field_tokens_to_cloze(tmpl_str: str, target_fields: List[str]) -> str:
+    """将模板中的普通字段占位符 ``{{Field}}`` / ``{{filter:Field}}`` 转为 ``{{cloze:Field}}``，保留条件标记。"""
+    target_set = {f for f in target_fields if f}
+    if not tmpl_str or not target_set:
+        return tmpl_str or ""
+
+    def _repl(match: re.Match) -> str:
+        raw_inner = match.group(1).strip()
+        if not raw_inner or raw_inner[0] in ("#", "/", "^", "!"):
+            return match.group(0)
+        if raw_inner.lower() in _SPECIAL_TEMPLATE_TAGS:
+            return match.group(0)
+        if raw_inner in target_set:
+            return f"{{{{cloze:{raw_inner}}}}}"
+        parts = raw_inner.split(":")
+        bare_name = parts[-1].strip()
+        prefixes = [p.strip().lower() for p in parts[:-1]]
+        if (
+            bare_name in target_set
+            and prefixes
+            and all(p in _KNOWN_CLOZE_FILTER_PREFIXES for p in prefixes)
+        ):
+            if "cloze" in prefixes:
+                return match.group(0)
+            return f"{{{{cloze:{bare_name}}}}}"
+        return match.group(0)
+
+    return _TEMPLATE_TOKEN_RE.sub(_repl, tmpl_str)
+
+
+def _rewrite_template_for_cloze(
+    qfmt: str, afmt: str, cloze_fields: List[str], primary_cloze_field: str
+) -> Tuple[str, str]:
+    """将标准卡型模板重写为合法的 Anki ``MODEL_CLOZE`` 正反面模板（保留所有 HTML 包装与 CSS 类名）。"""
+    target_fields = list(dict.fromkeys(f for f in cloze_fields if f))
+    if not target_fields and primary_cloze_field:
+        target_fields = [primary_cloze_field]
+
+    new_qfmt = _convert_field_tokens_to_cloze(qfmt or "", target_fields)
+    if not _CLOZE_TOKEN_CHECK_RE.search(new_qfmt) and primary_cloze_field:
+        cloze_tag = f"{{{{cloze:{primary_cloze_field}}}}}"
+        new_qfmt = f"{new_qfmt}\n{cloze_tag}" if new_qfmt.strip() else cloze_tag
+
+    new_afmt = _convert_field_tokens_to_cloze(afmt or "", target_fields)
+    if _FRONTSIDE_RE.search(new_afmt):
+        replacement = new_qfmt if HR_ANSWER_RE.search(new_afmt) else f"{new_qfmt}\n<hr id=answer>\n"
+        new_afmt = _FRONTSIDE_RE.sub(lambda _m: replacement, new_afmt)
+
+    if not _CLOZE_TOKEN_CHECK_RE.search(new_afmt):
+        new_afmt = f"{new_qfmt}\n<hr id=answer>\n{new_afmt}" if new_afmt.strip() else new_qfmt
+
+    return new_qfmt, new_afmt
 
 
 class EditService:
@@ -28,6 +128,302 @@ class EditService:
     def col(self):
         return self._get_col()
 
+    @staticmethod
+    def _all_models_with_companions(col) -> List[Dict[str, Any]]:
+        base = list(col.models.all()) if (col and hasattr(col, "models") and hasattr(col.models, "all")) else []
+        extra = list(getattr(col, "_companion_models", []) or [])
+        seen_ids = {str(m.get("id")) for m in base if isinstance(m, dict) and m.get("id") is not None}
+        merged = list(base)
+        for m in extra:
+            if isinstance(m, dict) and str(m.get("id")) not in seen_ids:
+                merged.append(m)
+        return merged
+
+    def _find_model_by_id_or_name(
+        self, col, requested_model_id: str = "", requested_model_name: str = ""
+    ) -> Optional[Dict[str, Any]]:
+        if not requested_model_id and not requested_model_name:
+            return None
+        for m in self._all_models_with_companions(col):
+            if requested_model_id and str(m.get("id", "")) == requested_model_id:
+                return m
+            if requested_model_name and str(m.get("name", "")).lower() == requested_model_name.lower():
+                return m
+        return None
+
+    def _save_model_dict(self, col, model_dict: Dict[str, Any]) -> None:
+        if not hasattr(col, "models"):
+            return
+        if hasattr(col.models, "update_dict"):
+            col.models.update_dict(model_dict)
+        elif hasattr(col.models, "save"):
+            col.models.save(model_dict)
+
+    def _ensure_companion_cloze_model(
+        self,
+        col,
+        std_model: Dict[str, Any],
+        cloze_fields: List[str],
+        card_ord: int = 0,
+    ) -> Optional[Dict[str, Any]]:
+        """为自定义标准卡型创建（或复用）同构的 ``(Cloze)`` 伴生挖空卡型，完整保留字段与 CSS 样式。"""
+        if not isinstance(std_model, dict) or _is_image_occlusion_model(std_model):
+            return None
+
+        std_flds = [str(f.get("name", "")) for f in (std_model.get("flds") or []) if isinstance(f, dict)]
+        std_id_str = str(std_model.get("id") or "")
+        std_name = str(std_model.get("name") or "Basic").strip() or "Basic"
+        companion_name = f"{std_name} (Cloze)"
+
+        candidates = self._all_models_with_companions(col)
+        existing: Optional[Dict[str, Any]] = None
+        for m in candidates:
+            if int(m.get("type", 0) or 0) != 1:
+                continue
+            m_flds = [str(f.get("name", "")) for f in (m.get("flds") or []) if isinstance(f, dict)]
+            same_fields = (m_flds == std_flds) if std_flds else (not m_flds)
+            if not same_fields:
+                continue
+            if std_id_str and str(m.get("anki_studio_companion_of", "")) == std_id_str:
+                existing = m
+                break
+            if str(m.get("name", "")) == companion_name:
+                existing = m
+                break
+
+        primary_field = cloze_fields[0] if cloze_fields else (std_flds[0] if std_flds else "Text")
+
+        if existing is not None:
+            tmpls = existing.get("tmpls")
+            if isinstance(tmpls, list) and tmpls and isinstance(tmpls[0], dict):
+                t0 = tmpls[0]
+                old_q = str(t0.get("qfmt", "") or "")
+                old_a = str(t0.get("afmt", "") or "")
+                existing_cloze_fields = [m.strip() for m in _EXISTING_CLOZE_FIELD_RE.findall(old_q)]
+                merged_fields = list(dict.fromkeys([f for f in (existing_cloze_fields + cloze_fields) if f]))
+                new_q, new_a = _rewrite_template_for_cloze(old_q, old_a, merged_fields, primary_field)
+                std_css = str(std_model.get("css", "") or "")
+                changed = (
+                    new_q != old_q
+                    or new_a != old_a
+                    or (std_css and std_css != str(existing.get("css", "") or ""))
+                    or (std_id_str and str(existing.get("anki_studio_companion_of", "")) != std_id_str)
+                )
+                if changed:
+                    t0["qfmt"] = new_q
+                    t0["afmt"] = new_a
+                    if std_css:
+                        existing["css"] = std_css
+                    if std_id_str:
+                        existing["anki_studio_companion_of"] = std_id_str
+                    self._save_model_dict(col, existing)
+            return existing
+
+        used_names = {str(m.get("name", "")) for m in candidates if isinstance(m, dict)}
+        target_name = companion_name
+        suffix_idx = 2
+        while target_name in used_names:
+            target_name = f"{std_name} (Cloze {suffix_idx})"
+            suffix_idx += 1
+
+        cloze_m = copy.deepcopy(std_model)
+        cloze_m["id"] = 0
+        cloze_m["name"] = target_name
+        cloze_m["type"] = 1
+        if std_id_str:
+            cloze_m["anki_studio_companion_of"] = std_id_str
+
+        src_tmpls = std_model.get("tmpls") or []
+        if 0 <= card_ord < len(src_tmpls) and isinstance(src_tmpls[card_ord], dict):
+            tmpl0 = copy.deepcopy(src_tmpls[card_ord])
+        elif src_tmpls and isinstance(src_tmpls[0], dict):
+            tmpl0 = copy.deepcopy(src_tmpls[0])
+        else:
+            default_back = std_flds[1] if len(std_flds) > 1 else ""
+            tmpl0 = {
+                "name": "Cloze",
+                "qfmt": f"{{{{{primary_field}}}}}",
+                "afmt": f"{{{{FrontSide}}}}<hr id=answer>{f'{{{{{default_back}}}}}' if default_back else ''}",
+            }
+
+        tmpl0["name"] = "Cloze"
+        tmpl0["ord"] = 0
+        new_q, new_a = _rewrite_template_for_cloze(
+            str(tmpl0.get("qfmt", "") or ""),
+            str(tmpl0.get("afmt", "") or ""),
+            cloze_fields,
+            primary_field,
+        )
+        tmpl0["qfmt"] = new_q
+        tmpl0["afmt"] = new_a
+        cloze_m["tmpls"] = [tmpl0]
+
+        if hasattr(col, "models") and hasattr(col.models, "add_dict"):
+            col.models.add_dict(cloze_m)
+        elif hasattr(col, "models") and hasattr(col.models, "add"):
+            col.models.add(cloze_m)
+        else:
+            companions = getattr(col, "_companion_models", None)
+            if companions is None:
+                companions = []
+                setattr(col, "_companion_models", companions)
+            used_ids = {
+                int(m.get("id"))
+                for m in self._all_models_with_companions(col)
+                if isinstance(m, dict) and str(m.get("id", "")).lstrip("-").isdigit()
+            }
+            new_id = 900
+            while new_id in used_ids:
+                new_id += 1
+            cloze_m["id"] = new_id
+            companions.append(cloze_m)
+            return cloze_m
+
+        if hasattr(col, "models") and hasattr(col.models, "by_name"):
+            fetched = col.models.by_name(target_name)
+            if isinstance(fetched, dict):
+                return fetched
+        for m in self._all_models_with_companions(col):
+            if str(m.get("name", "")) == target_name:
+                return m
+        return cloze_m
+
+    def _prune_orphan_cloze_cards(
+        self, col, note, model: Dict[str, Any], active_card=None
+    ) -> List[str]:
+        """Remove orphan cloze cards whose ordinals no longer exist on the note.
+
+        Reassigns a card's ``ord`` before pruning if every existing card became an
+        orphan, so a single surviving card is preserved cleanly.
+        """
+        if not model or int(model.get("type") or 0) != 1 or _is_image_occlusion_model(model):
+            return []
+        if not hasattr(note, "card_ids"):
+            return []
+
+        valid_ords = {
+            int(m.group(1)) - 1
+            for _, val in note.items()
+            for m in CLOZE_RE.finditer(str(val or ""))
+            if int(m.group(1)) >= 1
+        }
+        if not valid_ords:
+            return []
+
+        cards_on_note = []
+        for cid_item in note.card_ids():
+            try:
+                cards_on_note.append(col.get_card(int(cid_item)))
+            except Exception:
+                pass
+        if not cards_on_note:
+            return []
+
+        valid_cards = [c for c in cards_on_note if int(getattr(c, "ord", 0)) in valid_ords]
+        orphan_cards = [c for c in cards_on_note if int(getattr(c, "ord", 0)) not in valid_ords]
+        if not valid_cards and orphan_cards and hasattr(col, "update_card"):
+            target_card = next(
+                (c for c in orphan_cards if active_card is not None and int(c.id) == int(active_card.id)),
+                orphan_cards[0],
+            )
+            target_card.ord = min(valid_ords)
+            col.update_card(target_card)
+            orphan_cards = [c for c in orphan_cards if int(c.id) != int(target_card.id)]
+
+        if not orphan_cards or (not valid_cards and len(orphan_cards) == len(cards_on_note)):
+            return []
+
+        orphan_cids = [int(c.id) for c in orphan_cards]
+        if hasattr(col, "remove_cards_and_orphaned_notes"):
+            col.remove_cards_and_orphaned_notes(orphan_cids)
+            return [str(cid) for cid in orphan_cids]
+        if hasattr(col, "remove_cards"):
+            col.remove_cards(orphan_cids)
+            return [str(cid) for cid in orphan_cids]
+        return []
+
+    def _convert_note_to_companion_cloze_if_needed(
+        self,
+        col,
+        note,
+        model: Dict[str, Any],
+        card=None,
+        pruned_sink: Optional[List[str]] = None,
+    ) -> Tuple[Dict[str, Any], bool]:
+        """当笔记内容含 ``{{cN::...}}`` 但当前模板为标准模板 ``type==0`` 时，仅将本条笔记迁移至伴生挖空模板。"""
+        cloze_fields = _find_cloze_field_names(note.items())
+        if not cloze_fields or _is_image_occlusion_model(model):
+            return model, False
+
+        model_type = int(model.get("type", 0) or 0)
+        if model_type == 1:
+            tmpls = model.get("tmpls")
+            if isinstance(tmpls, list) and tmpls and isinstance(tmpls[0], dict):
+                t0 = tmpls[0]
+                old_q = str(t0.get("qfmt", "") or "")
+                old_a = str(t0.get("afmt", "") or "")
+                existing_cloze_fields = [m.strip() for m in _EXISTING_CLOZE_FIELD_RE.findall(old_q)]
+                merged = list(dict.fromkeys([f for f in (existing_cloze_fields + cloze_fields) if f]))
+                new_q, new_a = _rewrite_template_for_cloze(old_q, old_a, merged, cloze_fields[0])
+                if new_q != old_q or new_a != old_a:
+                    t0["qfmt"] = new_q
+                    t0["afmt"] = new_a
+                    self._save_model_dict(col, model)
+            return model, False
+
+        card_ord = int(getattr(card, "ord", 0) or 0)
+        cloze_model = self._ensure_companion_cloze_model(col, model, cloze_fields, card_ord=card_ord)
+        if cloze_model is None:
+            return model, False
+
+        old_mid = int(model.get("id") or getattr(note, "mid", 1) or 1)
+        new_mid = int(cloze_model.get("id") or 0)
+
+        if (
+            hasattr(col, "models")
+            and hasattr(col.models, "change_notetype_info")
+            and hasattr(col.models, "change_notetype_of_notes")
+            and new_mid
+        ):
+            info = col.models.change_notetype_info(old_notetype_id=old_mid, new_notetype_id=new_mid)
+            req = info.input
+            req.note_ids.extend([int(note.id)])
+            col.models.change_notetype_of_notes(req)
+
+            reloaded_note = col.get_note(int(note.id)) if hasattr(col, "get_note") else note
+            if hasattr(col, "update_note"):
+                col.update_note(reloaded_note)
+
+            pruned = self._prune_orphan_cloze_cards(
+                col, reloaded_note, cloze_model, active_card=card
+            )
+            if pruned_sink is not None and pruned:
+                pruned_sink.extend(pruned)
+        else:
+            note._is_cloze = True
+            note._type_name = str(cloze_model.get("name") or "Cloze")
+            note._model = cloze_model
+            note.mid = new_mid
+
+        return cloze_model, True
+
+    @staticmethod
+    def _is_stock_basic_model(model: Dict[str, Any]) -> bool:
+        name = str(model.get("name", "") or "").strip().lower()
+        flds = [f.get("name", "") for f in (model.get("flds") or []) if isinstance(f, dict)]
+        css = str(model.get("css", "") or "").strip()
+        if name not in _STOCK_BASIC_NAMES or len(flds) > 2:
+            return False
+        tmpls = model.get("tmpls") or []
+        tmpl_blob = "".join(
+            str(t.get("qfmt", "")) + str(t.get("afmt", ""))
+            for t in tmpls
+            if isinstance(t, dict)
+        )
+        has_custom_markup = bool(re.search(r"<(?!/?(?:br|hr)\b)[a-z]", tmpl_blob, flags=re.I))
+        has_custom_css = bool(css and ("class" in tmpl_blob or ".card" not in css or len(css) > 240))
+        return not (has_custom_markup or has_custom_css)
+
     def update_card_inline(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Saves inline edits directly to the SQLite database via Anki's native note update API.
@@ -39,9 +435,15 @@ class EditService:
 
         note_id = data.get("noteId")
         card_id = data.get("cardId")
+        card = None
 
         if note_id and str(note_id).isdigit():
             note = col.get_note(int(note_id))
+            if card_id and str(card_id).isdigit():
+                try:
+                    card = col.get_card(int(card_id))
+                except Exception:
+                    card = None
         elif card_id and str(card_id).isdigit():
             card = col.get_card(int(card_id))
             note = card.note()
@@ -51,6 +453,7 @@ class EditService:
         field_names = list(note.keys())
         media_dir = get_media_dir(col)
         model = note.note_type() if hasattr(note, "note_type") else {"type": 0}
+        old_model_id = str(model.get("id") or getattr(note, "mid", "") or "")
         is_cloze = bool(model.get("type") == 1)
 
         explicit_fields = data.get("fields")
@@ -141,12 +544,34 @@ class EditService:
 
         col.update_note(note)
 
+        pruned_card_ids: List[str] = []
+        new_model, converted_to_cloze = self._convert_note_to_companion_cloze_if_needed(
+            col, note, model, card=card, pruned_sink=pruned_card_ids
+        )
+        if converted_to_cloze and hasattr(col, "get_note"):
+            try:
+                note = col.get_note(int(note.id))
+            except Exception:
+                pass
+        elif not converted_to_cloze:
+            pruned_more = self._prune_orphan_cloze_cards(
+                col, note, new_model or model, active_card=card
+            )
+            if pruned_more:
+                pruned_card_ids.extend(pruned_more)
+                if hasattr(col, "get_note"):
+                    try:
+                        note = col.get_note(int(note.id))
+                    except Exception:
+                        pass
+
         # Resolve target card IDs for deck relocation or suspension
+        note_cids = [int(cid) for cid in (note.card_ids() if hasattr(note, "card_ids") else [])]
         target_cids: List[int] = []
-        if card_id and str(card_id).isdigit():
+        if card_id and str(card_id).isdigit() and (not note_cids or int(card_id) in note_cids):
             target_cids.append(int(card_id))
-        elif hasattr(note, "card_ids"):
-            target_cids.extend(int(cid) for cid in note.card_ids())
+        elif note_cids:
+            target_cids.extend(note_cids)
 
         # Deck relocation
         target_did = None
@@ -174,10 +599,18 @@ class EditService:
             except Exception:
                 pass
 
+        active_model = new_model or model
+        resolved_card_id = str(target_cids[0]) if target_cids else str(card_id or "")
         return {
             "saved": True,
             "noteId": str(note.id),
-            "cardId": str(card_id or ""),
+            "cardId": resolved_card_id,
+            "notetypeId": str(active_model.get("id") or getattr(note, "mid", "") or ""),
+            "noteTypeName": str(active_model.get("name") or ""),
+            "isCloze": bool(active_model.get("type") == 1),
+            "convertedToCloze": converted_to_cloze,
+            "prunedCardIds": pruned_card_ids,
+            "previousNotetypeId": old_model_id,
             "fields": dict(note.items()),
             "tags": list(note.tags),
             "suspended": bool(data.get("suspended", False)),
@@ -462,24 +895,83 @@ class EditService:
 
         target_did = self._resolve_target_deck(col, deck_id_raw, deck_name)
 
-        is_cloze = bool(re.search(r"\{\{c\d+::", front) or re.search(r"\{\{c\d+::", back))
-        all_models = col.models.all() if hasattr(col.models, "all") else []
+        fields_payload = data.get("fields") if isinstance(data.get("fields"), dict) else {}
+        cloze_in_payload = _find_cloze_field_names(
+            [("front", front), ("back", back)] + [(str(k), v) for k, v in fields_payload.items()]
+        )
+        is_cloze = bool(cloze_in_payload)
+        all_models = self._all_models_with_companions(col)
+        req_model = self._find_model_by_id_or_name(col, requested_model_id, requested_model_name)
         model = None
 
-        # 1. Explicit model selection if not overridden by Cloze syntax
-        if not is_cloze and (requested_model_id or requested_model_name):
-            for m in all_models:
-                if requested_model_id and str(m.get("id", "")) == requested_model_id:
-                    model = m
-                    break
-                if requested_model_name and str(m.get("name", "")).lower() == requested_model_name.lower():
-                    model = m
-                    break
+        # 1. Explicit model selection:
+        #    - Standard card: honor requested model directly.
+        #    - Cloze card on a type==1 model: honor it directly.
+        #    - Cloze card on a custom type==0 model: resolve/create companion "(Cloze)" model preserving fields & CSS.
+        if req_model is not None:
+            if not is_cloze:
+                model = req_model
+            elif not _is_image_occlusion_model(req_model):
+                if int(req_model.get("type", 0) or 0) == 1:
+                    model = req_model
+                elif not self._is_stock_basic_model(req_model):
+                    req_flds = [
+                        str(f.get("name", ""))
+                        for f in (req_model.get("flds") or [])
+                        if isinstance(f, dict)
+                    ]
+                    mapped_fields: Dict[str, Any] = {}
+                    if req_flds:
+                        mapped_fields[req_flds[0]] = front
+                    if len(req_flds) > 1:
+                        mapped_fields[req_flds[1]] = back
+                    for fk, fv in fields_payload.items():
+                        mapped_fields[str(fk)] = fv
+                    req_cloze_fields = _find_cloze_field_names(mapped_fields.items()) or (
+                        [req_flds[0]] if req_flds else []
+                    )
+                    companion = self._ensure_companion_cloze_model(col, req_model, req_cloze_fields)
+                    if companion is not None:
+                        model = companion
 
         # 2. Fallback automatic model selection
+        if model is None and is_cloze and req_model is None:
+            current_m = (
+                col.models.current()
+                if (hasattr(col, "models") and hasattr(col.models, "current"))
+                else None
+            )
+            if (
+                isinstance(current_m, dict)
+                and int(current_m.get("type", 0) or 0) == 0
+                and not _is_image_occlusion_model(current_m)
+                and not self._is_stock_basic_model(current_m)
+                and fields_payload
+            ):
+                cur_flds = [
+                    str(f.get("name", ""))
+                    for f in (current_m.get("flds") or [])
+                    if isinstance(f, dict)
+                ]
+                if any(k in cur_flds for k in fields_payload):
+                    mapped_fields = {}
+                    if cur_flds:
+                        mapped_fields[cur_flds[0]] = front
+                    if len(cur_flds) > 1:
+                        mapped_fields[cur_flds[1]] = back
+                    for fk, fv in fields_payload.items():
+                        mapped_fields[str(fk)] = fv
+                    cur_cloze_fields = _find_cloze_field_names(mapped_fields.items()) or (
+                        [cur_flds[0]] if cur_flds else []
+                    )
+                    model = self._ensure_companion_cloze_model(col, current_m, cur_cloze_fields)
+
         if model is None:
-            for m in all_models:
-                if is_cloze and m.get("type") == 1:
+            prioritized_models = [
+                m for m in all_models if not m.get("anki_studio_companion_of")
+            ] + [m for m in all_models if m.get("anki_studio_companion_of")]
+            for m in prioritized_models:
+                if is_cloze and m.get("type") == 1 and not _is_image_occlusion_model(m):
                     model = m
                     break
                 if not is_cloze and m.get("type") == 0 and len(m.get("flds", [])) >= 2:
@@ -494,8 +986,8 @@ class EditService:
             note[flds[0]] = front
         if len(flds) > 1:
             note[flds[1]] = back
-        if isinstance(data.get("fields"), dict):
-            for k, v in data["fields"].items():
+        if fields_payload:
+            for k, v in fields_payload.items():
                 if k in note:
                     note[k] = normalize_media_html_for_storage(str(v), media_dir)
         note.tags = list(tags)
@@ -530,6 +1022,9 @@ class EditService:
             "cardIds": cids,
             "cardId": cids[0] if cids else str(note.id),
             "deckId": str(target_did),
+            "notetypeId": str((model or {}).get("id") or getattr(note, "mid", "") or ""),
+            "noteTypeName": str((model or {}).get("name") or ""),
+            "isCloze": bool((model or {}).get("type") == 1),
         }
 
     def toggle_suspend_card(self, data: Dict[str, Any]) -> Dict[str, Any]:

@@ -9,6 +9,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { usePresence } from '../../hooks/usePresence';
+import { Tooltip } from '../common/Tooltip';
 import { translate } from '../../i18n/translations';
 import { appActions, RescueReceipt, useAppStore } from '../../stores/useAppStore';
 import { getAccentScale } from '../../utils/themeTokens';
@@ -191,13 +192,16 @@ export const IcuRescueModal: React.FC = () => {
               </button>
             </div>
 
-            <button
-              onClick={() => appActions.closeIcuModal()}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors"
-              aria-label={t('close')}
-            >
-              ✕
-            </button>
+            <Tooltip variant="compact" content={t('close')} shortcut="Esc" side="bottom">
+              <button
+                type="button"
+                onClick={() => appActions.closeIcuModal()}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors"
+                aria-label={t('close')}
+              >
+                ✕
+              </button>
+            </Tooltip>
           </div>
         </header>
 
@@ -381,7 +385,6 @@ export const IcuRescueModal: React.FC = () => {
                                   type="button"
                                   onClick={() => setConfirmUndoId(item.id)}
                                   className="h-7 px-2.5 rounded-lg border border-[var(--status-danger)]/35 text-[var(--status-danger)] hover:bg-[var(--status-danger-soft)] text-[11px] font-medium cursor-pointer transition-colors shrink-0"
-                                  title={t('icuUndoReliefBtn')}
                                 >
                                   {t('icuUndoReliefBtn')}
                                 </button>

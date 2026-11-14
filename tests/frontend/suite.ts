@@ -23,6 +23,10 @@ import './specs/occlusionPreview.spec';
 import './specs/imageOcclusionPolicy.spec';
 import './specs/editorTable.spec';
 import './specs/domTarget.spec';
+import './specs/cardDebugInfo.spec';
+import './specs/learningTips.spec';
+import './specs/clozeMode.spec';
+import './specs/reviewAudio.spec';
 
 import { report } from './harness';
 

@@ -12,6 +12,19 @@ import { section, test, equal, ok, doesNotMatch } from '../harness';
 import { AnkiStudioLogo } from '../../../frontend/src/components/common/AnkiStudioLogo';
 import { SyncStateIcon } from '../../../frontend/src/components/common/SyncStateIcon';
 import { StreakFlameBackdrop } from '../../../frontend/src/components/dashboard/StreakFlameBackdrop';
+import { SyncStatusPill } from '../../../frontend/src/components/dashboard/SyncStatusPill';
+import { CardEditorModal } from '../../../frontend/src/components/quick-add/CardEditorModal';
+import { getAppState, setAppState } from '../../../frontend/src/stores/useAppStore';
+import {
+  ChartTooltipContent,
+  ChartTooltipPortal,
+  Tooltip,
+  TOOLTIP_VARIANT_CLASSES,
+} from '../../../frontend/src/components/common/Tooltip';
+import {
+  HoverCard,
+  HOVERCARD_SIZE_CLASSES,
+} from '../../../frontend/src/components/common/HoverCard';
 
 function render(element: React.ReactElement): string {
   const html = renderToStaticMarkup(element);
@@ -99,3 +112,165 @@ test('repeated renders stay deterministic in shape', () => {
   const second = render(React.createElement(StreakFlameBackdrop, { isDark: true }));
   equal(first.length, second.length, 'markup length must be stable across renders');
 });
+
+section('render · Tooltip & HoverCard (SSR)');
+
+test('Tooltip renders intrinsic enabled trigger cleanly in SSR (closed & controlled open)', () => {
+  const closedHtml = render(
+    React.createElement(
+      Tooltip,
+      { content: 'Command Palette', shortcut: 'Cmd+K' },
+      React.createElement('button', { type: 'button', 'aria-label': 'Command Palette' }, 'K'),
+    ),
+  );
+  ok(closedHtml.startsWith('<button'), 'enabled intrinsic trigger should not be extra-wrapped');
+  ok(closedHtml.includes('aria-label="Command Palette"'));
+
+  const openSsrHtml = render(
+    React.createElement(
+      Tooltip,
+      { content: 'Zoom In', variant: 'compact', open: true },
+      React.createElement('button', { type: 'button' }, '+'),
+    ),
+  );
+  ok(openSsrHtml.startsWith('<button') && openSsrHtml.includes('>+<' + '/button>'));
+  ok(
+    openSsrHtml.includes('aria-describedby='),
+    'supplementary open Tooltip must bind aria-describedby on trigger',
+  );
+  const openDuplicateHtml = render(
+    React.createElement(
+      Tooltip,
+      { content: 'Zoom In', variant: 'compact', open: true },
+      React.createElement('button', { type: 'button', 'aria-label': 'Zoom In' }, '+'),
+    ),
+  );
+  ok(
+    !openDuplicateHtml.includes('aria-describedby='),
+    'auto ariaLabelMode must suppress duplicate aria-describedby when aria-label matches plain content',
+  );
+  ok(
+    TOOLTIP_VARIANT_CLASSES.compact.includes('max-w-[260px]') &&
+      TOOLTIP_VARIANT_CLASSES.chart.includes('tabular-nums'),
+    'variant class maps must expose compact and chart specs',
+  );
+});
+
+test('Tooltip wraps disabled native triggers and forwards layout utility tokens', () => {
+  const html = render(
+    React.createElement(
+      Tooltip,
+      { content: 'Come back tomorrow', triggerClassName: 'shrink-0' },
+      React.createElement(
+        'button',
+        { type: 'button', disabled: true, className: 'w-full flex-1' },
+        'Study',
+      ),
+    ),
+  );
+  ok(html.startsWith('<span'), 'disabled native trigger must be wrapped so hover stays active');
+  ok(html.includes('w-full') && html.includes('flex-1') && html.includes('shrink-0'));
+  ok(html.includes('pointer-events:none'), 'inner disabled button must delegate pointer events');
+});
+
+test('ChartTooltipContent and ChartTooltipPortal render SSR-safe chart markup', () => {
+  const contentHtml = render(
+    React.createElement(ChartTooltipContent, {
+      eyebrow: '2026-11-14',
+      heading: 'Reviewed 42',
+      rows: [
+        { label: 'Good', value: '36', tone: 'success' },
+        { label: 'Hard', value: '4', tone: 'warning' },
+        { label: 'Again', value: '2', tone: 'danger' },
+      ],
+      footer: 'Retention 95%',
+    }),
+  );
+  ok(contentHtml.includes('tabular-nums'));
+  ok(contentHtml.includes('2026-11-14') && contentHtml.includes('Reviewed 42'));
+  ok(contentHtml.includes('--status-success-text') && contentHtml.includes('--status-warning-text'));
+  ok(contentHtml.includes('Retention 95%'));
+
+  const portalHtml = renderToStaticMarkup(
+    React.createElement(ChartTooltipPortal, {
+      open: true,
+      anchorEl: null,
+      content: React.createElement('span', null, '42'),
+    }),
+  );
+  equal(portalHtml, '', 'ChartTooltipPortal must safely render empty string during SSR');
+});
+
+test('HoverCard renders disclosure semantics and stays SSR-safe when open', () => {
+  const html = render(
+    React.createElement(
+      HoverCard,
+      {
+        size: 'sm',
+        open: true,
+        content: React.createElement('div', null, 'Retention breakdown'),
+      },
+      React.createElement('button', { type: 'button' }, 'Info'),
+    ),
+  );
+  ok(html.includes('<button type="button"'));
+  ok(html.includes('aria-expanded="true"'), 'toggleOnClick HoverCard must expose aria-expanded');
+  ok(html.includes('data-hovercard-root='), 'HoverCard must stamp outside-click root marker');
+  ok(HOVERCARD_SIZE_CLASSES.sm.includes('w-[220px]') && HOVERCARD_SIZE_CLASSES.md.includes('w-[248px]'));
+});
+
+section('render · SyncStatusPill');
+
+test('SyncStatusPill renders full English label without overflow-hidden or leading-none descender clipping', () => {
+  const prevState = getAppState();
+  try {
+    setAppState({
+      resolvedLang: 'en',
+      syncing: false,
+      isInitialSyncing: false,
+      syncJustFinished: false,
+      lastSyncedTimestamp: Date.now() - 65_000,
+    });
+    const html = render(React.createElement(SyncStatusPill));
+    ok(html.includes('Last synced'), 'English sync prefix must render');
+    ok(html.includes('1m ago') || html.includes('1'), 'Relative sync timestamp must render');
+    ok(!html.includes('overflow-hidden'), 'Snapshot sync pill label must not clip descenders via overflow-hidden');
+    ok(!html.includes('leading-none'), 'Sync pill label must avoid leading-none so g/y descenders stay intact');
+    ok(html.includes('leading-[1.4]') && html.includes('whitespace-nowrap'));
+  } finally {
+    setAppState({
+      resolvedLang: prevState.resolvedLang,
+      syncing: prevState.syncing,
+      isInitialSyncing: prevState.isInitialSyncing,
+      syncJustFinished: prevState.syncJustFinished,
+      lastSyncedTimestamp: prevState.lastSyncedTimestamp,
+    });
+  }
+});
+
+section('render · CardEditorModal');
+
+test('open card editor modal renders ui-modal-backdrop without GPU backdrop-blur layers', () => {
+  const prevState = getAppState();
+  setAppState({
+    quickAddOpen: true,
+    editingCardData: null,
+  });
+
+  try {
+    const html = render(React.createElement(CardEditorModal));
+    ok(html.includes('ui-modal-backdrop'), 'expected ui-modal-backdrop overlay class');
+    ok(html.includes('ui-modal-panel'), 'expected ui-modal-panel container class');
+    doesNotMatch(
+      html,
+      /backdrop-blur/,
+      'card editor modal should not mount live backdrop-blur layers over Windows QtWebEngine',
+    );
+  } finally {
+    setAppState({
+      quickAddOpen: prevState.quickAddOpen,
+      editingCardData: prevState.editingCardData,
+    });
+  }
+});
+

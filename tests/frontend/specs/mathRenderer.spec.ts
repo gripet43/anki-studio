@@ -48,3 +48,21 @@ test('raw < and > inside math are escaped instead of becoming tags', () => {
   ok(out.includes('&lt;') && out.includes('&gt;'));
   doesNotMatch(out, /<b>/);
 });
+
+section('math renderer · cloze ordinal pills');
+
+test('multi-cloze question and answer render active pills and plain inactive clozes', () => {
+  const src = '54353453453哈哈哈哈哈哈 {{c1::哈哈}} 哈哈低调{{c2::低调}}';
+  const q1 = renderMathAndRichHtml(src, true, 1);
+  ok(q1.includes('class="anki-cloze-question">[...]</span>'));
+  ok(q1.includes('class="cloze-inactive" data-ordinal="2">低调</span>'));
+  doesNotMatch(q1, /\{\{c\d+::/);
+
+  const a1 = renderMathAndRichHtml(src, false, 1);
+  ok(a1.includes('class="anki-cloze-answer">哈哈</span>'));
+  ok(a1.includes('class="cloze-inactive" data-ordinal="2">低调</span>'));
+
+  const q2 = renderMathAndRichHtml(src, true, 2);
+  ok(q2.includes('class="cloze-inactive" data-ordinal="1">哈哈</span>'));
+  ok(q2.includes('class="anki-cloze-question">[...]</span>'));
+});

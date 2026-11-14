@@ -14,6 +14,10 @@
 - `custom_nickname`：首页问候语中显示的名字。留空则使用当前 Anki 用户档案名。
 - `auto_launch_modern_ui`：`true` / `false`
   Anki 启动时是否自动进入 Anki Studio。设为 `false` 则停留在原生界面，需要手动切换。
+- `auto_play_front_audio`：`true` / `false`（默认 `false`）
+  学习卡片显示正面时是否自动播放正面音频。
+- `auto_play_back_audio`：`true` / `false`（默认 `true`）
+  学习卡片翻面显示答案时是否自动播放背面音频；若背面没有独立音频，则回退重播正面音频。
 
 ## 切换与快捷键
 
@@ -38,7 +42,7 @@
   **不包含**卡片内容、牌组名、标签、搜索词或任何 AnkiWeb 账号信息。可在
   设置 → 关于中随时关闭。
 - `analytics_endpoint`：默认内置官方端点
-  （`https://anki-studio-analytics.congtoubyby.workers.dev/v1/events`）。
+  （`https://anki.63096039.xyz/v1/events`）。
   设为空字符串会**完全停止上报**；也可以换成自己的 Cloudflare Worker 或
   大陆云函数，协议保持一致（见 `scripts/analytics-worker/`）。
 - `analytics_install_id` / `analytics_queue` / `analytics_marks`：
