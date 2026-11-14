@@ -31,7 +31,7 @@ export const StatsView: React.FC = () => {
       ? 'bg-[#111216] border-[#22232B] text-white'
       : theme === 'dark'
       ? 'bg-[#1A1B21] border-[#2A2C36] text-white'
-      : 'bg-white border-[#EAECEF] text-[#1D1D1F]';
+      : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[#1D1D1F]';
 
   const subText = 'text-[#5C5E66] dark:text-[#A8AAB8]';
 

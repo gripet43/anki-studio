@@ -26,6 +26,11 @@ import {
 } from '../../utils/reviewAudio';
 import { getAccentScale } from '../../utils/themeTokens';
 import { CopyDebugInfoButton } from '../common/CopyDebugInfoButton';
+import {
+  CelebrationIllustration,
+  hasIllustrationPack,
+  ReviewerCornerDecor,
+} from '../common/ThemeIllustrations';
 import { Tooltip } from '../common/Tooltip';
 import { LightboxTarget, ReviewerImageLightbox } from './ReviewerImageLightbox';
 import { SandboxCardFrame } from './SandboxCardFrame';
@@ -489,15 +494,15 @@ export const ReviewerView: React.FC = () => {
       ? 'bg-[#09090C] text-[#F4F4F6]'
       : theme === 'dark'
       ? 'bg-[#131418] text-[#F2F3F7]'
-      : 'bg-[#F4F4F6] text-[#1D1D1F]';
+      : 'bg-[var(--bg-canvas)] text-[#1D1D1F]';
 
   const headerBtnSurface = isDark
     ? 'bg-[#17181E] border-white/[0.07] text-[#8E8E93] hover:text-white'
-    : 'bg-white border-[#E5E5EA] text-[#6E6E73] hover:text-[#1D1D1F] shadow-2xs';
+    : 'bg-[var(--bg-card)] border-[#E5E5EA] text-[#6E6E73] hover:text-[#1D1D1F] shadow-2xs';
 
   const cardContainerSurface = isDark
     ? 'bg-[#16171D] border-white/[0.08] shadow-[0_24px_60px_rgba(0,0,0,0.65)] text-white'
-    : 'bg-white border-[#EAECEF] shadow-[0_20px_50px_rgba(0,0,0,0.07)] text-[#1D1D1F]';
+    : 'bg-[var(--bg-card)] border-[var(--border-subtle)] shadow-[0_20px_50px_rgba(0,0,0,0.07)] text-[#1D1D1F]';
 
   const inspectorSurface = isDark
     ? 'bg-[#121318]/95 border-white/[0.07] text-white'
@@ -547,9 +552,13 @@ export const ReviewerView: React.FC = () => {
 
         <div className="flex-1 flex items-center justify-center p-6">
           <div className={`w-[540px] rounded-[24px] border p-9 text-center space-y-6 ${cardContainerSurface}`}>
-            <div className="w-16 h-16 rounded-2xl bg-[var(--status-success-soft)] border border-[var(--status-success)]/30 text-[var(--status-success)] text-[28px] flex items-center justify-center mx-auto">
-              ✓
-            </div>
+            {hasIllustrationPack(accentColor) ? (
+              <CelebrationIllustration accentColor={accentColor} isDark={isDark} />
+            ) : (
+              <div className="w-16 h-16 rounded-2xl bg-[var(--status-success-soft)] border border-[var(--status-success)]/30 text-[var(--status-success)] text-[28px] flex items-center justify-center mx-auto">
+                ✓
+              </div>
+            )}
 
             <div>
               <h2 className="text-[26px] font-bold tracking-tight">
@@ -563,7 +572,9 @@ export const ReviewerView: React.FC = () => {
             <div className="grid grid-cols-3 gap-3 pt-2">
               <div
                 className={`rounded-xl border p-4 ${
-                  isDark ? 'bg-[#1A1B23] border-white/[0.06]' : 'bg-[#F8F8FA] border-[#ECECF2]'
+                  isDark
+                    ? 'bg-[#1A1B23] border-white/[0.06]'
+                    : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)]'
                 }`}
               >
                 <div className="text-[22px] font-bold">
@@ -573,7 +584,9 @@ export const ReviewerView: React.FC = () => {
               </div>
               <div
                 className={`rounded-xl border p-4 ${
-                  isDark ? 'bg-[#1A1B23] border-white/[0.06]' : 'bg-[#F8F8FA] border-[#ECECF2]'
+                  isDark
+                    ? 'bg-[#1A1B23] border-white/[0.06]'
+                    : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)]'
                 }`}
               >
                 <div className="text-[22px] font-bold text-[var(--status-success)]">{accuracyPct}%</div>
@@ -581,7 +594,9 @@ export const ReviewerView: React.FC = () => {
               </div>
               <div
                 className={`rounded-xl border p-4 ${
-                  isDark ? 'bg-[#1A1B23] border-white/[0.06]' : 'bg-[#F8F8FA] border-[#ECECF2]'
+                  isDark
+                    ? 'bg-[#1A1B23] border-white/[0.06]'
+                    : 'bg-[var(--bg-subtle)] border-[var(--border-subtle)]'
                 }`}
               >
                 <div className="text-[22px] font-bold text-[var(--brand-text)]">
@@ -1464,9 +1479,10 @@ export const ReviewerView: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 relative flex flex-col overflow-hidden">
+        <ReviewerCornerDecor accentColor={accentColor} isDark={isDark} />
         {/* Scrollable Center Pane for Flashcard */}
         <div
-          className={`flex-1 overflow-y-auto px-6 py-6 flex flex-col items-center transition-transform duration-[var(--dur-slow)] ${
+          className={`relative z-10 flex-1 overflow-y-auto px-6 py-6 flex flex-col items-center transition-transform duration-[var(--dur-slow)] ${
             inspectorOpen ? 'ltr:-translate-x-28 rtl:translate-x-28' : ''
           }`}
         >

@@ -7,8 +7,10 @@ import { section, test, eq, equal, ok } from '../harness';
 import {
   ACCENT_THEMES,
   ACCENT_COLOR_LIST,
+  ACCENT_ATMOSPHERE,
   isValidAccentColor,
   getAccentScale,
+  getAccentAtmosphere,
   buildThemeCssVars,
 } from '../../../frontend/src/utils/themeTokens';
 
@@ -177,4 +179,20 @@ test('buildThemeCssVars is pure and deterministic', () => {
       `${theme}: repeated calls must be identical`
     );
   }
+});
+
+section('theme tokens · bound illustration atmospheres');
+
+test('indigo binds clean zero-illustration default; the 7 other accents bind distinct packs', () => {
+  equal(getAccentAtmosphere('indigo').pack, 'none', 'default indigo must remain pure minimal');
+  const nonDefault = ACCENT_IDS.filter((id) => id !== 'indigo');
+  const packs = nonDefault.map((id) => getAccentAtmosphere(id).pack);
+  ok(packs.every((p) => p !== 'none'), 'every non-default accent must bind a curated illustration pack');
+  equal(new Set(packs).size, nonDefault.length, 'each non-default accent binds a unique pack');
+  for (const id of ACCENT_IDS) {
+    const meta = ACCENT_ATMOSPHERE[id];
+    ok(meta.nameZh.length > 0 && meta.nameEn.length > 0, `${id}: localized atmosphere name required`);
+    ok(meta.descZh.length > 0 && meta.descEn.length > 0, `${id}: localized atmosphere desc required`);
+  }
+  equal(getAccentAtmosphere('unknown' as never).pack, 'none', 'unknown accent falls back to indigo clean');
 });

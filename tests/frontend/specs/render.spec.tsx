@@ -14,6 +14,14 @@ import { SyncStateIcon } from '../../../frontend/src/components/common/SyncState
 import { StreakFlameBackdrop } from '../../../frontend/src/components/dashboard/StreakFlameBackdrop';
 import { SyncStatusPill } from '../../../frontend/src/components/dashboard/SyncStatusPill';
 import { CardEditorModal } from '../../../frontend/src/components/quick-add/CardEditorModal';
+import {
+  CelebrationIllustration,
+  EmptyStateIllustration,
+  GreetingVignette,
+  ReviewerCornerDecor,
+  ThemedDeckEmblem,
+} from '../../../frontend/src/components/common/ThemeIllustrations';
+import { ACCENT_COLOR_LIST } from '../../../frontend/src/utils/themeTokens';
 import { getAppState, setAppState } from '../../../frontend/src/stores/useAppStore';
 import {
   ChartTooltipContent,
@@ -271,6 +279,37 @@ test('open card editor modal renders ui-modal-backdrop without GPU backdrop-blur
       quickAddOpen: prevState.quickAddOpen,
       editingCardData: prevState.editingCardData,
     });
+  }
+});
+
+section('render · ThemeIllustrations (color-bound artworks)');
+
+test('official default indigo renders zero decorative illustration markup', () => {
+  for (const Comp of [GreetingVignette, ReviewerCornerDecor, CelebrationIllustration, EmptyStateIllustration]) {
+    equal(renderToStaticMarkup(React.createElement(Comp, { accentColor: 'indigo' })), '');
+  }
+  equal(
+    renderToStaticMarkup(React.createElement(ThemedDeckEmblem, { accentColor: 'indigo', deckAccent: 'indigo' })),
+    ''
+  );
+});
+
+test('all 7 themed accent colors render valid accessible SVGs across light and dark modes', () => {
+  const nonDefault = ACCENT_COLOR_LIST.filter((a) => a.id !== 'indigo').map((a) => a.id);
+  const deckSlots = ['indigo', 'blue', 'emerald', 'amber', 'rose', 'purple'] as const;
+  for (const accent of nonDefault) {
+    for (const isDark of [false, true]) {
+      for (const Comp of [GreetingVignette, ReviewerCornerDecor, CelebrationIllustration, EmptyStateIllustration]) {
+        const html = render(React.createElement(Comp, { accentColor: accent, isDark }));
+        ok(html.includes('<svg') && html.includes('aria-hidden="true"'), `${accent}: expected accessible SVG`);
+      }
+      for (const deckAccent of deckSlots) {
+        const html = render(
+          React.createElement(ThemedDeckEmblem, { accentColor: accent, deckAccent, isDark })
+        );
+        ok(html.includes('<svg') && html.includes('aria-hidden="true"'), `${accent}/${deckAccent}: expected emblem SVG`);
+      }
+    }
   }
 });
 

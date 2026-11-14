@@ -340,6 +340,114 @@ export const ACCENT_COLOR_LIST: AccentThemeMeta[] = [
   ACCENT_THEMES.slate,
 ];
 
+export type IllustrationPackId =
+  | 'none'
+  | 'botanical'
+  | 'kyoto'
+  | 'cafe'
+  | 'neko'
+  | 'celestial'
+  | 'cloudscape'
+  | 'library';
+
+export interface AccentAtmosphereMeta {
+  accent: AccentColor;
+  pack: IllustrationPackId;
+  nameZh: string;
+  nameEn: string;
+  paperZh: string;
+  paperEn: string;
+  descZh: string;
+  descEn: string;
+}
+
+export const ACCENT_ATMOSPHERE: Record<AccentColor, AccentAtmosphereMeta> = {
+  indigo: {
+    accent: 'indigo',
+    pack: 'none',
+    nameZh: '纯净默认 · 无插画',
+    nameEn: 'Pure Minimal · Clean',
+    paperZh: '净白默认画布',
+    paperEn: 'Pure Neutral Canvas',
+    descZh: '最干净的官方默认体验：无装饰插画、纯白极简画布，零视觉干扰',
+    descEn: 'Ultra-clean official Studio Blue default with pure neutral canvas and no illustrations',
+  },
+  emerald: {
+    accent: 'emerald',
+    pack: 'botanical',
+    nameZh: '植物手账',
+    nameEn: 'Botanical Journal',
+    paperZh: '温润鼠尾暖纸',
+    paperEn: 'Sage Cotton Paper',
+    descZh: '已自动搭配「植物手账」插画与温润护眼浅纸底色',
+    descEn: 'Paired with Botanical Journal illustrations & soothing sage paper canvas',
+  },
+  teal: {
+    accent: 'teal',
+    pack: 'kyoto',
+    nameZh: '京都和纸',
+    nameEn: 'Washi & Matcha',
+    paperZh: '清岚淡青和纸',
+    paperEn: 'Celadon Washi Paper',
+    descZh: '已自动搭配「京都和纸」清雅文房插画与清岚纸感（无十字徽标）',
+    descEn: 'Paired with serene Washi & Matcha study illustrations & celadon washi canvas',
+  },
+  amber: {
+    accent: 'amber',
+    pack: 'cafe',
+    nameZh: '窗边咖啡馆',
+    nameEn: 'Cozy Reading Café',
+    paperZh: '暖棉手账纸',
+    paperEn: 'Warm Cotton Paper',
+    descZh: '已自动搭配「窗边咖啡馆」暖意手账插画与暖棉纸感',
+    descEn: 'Paired with Cozy Café latte & croissant illustrations & warm cotton paper',
+  },
+  rose: {
+    accent: 'rose',
+    pack: 'neko',
+    nameZh: '橘猫伴读',
+    nameEn: 'Study Cat Companion',
+    paperZh: '晨雾柔粉纸',
+    paperEn: 'Soft Blush Paper',
+    descZh: '已自动搭配「橘猫伴读」治愈系桌宠插画与柔雾浅纸感',
+    descEn: 'Paired with Study Cat companion illustrations & gentle blush paper',
+  },
+  violet: {
+    accent: 'violet',
+    pack: 'celestial',
+    nameZh: '星夜天文台',
+    nameEn: 'Celestial Observatory',
+    paperZh: '星尘暮光纸',
+    paperEn: 'Iris Twilight Paper',
+    descZh: '已自动搭配「星夜天文台」月相星图插画（浅色清雅、深色如置夜空）',
+    descEn: 'Paired with Celestial Observatory moon & star charts across light and dark modes',
+  },
+  cyan: {
+    accent: 'cyan',
+    pack: 'cloudscape',
+    nameZh: '云端纸飞机',
+    nameEn: 'Pastel Sky & Kite',
+    paperZh: '晴空微雾纸',
+    paperEn: 'Breezy Sky Paper',
+    descZh: '已自动搭配「云端纸飞机」轻盈解压插画与晴空柔雾感',
+    descEn: 'Paired with breezy cloud & paper plane illustrations to ease study fatigue',
+  },
+  slate: {
+    accent: 'slate',
+    pack: 'library',
+    nameZh: '古典藏书阁',
+    nameEn: 'Bookplate & Wax Seal',
+    paperZh: '晨雾墨韵纸',
+    paperEn: 'Morning Mist Archival',
+    descZh: '已自动搭配「古典藏书阁」蘸水钢笔与藏书票手稿插画',
+    descEn: 'Paired with inkwell, fountain nib, and archival bookplate illustrations',
+  },
+};
+
+export function getAccentAtmosphere(accent: AccentColor): AccentAtmosphereMeta {
+  return ACCENT_ATMOSPHERE[accent] || ACCENT_ATMOSPHERE.indigo;
+}
+
 export function isValidAccentColor(val: unknown): val is AccentColor {
   return typeof val === 'string' && val in ACCENT_THEMES;
 }

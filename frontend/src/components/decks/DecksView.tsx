@@ -4,6 +4,7 @@ import { usePresence } from '../../hooks/usePresence';
 import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { getAccentScale } from '../../utils/themeTokens';
+import { EmptyStateIllustration } from '../common/ThemeIllustrations';
 import { Tooltip } from '../common/Tooltip';
 
 export const DecksView: React.FC = () => {
@@ -52,7 +53,7 @@ export const DecksView: React.FC = () => {
       ? 'bg-[#111216] border-[#22232B] text-white'
       : theme === 'dark'
       ? 'bg-[#1A1B21] border-[#2A2C36] text-white'
-      : 'bg-white border-[#EAECEF] text-[#1D1D1F]';
+      : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[#1D1D1F]';
 
   const subText = 'text-[#8E8E93]';
 
@@ -464,6 +465,13 @@ export const DecksView: React.FC = () => {
                 </div>
               );
             })
+          )}
+          {!isSyncPending && visibleDecks.length === 0 && (
+            <div className="px-6 py-12 text-center space-y-2">
+              <EmptyStateIllustration accentColor={accentColor} isDark={isDark} />
+              <div className="text-[14px] font-semibold">{t('noDecksTitle')}</div>
+              <p className={`text-[12px] ${subText}`}>{t('noDecksSub')}</p>
+            </div>
           )}
         </div>
       </section>

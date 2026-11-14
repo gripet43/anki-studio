@@ -89,6 +89,65 @@
     --dashboard-track-new: #D6D6DE;
   }
 
+  /* Curated light-mode paper atmospheres bound to non-default accent colors.
+     Official default (`indigo`) intentionally keeps the pure neutral canvas above. */
+  :root:not(.dark):not(.oled)[data-accent="emerald"] {
+    --bg-canvas: #F3F2EC;
+    --bg-card: #FCFBF8;
+    --bg-subtle: #ECEAE1;
+    --border-subtle: #E1DFD3;
+    --dashboard-track: #E5E3D8;
+    --dashboard-track-new: #D1CEC0;
+  }
+  :root:not(.dark):not(.oled)[data-accent="teal"] {
+    --bg-canvas: #EDF2F1;
+    --bg-card: #FAFDFC;
+    --bg-subtle: #E3EBE9;
+    --border-subtle: #D7E3DF;
+    --dashboard-track: #DCE7E4;
+    --dashboard-track-new: #C4D4CF;
+  }
+  :root:not(.dark):not(.oled)[data-accent="amber"] {
+    --bg-canvas: #F5F1E9;
+    --bg-card: #FFFDF8;
+    --bg-subtle: #EDE7DA;
+    --border-subtle: #E3DAC6;
+    --dashboard-track: #E7DFCF;
+    --dashboard-track-new: #D2C7B2;
+  }
+  :root:not(.dark):not(.oled)[data-accent="rose"] {
+    --bg-canvas: #F5F1F2;
+    --bg-card: #FFFCFD;
+    --bg-subtle: #EDE6E8;
+    --border-subtle: #E5DADF;
+    --dashboard-track: #E8DFE3;
+    --dashboard-track-new: #D5C8CD;
+  }
+  :root:not(.dark):not(.oled)[data-accent="violet"] {
+    --bg-canvas: #F2F1F7;
+    --bg-card: #FDFCFF;
+    --bg-subtle: #EAE7F3;
+    --border-subtle: #DDD8EB;
+    --dashboard-track: #E3DFF0;
+    --dashboard-track-new: #CEC8DF;
+  }
+  :root:not(.dark):not(.oled)[data-accent="cyan"] {
+    --bg-canvas: #EEF3F7;
+    --bg-card: #FAFDFE;
+    --bg-subtle: #E4ECF3;
+    --border-subtle: #D6E2EC;
+    --dashboard-track: #DCE6EF;
+    --dashboard-track-new: #C4D3E1;
+  }
+  :root:not(.dark):not(.oled)[data-accent="slate"] {
+    --bg-canvas: #F0F1F4;
+    --bg-card: #FAFAFC;
+    --bg-subtle: #E7E9EE;
+    --border-subtle: #DCE0E7;
+    --dashboard-track: #E1E4EB;
+    --dashboard-track-new: #C9CFD9;
+  }
+
   .dark {
     --bg-canvas: #131418;
     --bg-card: #1A1B21;

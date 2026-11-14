@@ -25,7 +25,11 @@ import {
   REVIEW_CONTENT_SCALES,
   ReviewStageWidth,
 } from '../../bridge/pycmd';
-import { ACCENT_COLOR_LIST, getAccentScale } from '../../utils/themeTokens';
+import {
+  ACCENT_COLOR_LIST,
+  getAccentScale,
+} from '../../utils/themeTokens';
+import { hasIllustrationPack } from '../common/ThemeIllustrations';
 import { localDateKey } from '../../utils/localDate';
 
 const XIAOHONGSHU_PROFILE_URL =
@@ -356,8 +360,21 @@ export const SettingsModal: React.FC = () => {
 
               {/* Theme Color Card */}
               <div className={`rounded-xl border p-4 space-y-3.5 ${cardSurface}`}>
-                <div className="text-[13px] font-semibold">
-                  {t('settingsThemeColorTitle')}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[13px] font-semibold">
+                    {t('settingsThemeColorTitle')}
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-md border ${
+                      hasIllustrationPack(accentColor)
+                        ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-text)]'
+                        : isDark
+                        ? 'bg-white/[0.04] border-white/[0.08] text-[#A4A6B4]'
+                        : 'bg-[#F5F6F8] border-[#E5E6EC] text-[#6E6E73]'
+                    }`}
+                  >
+                    {t(`accentAtmoName_${accentColor}` as any)}
+                  </span>
                 </div>
 
                 <div
@@ -370,13 +387,15 @@ export const SettingsModal: React.FC = () => {
                     const modeScale = isDark ? a.dark : a.light;
                     const shortLabel = t(`accentShort_${a.id}` as any);
                     const fullLabel = t(`accentName_${a.id}` as any);
+                    const atmoLabel = t(`accentAtmoName_${a.id}` as any);
+                    const tooltipText = `${fullLabel} · ${atmoLabel}`;
                     return (
-                      <Tooltip key={a.id} variant="compact" content={fullLabel}>
+                      <Tooltip key={a.id} variant="compact" content={tooltipText}>
                         <button
                           type="button"
                           role="radio"
                           aria-checked={active}
-                          aria-label={fullLabel}
+                          aria-label={tooltipText}
                         onClick={() => {
                           appActions.setAccentColor(a.id);
                           showToast(t('savedAccentToast', { name: shortLabel }));

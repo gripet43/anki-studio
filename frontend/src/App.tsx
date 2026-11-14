@@ -87,12 +87,13 @@ export const App: React.FC = () => {
     const rootEl = document.documentElement;
     rootEl.classList.toggle('dark', theme === 'dark' || theme === 'oled');
     rootEl.classList.toggle('oled', theme === 'oled');
+    rootEl.dataset.accent = accentColor;
     rootEl.dir = isRtl ? 'rtl' : 'ltr';
     rootEl.lang = resolvedLang;
     for (const [k, v] of Object.entries(themeVars)) {
       rootEl.style.setProperty(k, v);
     }
-  }, [theme, themeVars, isRtl, resolvedLang]);
+  }, [theme, accentColor, themeVars, isRtl, resolvedLang]);
 
   useEffect(() => {
     appActions.initFromAnki();
@@ -228,7 +229,7 @@ export const App: React.FC = () => {
       ? 'bg-[#09090C] text-[#F4F4F6] dark oled'
       : theme === 'dark'
       ? 'bg-[#131418] text-[#F2F3F7] dark'
-      : 'bg-[#F4F4F6] text-[#1D1D1F]';
+      : 'bg-[var(--bg-canvas)] text-[#1D1D1F]';
 
   return (
     <div

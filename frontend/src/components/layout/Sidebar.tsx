@@ -51,11 +51,11 @@ export const Sidebar: React.FC = () => {
       ? 'bg-[#08080B] border-[#1E1F26] text-[#F4F4F6]'
       : theme === 'dark'
       ? 'bg-[#121317] border-[#252730] text-[#F2F3F7]'
-      : 'bg-[#FFFFFF] border-[#E8E9EE] text-[#1D1D1F]';
+      : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[#1D1D1F]';
 
   const mutedText = 'text-[#636366] dark:text-[#A6A8B6]';
   const navActiveBg = 'bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold';
-  const navHoverBg = isDark ? 'hover:bg-white/5 text-[#EBEBF5]' : 'hover:bg-[#F4F4F6] text-[#3A3A3C]';
+  const navHoverBg = isDark ? 'hover:bg-white/5 text-[#EBEBF5]' : 'hover:bg-[var(--bg-subtle)] text-[#3A3A3C]';
 
   const visibleSidebarDecks = decks.filter((d) => {
     if (!d.isChild) return true;

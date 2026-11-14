@@ -15,6 +15,12 @@ import { appActions, setAppState, useAppStore } from '../../stores/useAppStore';
 import { buildDeckScales } from '../../utils/deckPalette';
 import { getAccentScale } from '../../utils/themeTokens';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
+import {
+  EmptyStateIllustration,
+  GreetingVignette,
+  hasIllustrationPack,
+  ThemedDeckEmblem,
+} from '../common/ThemeIllustrations';
 import { StreakFlameBackdrop } from './StreakFlameBackdrop';
 import { SyncStatusPill } from './SyncStatusPill';
 
@@ -232,32 +238,35 @@ export const DashboardView: React.FC = () => {
         onDoubleClick={handleWindowDoubleClick}
         className="dashboard-header flex flex-wrap items-center justify-between gap-4 select-none cursor-default"
       >
-        <div className="min-w-[180px]">
-          <h1 className="text-[22px] sm:text-[24px] font-bold tracking-tight max-w-full text-balance leading-tight">
-            {dashboard.greeting}
-            {displayName}
-          </h1>
-          {isSyncPending ? (
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-ping shrink-0" />
-              <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight">
-                {syncing ? t('syncingAnkiWebAria') : t('loadingLocalCollection')}
-              </span>
-            </div>
-          ) : syncJustFinished ? (
-            <div className="flex items-center gap-1.5 mt-1.5 animate-sync-reveal">
-              <svg className="w-3.5 h-3.5 text-[var(--status-success)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" className="animate-draw-check" />
-              </svg>
-              <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight">
-                {t('syncCompleted')}
-              </span>
-            </div>
-          ) : (
-            <p className={`text-[13px] ${subText} mt-1.5 font-medium`}>
-              {formattedDateDisplay}
-            </p>
-          )}
+        <div className="min-w-[180px] flex items-center gap-3.5">
+          <div>
+            <h1 className="text-[22px] sm:text-[24px] font-bold tracking-tight max-w-full text-balance leading-tight">
+              {dashboard.greeting}
+              {displayName}
+            </h1>
+            {isSyncPending ? (
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-ping shrink-0" />
+                <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight">
+                  {syncing ? t('syncingAnkiWebAria') : t('loadingLocalCollection')}
+                </span>
+              </div>
+            ) : syncJustFinished ? (
+              <div className="flex items-center gap-1.5 mt-1.5 animate-sync-reveal">
+                <svg className="w-3.5 h-3.5 text-[var(--status-success)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" className="animate-draw-check" />
+                </svg>
+                <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight">
+                  {t('syncCompleted')}
+                </span>
+              </div>
+            ) : (
+              <p className={`text-[13px] ${subText} mt-1.5 font-medium`}>
+                {formattedDateDisplay}
+              </p>
+            )}
+          </div>
+          <GreetingVignette accentColor={accentColor} isDark={isDark} />
         </div>
 
         <div className="flex items-center gap-3 sm:gap-4 shrink-0 ms-auto">
@@ -1057,13 +1066,22 @@ export const DashboardView: React.FC = () => {
               </div>
             ) : displayedDecks.length === 0 ? (
               <div className={`rounded-2xl border p-10 text-center space-y-3 ${cardSurface}`}>
+                <EmptyStateIllustration accentColor={accentColor} isDark={isDark} />
                 <div className="text-[15px] font-semibold">{t('noDecksTitle')}</div>
                 <p className={`text-[12px] ${subText}`}>{t('noDecksSub')}</p>
               </div>
             ) : (
               <div className="dashboard-deck-grid grid gap-5">
                 {displayedDecks.map((deck, deckIndex) => {
-                  const iconNode = deckIconByAccent[deck.accent] || deckIconByAccent.indigo;
+                  const iconNode = hasIllustrationPack(accentColor) ? (
+                    <ThemedDeckEmblem
+                      accentColor={accentColor}
+                      deckAccent={deck.accent}
+                      isDark={isDark}
+                    />
+                  ) : (
+                    deckIconByAccent[deck.accent] || deckIconByAccent.indigo
+                  );
                   const deckScale = deckScales[deckIndex % deckScales.length];
                   const breakdown = deck.masteryBreakdown ?? {
                     mature: deck.mastery / 100,
