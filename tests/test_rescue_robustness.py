@@ -116,6 +116,24 @@ class TestRescueWithBadCards(unittest.TestCase):
         self.assertEqual(result["count"], 0)
         self.assertEqual(col.sched.calls, [], "没有任何可调度卡时不得调用调度器")
 
+    def test_vacation_shift_due_cards_skips_unreadable_cards(self):
+        col = FakeCol(
+            [1, 2, 3],
+            unreadable=(2,),
+            cards={1: FakeCard(1), 3: FakeCard(3)},
+        )
+        service = make_service(col)
+        result = service.set_vacation({
+            "days": 3,
+            "freezeNewCards": False,
+            "shiftReviewCards": True,
+            "freezeStreak": False,
+        })
+        self.assertTrue(result["success"])
+        self.assertEqual(result["vacation"]["shiftedCardCount"], 2)
+        self.assertEqual(len(col.sched.calls), 1)
+        self.assertEqual(col.sched.calls[0], ([1, 3], "3"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,6 +15,10 @@
 
 ## [Unreleased]
 
+- **[Antigravity] 全面更新 Windows 验版测试用例与沙盒冒烟守卫至 v1.5.9+ 基线**（改 [`tests/WINDOWS_HANDOFF.md`](tests/WINDOWS_HANDOFF.md)、[`tests/scenarios/smoke.py`](tests/scenarios/smoke.py)、[`tests/scenarios/README.md`](tests/scenarios/README.md)）：
+  - **更新 [`tests/WINDOWS_HANDOFF.md`](tests/WINDOWS_HANDOFF.md)**：从过时的 `v1.4.66` 基线升级为 `v1.5.9+`，去除已于 `v1.5.4` 解决的 Windows 临时补丁提醒；补齐 Python `unittest`（150 项）、前端单测（126 项）、Analytics Worker 测试（19 项）、静态审计（24 项）、场景冒烟（705 项）与 Bundle 审计（Item #1–#49）的完整自动化命令与预期结果；将手工验收整合扩充为 **25 项**（A 组基础基线 7 项 + B 组 Windows QtWebEngine/防屏闪/中文 IME/事件防御 5 项 + C 组 v1.5.1–v1.5.8 表格/伴生 `(Cloze)`/灯箱/`Aa`/调试信息 6 项 + D 组 v1.5.9+ 统一浮层/英文同步胶囊/音频自动播放双开关/分体式朗读控制 4 项 + `media` 真音频 / `io-native` IO 只读 / `mixed` 七色旗标 3 项），补充 `power` 20k 压力测试、干净环境 `.ankiaddon` 打包校验注意项与 `r6` 报告模板。
+  - **补齐 [`tests/scenarios/smoke.py`](tests/scenarios/smoke.py) 真实 Anki 集合回归断言（692 → 705 项，11 场景）**：新增 `get_preferences` 与 `preferences:save`/`roundtrip` 对 `autoPlayFrontAudio`、`autoPlayBackAudio`、`reviewStageWidth`、`reviewContentScale` 的字段与往返校验；新增 `debug-info` 对 `get_card_debug_info` 结构和 `runtime.configSnapshot` 的断言；新增 `media:audio-side-split` 对 `[sound:]` 拆入 `frontAudioFiles` 且不污染 `backAudioFiles` 的断言；新增 `exam` 场景 `editor:companion-cloze` 伴生 `(Cloze)` 派生与原卡型隔离断言，并同步更新 [`tests/scenarios/README.md`](tests/scenarios/README.md)。
+
 - **[Antigravity] 新增学习卡片音频自动播放双开关设置与学习页快捷入口**（改 [`config.default.json`](config.default.json)、[`config.md`](config.md)、[`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`bridge/router.py`](bridge/router.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`frontend/src/utils/reviewAudio.ts`](frontend/src/utils/reviewAudio.ts)、[`frontend/src/utils/cardDebugInfo.ts`](frontend/src/utils/cardDebugInfo.ts)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/reviewer/SandboxCardFrame.tsx`](frontend/src/components/reviewer/SandboxCardFrame.tsx)、16 语种词典、[`tests/test_bridge.py`](tests/test_bridge.py)，新增 [`tests/frontend/specs/reviewAudio.spec.ts`](tests/frontend/specs/reviewAudio.spec.ts) 并注册至 [`tests/frontend/suite.ts`](tests/frontend/suite.ts)）：
   - **Studio 全局「设置 → 答题设置」双开关**：新增 `auto_play_front_audio`（显示正面时自动播放，默认关闭）与 `auto_play_back_audio`（翻面显示答案时自动播放，默认开启）两个独立配置项与设置卡片；通过布尔规范化校验保证持久化和调试快照一致。
   - **正反面音频拆分与翻面回退规则**：后端新增 `split_card_side_audio` 区分 `frontAudioFiles` 与 `backAudioFiles`（同时兼容保留合并 `audioFiles` 并为沙盒提供 `sandboxQuestionAudioFiles` / `sandboxAnswerAudioFiles`），剔除 Cloze 隐藏挖空音频对正面的剧透以及 `{{FrontSide}}` 重复携带的题干音频；前端通过 `resolveAutoPlayAudioFiles` 实现「正面仅播正面」「翻面若无独立背面音频则回退重播正面音频」「多段 `[sound:]` 通过 `AVPlayer.play_tags` 顺序连播」，并在切换卡片、`startReview`、`answerCurrentCard` 等异步转换处加入会话纪元（epoch）防抖。
@@ -46,6 +50,15 @@
   - **做法**：在解析 body / 打开 D1 batch **之前**校验 `User-Agent` 必须以 `AnkiStudio/` 开头、版本号非空、长度 ≤80，否则直接 403。插件自 v1.4.33 引入统计起就固定发 `AnkiStudio/<human_version>`（`git show 21cdad0` 核对过），**不挡任何已装用户，客户端零改动**。浏览器 JS 无法伪造 UA，所以 `Access-Control-Allow-Origin: *` 带来的跨站写入风险也一并堵住。UA 只比较不落库，「不存 IP / 不上报卡片内容」的披露不变。
   - **边界**：这挡的是**数据污染，不是流量** —— 扫描请求仍到达 Worker、仍消耗请求额度。要少挨打仍需限流 / WAF / 自定义域名。README 的验证 curl 同步补了 `-A`（否则现在会 403），并留了反向验证示例。
   - **验证**：新增 `node tests/test_analytics_worker.mjs`（14 项，data: URL 加载 Worker + mock D1，覆盖合法/旧版 UA、无 UA、curl、python-requests、Go、浏览器、空版本、前缀伪装、超长 UA、无效 install_id、OPTIONS 预检、GET 404）；Bundle 审计、Python 141 项、前端 96 项、`npm run build` 全绿，前端产物无 diff。
+
+## [v1.5.10] - 2026-11-14
+
+- **[Antigravity] 修复休假守护、连胜冻结统计与顺延坏卡容错逻辑漏洞**（改 [`bridge/deck_service.py`](bridge/deck_service.py)、[`bridge/vacation_service.py`](bridge/vacation_service.py)、[`tests/test_bridge.py`](tests/test_bridge.py)、[`tests/test_rescue_robustness.py`](tests/test_rescue_robustness.py)、[`manifest.json`](manifest.json)）：
+  - **连胜与本周活跃天不再被冻结日注水**（[`bridge/deck_service.py`](bridge/deck_service.py)）：`current_streak` 与 `longest_streak` 改为用冻结日（且仅限历史/当日）**桥接**连续复习间隙但不累加天数，0 复习开启休假不再产生虚高连胜；`week_active_days` 仅统计真实复习天（`count > 0`）。
+  - **真实复习不被冻结状态掩盖**（[`bridge/deck_service.py`](bridge/deck_service.py)）：热力图单元格仅在 `count == 0` 且处于 `frozen_dates` 时设置 `isStreakFrozen = True`，若当天存在真实复习则正常渲染复习数量、正确率与热度色阶。
+  - **提前结束休假回收未消耗冻结日期**（[`bridge/vacation_service.py`](bridge/vacation_service.py)）：`end_vacation()` 在非自然到期（`reason != "auto_expired"`）提前结束时，从 `vacation_state.frozen_dates` 与 `vacation_frozen_dates` 中移除 `>= today` 的未消耗冻结日（保留 `< today` 的已过休假记录），防止反复开启 30 天休假并立即结束来白嫖未来冻结日。
+  - **休假顺延复习卡容错过滤异常卡片**（[`bridge/vacation_service.py`](bridge/vacation_service.py)）：`_shift_due_cards()` 在调用 `col.sched.set_due_date` 前先经 `_filter_schedulable_cids` 剔除不可读/越界卡片，避免单张异常卡片导致整批顺延静默归零。
+  - **回归验证**：新增 `test_43`、`test_44` 与 `test_vacation_shift_due_cards_skips_unreadable_cards`；`manifest.json` 同步升级至 `1.5.10` 并重新打包 `.ankiaddon`。
 
 ## [v1.5.9] - 2026-11-14
 

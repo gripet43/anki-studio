@@ -3403,6 +3403,120 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 else:
                     sys.modules[k] = orig
 
+    def test_43_streak_freeze_does_not_inflate_streak_or_hide_real_reviews(self):
+        """Frozen days must bridge streaks without inflating counts, inflating weekActiveDays, or masking real reviews."""
+        sched = self.mock_col.sched
+        orig_cutoff = sched.day_cutoff
+        today_date = datetime.date.today()
+        today_start_sec = int(datetime.datetime.combine(today_date, datetime.time(0, 0)).timestamp())
+        sched.day_cutoff = today_start_sec + 86400
+
+        def set_review_days(offsets):
+            conn = self.mock_col.db.conn
+            conn.execute("DELETE FROM revlog")
+            base_id = 1_700_000_000_000
+            for idx, off in enumerate(offsets):
+                ts_ms = (today_start_sec + off * 86400 + 3600) * 1000
+                conn.execute(
+                    "INSERT INTO revlog VALUES (?, 201, 0, 3, 4, 2, 2500, 3000, 1)",
+                    (ts_ms + idx,),
+                )
+            conn.commit()
+
+        try:
+            # 1. Zero reviews + active vacation freeze must NOT fabricate streak >= 1 or weekActiveDays > 0
+            set_review_days([])
+            frozen_window = [
+                (today_date + datetime.timedelta(days=d)).isoformat()
+                for d in (-2, -1, 0, 1, 2)
+            ]
+            self.config_store["vacation_frozen_dates"] = frozen_window
+            self.config_store["vacation_state"] = {
+                "active": True,
+                "start_date": frozen_window[0],
+                "end_date": frozen_window[-1],
+                "freeze_streak": True,
+                "frozen_dates": frozen_window,
+            }
+            dash_zero = self._call("get_dashboard", {})["data"]
+            self.assertEqual(dash_zero["streak"]["current"], 0)
+            self.assertEqual(dash_zero["streak"]["longest"], 0)
+            self.assertEqual(dash_zero["streak"]["weekActiveDays"], 0)
+
+            # 2. Reviews on -6,-5,-4 + frozen -3,-2 + review on -1 + frozen today -> streak=4 (not 7)
+            frozen_window_2 = [
+                (today_date + datetime.timedelta(days=d)).isoformat()
+                for d in (-3, -2, 0, 1, 2)
+            ]
+            self.config_store["vacation_frozen_dates"] = frozen_window_2
+            self.config_store["vacation_state"] = {
+                "active": True,
+                "start_date": frozen_window_2[0],
+                "end_date": frozen_window_2[-1],
+                "freeze_streak": True,
+                "frozen_dates": frozen_window_2,
+            }
+            set_review_days([-6, -5, -4, -1])
+            dash_bridge = self._call("get_dashboard", {})["data"]
+            self.assertEqual(dash_bridge["streak"]["current"], 4)
+            self.assertEqual(dash_bridge["streak"]["longest"], 4)
+
+            # 3. Historical frozen bridge counts in longest_streak even after current streak resets
+            set_review_days([-10, -9, -7, 0])
+            self.config_store["vacation_frozen_dates"] = [
+                (today_date + datetime.timedelta(days=-8)).isoformat(),
+            ]
+            self.config_store["vacation_state"] = {"active": False, "frozen_dates": []}
+            dash_hist = self._call("get_dashboard", {})["data"]
+            self.assertEqual(dash_hist["streak"]["current"], 1)
+            self.assertEqual(dash_hist["streak"]["longest"], 3)
+
+            # 4. Reviewing on a frozen date must show real review cell instead of frozen mask
+            today_iso = today_date.isoformat()
+            self.config_store["vacation_frozen_dates"] = [today_iso]
+            dash_real = self._call("get_dashboard", {})["data"]
+            today_cell = next(c for c in dash_real["heatmap"]["cells"] if c["date"] == today_iso)
+            self.assertEqual(today_cell["count"], 1)
+            self.assertFalse(today_cell["isStreakFrozen"])
+        finally:
+            sched.day_cutoff = orig_cutoff
+
+    def test_44_early_end_vacation_prunes_unconsumed_future_frozen_dates(self):
+        """Ending vacation early must strip >= today frozen dates while keeping consumed past ones."""
+        today_date = datetime.date.today()
+        yesterday_iso = (today_date - datetime.timedelta(days=1)).isoformat()
+        today_iso = today_date.isoformat()
+        tomorrow_iso = (today_date + datetime.timedelta(days=1)).isoformat()
+        day2_iso = (today_date + datetime.timedelta(days=2)).isoformat()
+
+        # Simulate repeating start 30d -> end immediately: nothing stays frozen
+        res_start = self._call(
+            "set_vacation",
+            {"days": 30, "freezeStreak": True, "freezeNewCards": False, "shiftReviewCards": False},
+        )
+        self.assertTrue(res_start["data"]["success"])
+        self.assertEqual(len(self.config_store["vacation_frozen_dates"]), 30)
+
+        res_end = self._call("end_vacation", {})
+        self.assertTrue(res_end["data"]["wasActive"])
+        self.assertEqual(self.config_store["vacation_frozen_dates"], [])
+        self.assertEqual(self.config_store["vacation_state"]["frozen_dates"], [])
+
+        # Ongoing vacation that actually covered yesterday: ending today keeps yesterday, prunes >= today
+        self.config_store["vacation_frozen_dates"] = [yesterday_iso, today_iso, tomorrow_iso, day2_iso]
+        self.config_store["vacation_state"] = {
+            "active": True,
+            "start_date": yesterday_iso,
+            "end_date": day2_iso,
+            "freeze_streak": True,
+            "frozen_dates": [yesterday_iso, today_iso, tomorrow_iso, day2_iso],
+            "frozen_deck_limits": {},
+        }
+        res_end2 = self._call("end_vacation", {})
+        self.assertTrue(res_end2["data"]["wasActive"])
+        self.assertEqual(self.config_store["vacation_frozen_dates"], [yesterday_iso])
+        self.assertEqual(self.config_store["vacation_state"]["frozen_dates"], [yesterday_iso])
+
 
 if __name__ == "__main__":
     unittest.main()

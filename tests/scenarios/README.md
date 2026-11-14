@@ -93,6 +93,10 @@ python3 verify_isolation.py --check      # 确认真实库未被改动
 | `get_statistics` | 七个统计块齐全、留存率落在 0~1 |
 | `search_cards` | 全库搜索数等于实际卡片数、筛选不越界 |
 | `get_deck_options` | 调度字段齐全 |
+| `get_preferences` / `preferences:*` | 主题、音视频自动播放双开关与视图画幅/缩放配置齐全且往返一致 |
+| `debug-info` | `get_card_debug_info` 返回卡片/模板/原生渲染与运行时快照 |
+| `media:audio-side-split` | `media` 场景中正面 `[sound:]` 拆入 `frontAudioFiles`，不重复污染 `backAudioFiles` |
+| `editor:companion-cloze` | `exam` 场景普通卡加 `{{c1::...}}` 后自动派生 `(Cloze)` 伴生卡型 |
 | `maintenance:*` | 脏数据场景下，空卡与缺失媒体必须被**检出** |
 | `occlusion:frontHtml` | 遮挡结构完整：`data-io-mode`、`data-io-rect`、遮罩样式、图片 `file://`，且 cloze 已被消费 |
 | `native-io:*` | 原生 `Image Occlusion` 卡可读取；模板渲染缺失时记为**已知缺陷** |
@@ -118,7 +122,7 @@ python3 verify_isolation.py --check      # 确认真实库未被改动
 修复后已升级为正式断言 `native-io:frontHtml` 与 `native-io:review`，同时列表与复习
 两条渲染路径都被守住。**目前没有未认领的已知缺陷。**
 
-全部在 `state/smoke/` 的副本上执行，跑完即删。**11 个场景、692 项检查约 5 秒**。
+全部在 `state/smoke/` 的副本上执行，跑完即删。**11 个场景、705 项检查约 5–10 秒**。
 
 ### 覆盖范围
 

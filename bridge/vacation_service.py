@@ -410,10 +410,21 @@ class VacationService:
                 item["endedAt"] = ended_at
                 break
 
-        self._write_config({
+        write_payload: Dict[str, Any] = {
             "vacation_state": updated_state,
             "vacation_history": vacation_history,
-        })
+        }
+        if is_active and reason != "auto_expired":
+            today_iso = datetime.date.today().isoformat()
+            own_frozen = [str(d) for d in (vacation_cfg.get("frozen_dates") or [])]
+            unconsumed = {d for d in own_frozen if d >= today_iso}
+            updated_state["frozen_dates"] = [d for d in own_frozen if d < today_iso]
+            if unconsumed:
+                write_payload[FROZEN_DATES_KEY] = sorted(
+                    set(effective_frozen_dates(cfg)) - unconsumed
+                )
+
+        self._write_config(write_payload)
 
         mw = self.mw
         if mw is not None and hasattr(mw, "reset"):
@@ -949,7 +960,9 @@ class VacationService:
             if not due_cids:
                 return 0, [], {}
 
-            cids_list = list(due_cids)
+            cids_list, _skipped = self._filter_schedulable_cids(col, list(due_cids))
+            if not cids_list:
+                return 0, [], {}
             snapshot = self._snapshot_card_schedule(col, cids_list)
             # 裸 SQL 兜底已删除，理由同 _cancel_vacation：不维护 usn/mod 会破坏同步。
             if hasattr(col, "sched") and hasattr(col.sched, "set_due_date"):

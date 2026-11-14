@@ -282,9 +282,47 @@ def run_checks(runner: ScenarioRunner) -> None:
     runner.check("get_vacation_status", vacation)
 
     def preferences(payload: dict) -> None:
-        runner.expect_success(payload)
+        data = runner.expect_success(payload)
+        prefs = data.get("preferences") if isinstance(data.get("preferences"), dict) else data
+        for key in ("autoPlayFrontAudio", "autoPlayBackAudio"):
+            if not isinstance(prefs.get(key), bool):
+                raise AssertionError(f"preferences.{key} 应为 bool，实际 {prefs.get(key)!r}")
+        if prefs.get("reviewStageWidth") not in ("standard", "auto", "wide", "full"):
+            raise AssertionError(f"reviewStageWidth 非法：{prefs.get('reviewStageWidth')!r}")
+        if int(prefs.get("reviewContentScale") or 0) not in (90, 100, 115, 130, 150):
+            raise AssertionError(f"reviewContentScale 非法：{prefs.get('reviewContentScale')!r}")
 
     runner.check("get_preferences", preferences)
+
+    audio_rows = runner._sqlite_rows(
+        "select c.id from cards c join notes n on c.nid=n.id "
+        "where n.flds like '%[sound:%' order by c.id limit 1"
+    )
+    if audio_rows:
+        audio_cid = audio_rows[0][0]
+
+        def audio_side_split(payload: dict) -> None:
+            data = runner.expect_success(payload)
+            cards_out = data.get("cards") or []
+            if not cards_out:
+                raise AssertionError("音频卡片 get_review_queue 返回空列表")
+            item = cards_out[0]
+            front_aud = item.get("frontAudioFiles")
+            back_aud = item.get("backAudioFiles")
+            if not isinstance(front_aud, list) or not isinstance(back_aud, list):
+                raise AssertionError("缺少 frontAudioFiles / backAudioFiles 列表")
+            if not front_aud:
+                raise AssertionError("正面 [sound:...] 音频未提取到 frontAudioFiles")
+            dup = [f for f in back_aud if f in front_aud]
+            if dup:
+                raise AssertionError(f"backAudioFiles 重复携带了正面音频：{dup}")
+
+        runner.check(
+            "get_review_queue",
+            audio_side_split,
+            {"cardIds": [str(audio_cid)]},
+            label="media:audio-side-split",
+        )
 
 
 def run_deck_options(runner: ScenarioRunner) -> None:
@@ -816,7 +854,7 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
     def record(label: str, ok: bool, detail: str = "") -> None:
         runner.results.append(CheckResult(runner.key, label, ok, detail))
 
-    # ---- 只读：复习队列
+    # ---- 只读：复习队列与卡片调试诊断
     def review_queue(payload: dict) -> None:
         data = runner.expect_success(payload)
         for key in ("cards", "totalDue"):
@@ -824,6 +862,41 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
                 raise KeyError(f"复习队列缺 {key}（实际：{sorted(data)}）")
 
     runner.check("get_review_queue", review_queue, {"limit": 5})
+
+    probe_cid = runner.sqlite_count("select min(id) from cards")
+    if probe_cid:
+        def card_debug_info(payload: dict) -> None:
+            data = runner.expect_success(payload)
+            if not data.get("available"):
+                raise AssertionError(f"get_card_debug_info 不可用：{data.get('reason')}")
+            for key in (
+                "cardInfo",
+                "noteInfo",
+                "noteTypeInfo",
+                "nativeRender",
+                "clozeAndCharDiagnostics",
+                "runtime",
+            ):
+                if not isinstance(data.get(key), dict):
+                    raise KeyError(f"get_card_debug_info 缺 {key}")
+            if not isinstance(data["noteTypeInfo"].get("activeTemplate"), dict):
+                raise KeyError("noteTypeInfo 缺 activeTemplate")
+            snap = data["runtime"].get("configSnapshot") or {}
+            for key in (
+                "autoPlayFrontAudio",
+                "autoPlayBackAudio",
+                "reviewStageWidth",
+                "reviewContentScale",
+            ):
+                if key not in snap:
+                    raise KeyError(f"configSnapshot 缺 {key}")
+
+        runner.check(
+            "get_card_debug_info",
+            card_debug_info,
+            {"cardId": str(probe_cid)},
+            label="debug-info",
+        )
 
     # ---- 自定义学习：预览与启动
     def preview(payload: dict) -> None:
@@ -878,19 +951,38 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
     else:
         runner.warn("duplicate:skip", "首条笔记正文去标签后为空，查重分支未被覆盖")
 
-    # ---- 偏好往返
+    # ---- 偏好往返（含主题、音频双开关与视图双维调节）
     def save_pref(payload: dict) -> None:
         data = runner.expect_success(payload)
         if data.get("saved") is False:
             raise AssertionError("偏好未保存")
 
-    runner.check("save_preferences", save_pref, {"theme": "dark"}, label="preferences:save")
+    runner.check(
+        "save_preferences",
+        save_pref,
+        {
+            "theme": "dark",
+            "autoPlayFrontAudio": True,
+            "autoPlayBackAudio": False,
+            "reviewStageWidth": "wide",
+            "reviewContentScale": 115,
+        },
+        label="preferences:save",
+    )
 
     def read_pref(payload: dict) -> None:
         data = runner.expect_success(payload)
         prefs = data.get("preferences") if isinstance(data.get("preferences"), dict) else data
         if prefs.get("theme") != "dark":
             raise AssertionError(f"写 dark 读回 {prefs.get('theme')}")
+        if prefs.get("autoPlayFrontAudio") is not True or prefs.get("autoPlayBackAudio") is not False:
+            raise AssertionError(
+                f"音频自动播放开关往返不一致：{prefs.get('autoPlayFrontAudio')}/{prefs.get('autoPlayBackAudio')}"
+            )
+        if prefs.get("reviewStageWidth") != "wide" or int(prefs.get("reviewContentScale") or 0) != 115:
+            raise AssertionError(
+                f"视图宽度/缩放往返不一致：{prefs.get('reviewStageWidth')}/{prefs.get('reviewContentScale')}"
+            )
 
     runner.check("get_preferences", read_pref, label="preferences:roundtrip")
 
@@ -942,6 +1034,42 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
              "front": "冒烟编辑正面", "back": "冒烟编辑背面"},
             label="editor:persisted",
         )
+
+    # ---- 普通卡加挖空自动派生 (Cloze) 伴生卡型（仅在 exam 场景跑，避免污染基础计数）
+    if runner.key == "exam":
+        added_basic = runner.expect_success(
+            runner.call(
+                "quick_add",
+                {
+                    "front": "Windows smoke companion basic",
+                    "back": "smoke companion back",
+                    "deckName": "Default",
+                },
+            )
+        )
+        added_cid = added_basic.get("cardId")
+        added_nid = added_basic.get("noteId")
+        if added_cid and added_nid:
+            def companion_cloze(payload: dict) -> None:
+                data = runner.expect_success(payload)
+                if not data.get("saved") or not data.get("isCloze"):
+                    raise AssertionError(f"普通卡转伴生挖空失败：{data}")
+                if not data.get("convertedToCloze"):
+                    raise AssertionError(f"未触发 convertedToCloze：{data}")
+                if "(Cloze)" not in str(data.get("noteTypeName") or ""):
+                    raise AssertionError(f"期望伴生 (Cloze) 卡型，实际：{data.get('noteTypeName')}")
+
+            runner.check(
+                "update_card_inline",
+                companion_cloze,
+                {
+                    "cardId": str(added_cid),
+                    "noteId": str(added_nid),
+                    "front": "Windows smoke {{c1::companion cloze}}",
+                    "back": "smoke companion back",
+                },
+                label="editor:companion-cloze",
+            )
 
     # ---- 粘贴图片：素材必须真的落盘
     def paste(payload: dict) -> None:

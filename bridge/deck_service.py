@@ -1197,9 +1197,9 @@ class DeckService:
         for i in range(365):
             d = today_date - datetime.timedelta(days=(364 - i))
             d_str = d.isoformat()
-            is_frozen = d_str in frozen_dates
             info = day_map.get(i, {"count": 0, "correct": 0})
             cnt = info["count"]
+            is_frozen = (d_str in frozen_dates) and (cnt == 0)
             corr = info["correct"]
             acc = round((corr / cnt) * 100) if cnt > 0 else 0
             level = 0 if cnt == 0 else (1 if cnt < 15 else (2 if cnt < 35 else (3 if cnt < 65 else 4)))
@@ -1226,24 +1226,35 @@ class DeckService:
         day_set = recent_day_offsets | older_day_offsets
         day_offsets = sorted(day_set)
 
-        def is_day_active(d_off: int) -> bool:
-            if d_off in day_set:
-                return True
+        def is_day_frozen(d_off: int) -> bool:
+            if d_off > 0:
+                return False
             d_iso = (today_date + datetime.timedelta(days=d_off)).isoformat()
             return d_iso in frozen_dates
 
+        def is_day_kept(d_off: int) -> bool:
+            return d_off in day_set or is_day_frozen(d_off)
+
+        def is_bridge_frozen(start_exclusive: int, end_exclusive: int) -> bool:
+            gap = end_exclusive - start_exclusive - 1
+            if gap <= 0 or gap > len(frozen_dates):
+                return False
+            return all(is_day_frozen(k) for k in range(start_exclusive + 1, end_exclusive))
+
         current_streak = 0
-        cursor = 0 if is_day_active(0) else (-1 if is_day_active(-1) else None)
+        cursor = 0 if is_day_kept(0) else (-1 if is_day_kept(-1) else None)
         if cursor is not None:
-            while is_day_active(cursor):
-                current_streak += 1
+            while is_day_kept(cursor):
+                # Frozen days bridge the streak without inflating its count.
+                if cursor in day_set:
+                    current_streak += 1
                 cursor -= 1
 
         longest_streak = 0
         run = 0
         prev = None
         for d in day_offsets:
-            if prev is None or d == prev + 1:
+            if prev is None or d == prev + 1 or is_bridge_frozen(prev, d):
                 run += 1
             else:
                 run = 1
@@ -1259,10 +1270,7 @@ class DeckService:
         week_active_days = sum(
             1
             for i in range(weekday_idx + 1)
-            if (
-                day_map.get(364 - i, {"count": 0})["count"] > 0
-                or (today_date - datetime.timedelta(days=i)).isoformat() in frozen_dates
-            )
+            if day_map.get(364 - i, {"count": 0})["count"] > 0
         )
 
         retention_rate = round((week_correct / week_reviews) * 100) if week_reviews > 0 else 0
