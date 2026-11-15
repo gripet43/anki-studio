@@ -1,5 +1,7 @@
 # Anki Studio
 
+![Anki Studio](docs/assets/brand-banner.png)
+
 **[English](#english) · [简体中文](#简体中文)** · **[AnkiWeb Add-on (`1071937836`)](https://ankiweb.net/shared/info/1071937836)**
 
 ---
@@ -24,7 +26,8 @@
 ## Highlights
 
 - **Distraction-Free Workspace** — Today Dashboard with daily goal ring, streak tracker, 26×7 learning heatmap, deck mastery bars derived harmoniously from your accent color, and weekly review rhythm.
-- **Calm Reviewer** — spacious centered card stage with FSRS interval previews (`Again / Hard / Good / Easy`), Cloze, MathJax/KaTeX, flags, tags, and instant Light / Dark / True OLED themes across 8 accent palettes.
+- **Calm Reviewer** — spacious centered card stage with FSRS interval previews (`Again / Hard / Good / Easy`), Cloze, MathJax/KaTeX, flags, tags, `Aa` stage width & scale controls, **75%–500% pan-and-zoom image/mind-map lightbox**, and independent front/back audio auto-play switches.
+- **System Auto, Light & Dark + 8 Accent Atmospheres** — auto-follows your OS appearance across 8 accent palettes; keep **Indigo** for 100% pure neutral minimalism, or pick 7 optional warm-paper & illustration themes (*Botanical Journal, Washi & Matcha, Cozy Café, Study Cat, Observatory, Pastel Sky, Bookplate Study*).
 - **FSRS Analytics & Memory Insights** — 30-day due workload forecast, card maturity lifecycle breakdown, 12-week historical retention trend, 24-hour focus breakdown, and strict FSRS True Retention.
 - **Burnout Shield (`Vacation Mode` & `Schedule Relief`)** — freeze new-card limits, snapshot & shift due dates without breaking intervals or streaks, spread overdue backlogs smoothly over *N* days, or trigger a curated 10–15 card **Light Session** on exhausted days.
 - **Fast Card Library** — filter by status, difficulty, flag, tag, or deck; multi-select to batch edit, suspend, bury, move, or delete.
@@ -70,8 +73,9 @@
 - **全局瀑布流级联同步**：顶部状态指示、环形进度雷达、牌组卡片、26×7 学习热力图与周节奏图表全屏协同呼吸。
 - **4 级统一按钮系统**：严谨的视觉层级（Primary、Secondary、Ghost、Icon Circle），提供细腻的物理触感反馈。
 - **🌴 休假守护与雪崩急救**：内建事前休假（新卡冻结 + 顺延 + 连胜冰冻 Streak Freeze）、事后削峰填谷（卡片均匀平摊消化）与低能量极简打卡模式。
+- **学习专注细节升级**：复习页支持 `Aa` 舞台宽度与字号调节、图片/思维导图 **75%–500% 无极缩放灯箱**，以及正面/背面独立的卡片音频自动播放双开关。
 - **三层防迷失安全网**：快捷键 `Ctrl+Opt+M` / `Ctrl+Alt+M`、工具菜单入口与原生工具栏常驻彩色胶囊，随时秒切原生。
-- **多主题与个性化**：支持 Light、Dark、OLED 纯黑三种专业主题，以及 8 套品牌强调色；首页牌组卡配色由所选强调色派生，同色系内做深浅分级，不会出现一套彩虹色。
+- **多主题与纸感氛围**：支持 `跟随系统 (System)`、`浅色 (Light)`、`深色 (Dark)` 三种显示模式与 8 套品牌强调色；默认经典蓝（`Indigo`）严格保持零插画纯白极简工作台，其余 7 款强调色各自绑定专属纸感与微插画氛围（植物手账、京都和纸、窗边咖啡馆、橘猫伴读、星夜天文台、云端纸飞机、古典藏书阁），首页牌组卡配色由所选强调色和谐派生。
 - **16 种界面语言**：简繁中文、英、日、韩、德、法、西、意、葡（巴西）、俄、荷、波、土、越、阿，可跟随 Anki 客户端语言自动切换。
 
 ---
@@ -85,7 +89,7 @@
 👉 **[项目改动日志与多助手协同协议 (CHANGELOG.md)](CHANGELOG.md)**
 
 该文档涵盖：
-1. **色彩与主题矩阵**：Light、Dark、OLED 调色板与语义 Token。
+1. **色彩与主题矩阵**：System Auto / Light / Dark 调色板、8 大主题色纸感氛围与语义 Token。
 2. **按钮四级体系**：`btn-primary`、`btn-secondary`、`btn-ghost`、`btn-icon-circle` 的类名规范与交互微动效。
 3. **动效流水线**：阶段一同步呼吸（1.8s）到阶段二瀑布流入场（0.8s）的编排细节。
 4. **前端工程规范**：`useSyncExternalStore` 状态单向流、防中断保护锁、Modern Web 合成器动效铁律。

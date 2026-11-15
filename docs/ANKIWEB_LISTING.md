@@ -1,4 +1,4 @@
-# AnkiWeb 上架资料（v1.5.7+ / 出海优化版）
+# AnkiWeb 上架资料（v1.6.1+ / 出海优化版）
 
 > 上传入口：<https://ankiweb.net/shared/addons> → Edit / Upload
 > 表单只有五个字段：Title、Tags、Support Page、Branches、Description。
@@ -40,7 +40,7 @@ anki addon ui theme dashboard modern minimalist fsrs scheduler analytics
 https://github.com/gripet43/anki-studio/issues
 ```
 
-仓库为 public，链接与描述里的 GitHub raw 图片直链均可匿名访问。**更新 AnkiWeb 文案前请确保对应资产已推送到 GitHub `main` 分支**。
+仓库为 public，链接与描述里的 GitHub raw 图片直链均可匿名访问。**更新 AnkiWeb 文案前请确保最新代码与文档已 `git push` 到 GitHub `main` 分支**。
 
 ## 4. Branches
 
@@ -61,6 +61,8 @@ AnkiWeb 实测已原生支持标准 Markdown（包括 `##` 二级标题、加粗
 5. **Schedule Relief（浅色弹窗）**：积压平摊 7 天方案（另已在 `docs/assets/screenshots/05-vacation.png` 同步留存同风格 Vacation Mode 高清图）
 
 ```markdown
+![Anki Studio](https://raw.githubusercontent.com/gripet43/anki-studio/main/docs/assets/brand-banner.png)
+
 A calm, Apple HIG–inspired desktop workspace for Anki — with FSRS analytics, Vacation Mode, Schedule Relief, and zero mini-games.
 
 ![Anki Studio preview](https://raw.githubusercontent.com/gripet43/anki-studio/main/docs/assets/anki-studio-preview.gif)
@@ -76,12 +78,12 @@ A calm, Apple HIG–inspired desktop workspace for Anki — with FSRS analytics,
 Most Anki overhauls add mini-games, pets, or cluttered side panels. Anki Studio takes the opposite approach: clean typography, low-friction daily tracking, and burnout protection designed for serious learners.
 
 - **Today Dashboard** — daily progress ring, streak counter, 26×7 study heatmap, deck mastery bars, and weekly rhythm
-- **Calm Reviewer & Cloze Support** — spacious card stage, FSRS interval previews (`Again / Hard / Good / Easy`), flags, tags, and MathJax/KaTeX rendering
+- **Calm Reviewer & Study Controls** — spacious card stage with FSRS interval previews (`Again / Hard / Good / Easy`), Cloze, flags, tags, MathJax/KaTeX, `Aa` stage width & scale controls, **75%–500% pan-and-zoom image/mind-map lightbox**, and independent front/back audio auto-play switches
 - **FSRS Analytics & Memory Insights** — 30-day review workload forecast, card maturity breakdown, 12-week retention trend, 24-hour focus window, and strict FSRS True Retention
 - **Vacation Mode & Schedule Relief** — freeze new-card caps, snapshot & shift due dates without touching intervals, preserve streaks, spread overdue backlogs over *N* days, or start a curated 10–15 card **Light Session** on low-energy days
 - **Card Library & Batch Actions** — filter instantly by status, difficulty, flag, tag, or deck; multi-select to edit, suspend, bury, move, or delete in bulk
 - **Rich Card Editor & Script Compatibility** — write Cloze notes, tables, and math formatting natively; template-driven and Image Occlusion cards render faithfully in isolated **Compatibility Mode** (authoring/editing Image Occlusion masks stays in Anki's native editor so card structure is never altered)
-- **Light, Dark & True OLED Themes** — 3 display modes × 8 harmonious accent palettes synced cleanly across decks and charts
+- **System Auto, Light & Dark + 8 Accent Atmospheres** — auto-follows OS appearance across 8 harmonious palettes; keep **Indigo** for 100% pure neutral minimalism, or pick 7 optional warm-paper & illustration themes (*Botanical Journal, Washi & Matcha, Cozy Café, Study Cat, Observatory, Pastel Sky, Bookplate Study*)
 
 ## Safe by Design: Zero Lock-In
 
@@ -103,7 +105,7 @@ Card contents, deck names, tags, and search queries **never leave your device**.
 Anki Studio 把 Anki 主窗口变成桌面级沉浸式工作区，同时与 AnkiWeb 同步完全兼容。
 
 - **今日概览** — 连续打卡、26×7 学习热力图、牌组掌握度、本周复习节奏
-- **牌组配色由强调色派生** — 8 套配色 × 明 / 暗 / 纯黑三种主题
+- **牌组配色与纸感氛围由强调色派生** — 8 套配色（默认经典蓝零插画纯白，其余 7 色含护眼纸感插画氛围）× 跟随系统 / 浅色 / 深色
 - **休假模式** — 冻结新卡上限、顺延到期日期、连胜冰冻
 - **进度减负** — 不改变间隔，把逾期卡平摊到 N 天
 - **低能量极简打卡** — 精选 10–15 张的轻量队列
@@ -122,7 +124,7 @@ Anki Studio 把 Anki 主窗口变成桌面级沉浸式工作区，同时与 Anki
 Anki Studio 把 Anki 主視窗變成桌面級沉浸式工作區，同時與 AnkiWeb 同步完全相容。
 
 - **今日概覽** — 連續打卡、26×7 學習熱力圖、牌組掌握度、本週複習節奏
-- **牌組配色由強調色派生** — 8 套配色 × 明 / 暗 / 純黑三種主題
+- **牌組配色與紙感氛圍由強調色派生** — 8 套配色（預設經典藍零插畫純白，其餘 7 色搭護眼紙感插畫氛圍）× 跟隨系統 / 淺色 / 深色
 - **休假模式** — 凍結新卡上限、順延到期日期、連勝冰凍
 - **進度減負** — 不改變間隔，把逾期卡平攤到 N 天
 - **低能量極簡打卡** — 精選 10–15 張的輕量佇列
@@ -141,7 +143,7 @@ Anki Studio 把 Anki 主視窗變成桌面級沉浸式工作區，同時與 Anki
 Anki Studio は Anki のメインウィンドウをデスクトップ級のワークスペースに置き換えます。AnkiWeb 同期とは完全に互換です。
 
 - **今日の概要** — 連続学習日数、26×7 の学習ヒートマップ、デッキ習熟度、週間リズム
-- **デッキの配色はアクセントカラーから生成** — 8 色 × ライト / ダーク / OLED
+- **デッキの配色はアクセントカラーから生成** — 8 色 × システム連動 / ライト / ダーク
 - **休暇モード** — 新規カード上限の凍結、期日の繰り下げ、連続記録の凍結
 - **負担軽減** — 間隔を変えずに期限切れカードを N 日に分散
 - **低エネルギー学習** — 10〜15 枚だけの軽量キュー
@@ -160,7 +162,7 @@ Anki Studio は Anki のメインウィンドウをデスクトップ級のワ�
 Anki Studio는 Anki의 메인 창을 데스크톱급 작업 공간으로 바꿉니다. AnkiWeb 동기화와 완전히 호환됩니다.
 
 - **오늘 개요** — 연속 학습일, 26×7 학습 히트맵, 덱 숙련도, 주간 리듬
-- **덱 색상은 강조색에서 생성** — 8가지 팔레트 × 라이트 / 다크 / OLED
+- **덱 색상은 강조색에서 생성** — 8가지 팔레트 × 시스템 연동 / 라이트 / 다크
 - **휴가 모드** — 새 카드 한도 동결, 만기일 미루기, 연속 기록 동결
 - **진도 완화** — 간격을 바꾸지 않고 만기 카드를 N일에 분산
 - **저에너지 학습** — 10~15장만 골라 주는 가벼운 큐
@@ -179,7 +181,7 @@ Anki Studio는 Anki의 메인 창을 데스크톱급 작업 공간으로 바꿉�
 Anki Studio verwandelt das Hauptfenster von Anki in einen Arbeitsbereich im Desktop-Stil – vollständig kompatibel mit der AnkiWeb-Synchronisierung.
 
 - **Tagesübersicht** — Streak, 26×7-Lern-Heatmap, Stapel-Fortschritt, Wochenrhythmus
-- **Stapelfarben aus der Akzentfarbe abgeleitet** — 8 Paletten × Hell / Dunkel / OLED
+- **Stapelfarben aus der Akzentfarbe abgeleitet** — 8 Paletten × System / Hell / Dunkel
 - **Urlaubsmodus** — Limit für neue Karten einfrieren, Fälligkeiten verschieben, Streak einfrieren
 - **Pensum entlasten** — überfällige Karten ohne Änderung der Intervalle auf N Tage verteilen
 - **Lernsitzung mit wenig Energie** — eine kuratierte Warteschlange von 10–15 Karten
@@ -198,7 +200,7 @@ Anki Studio verwandelt das Hauptfenster von Anki in einen Arbeitsbereich im Desk
 Anki Studio transforme la fenêtre principale d'Anki en espace de travail de bureau, tout en restant pleinement compatible avec la synchronisation AnkiWeb.
 
 - **Vue du jour** — série de jours, heatmap 26×7, maîtrise des paquets, rythme hebdomadaire
-- **Couleurs des paquets dérivées de la couleur d'accent** — 8 palettes × clair / sombre / OLED
+- **Couleurs des paquets dérivées de la couleur d'accent** — 8 palettes × Système / Clair / Sombre
 - **Mode vacances** — gel des limites de nouvelles cartes, report des échéances, gel de la série
 - **Alléger la charge** — répartir les cartes en retard sur N jours sans toucher aux intervalles
 - **Session à faible énergie** — une file de 10 à 15 cartes seulement
@@ -217,7 +219,7 @@ Anki Studio transforme la fenêtre principale d'Anki en espace de travail de bur
 Anki Studio convierte la ventana principal de Anki en un espacio de trabajo de escritorio, manteniendo total compatibilidad con la sincronización de AnkiWeb.
 
 - **Vista de hoy** — racha, mapa de calor 26×7, dominio del mazo, ritmo semanal
-- **Colores de mazo derivados del color de acento** — 8 paletas × claro / oscuro / OLED
+- **Colores de mazo derivados del color de acento** — 8 paletas × Sistema / Claro / Oscuro
 - **Modo vacaciones** — congela límites de tarjetas nuevas, aplaza vencimientos, congela la racha
 - **Aliviar carga** — reparte las tarjetas atrasadas en N días sin tocar los intervalos
 - **Sesión de baja energía** — una cola de solo 10–15 tarjetas
@@ -236,7 +238,7 @@ Anki Studio convierte la ventana principal de Anki en un espacio de trabajo de e
 Anki Studio trasforma la finestra principale di Anki in uno spazio di lavoro desktop, restando pienamente compatibile con la sincronizzazione AnkiWeb.
 
 - **Panoramica di oggi** — serie, mappa di calore 26×7, padronanza dei mazzi, ritmo settimanale
-- **Colori dei mazzi derivati dal colore d'accento** — 8 palette × chiaro / scuro / OLED
+- **Colori dei mazzi derivati dal colore d'accento** — 8 palette × Sistema / Chiaro / Scuro
 - **Modalità vacanza** — blocca i limiti delle nuove carte, sposta le scadenze, congela la serie
 - **Alleggerisci il carico** — distribuisce le carte scadute su N giorni senza toccare gli intervalli
 - **Sessione a bassa energia** — una coda di sole 10–15 carte
@@ -255,7 +257,7 @@ Anki Studio trasforma la finestra principale di Anki in uno spazio di lavoro des
 O Anki Studio transforma a janela principal do Anki em um espaço de trabalho de desktop, mantendo total compatibilidade com a sincronização do AnkiWeb.
 
 - **Visão de hoje** — sequência, mapa de calor 26×7, domínio do baralho, ritmo semanal
-- **Cores dos baralhos derivadas da cor de destaque** — 8 paletas × claro / escuro / OLED
+- **Cores dos baralhos derivadas da cor de destaque** — 8 paletas × Sistema / Claro / Escuro
 - **Modo férias** — congela limites de cartões novos, adia vencimentos, congela a sequência
 - **Aliviar carga** — distribui cartões atrasados em N dias sem alterar os intervalos
 - **Sessão de baixa energia** — uma fila de apenas 10–15 cartões
@@ -274,7 +276,7 @@ O Anki Studio transforma a janela principal do Anki em um espaço de trabalho de
 Anki Studio превращает главное окно Anki в полноценное рабочее пространство, полностью совместимое с синхронизацией AnkiWeb.
 
 - **Обзор дня** — серия дней, тепловая карта 26×7, освоение колод, недельный ритм
-- **Цвета колод выводятся из акцентного цвета** — 8 палитр × светлая / тёмная / OLED
+- **Цвета колод выводятся из акцентного цвета** — 8 палитр × Системная / Светлая / Тёмная
 - **Режим отпуска** — заморозка лимита новых карт, сдвиг сроков, заморозка серии
 - **Разгрузка** — распределение просроченных карт на N дней без изменения интервалов
 - **Сессия «мало сил»** — очередь всего из 10–15 карт
@@ -293,7 +295,7 @@ Anki Studio превращает главное окно Anki в полноце�
 Anki Studio verandert het hoofdvenster van Anki in een desktop-werkruimte, volledig compatibel met AnkiWeb-synchronisatie.
 
 - **Overzicht van vandaag** — reeks, 26×7 heatmap, beheersing per stapel, weekritme
-- **Stapelkleuren afgeleid van je accentkleur** — 8 paletten × licht / donker / OLED
+- **Stapelkleuren afgeleid van je accentkleur** — 8 paletten × Systeem / Licht / Donker
 - **Vakantiemodus** — limiet voor nieuwe kaarten bevriezen, vervaldata verschuiven, reeks bevriezen
 - **Werkdruk verlichten** — achterstallige kaarten over N dagen spreiden zonder intervallen te wijzigen
 - **Sessie met weinig energie** — een wachtrij van slechts 10–15 kaarten
@@ -312,7 +314,7 @@ Anki Studio verandert het hoofdvenster van Anki in een desktop-werkruimte, volle
 Anki Studio zamienia główne okno Anki w pulpit klasy desktop, zachowując pełną zgodność z synchronizacją AnkiWeb.
 
 - **Przegląd dnia** — seria dni, mapa cieplna 26×7, opanowanie talii, rytm tygodnia
-- **Kolory talii pochodzą z koloru akcentu** — 8 palet × jasny / ciemny / OLED
+- **Kolory talii pochodzą z koloru akcentu** — 8 palet × Systemowy / Jasny / Ciemny
 - **Tryb wakacyjny** — zamrożenie limitu nowych kart, przesunięcie terminów, zamrożenie serii
 - **Ulżenie obciążeniu** — rozłożenie zaległych kart na N dni bez zmiany interwałów
 - **Sesja na małej energii** — kolejka zaledwie 10–15 kart
@@ -331,7 +333,7 @@ Anki Studio zamienia główne okno Anki w pulpit klasy desktop, zachowując peł
 Anki Studio, Anki'nin ana penceresini masaüstü düzeyinde bir çalışma alanına dönüştürür ve AnkiWeb senkronizasyonuyla tam uyumludur.
 
 - **Günün özeti** — seri, 26×7 ısı haritası, deste hâkimiyeti, haftalık ritim
-- **Deste renkleri vurgu renginden türetilir** — 8 palet × açık / koyu / OLED
+- **Deste renkleri vurgu renginden türetilir** — 8 palet × Sistem / Açık / Koyu
 - **Tatil modu** — yeni kart limitini dondur, vadeleri ötele, seriyi dondur
 - **Yükü hafiflet** — gecikmiş kartları aralıkları değiştirmeden N güne yay
 - **Düşük enerji oturumu** — yalnızca 10–15 kartlık bir kuyruk
@@ -350,7 +352,7 @@ Anki Studio, Anki'nin ana penceresini masaüstü düzeyinde bir çalışma alan�
 Anki Studio biến cửa sổ chính của Anki thành không gian làm việc chuẩn desktop, vẫn tương thích hoàn toàn với đồng bộ AnkiWeb.
 
 - **Tổng quan hôm nay** — chuỗi ngày, bản đồ nhiệt 26×7, độ thành thạo bộ thẻ, nhịp tuần
-- **Màu bộ thẻ sinh ra từ màu nhấn** — 8 bảng màu × sáng / tối / OLED
+- **Màu bộ thẻ sinh ra từ màu nhấn** — 8 bảng màu × Theo hệ thống / Sáng / Tối
 - **Chế độ nghỉ phép** — đóng băng giới hạn thẻ mới, dời ngày đến hạn, đóng băng chuỗi ngày
 - **Giảm tải** — dàn đều thẻ quá hạn ra N ngày mà không đổi khoảng cách ôn tập
 - **Phiên ôn nhẹ** — hàng đợi chỉ 10–15 thẻ
@@ -369,7 +371,7 @@ Anki Studio biến cửa sổ chính của Anki thành không gian làm việc c
 يحوّل Anki Studio النافذة الرئيسية لـ Anki إلى مساحة عمل بمستوى سطح المكتب، مع بقائه متوافقًا تمامًا مع مزامنة AnkiWeb.
 
 - **نظرة اليوم** — سلسلة الأيام، خريطة حرارية 26×7، إتقان المجموعات، إيقاع الأسبوع
-- **ألوان المجموعات مشتقّة من لون التمييز** — 8 لوحات × فاتح / داكن / OLED
+- **ألوان المجموعات مشتقّة من لون التمييز** — 8 لوحات × تلقائي (النظام) / فاتح / داكن
 - **وضع العطلة** — تجميد حد البطاقات الجديدة، تأجيل تواريخ الاستحقاق، تجميد السلسلة
 - **تخفيف العبء** — توزيع البطاقات المتأخرة على N أيام دون تغيير الفواصل
 - **جلسة الطاقة المنخفضة** — قائمة من 10–15 بطاقة فقط
@@ -390,6 +392,8 @@ Anki Studio biến cửa sổ chính của Anki thành không gian làm việc c
 
 | 文件 | 用途 | 规格 |
 |---|---|---|
+| [`docs/assets/brand-banner.png`](assets/brand-banner.png) | AnkiWeb 与 README 顶部品牌横幅 | 1200×260 · 24 KB |
+| [`docs/assets/logo-512.png`](assets/logo-512.png) | 社媒 / Product Hunt / 视频片头 Logo | 512×512 · 7 KB |
 | [`docs/assets/anki-studio-preview.gif`](assets/anki-studio-preview.gif) | AnkiWeb 与 README 首屏主视觉 | **1200×850、5 帧 × 2.8s（14.0s）、613 KB** |
 | [`docs/assets/screenshots/01-dashboard.png`](assets/screenshots/01-dashboard.png) | Dashboard（英文浅色高清图） | 2944×2086 · 486 KB |
 | [`docs/assets/screenshots/02-reviewer.png`](assets/screenshots/02-reviewer.png) | Reviewer（英文 Cloze 背面 + FSRS 按钮） | 2944×2086 · 171 KB |
