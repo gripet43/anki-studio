@@ -12,12 +12,13 @@ import { usePresence } from '../../hooks/usePresence';
 import { Tooltip } from '../common/Tooltip';
 import { translate } from '../../i18n/translations';
 import { appActions, RescueReceipt, useAppStore } from '../../stores/useAppStore';
-import { getAccentScale } from '../../utils/themeTokens';
+import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 
 export const IcuRescueModal: React.FC = () => {
   const store = useAppStore();
   const t = (key: any, params?: any) => translate(store.resolvedLang, key, params);
-  const brandHex = getAccentScale(store.accentColor, store.theme).brand;
+  const resolvedTheme = resolveThemeMode(store.theme, store.systemDark);
+  const brandHex = getAccentScale(store.accentColor, resolvedTheme).brand;
 
   const backlog = store.dashboard.backlog;
   const totalDue = backlog?.totalDue || store.dashboard.todayStats.totalPending || 0;
@@ -71,20 +72,14 @@ export const IcuRescueModal: React.FC = () => {
     return null;
   }
 
-  const isDark = store.theme === 'dark' || store.theme === 'oled';
-  const modalBg =
-    store.theme === 'oled'
-      ? 'bg-[#101115] border-[#242630] text-[#F4F4F6]'
-      : isDark
-      ? 'bg-[#181920] border-[#2C2E3A] text-[#F2F3F7]'
-      : 'bg-[#FFFFFF] border-[#E5E5EA] text-[#1D1D1F]';
+  const isDark = resolvedTheme === 'dark';
+  const modalBg = isDark
+    ? 'bg-[#181920] border-[#2C2E3A] text-[#F2F3F7]'
+    : 'bg-[#FFFFFF] border-[#E5E5EA] text-[#1D1D1F]';
 
-  const cardSurface =
-    store.theme === 'oled'
-      ? 'bg-[#15161C] border-[#242630]'
-      : isDark
-      ? 'bg-[#1F212A] border-[#2E303D]'
-      : 'bg-[#F9F9FB] border-[#ECECF2]';
+  const cardSurface = isDark
+    ? 'bg-[#1F212A] border-[#2E303D]'
+    : 'bg-[#F9F9FB] border-[#ECECF2]';
 
   const perDayEstimate = Math.ceil(totalDue / Math.max(1, days));
 

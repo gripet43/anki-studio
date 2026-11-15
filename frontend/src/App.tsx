@@ -15,7 +15,7 @@ import { IcuRescueModal } from './components/vacation/IcuRescueModal';
 import { usePresence } from './hooks/usePresence';
 import { ensureLanguageLoaded, isLanguageLoaded, isRtlLanguage, translate } from './i18n/translations';
 import { appActions, getAppState, setAppState, showToast, useAppStore } from './stores/useAppStore';
-import { buildThemeCssVars } from './utils/themeTokens';
+import { buildThemeCssVars, resolveThemeMode } from './utils/themeTokens';
 
 export const App: React.FC = () => {
   const {
@@ -25,12 +25,17 @@ export const App: React.FC = () => {
     quickAddOpen,
     settingsOpen,
     theme,
+    systemDark,
     accentColor,
     resolvedLang,
     toastMessage,
   } = useAppStore();
 
-  const themeVars = useMemo(() => buildThemeCssVars(accentColor, theme), [accentColor, theme]);
+  const resolvedTheme = resolveThemeMode(theme, systemDark);
+  const themeVars = useMemo(
+    () => buildThemeCssVars(accentColor, resolvedTheme),
+    [accentColor, resolvedTheme]
+  );
   const isRtl = isRtlLanguage(resolvedLang);
 
   // Cache last non-empty toast message so exit animation renders the departing text cleanly (E2)
@@ -79,21 +84,27 @@ export const App: React.FC = () => {
         themeSwitchTimerRef.current = null;
       }
     };
-  }, [theme, accentColor]);
+  }, [theme, resolvedTheme, accentColor]);
 
-  // Synchronize CSS variables, theme class, and language/RTL direction onto document.documentElement
+  // Synchronize CSS variables, color-scheme meta, theme class, and language/RTL direction onto document.documentElement
   // so portals and root-level styles always reflect the active theme, accent, and text direction.
   useEffect(() => {
     const rootEl = document.documentElement;
-    rootEl.classList.toggle('dark', theme === 'dark' || theme === 'oled');
-    rootEl.classList.toggle('oled', theme === 'oled');
+    rootEl.classList.toggle('dark', resolvedTheme === 'dark');
+    rootEl.classList.remove('oled');
+    rootEl.dataset.themeMode = theme;
+    rootEl.dataset.resolvedTheme = resolvedTheme;
     rootEl.dataset.accent = accentColor;
     rootEl.dir = isRtl ? 'rtl' : 'ltr';
     rootEl.lang = resolvedLang;
+    const metaScheme = document.querySelector('meta[name="color-scheme"]');
+    if (metaScheme) {
+      metaScheme.setAttribute('content', theme === 'auto' ? 'light dark' : resolvedTheme);
+    }
     for (const [k, v] of Object.entries(themeVars)) {
       rootEl.style.setProperty(k, v);
     }
-  }, [theme, accentColor, themeVars, isRtl, resolvedLang]);
+  }, [theme, resolvedTheme, accentColor, themeVars, isRtl, resolvedLang]);
 
   useEffect(() => {
     appActions.initFromAnki();
@@ -134,12 +145,35 @@ export const App: React.FC = () => {
       setAppState({ settingsOpen: true });
     };
 
+    const mediaQuery =
+      typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+        ? window.matchMedia('(prefers-color-scheme: dark)')
+        : null;
+    const onSystemThemeChange = (e: MediaQueryListEvent) => {
+      setAppState({ systemDark: e.matches });
+    };
+    if (mediaQuery) {
+      setAppState({ systemDark: mediaQuery.matches });
+      if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', onSystemThemeChange);
+      } else if (typeof mediaQuery.addListener === 'function') {
+        mediaQuery.addListener(onSystemThemeChange);
+      }
+    }
+
     window.addEventListener('anki:collection-updated', onCollectionUpdated);
     window.addEventListener('anki:sync-started', onSyncStarted);
     window.addEventListener('anki:sync-finished', onSyncFinished);
     window.addEventListener('anki:toast', onAnkiToast);
     window.addEventListener('anki:open-settings', onOpenSettings);
     return () => {
+      if (mediaQuery) {
+        if (typeof mediaQuery.removeEventListener === 'function') {
+          mediaQuery.removeEventListener('change', onSystemThemeChange);
+        } else if (typeof mediaQuery.removeListener === 'function') {
+          mediaQuery.removeListener(onSystemThemeChange);
+        }
+      }
       window.removeEventListener('anki:collection-updated', onCollectionUpdated);
       window.removeEventListener('anki:sync-started', onSyncStarted);
       window.removeEventListener('anki:sync-finished', onSyncFinished);
@@ -225,9 +259,7 @@ export const App: React.FC = () => {
   }, [inReviewMode, cmdKOpen, quickAddOpen, settingsOpen]);
 
   const rootBg =
-    theme === 'oled'
-      ? 'bg-[#09090C] text-[#F4F4F6] dark oled'
-      : theme === 'dark'
+    resolvedTheme === 'dark'
       ? 'bg-[#131418] text-[#F2F3F7] dark'
       : 'bg-[var(--bg-canvas)] text-[#1D1D1F]';
 
@@ -280,7 +312,7 @@ export const App: React.FC = () => {
         <div
           data-state={toastPresence.state}
           className={`fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2.5 rounded-full border shadow-2xl text-[12px] font-medium flex items-center gap-2.5 backdrop-blur-md ui-toast select-none ${
-            theme === 'light'
+            resolvedTheme === 'light'
               ? 'bg-[#1D1D1F]/92 text-white border-black/10 shadow-[0_12px_36px_rgba(0,0,0,0.22)]'
               : 'bg-[#22232B]/94 text-white border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.5)]'
           }`}

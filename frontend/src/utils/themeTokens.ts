@@ -4,7 +4,9 @@
 // scales), Notion (warm low-chroma accents), and Material 3 Dark Theme guidelines.
 // ============================================================================
 
-export type ThemeMode = 'light' | 'dark' | 'oled';
+export type ThemeMode = 'auto' | 'light' | 'dark';
+export type ResolvedTheme = 'light' | 'dark';
+export type ThemeInput = ThemeMode | ResolvedTheme;
 
 export type AccentColor =
   | 'indigo'
@@ -448,13 +450,45 @@ export function getAccentAtmosphere(accent: AccentColor): AccentAtmosphereMeta {
   return ACCENT_ATMOSPHERE[accent] || ACCENT_ATMOSPHERE.indigo;
 }
 
+export function detectSystemDark(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+/**
+ * Normalizes persisted/runtime theme preferences to `'auto' | 'light' | 'dark'`,
+ * gracefully migrating legacy `'oled'` configurations to `'dark'`.
+ */
+export function normalizeThemeMode(val: unknown): ThemeMode {
+  const raw = typeof val === 'string' ? val.trim().toLowerCase() : '';
+  if (raw === 'oled' || raw === 'dark') return 'dark';
+  if (raw === 'light') return 'light';
+  return 'auto';
+}
+
+/**
+ * Resolves a stored theme preference (`'auto' | 'light' | 'dark'`) into the
+ * active concrete visual scheme (`'light' | 'dark'`).
+ */
+export function resolveThemeMode(theme: ThemeInput, systemDark?: boolean): ResolvedTheme {
+  if (theme === 'dark') return 'dark';
+  if (theme === 'light') return 'light';
+  return (systemDark ?? detectSystemDark()) ? 'dark' : 'light';
+}
+
 export function isValidAccentColor(val: unknown): val is AccentColor {
   return typeof val === 'string' && val in ACCENT_THEMES;
 }
 
-export function getAccentScale(accent: AccentColor, theme: ThemeMode): AccentScale {
+export function getAccentScale(
+  accent: AccentColor,
+  theme: ThemeInput,
+  systemDark?: boolean
+): AccentScale {
   const meta = ACCENT_THEMES[accent] || ACCENT_THEMES.indigo;
-  const isDark = theme === 'dark' || theme === 'oled';
+  const isDark = resolveThemeMode(theme, systemDark) === 'dark';
   return isDark ? meta.dark : meta.light;
 }
 
@@ -487,17 +521,22 @@ const DARK_STATUS_TEXT: StatusTextTokens = {
  * Returns WCAG AA (>= 4.5:1) semantic foreground colors calibrated for small
  * (11px) numbers and badges rendered inside elevated `--tooltip-bg` surfaces.
  */
-export function getStatusTextTokens(theme: ThemeMode): StatusTextTokens {
-  return theme === 'dark' || theme === 'oled' ? DARK_STATUS_TEXT : LIGHT_STATUS_TEXT;
+export function getStatusTextTokens(theme: ThemeInput, systemDark?: boolean): StatusTextTokens {
+  return resolveThemeMode(theme, systemDark) === 'dark' ? DARK_STATUS_TEXT : LIGHT_STATUS_TEXT;
 }
 
 /**
  * Computes inline CSS variable declarations for the root container and documentElement
  * so that all descendant components and modals automatically inherit the active theme.
  */
-export function buildThemeCssVars(accent: AccentColor, theme: ThemeMode): Record<string, string> {
-  const s = getAccentScale(accent, theme);
-  const isDark = theme === 'dark' || theme === 'oled';
+export function buildThemeCssVars(
+  accent: AccentColor,
+  theme: ThemeInput,
+  systemDark?: boolean
+): Record<string, string> {
+  const resolved = resolveThemeMode(theme, systemDark);
+  const s = getAccentScale(accent, resolved);
+  const isDark = resolved === 'dark';
 
   return {
     '--brand': s.brand,
@@ -509,7 +548,7 @@ export function buildThemeCssVars(accent: AccentColor, theme: ThemeMode): Record
     '--brand-surface': s.brandSurface,
     '--brand-border': s.brandBorder,
     '--brand-muted-bar': s.brandMutedBar,
-    '--heatmap-0': isDark ? (theme === 'oled' ? '#191920' : '#25252E') : '#ECECEF',
+    '--heatmap-0': isDark ? '#25252E' : '#ECECEF',
     '--heatmap-1': s.heatmap[0],
     '--heatmap-2': s.heatmap[1],
     '--heatmap-3': s.heatmap[2],

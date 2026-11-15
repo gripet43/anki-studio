@@ -1,5 +1,5 @@
 // ============================================================================
-// Theme token matrix — 3 themes × 8 accent colours
+// Theme token matrix — Auto / Light / Dark × 8 accent colours
 // Guards the single source of truth every component reads via CSS variables.
 // ============================================================================
 
@@ -9,12 +9,14 @@ import {
   ACCENT_COLOR_LIST,
   ACCENT_ATMOSPHERE,
   isValidAccentColor,
+  normalizeThemeMode,
+  resolveThemeMode,
   getAccentScale,
   getAccentAtmosphere,
   buildThemeCssVars,
 } from '../../../frontend/src/utils/themeTokens';
 
-const THEMES = ['light', 'dark', 'oled'] as const;
+const THEMES = ['light', 'dark'] as const;
 const ACCENT_IDS = ['indigo', 'emerald', 'cyan', 'rose', 'amber', 'teal', 'violet', 'slate'] as const;
 
 const REQUIRED_SCALE_KEYS = [
@@ -126,10 +128,27 @@ test('isValidAccentColor accepts exactly the 8 ids and rejects junk', () => {
   }
 });
 
-test('getAccentScale collapses dark and oled onto the same dark scale', () => {
+test('normalizeThemeMode migrates legacy oled -> dark and defaults unknown values to auto', () => {
+  equal(normalizeThemeMode('auto'), 'auto');
+  equal(normalizeThemeMode('light'), 'light');
+  equal(normalizeThemeMode('dark'), 'dark');
+  equal(normalizeThemeMode('oled'), 'dark');
+  equal(normalizeThemeMode('OLED'), 'dark');
+  equal(normalizeThemeMode(''), 'auto');
+  equal(normalizeThemeMode('invalid'), 'auto');
+  equal(normalizeThemeMode(null), 'auto');
+});
+
+test('resolveThemeMode & getAccentScale resolve auto cleanly from systemDark', () => {
+  equal(resolveThemeMode('light', true), 'light');
+  equal(resolveThemeMode('dark', false), 'dark');
+  equal(resolveThemeMode('auto', false), 'light');
+  equal(resolveThemeMode('auto', true), 'dark');
   for (const id of ACCENT_IDS) {
+    eq(getAccentScale(id, 'light'), ACCENT_THEMES[id].light, `${id}: light scale mismatch`);
     eq(getAccentScale(id, 'dark'), ACCENT_THEMES[id].dark, `${id}: dark scale mismatch`);
-    eq(getAccentScale(id, 'oled'), ACCENT_THEMES[id].dark, `${id}: oled must reuse dark scale`);
+    eq(getAccentScale(id, 'auto', false), ACCENT_THEMES[id].light, `${id}: auto(light) mismatch`);
+    eq(getAccentScale(id, 'auto', true), ACCENT_THEMES[id].dark, `${id}: auto(dark) mismatch`);
   }
 });
 
@@ -162,13 +181,15 @@ test('the --brand variable always mirrors the resolved scale', () => {
   }
 });
 
-test('heatmap step 0 is a theme canvas tone, ordered light > dark > oled', () => {
+test('heatmap step 0 is a theme canvas tone, ordered light > dark, with auto matching resolved mode', () => {
   const light = buildThemeCssVars('indigo', 'light')['--heatmap-0'];
   const dark = buildThemeCssVars('indigo', 'dark')['--heatmap-0'];
-  const oled = buildThemeCssVars('indigo', 'oled')['--heatmap-0'];
+  const autoLight = buildThemeCssVars('indigo', 'auto', false)['--heatmap-0'];
+  const autoDark = buildThemeCssVars('indigo', 'auto', true)['--heatmap-0'];
   ok(relativeLuminance(light) > relativeLuminance(dark), 'light canvas must be lighter than dark');
-  ok(relativeLuminance(dark) > relativeLuminance(oled), 'dark canvas must be lighter than oled');
   ok(relativeLuminance(light) > 0.6, 'light heatmap empty cell should read as near-white');
+  equal(autoLight, light, 'auto(false) must match light heatmap canvas');
+  equal(autoDark, dark, 'auto(true) must match dark heatmap canvas');
 });
 
 test('buildThemeCssVars is pure and deterministic', () => {

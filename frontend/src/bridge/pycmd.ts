@@ -332,7 +332,7 @@ export type ReviewContentScale = 90 | 100 | 115 | 130 | 150;
 export const REVIEW_CONTENT_SCALES: readonly ReviewContentScale[] = [90, 100, 115, 130, 150] as const;
 
 export interface UserPreferences {
-  theme: 'light' | 'dark' | 'oled';
+  theme: 'auto' | 'light' | 'dark';
   accentColor: 'indigo' | 'emerald' | 'cyan' | 'rose' | 'amber' | 'teal' | 'violet' | 'slate';
   language: string;
   customNickname: string;

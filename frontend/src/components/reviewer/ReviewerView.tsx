@@ -24,7 +24,7 @@ import {
   resolveManualPlayAudioFiles,
   resolveVisibleAudioFiles,
 } from '../../utils/reviewAudio';
-import { getAccentScale } from '../../utils/themeTokens';
+import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 import { CopyDebugInfoButton } from '../common/CopyDebugInfoButton';
 import {
   CelebrationIllustration,
@@ -55,6 +55,7 @@ export const ReviewerView: React.FC = () => {
     playingAudioFile,
     decks,
     theme,
+    systemDark,
     accentColor,
     resolvedLang,
     envInfo,
@@ -68,8 +69,9 @@ export const ReviewerView: React.FC = () => {
     reviewContentScale,
   } = useAppStore();
 
-  const isDark = theme === 'dark' || theme === 'oled';
-  const brandHex = getAccentScale(accentColor, theme).brand;
+  const resolvedTheme = resolveThemeMode(theme, systemDark);
+  const isDark = resolvedTheme === 'dark';
+  const brandHex = getAccentScale(accentColor, resolvedTheme).brand;
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
   const platform = envInfo.platform;
@@ -488,13 +490,10 @@ export const ReviewerView: React.FC = () => {
   const avgSecDisplay =
     sessionStudiedCount > 0 ? (sessionTotalTimeMs / sessionStudiedCount / 1000).toFixed(1) : '0.0';
 
-  // Item #6: Strict Light / Dark / OLED Surface Tokens
-  const screenBg =
-    theme === 'oled'
-      ? 'bg-[#09090C] text-[#F4F4F6]'
-      : theme === 'dark'
-      ? 'bg-[#131418] text-[#F2F3F7]'
-      : 'bg-[var(--bg-canvas)] text-[#1D1D1F]';
+  // Item #6: Strict Light / Dark Surface Tokens
+  const screenBg = isDark
+    ? 'bg-[#131418] text-[#F2F3F7]'
+    : 'bg-[var(--bg-canvas)] text-[#1D1D1F]';
 
   const headerBtnSurface = isDark
     ? 'bg-[#17181E] border-white/[0.07] text-[#8E8E93] hover:text-white'

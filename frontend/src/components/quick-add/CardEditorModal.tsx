@@ -6,7 +6,7 @@ import { formatShortcut, translate } from '../../i18n/translations';
 import { appActions, LibraryCardItem, ReviewCardItem, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
 import { renderMathAndRichHtml } from '../../utils/mathRenderer';
 import { extractMediaBaseUrlFromHtml, resolveMediaInHtml } from '../../utils/mediaUrl';
-import { getAccentScale } from '../../utils/themeTokens';
+import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 import {
   IMAGE_OCCLUSION_AUTHORING_ENABLED,
   isImageOcclusionNote,
@@ -162,6 +162,7 @@ export const CardEditorModal: React.FC = () => {
     decks,
     libraryCards,
     theme,
+    systemDark,
     accentColor,
     resolvedLang,
     envInfo,
@@ -172,7 +173,8 @@ export const CardEditorModal: React.FC = () => {
     libraryFrontCardStyles,
   } = useAppStore();
 
-  const isDark = theme === 'dark' || theme === 'oled';
+  const resolvedTheme = resolveThemeMode(theme, systemDark);
+  const isDark = resolvedTheme === 'dark';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
   // 正面输入框的占位提示里带挖空快捷键，必须随平台走（macOS `Cmd` / Windows·Linux `Ctrl`）。
@@ -250,7 +252,7 @@ export const CardEditorModal: React.FC = () => {
     }
   };
 
-  const brandHex = getAccentScale(accentColor, theme).brand;
+  const brandHex = getAccentScale(accentColor, resolvedTheme).brand;
   const effectiveMediaBaseUrl = useMemo(() => {
     if (envInfo.mediaBaseUrl) return envInfo.mediaBaseUrl;
     if (editingCardData) {

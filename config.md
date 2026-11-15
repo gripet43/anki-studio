@@ -5,8 +5,8 @@
 
 ## 常用选项
 
-- `theme`：`"light"` | `"dark"` | `"oled"`
-  主题模式。`oled` 为纯黑底，适合 OLED 屏。
+- `theme`：`"auto"` | `"light"` | `"dark"`
+  主题模式。`"auto"` 跟随系统浅色 / 深色外观自动切换；历史配置中的 `"oled"` 会自动兼容迁移为 `"dark"`。
 - `accent_color`：`"indigo"` | `"emerald"` | `"cyan"` | `"rose"` | `"amber"` | `"teal"` | `"violet"` | `"slate"`
   品牌强调色，共 8 套。首页牌组卡片的配色也由这一项派生（同色系内的深浅变化，不会串色）。
 - `language`：`"auto"` 或 `"zh-CN"` `"zh-TW"` `"en"` `"ja"` `"ko"` `"es"` `"fr"` `"de"` `"ru"` `"pt-BR"` `"it"` `"ar"` `"vi"` `"tr"` `"pl"` `"nl"`

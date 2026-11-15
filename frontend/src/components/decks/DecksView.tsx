@@ -3,7 +3,7 @@ import { DeckItem, DeckOptionsData } from '../../bridge/pycmd';
 import { usePresence } from '../../hooks/usePresence';
 import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
-import { getAccentScale } from '../../utils/themeTokens';
+import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 import { EmptyStateIllustration } from '../common/ThemeIllustrations';
 import { Tooltip } from '../common/Tooltip';
 
@@ -12,6 +12,7 @@ export const DecksView: React.FC = () => {
     decks,
     collapsedDeckIds,
     theme,
+    systemDark,
     accentColor,
     resolvedLang,
     isInitialSyncing,
@@ -45,15 +46,13 @@ export const DecksView: React.FC = () => {
   const [optRelearningSteps, setOptRelearningSteps] = useState<string>('10m');
   const [optLeechThreshold, setOptLeechThreshold] = useState<number>(8);
 
-  const isDark = theme === 'dark' || theme === 'oled';
-  const brandHex = getAccentScale(accentColor, theme).brand;
+  const resolvedTheme = resolveThemeMode(theme, systemDark);
+  const isDark = resolvedTheme === 'dark';
+  const brandHex = getAccentScale(accentColor, resolvedTheme).brand;
 
-  const cardSurface =
-    theme === 'oled'
-      ? 'bg-[#111216] border-[#22232B] text-white'
-      : theme === 'dark'
-      ? 'bg-[#1A1B21] border-[#2A2C36] text-white'
-      : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[#1D1D1F]';
+  const cardSurface = isDark
+    ? 'bg-[#1A1B21] border-[#2A2C36] text-white'
+    : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[#1D1D1F]';
 
   const subText = 'text-[#8E8E93]';
 

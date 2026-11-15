@@ -704,16 +704,24 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertTrue(dash_prefs["autoPlayFrontAudio"])
         self.assertFalse(dash_prefs["autoPlayBackAudio"])
 
+        # Legacy oled migrates cleanly -> dark; auto & invalid normalize cleanly
+        oled_mig = self._call("save_preferences", {"theme": "oled"})
+        self.assertEqual(oled_mig["data"]["preferences"]["theme"], "dark")
+        auto_res = self._call("save_preferences", {"theme": "auto"})
+        self.assertEqual(auto_res["data"]["preferences"]["theme"], "auto")
+
         # Invalid review display values & string-encoded bools must normalize cleanly
         fallback_res = self._call(
             "save_preferences",
             {
+                "theme": "invalid-theme",
                 "autoPlayFrontAudio": "false",
                 "autoPlayBackAudio": "1",
                 "reviewStageWidth": "invalid-width",
                 "reviewContentScale": 999,
             },
         )
+        self.assertEqual(fallback_res["data"]["preferences"]["theme"], "auto")
         self.assertFalse(fallback_res["data"]["preferences"]["autoPlayFrontAudio"])
         self.assertTrue(fallback_res["data"]["preferences"]["autoPlayBackAudio"])
         self.assertEqual(fallback_res["data"]["preferences"]["reviewStageWidth"], "auto")

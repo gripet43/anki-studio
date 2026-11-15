@@ -214,7 +214,7 @@ class BridgeRouter:
         review_stage_width, review_content_scale = self.deck_service._normalize_review_display_prefs(cfg)
         auto_play_front_audio, auto_play_back_audio = self.deck_service._normalize_review_audio_prefs(cfg)
         return {
-            "theme": cfg.get("theme", "light"),
+            "theme": self.deck_service._normalize_theme_mode(cfg.get("theme")),
             "accentColor": cfg.get("accent_color", "indigo"),
             "language": cfg.get("language", "auto"),
             "resolvedLanguage": self.deck_service._resolve_language(cfg.get("language")),
@@ -234,7 +234,7 @@ class BridgeRouter:
     def action_save_preferences(self, data: Dict[str, Any]) -> Dict[str, Any]:
         patch: Dict[str, Any] = {}
         if "theme" in data:
-            patch["theme"] = data["theme"]
+            patch["theme"] = self.deck_service._normalize_theme_mode(data["theme"])
         if "accentColor" in data:
             patch["accent_color"] = data["accentColor"]
         if "language" in data:
@@ -288,7 +288,7 @@ class BridgeRouter:
         return {
             "saved": True,
             "preferences": {
-                "theme": saved.get("theme", "light"),
+                "theme": self.deck_service._normalize_theme_mode(saved.get("theme")),
                 "accentColor": saved.get("accent_color", "indigo"),
                 "language": saved.get("language", "auto"),
                 "resolvedLanguage": self.deck_service._resolve_language(saved.get("language")),
@@ -404,7 +404,7 @@ class BridgeRouter:
             "qtVersion": qt_version,
             "patchHealth": patch_health,
             "configSnapshot": {
-                "theme": cfg.get("theme", "light"),
+                "theme": self.deck_service._normalize_theme_mode(cfg.get("theme")),
                 "accentColor": cfg.get("accent_color", "indigo"),
                 "resolvedLanguage": self.deck_service._resolve_language(cfg.get("language")),
                 "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),

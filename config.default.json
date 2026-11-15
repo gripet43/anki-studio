@@ -3,7 +3,7 @@
   "dev_server_url": "http://localhost:5173",
   "auto_launch_modern_ui": true,
   "toggle_shortcut": "Ctrl+Alt+M",
-  "theme": "light",
+  "theme": "auto",
   "accent_color": "indigo",
   "language": "auto",
   "collapsed_deck_ids": [],

@@ -10,7 +10,7 @@ import { usePresence } from '../../hooks/usePresence';
 import { Tooltip } from '../common/Tooltip';
 import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
-import { getAccentScale } from '../../utils/themeTokens';
+import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 
 export const CustomStudyModal: React.FC = () => {
   const {
@@ -21,14 +21,16 @@ export const CustomStudyModal: React.FC = () => {
     libraryAllTags,
     libraryCards,
     theme,
+    systemDark,
     accentColor,
     resolvedLang,
   } = useAppStore();
 
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
-  const isDark = theme === 'dark' || theme === 'oled';
-  const brandHex = getAccentScale(accentColor, theme).brand;
+  const resolvedTheme = resolveThemeMode(theme, systemDark);
+  const isDark = resolvedTheme === 'dark';
+  const brandHex = getAccentScale(accentColor, resolvedTheme).brand;
 
   const [preset, setPreset] = useState<CustomStudyParams['preset']>(
     customStudyInitialPreset || 'mistakes'
@@ -163,19 +165,13 @@ export const CustomStudyModal: React.FC = () => {
   const presence = usePresence(customStudyModalOpen, 120);
   if (!presence.mounted) return null;
 
-  const modalBg =
-    theme === 'oled'
-      ? 'bg-[#101115] border-[#242630] text-[#F4F4F6]'
-      : isDark
-      ? 'bg-[#181920] border-[#2C2E3A] text-[#F2F3F7]'
-      : 'bg-[#FFFFFF] border-[#E5E5EA] text-[#1D1D1F]';
+  const modalBg = isDark
+    ? 'bg-[#181920] border-[#2C2E3A] text-[#F2F3F7]'
+    : 'bg-[#FFFFFF] border-[#E5E5EA] text-[#1D1D1F]';
 
-  const cardSurface =
-    theme === 'oled'
-      ? 'bg-[#15161C] border-[#242630]'
-      : isDark
-      ? 'bg-[#1F212A] border-[#2E303D]'
-      : 'bg-[#F9F9FB] border-[#ECECF2]';
+  const cardSurface = isDark
+    ? 'bg-[#1F212A] border-[#2E303D]'
+    : 'bg-[#F9F9FB] border-[#ECECF2]';
 
   const controlBg = isDark
     ? 'bg-[#16171F] border-[#2C2E3B] text-[#F2F3F7]'

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { translate } from '../../i18n/translations';
 import { useAppStore } from '../../stores/useAppStore';
-import { getAccentScale } from '../../utils/themeTokens';
+import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 import {
   ChartTooltipContent,
   ChartTooltipPortal,
@@ -13,6 +13,7 @@ export const StatsView: React.FC = () => {
     advancedStats,
     dashboard,
     theme,
+    systemDark,
     accentColor,
     resolvedLang,
     isInitialSyncing,
@@ -23,13 +24,12 @@ export const StatsView: React.FC = () => {
     translate(resolvedLang, key, params);
   const isSyncPending = isInitialSyncing || syncing;
 
-  const accentScale = getAccentScale(accentColor, theme);
+  const resolvedTheme = resolveThemeMode(theme, systemDark);
+  const accentScale = getAccentScale(accentColor, resolvedTheme);
   const brandHex = accentScale.brand;
 
   const cardSurface =
-    theme === 'oled'
-      ? 'bg-[#111216] border-[#22232B] text-white'
-      : theme === 'dark'
+    resolvedTheme === 'dark'
       ? 'bg-[#1A1B21] border-[#2A2C36] text-white'
       : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[#1D1D1F]';
 

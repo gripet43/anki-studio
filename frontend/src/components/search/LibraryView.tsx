@@ -16,6 +16,7 @@ import {
 import { formatCardPreviewHtml, getDeckColorByHash } from '../../utils/mathRenderer';
 import { Tooltip } from '../common/Tooltip';
 import { getClosestFromTarget } from '../../utils/domTarget';
+import { resolveThemeMode } from '../../utils/themeTokens';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
 
 export const LibraryView: React.FC = () => {
@@ -43,6 +44,7 @@ export const LibraryView: React.FC = () => {
     selectedCardIds,
     decks,
     theme,
+    systemDark,
     resolvedLang,
   } = useAppStore();
 
@@ -120,20 +122,14 @@ export const LibraryView: React.FC = () => {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  const isDark = theme === 'dark' || theme === 'oled';
-  const cardSurface =
-    theme === 'oled'
-      ? 'bg-[#111216] border-[#22232B] text-white'
-      : theme === 'dark'
-      ? 'bg-[#1A1B21] border-[#2A2C36] text-white'
-      : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[#1D1D1F]';
+  const isDark = resolveThemeMode(theme, systemDark) === 'dark';
+  const cardSurface = isDark
+    ? 'bg-[#1A1B21] border-[#2A2C36] text-white'
+    : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[#1D1D1F]';
 
-  const popoverSurface =
-    theme === 'oled'
-      ? 'bg-[#15161C]/95 border-[#2A2C38] text-white'
-      : theme === 'dark'
-      ? 'bg-[#1E1F28]/95 border-[#323444] text-white'
-      : 'bg-white/95 border-[#E5E5EA] text-[#1D1D1F]';
+  const popoverSurface = isDark
+    ? 'bg-[#1E1F28]/95 border-[#323444] text-white'
+    : 'bg-white/95 border-[#E5E5EA] text-[#1D1D1F]';
 
   const subText = 'text-[#636366] dark:text-[#8E8E93]';
 

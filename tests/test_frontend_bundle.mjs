@@ -106,12 +106,13 @@ assert(
   'Item #4: CommandPaletteModal must use 5:7 split ratio, click-to-select (no hover jump), and one-click copy'
 );
 
-// Item #5 & #6: Reviewer 560px ergonomic alignment & Light/Dark dual-mode adaptation
+// Item #5 & #6: Reviewer 560px ergonomic alignment & Light/Dark/System adaptation
 assert(
   reviewerSrc.includes('w-[560px] h-[58px]') &&
     reviewerSrc.includes('w-[170px] h-[58px]') &&
     reviewerSrc.includes('w-[374px] h-[58px]') &&
-    reviewerSrc.includes("theme === 'dark' || theme === 'oled'"),
+    reviewerSrc.includes('resolveThemeMode') &&
+    reviewerSrc.includes("resolvedTheme === 'dark'"),
   'Items #5 & #6: ReviewerView must align bottom buttons to 560px (170px Again + 374px Good) and adapt to Light/Dark themes'
 );
 

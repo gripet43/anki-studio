@@ -51,22 +51,19 @@ import {
 } from '../i18n/translations';
 import { renderMathAndRichHtml } from '../utils/mathRenderer';
 import {
+  AccentColor,
+  detectSystemDark,
+  normalizeThemeMode,
+  ThemeMode,
+} from '../utils/themeTokens';
+import {
   resolveAudioFilesToPlay,
   resolveAutoPlayAudioFiles,
   resolveManualPlayAudioFiles,
 } from '../utils/reviewAudio';
 
 export type NavTab = 'dashboard' | 'library' | 'stats' | 'decks' | 'design-system';
-export type ThemeMode = 'light' | 'dark' | 'oled';
-export type AccentColor =
-  | 'indigo'
-  | 'emerald'
-  | 'cyan'
-  | 'rose'
-  | 'amber'
-  | 'teal'
-  | 'violet'
-  | 'slate';
+export type { AccentColor, ThemeMode };
 export type LibraryViewMode = 'gallery' | 'table';
 export type FlagFilterValue = 'all' | 'flagged' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7';
 
@@ -127,6 +124,7 @@ export interface AppState {
 
   // Theme, i18n, Nickname & Platform
   theme: ThemeMode;
+  systemDark: boolean;
   accentColor: AccentColor;
   languagePref: LanguageOption;
   resolvedLang: ResolvedLanguage;
@@ -250,7 +248,8 @@ const initialState: AppState = {
   lastSyncedTimestamp: Date.now(),
   lastSyncedText: translate(initialLang, 'syncing'),
 
-  theme: 'light',
+  theme: 'auto',
+  systemDark: detectSystemDark(),
   accentColor: 'indigo',
   languagePref: 'auto',
   resolvedLang: initialLang,
@@ -606,7 +605,7 @@ export const appActions = {
         decks: realDecks,
         activeDeckId: state.activeDeckId || realDecks[0]?.id || null,
         advancedStats: hasPopulatedStats ? incomingStats! : state.advancedStats,
-        theme: prefs?.theme || state.theme,
+        theme: prefs?.theme ? normalizeThemeMode(prefs.theme) : state.theme,
         accentColor: prefs?.accentColor || state.accentColor,
         languagePref: (prefs?.language as LanguageOption) || state.languagePref,
         resolvedLang: effectiveLang,
@@ -738,11 +737,12 @@ export const appActions = {
     reviewStageWidth?: ReviewStageWidth;
     reviewContentScale?: ReviewContentScale;
   }) {
+    const normalizedTheme = patch.theme !== undefined ? normalizeThemeMode(patch.theme) : undefined;
     const nextLangPref = patch.language !== undefined ? patch.language : state.languagePref;
     const nextResolvedLang = resolveLanguage(nextLangPref, state.dashboard.language);
 
     setAppState({
-      ...(patch.theme ? { theme: patch.theme } : {}),
+      ...(normalizedTheme ? { theme: normalizedTheme } : {}),
       ...(patch.accentColor ? { accentColor: patch.accentColor } : {}),
       ...(patch.language ? { languagePref: patch.language, resolvedLang: nextResolvedLang } : {}),
       ...(patch.customNickname !== undefined ? { customNickname: patch.customNickname } : {}),

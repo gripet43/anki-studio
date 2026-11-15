@@ -28,6 +28,7 @@ import {
 import {
   ACCENT_COLOR_LIST,
   getAccentScale,
+  resolveThemeMode,
 } from '../../utils/themeTokens';
 import { hasIllustrationPack } from '../common/ThemeIllustrations';
 import { localDateKey } from '../../utils/localDate';
@@ -42,6 +43,7 @@ export const SettingsModal: React.FC = () => {
   const {
     settingsOpen,
     theme,
+    systemDark,
     accentColor,
     languagePref,
     resolvedLang,
@@ -69,7 +71,8 @@ export const SettingsModal: React.FC = () => {
   const [emptyReport, setEmptyReport] = useState<any | null>(null);
   const [mediaReport, setMediaReport] = useState<any | null>(null);
 
-  const isDark = theme === 'dark' || theme === 'oled';
+  const resolvedTheme = resolveThemeMode(theme, systemDark);
+  const isDark = resolvedTheme === 'dark';
   const tipsHiddenToday = tipsHiddenOn === localDateKey();
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
@@ -109,35 +112,27 @@ export const SettingsModal: React.FC = () => {
   const presence = usePresence(settingsOpen, 120);
   if (!presence.mounted) return null;
 
-  const modalSurface =
-    theme === 'oled'
-      ? 'bg-[#101115] border-[#242630] text-white'
-      : theme === 'dark'
-      ? 'bg-[#181920] border-[#2C2E3A] text-white'
-      : 'bg-white border-[#E5E5EA] text-[#1D1D1F]';
+  const modalSurface = isDark
+    ? 'bg-[#181920] border-[#2C2E3A] text-white'
+    : 'bg-white border-[#E5E5EA] text-[#1D1D1F]';
 
-  const cardSurface =
-    theme === 'oled'
-      ? 'bg-[#15161C] border-[#242630]'
-      : theme === 'dark'
-      ? 'bg-[#1F212A] border-[#2E303D]'
-      : 'bg-[#F9F9FB] border-[#ECECF2]';
+  const cardSurface = isDark
+    ? 'bg-[#1F212A] border-[#2E303D]'
+    : 'bg-[#F9F9FB] border-[#ECECF2]';
 
-  const sidebarBg =
-    theme === 'oled'
-      ? 'bg-[#0B0C0F] border-[#22232D]'
-      : theme === 'dark'
-      ? 'bg-[#13141A] border-[#252732]'
-      : 'bg-[#F5F5F7] border-[#E8E8ED]';
+  const sidebarBg = isDark
+    ? 'bg-[#13141A] border-[#252732]'
+    : 'bg-[#F5F5F7] border-[#E8E8ED]';
 
   const subText = 'text-[#636366] dark:text-[#A6A8B6]';
   const shortcutHint = formatShortcut('Ctrl + Opt + M', envInfo.platform);
-  const currentScale = getAccentScale(accentColor, theme);
+  const currentScale = getAccentScale(accentColor, resolvedTheme);
+  const systemModeLabel = systemDark ? t('themeDark') : t('themeLight');
 
   const themeOptions: Array<{ id: ThemeMode; label: string; desc: string }> = [
+    { id: 'auto', label: t('themeAuto'), desc: t('themeAutoDesc', { mode: systemModeLabel }) },
     { id: 'light', label: t('themeLight'), desc: t('themeLightDesc') },
     { id: 'dark', label: t('themeDark'), desc: t('themeDarkDesc') },
-    { id: 'oled', label: t('themeOled'), desc: t('themeOledDesc') },
   ];
 
   const currentLangMeta = getLanguageMeta(resolvedLang);

@@ -91,7 +91,7 @@ test('derivation is deterministic and never mutates the base scale', () => {
 
 test('every derived token stays a valid colour string', () => {
   for (const id of ACCENT_IDS) {
-    for (const theme of ['light', 'dark', 'oled'] as const) {
+    for (const theme of ['light', 'dark'] as const) {
       const scales = buildDeckScales(getAccentScale(id, theme));
       scales.forEach((scale, index) => {
         for (const key of ['brand', 'brandHover', 'brandText', 'brandSoft', 'brandSurface', 'brandBorder', 'brandMutedBar'] as const) {

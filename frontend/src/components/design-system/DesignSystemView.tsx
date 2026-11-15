@@ -7,14 +7,20 @@ import {
   translate,
 } from '../../i18n/translations';
 import { appActions, showToast, ThemeMode, useAppStore } from '../../stores/useAppStore';
-import { ACCENT_COLOR_LIST, ACCENT_THEMES, getAccentScale } from '../../utils/themeTokens';
+import {
+  ACCENT_COLOR_LIST,
+  ACCENT_THEMES,
+  getAccentScale,
+  resolveThemeMode,
+} from '../../utils/themeTokens';
 import { ChartTooltipContent, Tooltip } from '../common/Tooltip';
 import { HoverCard } from '../common/HoverCard';
 
 export const DesignSystemView: React.FC = () => {
-  const { theme, accentColor, languagePref, resolvedLang, customNickname, dashboard } =
+  const { theme, systemDark, accentColor, languagePref, resolvedLang, customNickname, dashboard } =
     useAppStore();
-  const isDark = theme === 'dark' || theme === 'oled';
+  const resolvedTheme = resolveThemeMode(theme, systemDark);
+  const isDark = resolvedTheme === 'dark';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
@@ -24,15 +30,12 @@ export const DesignSystemView: React.FC = () => {
     setNicknameDraft(customNickname || '');
   }, [customNickname]);
 
-  const currentScale = getAccentScale(accentColor, theme);
+  const currentScale = getAccentScale(accentColor, resolvedTheme);
   const currentMeta = ACCENT_THEMES[accentColor] || ACCENT_THEMES.indigo;
 
-  const cardSurface =
-    theme === 'oled'
-      ? 'bg-[#111216] border-[#22232B] text-white'
-      : theme === 'dark'
-      ? 'bg-[#1A1B21] border-[#2A2C36] text-white'
-      : 'bg-white border-[#EBEBF0] text-[#1D1D1F]';
+  const cardSurface = isDark
+    ? 'bg-[#1A1B21] border-[#2A2C36] text-white'
+    : 'bg-white border-[#EBEBF0] text-[#1D1D1F]';
 
   const subText = 'text-[#8E8E93]';
 
@@ -45,9 +48,15 @@ export const DesignSystemView: React.FC = () => {
   ];
 
   const themeOptions: Array<{ id: ThemeMode; label: string; style: string }> = [
+    {
+      id: 'auto',
+      label: t('themeAuto'),
+      style: systemDark
+        ? 'bg-[#131418] text-white border border-[#2A2C36]'
+        : 'bg-white text-[var(--brand-text)] border-2 border-[var(--brand)]',
+    },
     { id: 'light', label: t('themeLight'), style: 'bg-white text-[var(--brand-text)] border-2 border-[var(--brand)]' },
     { id: 'dark', label: t('themeDark'), style: 'bg-[#131418] text-white border border-[#2A2C36]' },
-    { id: 'oled', label: t('themeOled'), style: 'bg-[#09090C] text-white border border-[#22232B]' },
   ];
 
   const languageGridItems: Array<{ id: LanguageOption; nativeName: string; subLabel: string }> = [

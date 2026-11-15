@@ -270,6 +270,16 @@ class DeckService:
                 return False
         return bool(val)
 
+    @staticmethod
+    def _normalize_theme_mode(value: Any, default: str = "auto") -> str:
+        """Normalizes theme mode to 'auto' | 'light' | 'dark', migrating legacy 'oled' to 'dark'."""
+        raw = str(value or default).strip().lower()
+        if raw == "oled":
+            return "dark"
+        if raw in ("auto", "light", "dark"):
+            return raw
+        return default
+
     @classmethod
     def _normalize_review_audio_prefs(cls, cfg: Dict[str, Any]) -> Tuple[bool, bool]:
         """Normalizes front and back audio auto-play preferences with safe defaults."""
@@ -487,7 +497,7 @@ class DeckService:
                 "language": lang,
                 "envInfo": env_info,
                 "preferences": {
-                    "theme": cfg.get("theme", "light"),
+                    "theme": self._normalize_theme_mode(cfg.get("theme")),
                     "accentColor": cfg.get("accent_color", "indigo"),
                     "language": cfg.get("language", "auto"),
                     "customNickname": cfg.get("custom_nickname", ""),
@@ -1904,7 +1914,7 @@ class DeckService:
             "language": lang,
             "envInfo": env_info,
             "preferences": {
-                "theme": cfg.get("theme", "light"),
+                "theme": cls._normalize_theme_mode(cfg.get("theme")),
                 "accentColor": cfg.get("accent_color", "indigo"),
                 "language": cfg.get("language", "auto"),
                 "customNickname": cfg.get("custom_nickname", ""),

@@ -5,7 +5,7 @@ import { formatShortcut, translate } from '../../i18n/translations';
 import { appActions, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
 import { copyTextToClipboard } from '../../utils/clipboard';
 import { getDeckColorByHash, renderMathAndRichHtml } from '../../utils/mathRenderer';
-import { getAccentScale } from '../../utils/themeTokens';
+import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 
 /**
  * 卡包模板 CSS 的作用域根类，必须和 bridge/media_utils.py 的 CARD_ROOT_CLASS 一致。
@@ -54,6 +54,7 @@ export const CommandPaletteModal: React.FC = () => {
     libraryAllTags,
     decks,
     theme,
+    systemDark,
     accentColor,
     resolvedLang,
     envInfo,
@@ -63,12 +64,13 @@ export const CommandPaletteModal: React.FC = () => {
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const isDark = theme === 'dark' || theme === 'oled';
+  const resolvedTheme = resolveThemeMode(theme, systemDark);
+  const isDark = resolvedTheme === 'dark';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
   formatShortcut('Cmd Enter', envInfo.platform);
 
-  const brandHex = getAccentScale(accentColor, theme).brand;
+  const brandHex = getAccentScale(accentColor, resolvedTheme).brand;
 
   const hasQuery = cmdKQuery.trim().length > 0;
   const displayedResults = hasQuery ? cmdKResults : [];

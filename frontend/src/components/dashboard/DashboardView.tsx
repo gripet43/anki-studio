@@ -13,7 +13,7 @@ import {
 } from '../../i18n/translations';
 import { appActions, setAppState, useAppStore } from '../../stores/useAppStore';
 import { buildDeckScales } from '../../utils/deckPalette';
-import { getAccentScale } from '../../utils/themeTokens';
+import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
 import {
   EmptyStateIllustration,
@@ -33,6 +33,7 @@ export const DashboardView: React.FC = () => {
     showAllDashboardDecks,
     syncing,
     theme,
+    systemDark,
     accentColor,
     resolvedLang,
     showShortcutHints,
@@ -58,9 +59,10 @@ export const DashboardView: React.FC = () => {
   const [rhythmAnchorEl, setRhythmAnchorEl] = useState<HTMLElement | null>(null);
   const [peekNormalDashboard, setPeekNormalDashboard] = useState<boolean>(false);
 
-  const accentScale = getAccentScale(accentColor, theme);
+  const resolvedTheme = resolveThemeMode(theme, systemDark);
+  const accentScale = getAccentScale(accentColor, resolvedTheme);
   const brandHex = accentScale.brand;
-  const isDark = theme === 'dark' || theme === 'oled';
+  const isDark = resolvedTheme === 'dark';
 
   // Dashboard surfaces are semantic so theme tokens stay in one place.
   const cardSurface = 'dashboard-surface';

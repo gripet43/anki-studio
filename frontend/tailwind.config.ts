@@ -22,7 +22,6 @@ const config: Config = {
           white: '#FFFFFF',
           light: '#F4F4F6',
           dark: '#16161A',
-          oled: '#0A0A0D',
         },
         // 仅为与本文件的历史值保持一致而保留，非当前品牌色；
         // 当前 indigo = #3076C3（Studio Blue），见 themeTokens.ts。

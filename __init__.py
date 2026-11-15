@@ -194,6 +194,38 @@ class AnkiModernHost:
         except Exception:
             return "en"
 
+    @staticmethod
+    def _detect_system_dark_mode() -> bool:
+        """Detect OS dark appearance via Qt styleHints / palette, falling back to Anki night mode."""
+        try:
+            from aqt.qt import QGuiApplication, QPalette, Qt
+
+            app = QGuiApplication.instance()
+            if app is not None:
+                style_hints = app.styleHints() if hasattr(app, "styleHints") else None
+                if style_hints is not None and hasattr(style_hints, "colorScheme"):
+                    scheme = style_hints.colorScheme()
+                    if hasattr(Qt, "ColorScheme"):
+                        if scheme == Qt.ColorScheme.Dark:
+                            return True
+                        if scheme == Qt.ColorScheme.Light:
+                            return False
+                palette = app.palette()
+                if palette is not None:
+                    win_color = palette.color(QPalette.ColorRole.Window)
+                    if win_color.isValid():
+                        return win_color.lightness() < 128
+        except Exception:
+            pass
+        try:
+            from aqt import mw
+
+            if mw and getattr(mw, "pm", None) and hasattr(mw.pm, "night_mode"):
+                return bool(mw.pm.night_mode())
+        except Exception:
+            pass
+        return False
+
     def initialize(self) -> None:
         try:
             from aqt import gui_hooks, mw
@@ -870,7 +902,14 @@ class AnkiModernHost:
             try:
                 from aqt.qt import QColor
                 cfg = self.get_config()
-                bg_hex = "#16161A" if cfg.get("theme") in ("dark", "oled") else "#F4F4F6"
+                raw_theme = str(cfg.get("theme") or "auto").strip().lower()
+                if raw_theme in ("dark", "oled"):
+                    is_dark_bg = True
+                elif raw_theme == "light":
+                    is_dark_bg = False
+                else:
+                    is_dark_bg = self._detect_system_dark_mode()
+                bg_hex = "#131418" if is_dark_bg else "#F4F4F6"
                 if hasattr(page, "setBackgroundColor"):
                     page.setBackgroundColor(QColor(bg_hex))
             except Exception:

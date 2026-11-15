@@ -3,7 +3,7 @@ import { translate } from '../../i18n/translations';
 import { appActions, NavTab, setAppState, useAppStore } from '../../stores/useAppStore';
 import { AnkiStudioLogo } from '../common/AnkiStudioLogo';
 import { getDeckColorByHash } from '../../utils/mathRenderer';
-import { getAccentScale } from '../../utils/themeTokens';
+import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
 import { Tooltip } from '../common/Tooltip';
 
@@ -14,6 +14,7 @@ export const Sidebar: React.FC = () => {
     collapsedDeckIds,
     dashboard,
     theme,
+    systemDark,
     accentColor,
     resolvedLang,
     envInfo,
@@ -42,16 +43,14 @@ export const Sidebar: React.FC = () => {
     }, 900);
   };
 
-  const accentScale = getAccentScale(accentColor, theme);
+  const resolvedTheme = resolveThemeMode(theme, systemDark);
+  const accentScale = getAccentScale(accentColor, resolvedTheme);
   const brandHex = accentScale.brand;
 
-  const isDark = theme === 'dark' || theme === 'oled';
-  const sidebarBg =
-    theme === 'oled'
-      ? 'bg-[#08080B] border-[#1E1F26] text-[#F4F4F6]'
-      : theme === 'dark'
-      ? 'bg-[#121317] border-[#252730] text-[#F2F3F7]'
-      : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[#1D1D1F]';
+  const isDark = resolvedTheme === 'dark';
+  const sidebarBg = isDark
+    ? 'bg-[#121317] border-[#252730] text-[#F2F3F7]'
+    : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[#1D1D1F]';
 
   const mutedText = 'text-[#636366] dark:text-[#A6A8B6]';
   const navActiveBg = 'bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold';
