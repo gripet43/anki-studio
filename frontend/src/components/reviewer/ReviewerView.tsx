@@ -2168,7 +2168,7 @@ export const ReviewerView: React.FC = () => {
                   onClick={() => appActions.answerCurrentCard(3)}
                   className={`w-[374px] h-[58px] px-6 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] active:scale-[0.98] bg-[var(--brand-soft)] border-[var(--brand-border)] hover:border-[var(--brand)] text-[var(--brand-text)]`}
+                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] active:scale-[0.98] bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success)]`}
                 >
                   <div className={showShortcutHints ? 'text-start' : 'text-center'}>
                     <div className="text-[15px] font-bold">{t('rateGood')}</div>

@@ -15,6 +15,11 @@
 
 ## [Unreleased]
 
+## [v1.6.3] - 2026-11-15
+
+- **[Antigravity] 修复二选一复习模式下「记得」按钮随主题色变色导致与「遗忘」撞色的问题**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs) 与 [`manifest.json`](manifest.json)）：
+  - **锁定评分按钮语义色彩**：将二选一评分栏中「记得（Good）」按钮从随主题色变化的 `--brand-soft` / `--brand-border` / `--brand-text` 改为与四档评分模式完全一致的固定语义成功绿 `--status-success-soft` / `--status-success`，彻底避免在赤陶粉（`rose`）或琥珀金（`amber`）等主题下「遗忘」与「记得」视觉混淆；并在静态审计套件新增守卫断言防止回归，升级版本至 `v1.6.3`。
+
 ## [v1.6.2] - 2026-11-15
 
 - **[Antigravity] 实现 Anki 调度器过零 / 换日精确感知与新一天卡片智能浮现系统**（新增 [`bridge/day_rollover.py`](bridge/day_rollover.py)、[`tests/test_day_rollover.py`](tests/test_day_rollover.py)、[`tests/frontend/specs/dayRollover.spec.ts`](tests/frontend/specs/dayRollover.spec.ts)、[`tests/test_day_rollover_store.mjs`](tests/test_day_rollover_store.mjs)，修改 [`__init__.py`](__init__.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/router.py`](bridge/router.py)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`frontend/src/data/mockData.ts`](frontend/src/data/mockData.ts)、[`frontend/src/utils/localDate.ts`](frontend/src/utils/localDate.ts)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/App.tsx`](frontend/src/App.tsx)、[`frontend/src/components/dashboard/DashboardTipLine.tsx`](frontend/src/components/dashboard/DashboardTipLine.tsx)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/i18n/translations.ts`](frontend/src/i18n/translations.ts)、14 份 [`frontend/src/i18n/locales/*.ts`](frontend/src/i18n/locales/) 与 [`manifest.json`](manifest.json)）：

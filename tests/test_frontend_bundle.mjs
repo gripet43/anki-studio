@@ -116,6 +116,19 @@ assert(
   'Items #5 & #6: ReviewerView must align bottom buttons to 560px (170px Again + 374px Good) and adapt to Light/Dark themes'
 );
 
+// Guardrail: Binary mode "Good / 记得" rating button must keep fixed semantic success color
+// (`--status-success`), never `--brand-*`, otherwise Rose/Amber themes make Good look like Again.
+const binaryGoodBlockMatch = reviewerSrc.match(
+  /w-\[374px\]\s+h-\[58px\][\s\S]{0,650}?rateGood/
+);
+assert(
+  binaryGoodBlockMatch &&
+    binaryGoodBlockMatch[0].includes('bg-[var(--status-success-soft)]') &&
+    binaryGoodBlockMatch[0].includes('text-[var(--status-success)]') &&
+    !binaryGoodBlockMatch[0].includes('var(--brand'),
+  'Binary Good rating button must use fixed semantic --status-success tokens instead of theme --brand-*'
+);
+
 // Item #7: Design System removed from normal Sidebar, gated behind debugModeUnlocked
 assert(
   sidebarSrc.includes('handleVersionBadgeClick') &&
