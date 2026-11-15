@@ -17,6 +17,7 @@ import urllib.parse
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .day_rollover import refresh_scheduler_if_needed
 from .media_utils import (
     CLOZE_RE,
     NativeRender,
@@ -83,6 +84,7 @@ class ReviewService:
         col = self.col
         if col is None:
             return {"cards": [], "totalDue": 0, "isPreviewOnly": False}
+        refresh_scheduler_if_needed(col)
 
         deck_id = data.get("deckId")
         if deck_id and str(deck_id).isdigit():
@@ -104,6 +106,7 @@ class ReviewService:
         lang = data.get("language") or self._get_lang()
         if col is None:
             return {"cards": [], "totalDue": 0, "isPreviewOnly": False}
+        refresh_scheduler_if_needed(col)
 
         deck_id = data.get("deckId")
         limit = max(1, int(data.get("limit") or 100))

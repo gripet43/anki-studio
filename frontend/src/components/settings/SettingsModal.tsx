@@ -31,7 +31,7 @@ import {
   resolveThemeMode,
 } from '../../utils/themeTokens';
 import { hasIllustrationPack } from '../common/ThemeIllustrations';
-import { localDateKey } from '../../utils/localDate';
+import { getEffectiveDayKey } from '../../utils/localDate';
 
 const XIAOHONGSHU_PROFILE_URL =
   'https://www.xiaohongshu.com/user/profile/6496d6f8000000001001ff0f';
@@ -62,6 +62,7 @@ export const SettingsModal: React.FC = () => {
     autoPlayBackAudio,
     reviewStageWidth,
     reviewContentScale,
+    dayBoundary,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(settingsInitialTab || 'appearance');
@@ -73,7 +74,8 @@ export const SettingsModal: React.FC = () => {
 
   const resolvedTheme = resolveThemeMode(theme, systemDark);
   const isDark = resolvedTheme === 'dark';
-  const tipsHiddenToday = tipsHiddenOn === localDateKey();
+  const effectiveDayKey = getEffectiveDayKey(dayBoundary);
+  const tipsHiddenToday = tipsHiddenOn === effectiveDayKey;
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
@@ -575,7 +577,7 @@ export const SettingsModal: React.FC = () => {
                   type="button"
                   role="switch"
                   aria-checked={!tipsHiddenToday}
-                  onClick={() => appActions.updatePreferences({ tipsHiddenOn: tipsHiddenToday ? '' : localDateKey() })}
+                  onClick={() => appActions.updatePreferences({ tipsHiddenOn: tipsHiddenToday ? '' : effectiveDayKey })}
                   style={!tipsHiddenToday ? { backgroundColor: currentScale.brand } : undefined}
                   className={`w-12 h-6.5 shrink-0 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${
                     !tipsHiddenToday ? '' : isDark ? 'bg-[#3A3A48]' : 'bg-[#E5E5EA]'

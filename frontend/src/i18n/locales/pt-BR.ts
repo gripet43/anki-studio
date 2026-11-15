@@ -687,5 +687,13 @@ export const dict: TranslationTable = {
   reviewAudioQuickTitle: "Áudio automático",
   autoPlayBackFallbackNote: "Se o verso não tiver áudio próprio, virar o cartão repetirá o áudio da frente.",
   openAnswerSettingsLink: "Abrir em Configurações → Resposta",
+  dayRolloverToast: "Um novo dia de estudo começou — a fila de hoje foi atualizada",
+  reviewerDayRolloverBanner: "Um novo dia chegou — os cartões de hoje serão carregados após este cartão",
+  reviewerDayRolloverSyncNow: "Mudar para hoje",
+  dayRolloverQueueSyncedToast: "Fila de hoje sincronizada ({n} cartões)",
+  newDayReadyBadge: "Novo dia pronto",
+  newDayReadyTitle: "Os cartões de hoje estão prontos",
+  newDayReadySub: "A sessão de ontem foi concluída — {n} cartões estão prontos para hoje.",
+  startTodayStudyBtn: "Iniciar estudo de hoje",
 
 };

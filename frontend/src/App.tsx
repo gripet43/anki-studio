@@ -29,6 +29,7 @@ export const App: React.FC = () => {
     accentColor,
     resolvedLang,
     toastMessage,
+    dayBoundary,
   } = useAppStore();
 
   const resolvedTheme = resolveThemeMode(theme, systemDark);
@@ -145,6 +146,24 @@ export const App: React.FC = () => {
       setAppState({ settingsOpen: true });
     };
 
+    const onDayChanged = (e: Event) => {
+      if (getAppState().isInitialSyncing) return;
+      const detail = (e as CustomEvent)?.detail;
+      appActions.handleDayChanged(detail);
+    };
+
+    let lastWakeCheckMs = 0;
+    const onWakeCheck = (source: string) => {
+      if (getAppState().isInitialSyncing) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - lastWakeCheckMs < 3000) return;
+      lastWakeCheckMs = now;
+      appActions.checkDayRollover(source);
+    };
+    const onWindowFocus = () => onWakeCheck('window_focus');
+    const onVisibilityChange = () => onWakeCheck('visibility');
+
     const mediaQuery =
       typeof window !== 'undefined' && typeof window.matchMedia === 'function'
         ? window.matchMedia('(prefers-color-scheme: dark)')
@@ -166,6 +185,9 @@ export const App: React.FC = () => {
     window.addEventListener('anki:sync-finished', onSyncFinished);
     window.addEventListener('anki:toast', onAnkiToast);
     window.addEventListener('anki:open-settings', onOpenSettings);
+    window.addEventListener('anki:day-changed', onDayChanged);
+    window.addEventListener('focus', onWindowFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       if (mediaQuery) {
         if (typeof mediaQuery.removeEventListener === 'function') {
@@ -179,8 +201,48 @@ export const App: React.FC = () => {
       window.removeEventListener('anki:sync-finished', onSyncFinished);
       window.removeEventListener('anki:toast', onAnkiToast);
       window.removeEventListener('anki:open-settings', onOpenSettings);
+      window.removeEventListener('anki:day-changed', onDayChanged);
+      window.removeEventListener('focus', onWindowFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, []);
+
+  // Precise browser-side cutoff timer aligned to Anki's `day_cutoff + 2s` with overdue backoff
+  useEffect(() => {
+    if (!dayBoundary?.available || !dayBoundary.dayCutoff || dayBoundary.dayCutoff <= 0) {
+      return;
+    }
+    let cancelled = false;
+    let timerId: number | null = null;
+    let retryDelayMs = 2000;
+
+    const arm = (delayMs: number) => {
+      if (cancelled) return;
+      const bounded = Math.min(2_147_000_000, Math.max(1000, delayMs));
+      timerId = window.setTimeout(async () => {
+        if (cancelled) return;
+        await appActions.checkDayRollover('frontend_cutoff_timer');
+        if (cancelled) return;
+        const latest = getAppState().dayBoundary;
+        if (
+          latest?.available &&
+          latest.dayCutoff === dayBoundary.dayCutoff &&
+          Date.now() >= latest.dayCutoff * 1000
+        ) {
+          retryDelayMs = Math.min(retryDelayMs * 2, 60_000);
+          arm(retryDelayMs);
+        }
+      }, bounded);
+    };
+
+    const initialDelay = Math.max(1000, dayBoundary.dayCutoff * 1000 + 2000 - Date.now());
+    arm(initialDelay);
+
+    return () => {
+      cancelled = true;
+      if (timerId !== null) window.clearTimeout(timerId);
+    };
+  }, [dayBoundary?.available, dayBoundary?.dayCutoff, dayBoundary?.schedToday]);
 
   // Global keyboard shortcuts:
   // - Cmd+K / Ctrl+K: Search Palette

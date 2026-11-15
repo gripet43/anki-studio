@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { LEARNING_TIPS, resolveTipLocale } from '../../content/learningTips';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { translate } from '../../i18n/translations';
-import { localDateKey } from '../../utils/localDate';
+import { getEffectiveDayKey } from '../../utils/localDate';
 import { Tooltip } from '../common/Tooltip';
 
 const ROTATE_MS = 10000;
@@ -14,9 +14,9 @@ const ROTATE_MS = 10000;
  * （换一条 / 今天不再显示）。「今天不再显示」只隐藏当天，明天自动恢复。
  */
 export const DashboardTipLine: React.FC = () => {
-  const { resolvedLang, tipsHiddenOn } = useAppStore();
+  const { resolvedLang, tipsHiddenOn, dayBoundary } = useAppStore();
   const locale = resolveTipLocale(resolvedLang);
-  const today = localDateKey();
+  const today = getEffectiveDayKey(dayBoundary);
   const hiddenToday = tipsHiddenOn === today;
 
   const [index, setIndex] = useState(() => Math.floor(Math.random() * LEARNING_TIPS.length));

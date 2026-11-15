@@ -687,5 +687,13 @@ export const dict: TranslationTable = {
   reviewAudioQuickTitle: "Автовоспроизведение аудио",
   autoPlayBackFallbackNote: "Если на обратной стороне нет аудио, при перевороте повторится аудио лицевой стороны.",
   openAnswerSettingsLink: "Открыть в Настройках → Ответ",
+  dayRolloverToast: "Начался новый учебный день — очередь на сегодня обновлена",
+  reviewerDayRolloverBanner: "Наступил новый день — сегодняшние карточки плавно подгрузятся после этой",
+  reviewerDayRolloverSyncNow: "Перейти на сегодня",
+  dayRolloverQueueSyncedToast: "Очередь на сегодня синхронизирована ({n} карт.)",
+  newDayReadyBadge: "Новый день готов",
+  newDayReadyTitle: "Новые карточки на сегодня готовы",
+  newDayReadySub: "Вчерашняя сессия завершена — сегодня вас ждут {n} карт.",
+  startTodayStudyBtn: "Начать сегодняшнее обучение",
 
 };

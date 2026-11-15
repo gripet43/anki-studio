@@ -687,5 +687,13 @@ export const dict: TranslationTable = {
   reviewAudioQuickTitle: "Otomatik Ses Oynatma",
   autoPlayBackFallbackNote: "Arka yüzde kendi sesi yoksa kartı çevirince ön yüz sesi tekrar çalınır.",
   openAnswerSettingsLink: "Ayarlar → Yanıt Ayarlarında Aç",
+  dayRolloverToast: "Yeni bir çalışma günü başladı — bugünün kuyruğu güncellendi",
+  reviewerDayRolloverBanner: "Yeni gün başladı — bu karttan sonra bugünün kartları sorunsuzca yüklenecek",
+  reviewerDayRolloverSyncNow: "Bugüne Geç",
+  dayRolloverQueueSyncedToast: "Bugünün çalışma kuyruğu eşitlendi ({n} kart)",
+  newDayReadyBadge: "Yeni Gün Hazır",
+  newDayReadyTitle: "Bugünün Yeni Kartları Hazır",
+  newDayReadySub: "Dünkü oturum tamamlandı — bugün seni {n} kart bekliyor.",
+  startTodayStudyBtn: "Bugünkü Çalışmaya Başla",
 
 };

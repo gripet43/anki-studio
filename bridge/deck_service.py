@@ -16,6 +16,7 @@ from pathlib import Path
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .day_rollover import read_day_timing, refresh_scheduler_if_needed
 from .media_utils import get_media_base_url, get_media_dir, get_media_http_base_url
 from .vacation_service import effective_frozen_dates
 
@@ -370,8 +371,10 @@ class DeckService:
             return self._empty_dashboard(lang, profile_name, env_info, cfg)
 
         try:
+            refresh_scheduler_if_needed(col)
             now = datetime.datetime.now()
-            cutoff = getattr(col.sched, "day_cutoff", int(time.time()) + 86400)
+            day_boundary = read_day_timing(col)
+            cutoff = day_boundary["dayCutoff"] if day_boundary.get("available") else getattr(col.sched, "day_cutoff", int(time.time()) + 86400)
             today_start_sec = cutoff - 86400
             today_start_ms = today_start_sec * 1000
 
@@ -561,6 +564,7 @@ class DeckService:
                         and self.vacation_service.get_or_reconstruct_receipt()
                     )
                 ),
+                "dayBoundary": day_boundary,
             }
         except Exception as e:
             fallback = self._empty_dashboard(lang, profile_name, env_info, cfg)
@@ -1909,6 +1913,7 @@ class DeckService:
             "userName": profile_name,
             "greeting": cls._get_greeting(now.hour, lang),
             "dateDisplay": cls._format_date_display(now, lang),
+            "dayBoundary": read_day_timing(None),
             "synced": False,
             "syncedAt": 0,
             "language": lang,

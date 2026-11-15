@@ -67,6 +67,10 @@ export const ReviewerView: React.FC = () => {
     autoPlayBackAudio,
     reviewStageWidth,
     reviewContentScale,
+    dashboard,
+    dayBoundary,
+    pendingDayRollover,
+    reviewSessionDayKey,
   } = useAppStore();
 
   const resolvedTheme = resolveThemeMode(theme, systemDark);
@@ -515,11 +519,30 @@ export const ReviewerView: React.FC = () => {
     };
   }, []);
 
+  const sessionCrossedDay = Boolean(
+    !isPreviewSession &&
+      (pendingDayRollover ||
+        (dayBoundary?.available &&
+          reviewSessionDayKey !== null &&
+          dayBoundary.schedToday !== reviewSessionDayKey))
+  );
+  const effectiveTargetDeck =
+    reviewScopeDeckId && reviewScopeDeckId !== 'all'
+      ? decks.find((d) => d.id === reviewScopeDeckId)
+      : null;
+  const newDayPendingCount = effectiveTargetDeck
+    ? effectiveTargetDeck.dueNew + effectiveTargetDeck.dueReview
+    : dashboard?.todayStats?.totalPending ?? 0;
+  const isNewDayReady = sessionCrossedDay && newDayPendingCount > 0;
+
   // ============== SESSION COMPLETE CELEBRATION SCREEN (Light & Dark Adapted) ==============
   if (isSessionComplete || !currentCard) {
     return (
       <div className={`fixed inset-0 z-30 flex flex-col justify-between select-none overflow-hidden ui-view-enter ${screenBg}`}>
-        <div className="w-full h-[2px] bg-[var(--status-success)]" />
+        <div
+          className="w-full h-[2px]"
+          style={{ backgroundColor: isNewDayReady ? brandHex : 'var(--status-success)' }}
+        />
 
         <header
           className={`h-16 ${
@@ -536,8 +559,12 @@ export const ReviewerView: React.FC = () => {
               ‹
             </button>
             <div>
-              <div className="text-[14px] font-semibold">{t('reviewCompletedTitle')}</div>
-              <div className="text-[11px] text-[#8E8E93] mt-0.5">{t('reviewCompletedSub')}</div>
+              <div className="text-[14px] font-semibold">
+                {isNewDayReady ? t('newDayReadyBadge') : t('reviewCompletedTitle')}
+              </div>
+              <div className="text-[11px] text-[#8E8E93] mt-0.5">
+                {isNewDayReady ? t('newDayReadySub', { n: newDayPendingCount }) : t('reviewCompletedSub')}
+              </div>
             </div>
           </div>
 
@@ -560,11 +587,30 @@ export const ReviewerView: React.FC = () => {
             )}
 
             <div>
+              {isNewDayReady && (
+                <div className="mb-2.5 flex justify-center">
+                  <span
+                    style={{ color: brandHex, borderColor: `${brandHex}33`, backgroundColor: `${brandHex}12` }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold border"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: brandHex }} />
+                    {t('newDayReadyBadge')}
+                  </span>
+                </div>
+              )}
               <h2 className="text-[26px] font-bold tracking-tight">
-                {reviewScopeDeckId === 'all' ? t('congratsTitle') : t('congratsDeckTitle')}
+                {isNewDayReady
+                  ? t('newDayReadyTitle')
+                  : reviewScopeDeckId === 'all'
+                  ? t('congratsTitle')
+                  : t('congratsDeckTitle')}
               </h2>
               <p className="text-[13px] text-[#8E8E98] mt-1.5">
-                {reviewScopeDeckId === 'all' ? t('congratsSub') : t('congratsDeckSub')}
+                {isNewDayReady
+                  ? t('newDayReadySub', { n: newDayPendingCount })
+                  : reviewScopeDeckId === 'all'
+                  ? t('congratsSub')
+                  : t('congratsDeckSub')}
               </p>
             </div>
 
@@ -606,19 +652,39 @@ export const ReviewerView: React.FC = () => {
             </div>
 
             <div className="pt-3 flex items-center justify-center gap-3">
-              <button
-                onClick={() => appActions.exitReview()}
-                style={{ backgroundColor: brandHex }}
-                className="px-6 py-2.5 rounded-xl text-white font-semibold text-[13px] hover:opacity-95 cursor-pointer"
-              >
-                {t('backToDashboard')}
-              </button>
-              <button
-                onClick={() => appActions.startReview(activeDeckId || undefined, false, true)}
-                className={`px-5 py-2.5 rounded-xl border font-medium text-[13px] cursor-pointer ${headerBtnSurface}`}
-              >
-                {t('enterPreviewMode')}
-              </button>
+              {isNewDayReady ? (
+                <>
+                  <button
+                    onClick={() => appActions.startReview(reviewScopeDeckId || activeDeckId || 'all')}
+                    style={{ backgroundColor: brandHex }}
+                    className="px-6 py-2.5 rounded-xl text-white font-semibold text-[13px] hover:opacity-95 cursor-pointer"
+                  >
+                    {t('startTodayStudyBtn')}
+                  </button>
+                  <button
+                    onClick={() => appActions.exitReview()}
+                    className={`px-5 py-2.5 rounded-xl border font-medium text-[13px] cursor-pointer ${headerBtnSurface}`}
+                  >
+                    {t('backToDashboard')}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => appActions.exitReview()}
+                    style={{ backgroundColor: brandHex }}
+                    className="px-6 py-2.5 rounded-xl text-white font-semibold text-[13px] hover:opacity-95 cursor-pointer"
+                  >
+                    {t('backToDashboard')}
+                  </button>
+                  <button
+                    onClick={() => appActions.startReview(activeDeckId || undefined, false, true)}
+                    className={`px-5 py-2.5 rounded-xl border font-medium text-[13px] cursor-pointer ${headerBtnSurface}`}
+                  >
+                    {t('enterPreviewMode')}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -628,7 +694,7 @@ export const ReviewerView: React.FC = () => {
             isDark ? 'border-white/[0.04]' : 'border-[#E5E5EA]'
           }`}
         >
-          <span>{t('reviewCompletedSub')}</span>
+          <span>{isNewDayReady ? t('newDayReadySub', { n: newDayPendingCount }) : t('reviewCompletedSub')}</span>
           <span>
             {showShortcutHints ? `Esc · ${formatShortcut('Cmd Z', platform)}` : 'Esc'}
           </span>
@@ -1478,6 +1544,30 @@ export const ReviewerView: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 relative flex flex-col overflow-hidden">
+        {sessionCrossedDay && (
+          <div
+            role="status"
+            className={`relative z-20 mx-auto mt-2.5 px-3.5 py-1.5 rounded-full border backdrop-blur-md flex items-center gap-3 text-[12px] shadow-sm ${
+              isDark
+                ? 'bg-[#1D1F28]/85 border-white/10 text-[#EAEAF0]'
+                : 'bg-white/85 border-[var(--border-subtle)] text-[#2C2C2E]'
+            }`}
+          >
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: brandHex }}
+            />
+            <span className="leading-snug">{t('reviewerDayRolloverBanner')}</span>
+            <button
+              type="button"
+              onClick={() => appActions.syncPendingDayRolloverQueue()}
+              style={{ color: brandHex }}
+              className="font-semibold hover:underline cursor-pointer shrink-0"
+            >
+              {t('reviewerDayRolloverSyncNow')}
+            </button>
+          </div>
+        )}
         <ReviewerCornerDecor accentColor={accentColor} isDark={isDark} />
         {/* Scrollable Center Pane for Flashcard */}
         <div

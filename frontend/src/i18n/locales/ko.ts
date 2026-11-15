@@ -687,5 +687,13 @@ export const dict: TranslationTable = {
   reviewAudioQuickTitle: "오디오 자동 재생",
   autoPlayBackFallbackNote: "뒷면에 별도 오디오가 없으면 뒤집을 때 앞면 오디오가 다시 재생됩니다.",
   openAnswerSettingsLink: "설정 → 답안 설정에서 열기",
+  dayRolloverToast: "새로운 학습일이 시작되었습니다 — 오늘의 대기열이 업데이트되었습니다",
+  reviewerDayRolloverBanner: "새로운 날이 시작되었습니다 — 현재 카드 이후 오늘의 카드가 자연스럽게 이어집니다",
+  reviewerDayRolloverSyncNow: "오늘 대기열로 전환",
+  dayRolloverQueueSyncedToast: "오늘의 학습 대기열을 동기화했습니다 ({n}장)",
+  newDayReadyBadge: "새 학습일 준비 완료",
+  newDayReadyTitle: "오늘의 새 카드가 준비되었습니다",
+  newDayReadySub: "어제 학습이 완료되었으며 오늘 {n}장의 카드가 기다리고 있습니다.",
+  startTodayStudyBtn: "오늘 학습 시작하기",
 
 };

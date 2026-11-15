@@ -1039,6 +1039,14 @@ const ZH_CN_DICT = {
   reviewAudioQuickTitle: "音频自动播放",
   autoPlayBackFallbackNote: "若背面没有独立音频，开启「翻面」开关时将回退重播正面音频。",
   openAnswerSettingsLink: "在「设置 → 答题设置」中打开",
+  dayRolloverToast: "新的一天开始了，今日待学卡片已更新",
+  reviewerDayRolloverBanner: "新的一天已到达，当前卡片完成后将自动衔接到今日新队列",
+  reviewerDayRolloverSyncNow: "立即切换今日队列",
+  dayRolloverQueueSyncedToast: "已同步今日学习队列，共 {n} 张卡片",
+  newDayReadyBadge: "新的一天已开启",
+  newDayReadyTitle: "今日新卡片已就绪",
+  newDayReadySub: "昨日学习已完成，当前有 {n} 张今日待学卡片等你开始。",
+  startTodayStudyBtn: "开始今日学习",
 
 } as const;
 
@@ -1733,6 +1741,14 @@ const EN_DICT: TranslationTable = {
   reviewAudioQuickTitle: "Audio Auto-Play",
   autoPlayBackFallbackNote: "If the back side has no audio of its own, flipping replays the front audio.",
   openAnswerSettingsLink: "Open in Settings → Answer",
+  dayRolloverToast: "A new study day has started — today's queue is refreshed",
+  reviewerDayRolloverBanner: "A new day has arrived — today's cards will load smoothly after this card",
+  reviewerDayRolloverSyncNow: "Switch to Today",
+  dayRolloverQueueSyncedToast: "Synced today's study queue ({n} cards)",
+  newDayReadyBadge: "New Day Ready",
+  newDayReadyTitle: "Today's New Cards Are Ready",
+  newDayReadySub: "Yesterday's session is done — {n} cards are ready for today.",
+  startTodayStudyBtn: "Start Today's Study",
 
 };
 /**

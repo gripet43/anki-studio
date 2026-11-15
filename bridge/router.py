@@ -16,6 +16,7 @@ import urllib.parse
 from typing import Any, Callable, Dict, Optional
 
 from .analytics_service import AnalyticsService
+from .day_rollover import DayRolloverTracker, read_day_timing, refresh_scheduler_if_needed
 from .deck_service import DeckService
 from .edit_service import EditService
 from .review_service import ReviewService
@@ -79,6 +80,7 @@ class BridgeRouter:
         self.analytics_service = AnalyticsService(
             self._get_config, self._write_config, self._get_mw
         )
+        self.day_tracker = DayRolloverTracker()
 
     def handle_pycmd(self, command: str) -> Optional[str]:
         """
@@ -130,10 +132,27 @@ class BridgeRouter:
 
     def action_get_dashboard(self, data: Dict[str, Any]) -> Dict[str, Any]:
         result = self.deck_service.get_dashboard(data)
+        day_boundary = result.get("dayBoundary")
+        if isinstance(day_boundary, dict):
+            self.day_tracker.observe(day_boundary)
         warning = self.vacation_service.safety_warning()
         if warning:
             result["safetyWarning"] = warning
         return result
+
+    def action_check_day_rollover(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Checks scheduler day boundary (`today`/`day_cutoff`) and reports rollover transitions."""
+        col = self._get_col()
+        if col is not None:
+            refresh_scheduler_if_needed(col)
+        timing = read_day_timing(col)
+        res = self.day_tracker.evaluate(
+            timing,
+            client_sched_today=data.get("schedToday"),
+            client_day_cutoff=data.get("dayCutoff"),
+        )
+        res["source"] = str(data.get("source") or "frontend")
+        return res
 
     def action_get_statistics(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.deck_service.get_statistics(data)

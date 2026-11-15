@@ -364,10 +364,30 @@ export interface SafetyWarning {
   mismatches: string[];
 }
 
+export interface DayBoundaryInfo {
+  available: boolean;
+  schedToday: number;
+  dayCutoff: number;
+  dayStartSec: number;
+  logicalDate: string;
+  rolloverHour: number;
+  serverNow: number;
+}
+
+export interface DayRolloverCheckResult {
+  changed: boolean;
+  reason: 'rollover' | 'schedule_adjusted' | 'unchanged' | 'unavailable' | string;
+  source?: string;
+  dayBoundary: DayBoundaryInfo;
+  previousSchedToday?: number | null;
+  previousDayCutoff?: number | null;
+}
+
 export interface DashboardData {
   userName: string;
   greeting: string;
   dateDisplay: string;
+  dayBoundary?: DayBoundaryInfo;
   synced: boolean;
   syncedAt?: number;
   language?: string;

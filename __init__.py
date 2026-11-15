@@ -15,10 +15,12 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .bridge.compat import collect_health, format_health_summary
+from .bridge.day_rollover import read_day_timing, refresh_scheduler_if_needed
 from .bridge.router import BridgeRouter
 
 ADDON_DIR = Path(__file__).resolve().parent
@@ -142,6 +144,10 @@ class AnkiModernHost:
         # Populated once by `refresh_patch_health()` at the end of `initialize()`;
         # exposed to the frontend through `action_get_patch_health`.
         self.patch_health: Dict[str, Any] = {}
+        self._rollover_shot_timer: Optional[Any] = None
+        self._rollover_guard_timer: Optional[Any] = None
+        self._app_state_signal_connected: bool = False
+        self._last_focus_rollover_check: float = 0.0
         self.router = BridgeRouter(
             toggle_native_callback=self.toggle_modern_ui,
             config_getter=self.get_config,
@@ -257,6 +263,14 @@ class AnkiModernHost:
             gui_hooks.operation_did_execute.append(self._on_operation_did_execute)
         if hasattr(gui_hooks, "state_did_reset"):
             gui_hooks.state_did_reset.append(self._on_state_did_reset)
+        if hasattr(gui_hooks, "day_did_change"):
+            gui_hooks.day_did_change.append(self._on_day_did_change)
+        if hasattr(gui_hooks, "focus_did_change"):
+            gui_hooks.focus_did_change.append(self._on_focus_did_change)
+        if hasattr(gui_hooks, "profile_will_close"):
+            gui_hooks.profile_will_close.append(self._on_profile_will_close)
+        self._ensure_rollover_watchers()
+        self._schedule_next_rollover_shot()
 
         # 4. Layer 3 Safety Net: Inject prominent "[ 🌟 进入 Anki Studio (Ctrl+Opt+M) ]" button into Anki native top toolbar
         if hasattr(gui_hooks, "top_toolbar_did_init_links"):
@@ -635,12 +649,14 @@ class AnkiModernHost:
 
         self._emit_js_event("anki:sync-finished", {"synced": True, "syncedAt": synced_at_ms})
         self._emit_js_event("anki:collection-updated", {"source": "sync"})
+        self._check_day_rollover(source="sync", force_reschedule=True)
 
     def _on_operation_did_execute(self, changes: Any, handler: Any) -> None:
         """Triggered when background operations mutate collection."""
         if handler is self.webview:
             return
         self._emit_js_event("anki:collection-updated", {"source": "operation"})
+        self._check_day_rollover(source="operation", force_reschedule=True)
 
     def _hide_native_webviews(self, mw: Any) -> None:
         """Hides Anki's native toolbar, main webview, and bottom webview so they never overlap or steal input."""
@@ -702,6 +718,143 @@ class AnkiModernHost:
         except Exception:
             pass
 
+    def _ensure_rollover_watchers(self) -> None:
+        """Create Qt rollover timers and connect OS foreground activation signal."""
+        try:
+            from aqt.qt import QApplication, QTimer
+        except Exception:
+            return
+
+        mw_obj = None
+        try:
+            from aqt import mw as mw_obj
+        except Exception:
+            mw_obj = None
+
+        if self._rollover_shot_timer is None:
+            try:
+                shot = QTimer(mw_obj) if mw_obj is not None else QTimer()
+                shot.setSingleShot(True)
+                shot.timeout.connect(self._on_rollover_shot_timeout)
+                self._rollover_shot_timer = shot
+            except Exception:
+                self._rollover_shot_timer = None
+
+        if self._rollover_guard_timer is None:
+            try:
+                guard = QTimer(mw_obj) if mw_obj is not None else QTimer()
+                guard.setSingleShot(False)
+                guard.timeout.connect(self._on_rollover_guard_timeout)
+                guard.start(60_000)
+                self._rollover_guard_timer = guard
+            except Exception:
+                self._rollover_guard_timer = None
+
+        if not self._app_state_signal_connected:
+            try:
+                app = QApplication.instance()
+                if app is not None and hasattr(app, "applicationStateChanged"):
+                    app.applicationStateChanged.connect(self._on_application_state_changed)
+                    self._app_state_signal_connected = True
+            except Exception:
+                pass
+
+    def _schedule_next_rollover_shot(self) -> None:
+        """Arm the single-shot timer for `day_cutoff + 2s` (clamped for 32-bit Qt)."""
+        timer = self._rollover_shot_timer
+        if timer is None:
+            return
+        col = None
+        try:
+            from aqt import mw
+            col = getattr(mw, "col", None) if mw is not None else None
+        except Exception:
+            col = None
+
+        timing = read_day_timing(col)
+        day_cutoff = int(timing.get("dayCutoff") or 0)
+        if not timing.get("available") or day_cutoff <= 0:
+            try:
+                timer.stop()
+            except Exception:
+                pass
+            return
+
+        raw_delay_ms = int((day_cutoff + 2 - time.time()) * 1000)
+        delay_ms = max(5000, min(raw_delay_ms, 7 * 86_400 * 1000))
+        try:
+            timer.start(delay_ms)
+        except Exception:
+            pass
+
+    def _check_day_rollover(self, source: str = "timer", force_reschedule: bool = False) -> bool:
+        """Refresh overdue scheduler cutoff, evaluate day rollover, and notify webview."""
+        col = None
+        try:
+            from aqt import mw
+            col = getattr(mw, "col", None) if mw is not None else None
+        except Exception:
+            col = None
+        if col is None:
+            return False
+
+        refresh_scheduler_if_needed(col)
+        timing = read_day_timing(col)
+        res = self.router.day_tracker.evaluate(timing)
+        changed = bool(res.get("changed"))
+        if changed or force_reschedule:
+            self._schedule_next_rollover_shot()
+        if changed and self.is_modern_visible:
+            self._emit_js_event(
+                "anki:day-changed",
+                {
+                    "source": source,
+                    "reason": res.get("reason", "rollover"),
+                    "dayBoundary": timing,
+                },
+            )
+        return changed
+
+    def _on_rollover_shot_timeout(self) -> None:
+        self._check_day_rollover(source="cutoff_timer", force_reschedule=True)
+
+    def _on_rollover_guard_timeout(self) -> None:
+        self._check_day_rollover(source="guard_timer")
+
+    def _on_day_did_change(self, *args: Any) -> None:
+        self._check_day_rollover(source="gui_hook", force_reschedule=True)
+
+    def _on_focus_did_change(self, new_focus: Any = None, old_focus: Any = None) -> None:
+        if new_focus is None:
+            return
+        now_mono = time.monotonic()
+        if now_mono - self._last_focus_rollover_check < 2.0:
+            return
+        self._last_focus_rollover_check = now_mono
+        self._check_day_rollover(source="focus")
+
+    def _on_application_state_changed(self, state: Any) -> None:
+        try:
+            from aqt.qt import Qt
+            active_state = getattr(
+                getattr(Qt, "ApplicationState", None),
+                "ApplicationActive",
+                getattr(Qt, "ApplicationActive", None),
+            )
+            if active_state is not None and state != active_state:
+                return
+        except Exception:
+            pass
+        self._check_day_rollover(source="app_active")
+
+    def _on_profile_will_close(self, *args: Any) -> None:
+        if self._rollover_shot_timer is not None:
+            try:
+                self._rollover_shot_timer.stop()
+            except Exception:
+                pass
+        self.router.day_tracker.reset()
+
     def _on_state_did_reset(self, *args: Any) -> None:
         """
         When Anki runs `mw.reset()`, native Anki re-shows `mw.toolbar.web` and `mw.web`.
@@ -709,6 +862,7 @@ class AnkiModernHost:
         immediately re-hide the native webviews and raise `self.webview` so native widgets
         never cover or steal mouse/keyboard input from Anki Studio.
         """
+        self._check_day_rollover(source="reset", force_reschedule=True)
         if self.is_modern_visible:
             try:
                 from aqt import mw
@@ -722,6 +876,9 @@ class AnkiModernHost:
         cfg = self.get_config()
         if cfg.get("auto_launch_modern_ui", True):
             self.show_modern_ui()
+        else:
+            self._ensure_rollover_watchers()
+            self._schedule_next_rollover_shot()
 
     def _on_profile_did_open(self) -> None:
         """换用户档案后把现代界面重新挂回去。
@@ -731,6 +888,9 @@ class AnkiModernHost:
         选择，不该因为换了档案就被覆盖。启动时这个钩子会早于 main_window_did_init
         触发，那一次 is_modern_visible 还是 False，因此天然不会重复挂载。
         """
+        self.router.day_tracker.reset()
+        self._ensure_rollover_watchers()
+        self._schedule_next_rollover_shot()
         if not self.is_modern_visible:
             return
         try:
@@ -1001,6 +1161,8 @@ class AnkiModernHost:
             except Exception:
                 pass
 
+            self._ensure_rollover_watchers()
+            self._check_day_rollover(source="show_modern_ui", force_reschedule=True)
             self._emit_js_event("anki:collection-updated", {"source": "show_modern_ui"})
         except Exception as e:
             print(f"[Anki Studio] Error presenting Modern UI: {e}")

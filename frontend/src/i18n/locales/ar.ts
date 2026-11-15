@@ -687,5 +687,13 @@ export const dict: TranslationTable = {
   reviewAudioQuickTitle: "التشغيل التلقائي للصوت",
   autoPlayBackFallbackNote: "إذا لم يوجد صوت خاص للوجه الخلفي، فسيتم إعادة تشغيل صوت الوجه الأمامي عند القلب.",
   openAnswerSettingsLink: "فتح في الإعدادات ← إعدادات الإجابة",
+  dayRolloverToast: "بدأ يوم دراسة جديد — تم تحديث بطاقات اليوم",
+  reviewerDayRolloverBanner: "وصل يوم جديد — سيتم تحميل بطاقات اليوم بسلاسة بعد هذه البطاقة",
+  reviewerDayRolloverSyncNow: "الانتقال إلى اليوم",
+  dayRolloverQueueSyncedToast: "تمت مزامنة قائمة دراسة اليوم ({n} بطاقة)",
+  newDayReadyBadge: "يوم جديد جاهز",
+  newDayReadyTitle: "بطاقات اليوم الجديدة جاهزة",
+  newDayReadySub: "اكتملت جلسة الأمس — هناك {n} بطاقة بانتظارك اليوم.",
+  startTodayStudyBtn: "بدء دراسة اليوم",
 
 };

@@ -13,6 +13,8 @@ import {
   CardFlagColor,
   CustomStudyParams,
   DashboardData,
+  DayBoundaryInfo,
+  DayRolloverCheckResult,
   DeckItem,
   DeckOptionsData,
   EnvInfo,
@@ -77,6 +79,15 @@ export interface UndoSnapshot {
   sessionCorrect: number;
   sessionTotalTimeMs: number;
   wasSessionComplete: boolean;
+  dayKey?: number | null;
+}
+
+export interface PendingDayRolloverInfo {
+  fromSchedToday: number;
+  toSchedToday: number;
+  logicalDate: string;
+  detectedAtMs: number;
+  source?: string;
 }
 
 export interface AppState {
@@ -148,6 +159,9 @@ export interface AppState {
 
   // Dashboard, Decks & Statistics
   dashboard: DashboardData;
+  dayBoundary: DayBoundaryInfo | null;
+  pendingDayRollover: PendingDayRolloverInfo | null;
+  reviewSessionDayKey: number | null;
   decks: DeckItem[];
   advancedStats: AdvancedStatsData;
   showAllDashboardDecks: boolean;
@@ -270,6 +284,9 @@ const initialState: AppState = {
   },
 
   dashboard: EMPTY_DASHBOARD,
+  dayBoundary: null,
+  pendingDayRollover: null,
+  reviewSessionDayKey: null,
   decks: [],
   advancedStats: EMPTY_ADVANCED_STATS,
   showAllDashboardDecks: false,
@@ -365,6 +382,35 @@ let coldStartStartTs = 0;
 let analyticsStarted = false;
 let audioHighlightTimer: any = null;
 let reviewTransitionEpoch = 0;
+let lastNotifiedRolloverSchedToday: number | null = null;
+let rolloverCheckInFlight: Promise<void> | null = null;
+
+function isRolloverTransition(
+  prev: DayBoundaryInfo | null | undefined,
+  next: DayBoundaryInfo | null | undefined
+): boolean {
+  return Boolean(prev?.available && next?.available && next.schedToday !== prev.schedToday);
+}
+
+function buildPendingRollover(
+  fromSchedToday: number,
+  next: DayBoundaryInfo,
+  source?: string
+): PendingDayRolloverInfo {
+  return {
+    fromSchedToday,
+    toSchedToday: next.schedToday,
+    logicalDate: next.logicalDate,
+    detectedAtMs: Date.now(),
+    source,
+  };
+}
+
+function notifyDayRolloverOnce(schedToday: number) {
+  if (lastNotifiedRolloverSchedToday === schedToday) return;
+  lastNotifiedRolloverSchedToday = schedToday;
+  showToast(tState('dayRolloverToast'));
+}
 
 function autoPlayCardSide(card: ReviewCardItem | undefined | null, side: 'front' | 'back') {
   if (!card || !state.inReviewMode || state.isSessionComplete) return;
@@ -514,7 +560,7 @@ function applyInlineUpdateResponse(cardId: string, res: any) {
 // ---- Actions ----
 
 export const appActions = {
-  async initFromAnki(silent = false) {
+  async initFromAnki(silent = false, options?: { skipReviewQueueRefresh?: boolean }) {
     if (!isAnkiNativeEnv()) {
       setAppState({ isLoading: false, isInitialSyncing: false });
       return;
@@ -598,6 +644,17 @@ export const appActions = {
         incomingStats && incomingStats.maturityBreakdown && incomingStats.maturityBreakdown.total > 0
       );
 
+      const prevBoundary = state.dayBoundary;
+      const nextBoundary =
+        dashValid && dash?.dayBoundary?.available ? dash.dayBoundary : prevBoundary;
+      const rolledOver = isRolloverTransition(prevBoundary, nextBoundary);
+      const nextPendingRollover =
+        rolledOver && state.inReviewMode && !state.isPreviewSession && prevBoundary && nextBoundary
+          ? buildPendingRollover(prevBoundary.schedToday, nextBoundary, 'init')
+          : !state.inReviewMode
+          ? null
+          : state.pendingDayRollover;
+
       setAppState({
         isLoading: false,
         isInitialSyncing: false,
@@ -649,6 +706,12 @@ export const appActions = {
               decks: realDecks,
             }
           : EMPTY_DASHBOARD,
+        dayBoundary: nextBoundary ?? null,
+        pendingDayRollover: nextPendingRollover,
+        reviewSessionDayKey:
+          state.inReviewMode && state.reviewSessionDayKey === null && nextBoundary?.available
+            ? nextBoundary.schedToday
+            : state.reviewSessionDayKey,
         libraryCards: realCards,
         libraryTotalCount: searchRes?.collectionTotal ?? searchRes?.total ?? realCards.length,
         libraryFilteredCount: searchRes?.filteredCount ?? realCards.length,
@@ -658,13 +721,31 @@ export const appActions = {
         cmdKResults: state.cmdKQuery.trim() ? state.cmdKResults : [],
       });
 
-      if (state.inReviewMode && state.activeDeckId) {
+      if (rolledOver && !state.inReviewMode && nextBoundary?.available) {
+        notifyDayRolloverOnce(nextBoundary.schedToday);
+      }
+
+      const reviewScope = state.reviewScopeDeckId || state.activeDeckId || '';
+      const shouldRefreshActiveQueue =
+        !options?.skipReviewQueueRefresh &&
+        state.inReviewMode &&
+        !state.isSessionComplete &&
+        !state.isPreviewSession &&
+        !rolledOver &&
+        !nextPendingRollover &&
+        Boolean(reviewScope);
+
+      if (shouldRefreshActiveQueue) {
         try {
           const freshReviewRes = await callAnki<{ cards: ReviewCardItem[]; totalDue: number }>('start_review', {
-            deckId: state.activeDeckId,
+            deckId: reviewScope,
             includePreviewWhenEmpty: false,
           });
-          if (freshReviewRes && Array.isArray(freshReviewRes.cards)) {
+          if (
+            freshReviewRes &&
+            Array.isArray(freshReviewRes.cards) &&
+            !getAppState().pendingDayRollover
+          ) {
             if (freshReviewRes.cards.length === 0) {
               setAppState({
                 reviewQueue: [],
@@ -720,6 +801,92 @@ export const appActions = {
 
   async refreshDashboard(silent = true) {
     return this.initFromAnki(silent);
+  },
+
+  async checkDayRollover(source = 'frontend') {
+    if (!isAnkiNativeEnv() || state.isInitialSyncing) return;
+    if (rolloverCheckInFlight) return rolloverCheckInFlight;
+
+    rolloverCheckInFlight = (async () => {
+      try {
+        const prevBoundary = state.dayBoundary;
+        const res = await callAnki<DayRolloverCheckResult>('check_day_rollover', {
+          source,
+          schedToday: prevBoundary?.available ? prevBoundary.schedToday : undefined,
+          dayCutoff: prevBoundary?.available ? prevBoundary.dayCutoff : undefined,
+        });
+        if (!res?.dayBoundary?.available) return;
+        const clientShifted = isRolloverTransition(prevBoundary, res.dayBoundary);
+        if (res.changed || clientShifted) {
+          await appActions.handleDayChanged({
+            source: res.source || source,
+            reason: clientShifted ? 'rollover' : res.reason,
+            dayBoundary: res.dayBoundary,
+          });
+        } else if (
+          !prevBoundary?.available ||
+          prevBoundary.dayCutoff !== res.dayBoundary.dayCutoff
+        ) {
+          setAppState({ dayBoundary: res.dayBoundary });
+        }
+      } catch {}
+    })().finally(() => {
+      rolloverCheckInFlight = null;
+    });
+    return rolloverCheckInFlight;
+  },
+
+  async handleDayChanged(detail?: {
+    source?: string;
+    reason?: string;
+    dayBoundary?: DayBoundaryInfo;
+  }) {
+    const nextBoundary = detail?.dayBoundary;
+    if (!nextBoundary?.available) {
+      if (isAnkiNativeEnv()) {
+        await appActions.initFromAnki(true);
+      }
+      return;
+    }
+
+    const prevBoundary = state.dayBoundary;
+    const isRollover =
+      detail?.reason === 'rollover' || isRolloverTransition(prevBoundary, nextBoundary);
+
+    if (
+      prevBoundary?.available &&
+      prevBoundary.schedToday === nextBoundary.schedToday &&
+      prevBoundary.dayCutoff === nextBoundary.dayCutoff &&
+      !isRollover
+    ) {
+      return;
+    }
+
+    const nextPending =
+      isRollover && state.inReviewMode && !state.isPreviewSession
+        ? buildPendingRollover(
+            prevBoundary?.available
+              ? prevBoundary.schedToday
+              : state.reviewSessionDayKey ?? nextBoundary.schedToday - 1,
+            nextBoundary,
+            detail?.source
+          )
+        : !state.inReviewMode
+        ? null
+        : state.pendingDayRollover;
+
+    setAppState({
+      dayBoundary: nextBoundary,
+      pendingDayRollover: nextPending,
+    });
+
+    if (isAnkiNativeEnv()) {
+      await appActions.initFromAnki(true, { skipReviewQueueRefresh: true });
+    }
+
+    if (isRollover && !state.inReviewMode) {
+      notifyDayRolloverOnce(nextBoundary.schedToday);
+    }
   },
 
   async updatePreferences(patch: {
@@ -1828,6 +1995,8 @@ export const appActions = {
       inReviewMode: true,
       isSessionComplete: false,
       isPreviewSession: includePreview,
+      pendingDayRollover: null,
+      reviewSessionDayKey: state.dayBoundary?.available ? state.dayBoundary.schedToday : null,
       currentCardIndex: 0,
       isCardFlipped: startOnAnswerSide,
       cardShownAtMs: Date.now(),
@@ -2034,6 +2203,8 @@ export const appActions = {
       inReviewMode: false,
       isSessionComplete: false,
       isPreviewSession: false,
+      pendingDayRollover: null,
+      reviewSessionDayKey: null,
       inlineEditing: false,
       inspectorOpen: false,
       slashMenuOpen: false,
@@ -2120,7 +2291,7 @@ export const appActions = {
    */
   async continueReviewSession(): Promise<ReviewCardItem[] | null> {
     if (!isAnkiNativeEnv()) return null;
-    const scope = getAppState().reviewScopeDeckId || 'all';
+    const scope = getAppState().reviewScopeDeckId || getAppState().activeDeckId || 'all';
     try {
       const res = await callAnki<{ cards: ReviewCardItem[] }>('start_review', {
         deckId: scope,
@@ -2131,6 +2302,52 @@ export const appActions = {
     } catch {
       return null;
     }
+  },
+
+  /** 在学习横幅点击“立即同步”时，手动将当前队列平滑切换为新一天的实时队列。 */
+  async syncPendingDayRolloverQueue() {
+    appActions.stopAudio();
+    const epoch = ++reviewTransitionEpoch;
+    const scope = state.reviewScopeDeckId || state.activeDeckId || 'all';
+
+    if (isAnkiNativeEnv()) {
+      try {
+        const res = await callAnki<{ cards: ReviewCardItem[]; isPreviewOnly?: boolean }>(
+          'start_review',
+          {
+            deckId: scope,
+            includePreviewWhenEmpty: false,
+          }
+        );
+        if (epoch !== reviewTransitionEpoch || !state.inReviewMode) return;
+        const cards = res?.cards || [];
+        setAppState((prev) => ({
+          reviewQueue: cards,
+          currentCardIndex: 0,
+          isPreviewSession: Boolean(res?.isPreviewOnly),
+          isSessionComplete: cards.length === 0,
+          isCardFlipped: false,
+          cardShownAtMs: Date.now(),
+          pendingDayRollover: null,
+          reviewSessionDayKey: prev.dayBoundary?.available
+            ? prev.dayBoundary.schedToday
+            : prev.reviewSessionDayKey,
+        }));
+        if (cards.length > 0) {
+          autoPlayCardSide(cards[0], 'front');
+        }
+        showToast(tState('dayRolloverQueueSyncedToast', { n: cards.length }));
+        await appActions.initFromAnki(true, { skipReviewQueueRefresh: true });
+        return;
+      } catch {}
+    }
+
+    setAppState((prev) => ({
+      pendingDayRollover: null,
+      reviewSessionDayKey: prev.dayBoundary?.available
+        ? prev.dayBoundary.schedToday
+        : prev.reviewSessionDayKey,
+    }));
   },
 
   async answerCurrentCard(ease: 1 | 2 | 3 | 4) {
@@ -2154,6 +2371,7 @@ export const appActions = {
       sessionCorrect: state.sessionCorrectCount,
       sessionTotalTimeMs: state.sessionTotalTimeMs,
       wasSessionComplete: state.isSessionComplete,
+      dayKey: state.dayBoundary?.available ? state.dayBoundary.schedToday : state.reviewSessionDayKey,
     };
 
     let answerPromise: Promise<unknown> | null = null;
@@ -2180,14 +2398,33 @@ export const appActions = {
     }
 
     const isLastCard = state.currentCardIndex + 1 >= nextQueue.length;
+    const hasPendingDayRollover = Boolean(
+      !isPreview &&
+        (state.pendingDayRollover ||
+          (state.dayBoundary?.available &&
+            state.reviewSessionDayKey !== null &&
+            state.dayBoundary.schedToday !== state.reviewSessionDayKey))
+    );
 
-    // 最后一张答完先等它落库，再问调度器是否还有可学的卡（含学习步内的卡）。
+    // 若已跨越新一天：等当前评分落库后，自动从调度器拉取今日全新队列；
+    // 否则在同日最后一张时通过 learn-ahead 续取剩余学习步卡片。
     let continuation: ReviewCardItem[] | null = null;
-    if (isLastCard && !isPreview) {
+    let rolloverMergedCards: ReviewCardItem[] | null = null;
+    if (hasPendingDayRollover && isAnkiNativeEnv()) {
+      if (answerPromise) await answerPromise;
+      rolloverMergedCards = (await appActions.continueReviewSession()) ?? [];
+      if (epoch !== reviewTransitionEpoch || !state.inReviewMode) {
+        return;
+      }
+    } else if (isLastCard && !isPreview) {
       if (answerPromise) await answerPromise;
       continuation = await appActions.continueReviewSession();
     }
-    if (isLastCard && !isPreview && !continuation) {
+    if (
+      rolloverMergedCards !== null
+        ? rolloverMergedCards.length === 0
+        : isLastCard && !isPreview && !continuation
+    ) {
       trackAnalytics('review_session', { cards: state.sessionStudiedCount + 1 });
     }
 
@@ -2220,14 +2457,25 @@ export const appActions = {
 
     setAppState((prev) => ({
       undoStack: [...prev.undoStack, snapshot],
-      reviewQueue: continuation ?? nextQueue,
+      reviewQueue: rolloverMergedCards ?? continuation ?? nextQueue,
       decks: updatedDecks,
-      currentCardIndex: continuation
-        ? 0
-        : isLastCard
-        ? prev.currentCardIndex
-        : prev.currentCardIndex + 1,
-      isSessionComplete: continuation ? false : isLastCard,
+      currentCardIndex:
+        rolloverMergedCards !== null || continuation
+          ? 0
+          : isLastCard
+          ? prev.currentCardIndex
+          : prev.currentCardIndex + 1,
+      isSessionComplete:
+        rolloverMergedCards !== null
+          ? rolloverMergedCards.length === 0
+          : continuation
+          ? false
+          : isLastCard,
+      pendingDayRollover: rolloverMergedCards !== null ? null : prev.pendingDayRollover,
+      reviewSessionDayKey:
+        rolloverMergedCards !== null && prev.dayBoundary?.available
+          ? prev.dayBoundary.schedToday
+          : prev.reviewSessionDayKey,
       isCardFlipped: false,
       cardShownAtMs: Date.now(),
       revealedHintsCount: 2,
@@ -2249,6 +2497,15 @@ export const appActions = {
         },
       },
     }));
+
+    if (rolloverMergedCards !== null) {
+      if (rolloverMergedCards.length > 0 && epoch === reviewTransitionEpoch && state.inReviewMode) {
+        autoPlayCardSide(rolloverMergedCards[0], 'front');
+      }
+      showToast(tState('dayRolloverQueueSyncedToast', { n: rolloverMergedCards.length }));
+      appActions.initFromAnki(true, { skipReviewQueueRefresh: true });
+      return;
+    }
 
     if (continuation) {
       if (epoch === reviewTransitionEpoch && state.inReviewMode && !state.isSessionComplete) {
@@ -2300,14 +2557,25 @@ export const appActions = {
     }
 
     const last = state.undoStack[state.undoStack.length - 1];
+    const crossedDay = Boolean(
+      last.dayKey != null &&
+        state.dayBoundary?.available &&
+        last.dayKey !== state.dayBoundary.schedToday
+    );
     if (isAnkiNativeEnv() && !state.isPreviewSession) {
-      callAnki('undo').catch(() => {});
+      if (crossedDay) {
+        try {
+          await callAnki('undo');
+        } catch {}
+      } else {
+        callAnki('undo').catch(() => {});
+      }
     }
 
     setAppState((prev) => ({
       undoStack: prev.undoStack.slice(0, -1),
       reviewQueue: last.previousQueue,
-      decks: last.previousDecks,
+      decks: crossedDay ? prev.decks : last.previousDecks,
       currentCardIndex: last.cardIndex,
       isSessionComplete: false,
       isCardFlipped: true,
@@ -2315,12 +2583,17 @@ export const appActions = {
       sessionStudiedCount: last.sessionStudied,
       sessionCorrectCount: last.sessionCorrect,
       sessionTotalTimeMs: last.sessionTotalTimeMs,
-      dashboard: {
-        ...prev.dashboard,
-        decks: last.previousDecks,
-        todayStats: last.previousTodayStats,
-      },
+      dashboard: crossedDay
+        ? prev.dashboard
+        : {
+            ...prev.dashboard,
+            decks: last.previousDecks,
+            todayStats: last.previousTodayStats,
+          },
     }));
+    if (crossedDay && isAnkiNativeEnv()) {
+      appActions.initFromAnki(true, { skipReviewQueueRefresh: true });
+    }
     showToast(`${tState('undoBtnShort')}: ${last.card.front}`);
   },
 

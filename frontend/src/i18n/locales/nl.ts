@@ -687,5 +687,13 @@ export const dict: TranslationTable = {
   reviewAudioQuickTitle: "Audio automatisch afspelen",
   autoPlayBackFallbackNote: "Heeft de achterkant geen eigen audio, dan wordt bij omdraaien de voorkantaudio herhaald.",
   openAnswerSettingsLink: "Openen in Instellingen → Antwoorden",
+  dayRolloverToast: "Een nieuwe studiedag is begonnen — de wachtrij van vandaag is bijgewerkt",
+  reviewerDayRolloverBanner: "Er is een nieuwe dag aangebroken — de kaarten van vandaag laden na deze kaart",
+  reviewerDayRolloverSyncNow: "Naar vandaag schakelen",
+  dayRolloverQueueSyncedToast: "Wachtrij van vandaag gesynchroniseerd ({n} kaarten)",
+  newDayReadyBadge: "Nieuwe dag gereed",
+  newDayReadyTitle: "De nieuwe kaarten van vandaag staan klaar",
+  newDayReadySub: "De sessie van gisteren is afgerond — er staan vandaag {n} kaarten klaar.",
+  startTodayStudyBtn: "Vandaag starten",
 
 };

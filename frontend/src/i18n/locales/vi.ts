@@ -687,5 +687,13 @@ export const dict: TranslationTable = {
   reviewAudioQuickTitle: "Tự động phát âm thanh",
   autoPlayBackFallbackNote: "Nếu mặt sau không có âm thanh riêng, khi lật sẽ phát lại âm thanh mặt trước.",
   openAnswerSettingsLink: "Mở trong Cài đặt → Trả lời",
+  dayRolloverToast: "Một ngày học mới đã bắt đầu — hàng đợi hôm nay đã được làm mới",
+  reviewerDayRolloverBanner: "Đã sang ngày mới — các thẻ hôm nay sẽ tự động nối tiếp sau thẻ này",
+  reviewerDayRolloverSyncNow: "Chuyển sang hôm nay",
+  dayRolloverQueueSyncedToast: "Đã đồng bộ hàng đợi hôm nay ({n} thẻ)",
+  newDayReadyBadge: "Ngày mới sẵn sàng",
+  newDayReadyTitle: "Thẻ mới hôm nay đã sẵn sàng",
+  newDayReadySub: "Phiên hôm qua đã hoàn tất — hôm nay có {n} thẻ đang chờ bạn.",
+  startTodayStudyBtn: "Bắt đầu học hôm nay",
 
 };

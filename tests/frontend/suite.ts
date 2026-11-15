@@ -27,6 +27,7 @@ import './specs/cardDebugInfo.spec';
 import './specs/learningTips.spec';
 import './specs/clozeMode.spec';
 import './specs/reviewAudio.spec';
+import './specs/dayRollover.spec';
 
 import { report } from './harness';
 

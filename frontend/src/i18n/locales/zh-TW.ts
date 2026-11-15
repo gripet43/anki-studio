@@ -687,5 +687,13 @@ export const dict: TranslationTable = {
   reviewAudioQuickTitle: "音訊自動播放",
   autoPlayBackFallbackNote: "若背面沒有獨立音訊，開啟「翻面」開關時將回退重播正面音訊。",
   openAnswerSettingsLink: "在「設定 → 答題設定」中開啟",
+  dayRolloverToast: "新的一天開始了，今日待學卡片已更新",
+  reviewerDayRolloverBanner: "新的一天已到達，目前卡片完成後將自動銜接到今日新佇列",
+  reviewerDayRolloverSyncNow: "立即切換今日佇列",
+  dayRolloverQueueSyncedToast: "已同步今日學習佇列，共 {n} 張卡片",
+  newDayReadyBadge: "新的一天已開啟",
+  newDayReadyTitle: "今日新卡片已就緒",
+  newDayReadySub: "昨日學習已完成，目前有 {n} 張今日待學卡片等你開始。",
+  startTodayStudyBtn: "開始今日學習",
 
 };

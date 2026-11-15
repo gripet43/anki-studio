@@ -146,6 +146,15 @@ export const EMPTY_DASHBOARD: DashboardData = {
   },
   advancedStats: EMPTY_ADVANCED_STATS,
   lastRescueReceipt: null,
+  dayBoundary: {
+    available: false,
+    schedToday: 0,
+    dayCutoff: 0,
+    dayStartSec: 0,
+    logicalDate: '',
+    rolloverHour: 0,
+    serverNow: 0,
+  },
 };
 
 export const SEED_ADVANCED_STATS = EMPTY_ADVANCED_STATS;
