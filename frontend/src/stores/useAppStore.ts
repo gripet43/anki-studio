@@ -353,12 +353,48 @@ function emitChange() {
   }
 }
 
+const EMPTY_CMDK_STATE: Pick<
+  AppState,
+  | 'cmdKQuery'
+  | 'cmdKSelectedIndex'
+  | 'cmdKResults'
+  | 'cmdKCardStyles'
+  | 'cmdKFrontCardStyles'
+  | 'cmdKSearching'
+> = {
+  cmdKQuery: '',
+  cmdKSelectedIndex: 0,
+  cmdKResults: [],
+  cmdKCardStyles: {},
+  cmdKFrontCardStyles: {},
+  cmdKSearching: false,
+};
+
+let libraryDebounceTimer: any = null;
+let cmdKDebounceTimer: any = null;
+let cmdKRequestSeq = 0;
+
+function cancelPendingCmdKSearch() {
+  cmdKRequestSeq += 1;
+  if (cmdKDebounceTimer) {
+    clearTimeout(cmdKDebounceTimer);
+    cmdKDebounceTimer = null;
+  }
+}
+
 export function getAppState(): AppState {
   return state;
 }
 
 export function setAppState(updater: Partial<AppState> | ((prev: AppState) => Partial<AppState>)) {
-  const nextPartial = typeof updater === 'function' ? updater(state) : updater;
+  const rawPartial = typeof updater === 'function' ? updater(state) : updater;
+  let nextPartial = rawPartial;
+  const isOpeningCmdK = rawPartial.cmdKOpen === true && !state.cmdKOpen;
+  const isClosingCmdK = rawPartial.cmdKOpen === false && state.cmdKOpen;
+  if (isOpeningCmdK || isClosingCmdK) {
+    cancelPendingCmdKSearch();
+    nextPartial = { ...EMPTY_CMDK_STATE, ...rawPartial };
+  }
   state = { ...state, ...nextPartial };
   emitChange();
 }
@@ -374,9 +410,6 @@ export function showToast(message: string) {
 
 const tState = (key: any, params?: Record<string, string | number>) =>
   translate(state.resolvedLang, key, params);
-
-let libraryDebounceTimer: any = null;
-let cmdKDebounceTimer: any = null;
 
 const LIBRARY_PAGE_SIZE = 200;
 
@@ -542,11 +575,15 @@ function applyInlineUpdateResponse(cardId: string, res: any) {
       }
       if (cardStyles) {
         patch.libraryCardStyles = { ...prev.libraryCardStyles, ...cardStyles };
-        patch.cmdKCardStyles = { ...prev.cmdKCardStyles, ...cardStyles };
+        if (prev.cmdKOpen) {
+          patch.cmdKCardStyles = { ...prev.cmdKCardStyles, ...cardStyles };
+        }
       }
       if (cardFrontStyles) {
         patch.libraryFrontCardStyles = { ...prev.libraryFrontCardStyles, ...cardFrontStyles };
-        patch.cmdKFrontCardStyles = { ...prev.cmdKFrontCardStyles, ...cardFrontStyles };
+        if (prev.cmdKOpen) {
+          patch.cmdKFrontCardStyles = { ...prev.cmdKFrontCardStyles, ...cardFrontStyles };
+        }
       }
       if (sandboxIds) {
         patch.sandboxNoteTypeIds = sandboxIds;
@@ -1092,27 +1129,37 @@ export const appActions = {
   },
 
   searchCmdKDebounced(query: string) {
+    cancelPendingCmdKSearch();
+    const seq = cmdKRequestSeq;
+
+    if (!query.trim()) {
+      setAppState({
+        ...EMPTY_CMDK_STATE,
+        cmdKQuery: query,
+      });
+      return;
+    }
+
     setAppState({ cmdKQuery: query, cmdKSelectedIndex: 0 });
 
     if (!isAnkiNativeEnv()) {
       const q = query.trim().toLowerCase();
-      const matched = !q
-        ? state.libraryCards
-        : state.libraryCards.filter(
-            (c) =>
-              c.front.toLowerCase().includes(q) ||
-              c.back.toLowerCase().includes(q) ||
-              c.deckName.toLowerCase().includes(q) ||
-              c.tags.some((t) => t.toLowerCase().includes(q))
-          );
-      setAppState({ cmdKResults: matched });
+      const matched = state.libraryCards.filter(
+        (c) =>
+          c.front.toLowerCase().includes(q) ||
+          c.back.toLowerCase().includes(q) ||
+          c.deckName.toLowerCase().includes(q) ||
+          c.tags.some((t) => t.toLowerCase().includes(q))
+      );
+      setAppState({ cmdKResults: matched, cmdKSearching: false });
       return;
     }
 
-    if (cmdKDebounceTimer) clearTimeout(cmdKDebounceTimer);
     setAppState({ cmdKSearching: true });
 
     cmdKDebounceTimer = setTimeout(async () => {
+      cmdKDebounceTimer = null;
+      if (seq !== cmdKRequestSeq || !state.cmdKOpen) return;
       try {
         const res = await callAnki<{
           total: number;
@@ -1131,6 +1178,7 @@ export const appActions = {
           limit: 200,
           includeFacets: false,
         });
+        if (seq !== cmdKRequestSeq || !state.cmdKOpen) return;
         if (res && Array.isArray(res.cards)) {
           setAppState({
             cmdKResults: res.cards,
@@ -1142,6 +1190,7 @@ export const appActions = {
           setAppState({ cmdKSearching: false });
         }
       } catch {
+        if (seq !== cmdKRequestSeq || !state.cmdKOpen) return;
         setAppState({ cmdKSearching: false });
       }
     }, 180);
@@ -3457,6 +3506,7 @@ export const appActions = {
   async handleProfileChanged() {
     sessionVerifiedSyncTs = 0;
     coldStartInProgress = false;
+    cancelPendingCmdKSearch();
     setAppState((prev) => ({
       profileGeneration: prev.profileGeneration + 1,
       activeTab: 'dashboard',
@@ -3500,12 +3550,7 @@ export const appActions = {
       inlineEditing: false,
       editingField: null,
       slashMenuOpen: false,
-      cmdKQuery: '',
-      cmdKSelectedIndex: 0,
-      cmdKResults: [],
-      cmdKCardStyles: {},
-      cmdKFrontCardStyles: {},
-      cmdKSearching: false,
+      ...EMPTY_CMDK_STATE,
       libraryCards: [],
       libraryCardStyles: {},
       libraryFrontCardStyles: {},

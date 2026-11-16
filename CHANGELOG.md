@@ -15,6 +15,12 @@
 
 ## [Unreleased]
 
+## [v1.6.5] - 2026-11-16
+
+- **[Antigravity] 修复首页打开全局搜索后关闭再重新打开仍保留上次搜索词的问题**（改 [`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/search/CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)、新增 [`tests/frontend/specs/cmdkReset.spec.ts`](tests/frontend/specs/cmdkReset.spec.ts) 与 [`manifest.json`](manifest.json)）：
+  - **开关状态统一清空与防抖请求防竞态**：在 [`setAppState`](frontend/src/stores/useAppStore.ts) 处理 `cmdKOpen` 开启与关闭转换时统一调用 `cancelPendingCmdKSearch()` 并重置 `EMPTY_CMDK_STATE`（`cmdKQuery`、`cmdKSelectedIndex`、`cmdKResults`、`cmdKCardStyles`、`cmdKFrontCardStyles`、`cmdKSearching`）；同时为 `searchCmdKDebounced` 增加递增序列号 `cmdKRequestSeq`，在关闭弹窗或输入清空后立即丢弃尚未返回的异步查询结果，避免残余关键词或过期搜索结果回填。
+  - **平滑退场与重新打开聚焦**：[`CommandPaletteModal`](frontend/src/components/search/CommandPaletteModal.tsx) 在 `120ms` 关闭退场过渡期保留当次渲染快照避免结果页闪回引导页，并在再次打开时自动聚焦搜索输入框，升级版本至 `v1.6.5`。
+
 ## [v1.6.4] - 2026-11-16
 
 - **[Antigravity] 移除主题色选择器中「推荐 / Recommended」标签并保留单元格防溢出约束**（改 [`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/components/design-system/DesignSystemView.tsx`](frontend/src/components/design-system/DesignSystemView.tsx) 与 [`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：

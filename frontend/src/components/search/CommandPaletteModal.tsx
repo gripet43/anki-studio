@@ -2,7 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { usePresence } from '../../hooks/usePresence';
 import { Tooltip } from '../common/Tooltip';
 import { formatShortcut, translate } from '../../i18n/translations';
-import { appActions, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
+import {
+  appActions,
+  type LibraryCardItem,
+  setAppState,
+  showToast,
+  useAppStore,
+} from '../../stores/useAppStore';
 import { copyTextToClipboard } from '../../utils/clipboard';
 import { getDeckColorByHash, renderMathAndRichHtml } from '../../utils/mathRenderer';
 import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
@@ -63,6 +69,43 @@ export const CommandPaletteModal: React.FC = () => {
   const [copiedSide, setCopiedSide] = useState<'front' | 'back' | 'all' | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const lastOpenSnapshotRef = useRef<{
+    query: string;
+    selectedIndex: number;
+    results: LibraryCardItem[];
+    cardStyles: Record<string, string>;
+    frontCardStyles: Record<string, string>;
+    searching: boolean;
+  } | null>(null);
+  const presence = usePresence(cmdKOpen, 120);
+
+  if (cmdKOpen) {
+    lastOpenSnapshotRef.current = {
+      query: cmdKQuery,
+      selectedIndex: cmdKSelectedIndex,
+      results: cmdKResults,
+      cardStyles: cmdKCardStyles,
+      frontCardStyles: cmdKFrontCardStyles,
+      searching: cmdKSearching,
+    };
+  } else if (!presence.mounted) {
+    lastOpenSnapshotRef.current = null;
+  }
+
+  const renderQuery = cmdKOpen ? cmdKQuery : lastOpenSnapshotRef.current?.query ?? '';
+  const renderSelectedIndex = cmdKOpen
+    ? cmdKSelectedIndex
+    : lastOpenSnapshotRef.current?.selectedIndex ?? 0;
+  const renderResults = cmdKOpen ? cmdKResults : lastOpenSnapshotRef.current?.results ?? [];
+  const renderCardStyles = cmdKOpen
+    ? cmdKCardStyles
+    : lastOpenSnapshotRef.current?.cardStyles ?? {};
+  const renderFrontCardStyles = cmdKOpen
+    ? cmdKFrontCardStyles
+    : lastOpenSnapshotRef.current?.frontCardStyles ?? {};
+  const renderSearching = cmdKOpen
+    ? cmdKSearching
+    : lastOpenSnapshotRef.current?.searching ?? false;
 
   const resolvedTheme = resolveThemeMode(theme, systemDark);
   const isDark = resolvedTheme === 'dark';
@@ -72,19 +115,19 @@ export const CommandPaletteModal: React.FC = () => {
 
   const brandHex = getAccentScale(accentColor, resolvedTheme).brand;
 
-  const hasQuery = cmdKQuery.trim().length > 0;
-  const displayedResults = hasQuery ? cmdKResults : [];
-  const activeCard = displayedResults[cmdKSelectedIndex] || displayedResults[0] || null;
+  const hasQuery = renderQuery.trim().length > 0;
+  const displayedResults = hasQuery ? renderResults : [];
+  const activeCard = displayedResults[renderSelectedIndex] || displayedResults[0] || null;
 
   // 卡包自带的作用域模板 CSS（后端按卡型去重后随搜索结果一起给）。
   // 没有它，右侧预览就只是把卡包 HTML 原样摊开——柯林斯的色条、词性小标签、
   // 真题块全都变成一段灰扑扑的纯文本，和 Anki 里的样子对不上。
   const activeCardCss = activeCard?.notetypeId
-    ? cmdKCardStyles[String(activeCard.notetypeId)] || ''
+    ? renderCardStyles[String(activeCard.notetypeId)] || ''
     : '';
   // 正面用「保留 display:none」的那份，避免柯林斯详解/{{hint}} 内容在正面提前露出。
   const activeCardFrontCss = activeCard?.notetypeId
-    ? cmdKFrontCardStyles[String(activeCard.notetypeId)] || activeCardCss
+    ? renderFrontCardStyles[String(activeCard.notetypeId)] || activeCardCss
     : '';
 
   /**
@@ -181,6 +224,14 @@ export const CommandPaletteModal: React.FC = () => {
 
   useEffect(() => {
     if (!cmdKOpen) return;
+    const rafId = requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [cmdKOpen]);
+
+  useEffect(() => {
+    if (!cmdKOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -212,7 +263,6 @@ export const CommandPaletteModal: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [cmdKOpen, displayedResults.length, activeCard]);
 
-  const presence = usePresence(cmdKOpen, 120);
   if (!presence.mounted) return null;
 
   const handleCopyText = async (rawText: string, side: 'front' | 'back' | 'all' = 'all') => {
@@ -318,13 +368,13 @@ export const CommandPaletteModal: React.FC = () => {
             <input
               ref={searchInputRef}
               type="text"
-              value={cmdKQuery}
+              value={renderQuery}
               onChange={(e) => appActions.searchCmdKDebounced(e.target.value)}
               placeholder={t('cmdKSearchPlaceholder')}
               autoFocus
               className="w-full bg-transparent text-[15px] font-medium focus:outline-none placeholder:text-[#8E8E93]"
             />
-            {cmdKQuery && (
+            {renderQuery && (
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
@@ -345,7 +395,7 @@ export const CommandPaletteModal: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {hasQuery && cmdKSearching && (
+            {hasQuery && renderSearching && (
               <span className="text-[11px] text-[var(--brand-text)] font-medium flex items-center gap-1 me-1">
                 <span className="w-2 h-2 rounded-full bg-[var(--brand)] animate-ping" />
                 <span>{t('searchingShort')}</span>
@@ -453,7 +503,7 @@ export const CommandPaletteModal: React.FC = () => {
               </svg>
             </div>
             <div className="text-[15px] font-semibold tracking-tight text-[#1D1D1F] dark:text-[#F4F4F6]">
-              {t('cmdKNoResultsTitle', { q: cmdKQuery })}
+              {t('cmdKNoResultsTitle', { q: renderQuery })}
             </div>
             <p className="text-[12px] text-[#8E8E93] mt-1.5 max-w-[320px] leading-relaxed">
               {t('cmdKNoResultsSub')}
@@ -493,7 +543,7 @@ export const CommandPaletteModal: React.FC = () => {
             >
               <div className="space-y-1">
                 {displayedResults.map((item, idx) => {
-                  const isSelected = idx === cmdKSelectedIndex;
+                  const isSelected = idx === renderSelectedIndex;
                   const deckDot = getDeckColorByHash(item.deckId || item.deckName);
                   return (
                     <div
@@ -547,11 +597,12 @@ export const CommandPaletteModal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
+                  const querySnapshot = renderQuery;
                   setAppState({
                     cmdKOpen: false,
                     activeTab: 'library',
                   });
-                  appActions.searchLibraryDebounced({ query: cmdKQuery });
+                  appActions.searchLibraryDebounced({ query: querySnapshot });
                 }}
                 className="mt-2 py-1.5 text-center text-[11px] font-medium text-[var(--brand-text)] hover:underline cursor-pointer"
               >

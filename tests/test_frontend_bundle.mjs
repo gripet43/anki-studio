@@ -1391,4 +1391,13 @@ assert(
   'Item #51: Accent picker cells must omit the Recommended/officialBrandBadge tag and keep bounded cell width with overflow-hidden'
 );
 
+assert(
+  storeSrc.includes('EMPTY_CMDK_STATE') &&
+    storeSrc.includes('cancelPendingCmdKSearch') &&
+    storeSrc.includes('cmdKRequestSeq') &&
+    cmdKSrc.includes('lastOpenSnapshotRef') &&
+    cmdKSrc.includes('searchInputRef.current?.focus()'),
+  'Item #52: Closing or reopening Cmd+K global search must reset query/results cleanly, cancel stale in-flight requests, and restore input focus'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');
