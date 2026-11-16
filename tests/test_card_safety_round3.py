@@ -147,27 +147,30 @@ class CardSafetyRound3Test(unittest.TestCase):
         for seed in (0, 5, 17):
             with self.subTest(seed=seed):
                 env = SafetyEnv(seed, CARDS)
-                before = env.snap()
+                try:
+                    before = env.snap()
 
-                def flaky_set_due_date(cids, expr):
-                    for i, cid in enumerate(cids):
-                        env.col.conn.execute(
-                            "UPDATE cards SET due = ? WHERE id = ?", (450, int(cid))
-                        )
-                        if i == 2:
-                            env.col.conn.commit()  # partial state is durable
-                            raise RuntimeError("injected mid-batch I/O failure")
-                    env.col.conn.commit()
+                    def flaky_set_due_date(cids, expr):
+                        for i, cid in enumerate(cids):
+                            env.col.conn.execute(
+                                "UPDATE cards SET due = ? WHERE id = ?", (450, int(cid))
+                            )
+                            if i == 2:
+                                env.col.conn.commit()  # partial state is durable
+                                raise RuntimeError("injected mid-batch I/O failure")
+                        env.col.conn.commit()
 
-                env.col.sched.set_due_date = flaky_set_due_date
-                res = env.call("rescue_backlog", {"mode": "shift", "days": 3})
-                self.assertFalse(res["data"]["success"], "failure must not be reported as success")
+                    env.col.sched.set_due_date = flaky_set_due_date
+                    res = env.call("rescue_backlog", {"mode": "shift", "days": 3})
+                    self.assertFalse(res["data"]["success"], "failure must not be reported as success")
 
-                d = compare(before, env.snap())
-                self.assertEqual(d["cards_changed"], [], "partial writes were not rolled back")
-                self.assertEqual(d["cards_removed"], [])
-                self.assertEqual(d["notes_changed"], [])
-                self.assertEqual(env.cfg["safety_ticket"]["state"], "rolled_back")
+                    d = compare(before, env.snap())
+                    self.assertEqual(d["cards_changed"], [], "partial writes were not rolled back")
+                    self.assertEqual(d["cards_removed"], [])
+                    self.assertEqual(d["notes_changed"], [])
+                    self.assertEqual(env.cfg["safety_ticket"]["state"], "rolled_back")
+                finally:
+                    env.close()
 
     def test_02_sigkill_crash_leaves_recoverable_consistent_database(self):
         """A real child process is SIGKILLed; the DB must survive and recover."""
@@ -177,8 +180,10 @@ class CardSafetyRound3Test(unittest.TestCase):
             cfg_path = os.path.join(td, "config.json")
 
             creator = SafetyEnv(55, CARDS, db_path=db_path, cfg_path=cfg_path)
-            before = creator.snap()
-            creator.close()
+            try:
+                before = creator.snap()
+            finally:
+                creator.close()
 
             child = ctx.Process(target=_crash_child, args=(db_path, cfg_path))
             child.start()
@@ -201,8 +206,10 @@ class CardSafetyRound3Test(unittest.TestCase):
 
             # Physical integrity after an ungraceful kill.
             conn = sqlite3.connect(db_path)
-            self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
-            conn.close()
+            try:
+                self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            finally:
+                conn.close()
 
             # The ticket must still be pending (the crash happened before done).
             persisted = json.loads(Path(cfg_path).read_text(encoding="utf-8"))
@@ -210,13 +217,17 @@ class CardSafetyRound3Test(unittest.TestCase):
             self.assertTrue(persisted["rescue_history"][0]["scheduleSnapshot"])
 
             # Restart and let the next IPC call reconcile the orphan.
+            # Close before exiting TemporaryDirectory so Windows releases collection.anki2 handles.
             env = SafetyEnv.from_files(db_path, cfg_path)
-            env.call("get_vacation_status", {})
-            d = compare(before, env.snap())
-            for key in ("cards_added", "cards_removed", "cards_changed",
-                        "notes_changed", "revlog_removed"):
-                self.assertEqual(d[key], [], f"{key}: {d[key][:5]}")
-            self.assertEqual(env.cfg["safety_ticket"]["state"], "recovered")
+            try:
+                env.call("get_vacation_status", {})
+                d = compare(before, env.snap())
+                for key in ("cards_added", "cards_removed", "cards_changed",
+                            "notes_changed", "revlog_removed"):
+                    self.assertEqual(d[key], [], f"{key}: {d[key][:5]}")
+                self.assertEqual(env.cfg["safety_ticket"]["state"], "recovered")
+            finally:
+                env.close()
 
     def test_03_stateful_sequences_and_counterexample_shrinking(self):
         """Long random operation sequences, with automatic minimal reproduction."""

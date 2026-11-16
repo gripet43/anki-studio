@@ -50,6 +50,8 @@ PRIVATE_CONFIG_KEYS = {
     "safety_ticket",
     "last_sync_checked_map",
     "sandbox_notetype_ids",
+    "profile_states",
+    "_legacy_unscoped_profile_state",
 }
 
 EXCLUDED_NAMES = {
@@ -133,71 +135,85 @@ def build_manifest_payload() -> dict:
 
 
 def create_ankiaddon_package() -> Path:
-    if OUTPUT_ARCHIVE.exists():
-        OUTPUT_ARCHIVE.unlink()
-
     manifest = build_manifest_payload()
     print(
         f"[build_ankiaddon] manifest: v{manifest.get('human_version')} "
         f"mod={manifest['mod']} min_point_version={manifest['min_point_version']}"
     )
 
+    web_dir = ADDON_ROOT / "web"
+    if not (web_dir / "index.html").exists():
+        raise FileNotFoundError("web/index.html is missing. Run frontend build first.")
+
     included_files = []
+    staging_archive = OUTPUT_ARCHIVE.with_suffix(".ankiaddon.tmp")
+    if staging_archive.exists():
+        staging_archive.unlink()
 
-    with zipfile.ZipFile(OUTPUT_ARCHIVE, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        # 1. Top-level files (must sit directly at root of the .ankiaddon zip)
-        for filename in TOP_LEVEL_FILES:
-            filepath = ADDON_ROOT / filename
-            if not filepath.exists():
-                raise FileNotFoundError(f"Required top-level file missing: {filepath}")
-            if filename == "manifest.json":
-                zf.writestr(
-                    filename,
-                    json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-                )
-            elif filename == "config.json":
-                # config.json doubles as the add-on's default/schema template.
-                # Ship a sanitized copy so private study data never leaks.
-                # 源码仓库里的 config.json 已不入库（含真实昵称/回执/休假记录），
-                # 优先读 config.default.json 这份干净模板。
-                template = ADDON_ROOT / "config.default.json"
-                source = template if template.exists() else filepath
-                raw = json.loads(source.read_text(encoding="utf-8"))
-                for key in PRIVATE_CONFIG_KEYS:
-                    raw.pop(key, None)
-                zf.writestr(filename, json.dumps(raw, ensure_ascii=False, indent=2))
-            else:
-                zf.write(filepath, arcname=filename)
-            included_files.append(filename)
+    try:
+        with zipfile.ZipFile(staging_archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            # 1. Top-level files (must sit directly at root of the .ankiaddon zip)
+            for filename in TOP_LEVEL_FILES:
+                filepath = ADDON_ROOT / filename
+                if filename == "manifest.json":
+                    if not filepath.exists():
+                        raise FileNotFoundError(f"Required top-level file missing: {filepath}")
+                    zf.writestr(
+                        filename,
+                        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                    )
+                elif filename == "config.json":
+                    # config.json doubles as the add-on's default/schema template.
+                    # Ship a sanitized copy so private study data never leaks.
+                    # 源码仓库里的 config.json 已不入库（含真实昵称/回执/休假记录），
+                    # 优先读 config.default.json 这份干净模板（干净 clone 无 config.json 也能直接打包）。
+                    template = ADDON_ROOT / "config.default.json"
+                    source = template if template.exists() else filepath
+                    if not source.exists():
+                        raise FileNotFoundError(
+                            f"Required config template missing: {template} (or {filepath})"
+                        )
+                    raw = json.loads(source.read_text(encoding="utf-8"))
+                    for key in PRIVATE_CONFIG_KEYS:
+                        raw.pop(key, None)
+                    zf.writestr(filename, json.dumps(raw, ensure_ascii=False, indent=2))
+                else:
+                    if not filepath.exists():
+                        raise FileNotFoundError(f"Required top-level file missing: {filepath}")
+                    zf.write(filepath, arcname=filename)
+                included_files.append(filename)
 
-        # 2. bridge/*.py
-        bridge_dir = ADDON_ROOT / "bridge"
-        for py_file in sorted(bridge_dir.glob("*.py")):
-            if py_file.name in EXCLUDED_NAMES:
-                continue
-            arcname = f"bridge/{py_file.name}"
-            zf.write(py_file, arcname=arcname)
-            included_files.append(arcname)
+            # 2. bridge/*.py
+            bridge_dir = ADDON_ROOT / "bridge"
+            for py_file in sorted(bridge_dir.glob("*.py")):
+                if py_file.name in EXCLUDED_NAMES:
+                    continue
+                arcname = f"bridge/{py_file.name}"
+                zf.write(py_file, arcname=arcname)
+                included_files.append(arcname)
 
-        # 3. web/**
-        web_dir = ADDON_ROOT / "web"
-        if not (web_dir / "index.html").exists():
-            raise FileNotFoundError("web/index.html is missing. Run frontend build first.")
-        for file_path in sorted(web_dir.rglob("*")):
-            if file_path.is_dir():
-                continue
-            rel = file_path.relative_to(ADDON_ROOT)
-            # Exclude on the *relative* path: absolute .parts made any parent
-            # folder named "frontend"/"tests"/"scripts" silently drop every
-            # web asset and produce a package with no UI at all.
-            if any(part in EXCLUDED_NAMES or part.endswith(".pyc") for part in rel.parts):
-                continue
-            rel_path = rel.as_posix()
-            zf.write(file_path, arcname=rel_path)
-            included_files.append(rel_path)
+            # 3. web/**
+            for file_path in sorted(web_dir.rglob("*")):
+                if file_path.is_dir():
+                    continue
+                rel = file_path.relative_to(ADDON_ROOT)
+                # Exclude on the *relative* path: absolute .parts made any parent
+                # folder named "frontend"/"tests"/"scripts" silently drop every
+                # web asset and produce a package with no UI at all.
+                if any(part in EXCLUDED_NAMES or part.endswith(".pyc") for part in rel.parts):
+                    continue
+                rel_path = rel.as_posix()
+                zf.write(file_path, arcname=rel_path)
+                included_files.append(rel_path)
 
-    if "web/index.html" not in included_files:
-        raise RuntimeError("Packaged bundle is missing web/index.html; refusing to emit a broken add-on")
+        if "web/index.html" not in included_files:
+            raise RuntimeError("Packaged bundle is missing web/index.html; refusing to emit a broken add-on")
+
+        os.replace(staging_archive, OUTPUT_ARCHIVE)
+    except Exception:
+        if staging_archive.exists():
+            staging_archive.unlink()
+        raise
 
     print(f"[build_ankiaddon] Packaged {len(included_files)} runtime files -> {OUTPUT_ARCHIVE}")
     return OUTPUT_ARCHIVE

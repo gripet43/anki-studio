@@ -27,10 +27,16 @@ from guard import REAL_ANKI_ROOT, SANDBOX_ROOT, state_dir  # noqa: E402
 #: config.json 里属于运行时真实数据的字段，绝不该出现在沙盒副本中
 PRIVATE_CONFIG_KEYS = (
     "last_rescue_receipt",
+    "rescue_history",
     "vacation_state",
     "vacation_history",
     "vacation_frozen_dates",
     "custom_nickname",
+    "safety_ticket",
+    "last_sync_checked_map",
+    "sandbox_notetype_ids",
+    "profile_states",
+    "_legacy_unscoped_profile_state",
 )
 
 results: list[tuple[bool, str, str]] = []

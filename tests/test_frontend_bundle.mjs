@@ -693,6 +693,36 @@ assert(
   'Item #34: Windows QA fixes (prefs21.db _global row, smoke.py col.db lock reuse, window sizing, ApplicationShortcut, Ctrl+P settings, responsive hero/analytics, and deprecated API guards) must remain in place'
 );
 
+function listZipEntries(zipPath) {
+  const buf = fs.readFileSync(zipPath);
+  const minOffset = Math.max(0, buf.length - 65557);
+  let eocdOffset = -1;
+  for (let i = buf.length - 22; i >= minOffset; i -= 1) {
+    if (buf.readUInt32LE(i) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+  assert(eocdOffset >= 0, `Invalid .ankiaddon zip archive (missing EOCD): ${zipPath}`);
+  const totalEntries = buf.readUInt16LE(eocdOffset + 10);
+  const cdOffset = buf.readUInt32LE(eocdOffset + 16);
+  const entries = [];
+  let cursor = cdOffset;
+  for (let idx = 0; idx < totalEntries; idx += 1) {
+    assert(
+      cursor + 46 <= buf.length && buf.readUInt32LE(cursor) === 0x02014b50,
+      `Corrupt central directory entry #${idx} in ${zipPath}`
+    );
+    const nameLen = buf.readUInt16LE(cursor + 28);
+    const extraLen = buf.readUInt16LE(cursor + 30);
+    const commentLen = buf.readUInt16LE(cursor + 32);
+    const name = buf.subarray(cursor + 46, cursor + 46 + nameLen).toString('utf8');
+    entries.push(name);
+    cursor += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}
+
 const jsBundle = readText(WEB_JS);
 const cssBundle = readText(WEB_CSS);
 assert(
@@ -702,6 +732,17 @@ assert(
     cssBundle.includes('library-card-footer-meta') &&
     fs.existsSync(ANKIADDON_FILE),
   'Compiled production bundle and anki_modern_os.ankiaddon must exist with Library card CSS rules'
+);
+
+const addonZipEntries = listZipEntries(ANKIADDON_FILE);
+assert(
+  addonZipEntries.length >= 20 &&
+    addonZipEntries.includes('__init__.py') &&
+    addonZipEntries.includes('manifest.json') &&
+    addonZipEntries.includes('config.json') &&
+    addonZipEntries.includes('web/index.html') &&
+    !addonZipEntries.some((entry) => /^(tests|frontend|scripts|node_modules)\/|^(meta\.json|\.git)/.test(entry)),
+  `anki_modern_os.ankiaddon must contain valid runtime whitelist and web/index.html (got ${addonZipEntries.length} entries)`
 );
 
 // Item #35: 动效体系整体补齐门禁 —— 校验构建产物 CSS 包含全部核心动效类、令牌与无障碍降级，且源码中任意 animate-* 类均在产物 CSS 中真实存在
@@ -1326,6 +1367,20 @@ assert(
   `Item #49: 统一 Tooltip/HoverCard 规范校验失败（请确保完成全量迁移并重新执行 npm run build）：${
     rawTitleOffenders.length > 0 ? `残留原生 title=: ${rawTitleOffenders.join('; ')}` : 'DesignSystemView 或浮层原语契约缺失'
   }`
+);
+
+const profileConfigPy = readText(path.resolve(ADDON_ROOT, 'bridge/profile_config.py'));
+assert(
+  initPy.includes('read_profile_scoped_config') &&
+    initPy.includes('write_profile_scoped_config') &&
+    initPy.includes('"anki:profile-changed"') &&
+    profileConfigPy.includes('PROFILE_STATES_KEY') &&
+    profileConfigPy.includes('"vacation_state"') &&
+    storeSrc.includes('profileGeneration') &&
+    storeSrc.includes('async handleProfileChanged()') &&
+    appSrc.includes("'anki:profile-changed'") &&
+    jsBundle.includes('anki:profile-changed'),
+  'Item #50: Multi-profile config isolation & WebView profile-switch state reset contract failed (rebuild frontend with `cd frontend && npm run build`)'
 );
 
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

@@ -622,6 +622,7 @@ export const dict: TranslationTable = {
   vacationSafeguardsCountSummary: "Włączono zabezpieczeń: {n}",
   vacationSafeguardsLabel: "Zabezpieczenia",
   vacationSafeguardsSummary: "Wstrzymaj nowe · Przełóż powtórki · Zamroź serię",
+  vacationStreakFrozen: "Seria {n} dni zamrożona",
   vacationShiftedCountBadge: "Przełożono {n} kart",
   vacationTabHistory: "Historia",
   vacationTabSetup: "Ustawienia",

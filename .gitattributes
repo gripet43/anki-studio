@@ -1,0 +1,4 @@
+# Keep Vite production bundle and POSIX shell scripts in LF on Windows checkouts
+# so `npm run build` never marks built `web/` assets dirty due to CRLF conversion.
+web/** text eol=lf
+*.sh text eol=lf

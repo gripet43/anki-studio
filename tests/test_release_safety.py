@@ -119,5 +119,51 @@ class TestProfileSwitchRemount(unittest.TestCase):
         )
 
 
+class TestPackagingCleanClone(unittest.TestCase):
+    """干净仓库（仅有 config.default.json 而无 config.json）也必须能打包成功，且失败不留半成品。"""
+
+    def test_clean_clone_packages_without_working_config_json(self) -> None:
+        import importlib.util
+        import shutil
+        import tempfile
+        import zipfile
+
+        script_path = ADDON_ROOT / "scripts" / "build_ankiaddon.py"
+        spec = importlib.util.spec_from_file_location("test_build_ankiaddon_mod", script_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        with tempfile.TemporaryDirectory(prefix="anki_pkg_clean_") as td:
+            root = Path(td)
+            shutil.copy2(ADDON_ROOT / "__init__.py", root / "__init__.py")
+            shutil.copy2(ADDON_ROOT / "manifest.json", root / "manifest.json")
+            shutil.copy2(ADDON_ROOT / "config.default.json", root / "config.default.json")
+            shutil.copy2(ADDON_ROOT / "config.md", root / "config.md")
+            (root / "bridge").mkdir()
+            (root / "bridge" / "__init__.py").write_text("", encoding="utf-8")
+            (root / "web").mkdir()
+            (root / "web" / "index.html").write_text("<html></html>", encoding="utf-8")
+
+            out_zip = root / "anki_modern_os.ankiaddon"
+            orig_root, orig_out = mod.ADDON_ROOT, mod.OUTPUT_ARCHIVE
+            mod.ADDON_ROOT, mod.OUTPUT_ARCHIVE = root, out_zip
+            try:
+                emitted = mod.create_ankiaddon_package()
+            finally:
+                mod.ADDON_ROOT, mod.OUTPUT_ARCHIVE = orig_root, orig_out
+
+            self.assertEqual(emitted, out_zip)
+            self.assertTrue(out_zip.exists())
+            with zipfile.ZipFile(out_zip) as zf:
+                names = set(zf.namelist())
+                self.assertIn("config.json", names)
+                self.assertIn("web/index.html", names)
+                shipped_cfg = json.loads(zf.read("config.json"))
+                self.assertIn("profile_states", mod.PRIVATE_CONFIG_KEYS)
+                self.assertIn("_legacy_unscoped_profile_state", mod.PRIVATE_CONFIG_KEYS)
+                for priv in mod.PRIVATE_CONFIG_KEYS:
+                    self.assertNotIn(priv, shipped_cfg)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -475,8 +475,19 @@ export const DashboardView: React.FC = () => {
             <span>
               {vacationTimelineInfo.startLabel} – {vacationTimelineInfo.endLabel}
             </span>
-            <span className="opacity-40">·</span>
-            <span>{t('streakDays', { n: dashboard.streak.current })}</span>
+            {dashboard.streak.current > 0 && (
+              <>
+                <span className="opacity-40">·</span>
+                <span>
+                  {t(
+                    (dashboard.vacation?.frozenDates?.length ?? 0) > 0
+                      ? 'vacationStreakFrozen'
+                      : 'streakDays',
+                    { n: dashboard.streak.current },
+                  )}
+                </span>
+              </>
+            )}
           </p>
 
           {/* Minimal Action Buttons */}

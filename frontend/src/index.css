@@ -1752,3 +1752,248 @@ ruby rt {
     animation: none;
   }
 }
+
+/* ============================================================================
+   Reviewer UI Hierarchy, Popover API, Fluid Sizing & Contrast Accessibility
+   ============================================================================ */
+.reviewer-progress {
+  appearance: none;
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  inline-size: 100%;
+  block-size: 0.1875rem;
+  border: 0 solid;
+  overflow: clip;
+  pointer-events: none;
+  background-color: var(--border-subtle, #E5E5EA);
+  color: var(--reviewer-progress-color, var(--brand));
+}
+
+.dark .reviewer-progress {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.reviewer-progress::-webkit-progress-bar {
+  background-color: transparent;
+}
+
+.reviewer-progress::-webkit-progress-value {
+  background-color: var(--reviewer-progress-color, var(--brand));
+  transition: inline-size var(--dur-slow, 260ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.reviewer-progress::-moz-progress-bar {
+  background-color: var(--reviewer-progress-color, var(--brand));
+  transition: inline-size var(--dur-slow, 260ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reviewer-progress::-webkit-progress-value {
+    transition: none;
+  }
+  .reviewer-progress::-moz-progress-bar {
+    transition: none;
+  }
+}
+
+.reviewer-badge-trim {
+  text-box: trim-both cap alphabetic;
+}
+
+.reviewer-header {
+  min-block-size: 4rem;
+  block-size: auto;
+  padding-block: 0.625rem;
+}
+
+.reviewer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.reviewer-toolbar-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.reviewer-toolbar-btn,
+.reviewer-toolbar-split {
+  min-block-size: 2rem;
+}
+
+.reviewer-toolbar-btn {
+  min-inline-size: 2rem;
+  padding-block: 0.25rem;
+}
+
+.reviewer-meta-btn {
+  min-block-size: 1.75rem;
+  padding-inline: 0.625rem;
+  padding-block: 0.25rem;
+}
+
+@media (pointer: coarse) {
+  .reviewer-toolbar-btn,
+  .reviewer-toolbar-split,
+  .reviewer-meta-btn,
+  .reviewer-popover-item {
+    min-block-size: 2.75rem;
+  }
+  .reviewer-toolbar-btn {
+    min-inline-size: 2.75rem;
+  }
+  .reviewer-toolbar,
+  .reviewer-toolbar-group {
+    gap: 0.75rem;
+  }
+  .reviewer-switch {
+    min-block-size: 1.75rem;
+    min-inline-size: 2.75rem;
+  }
+}
+
+:is(.reviewer-toolbar-btn, .reviewer-meta-btn, .reviewer-cta-btn, .reviewer-switch, .reviewer-popover-item):focus-visible {
+  outline: 2px solid var(--brand-text);
+  outline-offset: 2px;
+}
+
+.reviewer-cta-btn--solid:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--brand);
+}
+
+.reviewer-bottom-dock {
+  background-color: var(--bg-card);
+  background-color: color-mix(in srgb, var(--bg-card) 86%, transparent);
+}
+
+.dark .reviewer-bottom-dock {
+  background-color: rgba(18, 19, 24, 0.9);
+}
+
+.reviewer-cta-shell {
+  inline-size: min(100%, 35rem);
+  block-size: auto;
+  min-block-size: 3.625rem;
+}
+
+.reviewer-cta-btn {
+  block-size: auto;
+  min-block-size: 3.625rem;
+  padding-block: 0.5rem;
+}
+
+.reviewer-cta-binary-again {
+  inline-size: auto;
+  flex: 170 1 0%;
+  min-inline-size: 7.5rem;
+}
+
+.reviewer-cta-binary-good {
+  inline-size: auto;
+  flex: 374 1 0%;
+  min-inline-size: 10.5rem;
+  color: var(--status-success-text);
+}
+
+@media (hover: hover) {
+  .reviewer-cta-btn:hover {
+    filter: brightness(0.97);
+  }
+  .dark .reviewer-cta-btn:hover {
+    filter: brightness(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reviewer-cta-btn:active {
+    transform: scale(0.985);
+  }
+}
+
+.reviewer-popover[popover] {
+  max-inline-size: calc(100vw - 1rem);
+  max-block-size: calc(100dvh - 5rem);
+  overflow-y: auto;
+}
+
+@supports (anchor-name: --rev-anchor) and (position-area: block-end) {
+  .reviewer-popover[popover] {
+    position: fixed;
+    margin: 0;
+    inset: auto;
+    position-area: block-end span-inline-start;
+    position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    margin-block-start: 0.5rem;
+  }
+}
+
+@supports not (position-area: block-end) {
+  .reviewer-popover[popover] {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reviewer-popover[popover] {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+    transition:
+      opacity 150ms var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
+      transform 150ms var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
+      display 150ms allow-discrete,
+      overlay 150ms allow-discrete;
+  }
+  .reviewer-popover[popover]:popover-open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  @starting-style {
+    .reviewer-popover[popover]:popover-open {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.98);
+    }
+  }
+}
+
+@media (max-height: 760px), (max-width: 820px) {
+  .reviewer-corner-decor {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .reviewer-progress {
+    border-block-end: 1px solid CanvasText;
+    forced-color-adjust: auto;
+  }
+  .reviewer-toolbar [role="separator"] {
+    border-inline-start: 1px solid CanvasText;
+  }
+  .reviewer-card-shell,
+  .reviewer-toolbar-btn,
+  .reviewer-toolbar-split,
+  .reviewer-meta-btn,
+  .reviewer-cta-btn,
+  .reviewer-popover[popover],
+  .reviewer-inspector {
+    border: 1px solid ButtonBorder;
+  }
+  .reviewer-cta-btn--solid {
+    background-color: Highlight;
+    color: HighlightText;
+    border-color: ButtonText;
+  }
+  :is(.reviewer-toolbar-btn, .reviewer-meta-btn, .reviewer-cta-btn, .reviewer-switch, .reviewer-popover-item):focus-visible {
+    outline: 2px solid Highlight;
+  }
+}

@@ -21,6 +21,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .bridge.compat import collect_health, format_health_summary
 from .bridge.day_rollover import read_day_timing, refresh_scheduler_if_needed
+from .bridge.profile_config import (
+    read_profile_scoped_config,
+    resolve_profile_key,
+    write_profile_scoped_config,
+)
 from .bridge.router import BridgeRouter
 
 ADDON_DIR = Path(__file__).resolve().parent
@@ -136,18 +141,20 @@ class AnkiModernHost:
     def __init__(self):
         self.webview: Optional[Any] = None
         self.is_modern_visible: bool = False
+        self._webview_profile_key: Optional[str] = None
+        self._webview_needs_profile_reset: bool = False
         self._sync_error_in_flight: Optional[str] = None
         self._orig_min_size: Optional[Any] = None
+        self._rollover_shot_timer: Optional[Any] = None
+        self._rollover_guard_timer: Optional[Any] = None
+        self._app_state_signal_connected: bool = False
+        self._last_focus_rollover_check: float = 0.0
         self._did_initial_expand: bool = bool(
             self.get_config().get("windowInitialExpandDone", False)
         )
         # Populated once by `refresh_patch_health()` at the end of `initialize()`;
         # exposed to the frontend through `action_get_patch_health`.
         self.patch_health: Dict[str, Any] = {}
-        self._rollover_shot_timer: Optional[Any] = None
-        self._rollover_guard_timer: Optional[Any] = None
-        self._app_state_signal_connected: bool = False
-        self._last_focus_rollover_check: float = 0.0
         self.router = BridgeRouter(
             toggle_native_callback=self.toggle_modern_ui,
             config_getter=self.get_config,
@@ -155,9 +162,17 @@ class AnkiModernHost:
             health_getter=lambda: self.patch_health,
         )
 
-    def get_config(self) -> Dict[str, Any]:
+    @staticmethod
+    def _get_active_mw() -> Any:
         try:
             from aqt import mw
+            return mw
+        except Exception:
+            return None
+
+    def _read_raw_config(self) -> Dict[str, Any]:
+        mw = self._get_active_mw()
+        try:
             if mw and getattr(mw, "addonManager", None):
                 cfg = mw.addonManager.getConfig(__name__)
                 if isinstance(cfg, dict):
@@ -171,27 +186,44 @@ class AnkiModernHost:
                 pass
         return {}
 
-    def write_config(self, new_cfg: Dict[str, Any]) -> Dict[str, Any]:
-        merged = {**self.get_config(), **(new_cfg or {})}
+    def _write_raw_config(self, raw_cfg: Dict[str, Any]) -> None:
+        mw = self._get_active_mw()
         try:
-            from aqt import mw
             if mw and getattr(mw, "addonManager", None):
-                mw.addonManager.writeConfig(__name__, merged)
+                mw.addonManager.writeConfig(__name__, raw_cfg)
                 # config.json is the add-on's default/schema template. Runtime
                 # state (receipts, real card text, vacation snapshots) belongs in
                 # meta.json only, otherwise it ships inside the .ankiaddon.
-                return merged
+                return
         except Exception as e:
             print(f"[Anki Studio] writeConfig failed: {e}")
         # Outside the Anki runtime (unit tests / tooling) there is no
         # addonManager, so keep a local fallback for preferences round-tripping.
         try:
             CONFIG_FILE.write_text(
-                json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
+                json.dumps(raw_cfg, ensure_ascii=False, indent=2), encoding="utf-8"
             )
         except Exception:
             pass
-        return merged
+
+    def get_config(self) -> Dict[str, Any]:
+        mw = self._get_active_mw()
+        raw_cfg = self._read_raw_config()
+        return read_profile_scoped_config(
+            raw_cfg,
+            mw=mw,
+            raw_writer=self._write_raw_config,
+        )
+
+    def write_config(self, new_cfg: Dict[str, Any]) -> Dict[str, Any]:
+        mw = self._get_active_mw()
+        raw_cfg = self._read_raw_config()
+        return write_profile_scoped_config(
+            raw_cfg,
+            new_cfg,
+            mw=mw,
+            raw_writer=self._write_raw_config,
+        )
 
     def _resolve_host_language(self) -> str:
         """Resolve the active UI language via DeckService (config preference or Anki locale)."""
@@ -642,8 +674,7 @@ class AnkiModernHost:
                 next_map = dict(checked_map) if isinstance(checked_map, dict) else {}
                 prev_ts = int(next_map.get(profile_key, 0) or 0)
                 next_map[profile_key] = max(prev_ts, synced_at_ms)
-                cfg["last_sync_checked_map"] = next_map
-                self.write_config(cfg)
+                self.write_config({"last_sync_checked_map": next_map})
             except Exception as e:
                 print(f"[Anki Studio] Failed to persist last_sync_checked_map: {e}")
 
@@ -848,6 +879,7 @@ class AnkiModernHost:
         self._check_day_rollover(source="app_active")
 
     def _on_profile_will_close(self, *args: Any) -> None:
+        self._webview_needs_profile_reset = True
         if self._rollover_shot_timer is not None:
             try:
                 self._rollover_shot_timer.stop()
@@ -870,7 +902,8 @@ class AnkiModernHost:
                 self._sync_webview_geometry_and_focus(grab_focus=True)
             except Exception:
                 pass
-            self._emit_js_event("anki:collection-updated", {"source": "reset"})
+            if not self._webview_needs_profile_reset:
+                self._emit_js_event("anki:collection-updated", {"source": "reset"})
 
     def _on_main_window_init(self) -> None:
         cfg = self.get_config()
@@ -1031,6 +1064,8 @@ class AnkiModernHost:
                     return self.webview
 
         self.webview = AnkiWebView(parent=target_parent)
+        self._webview_profile_key = resolve_profile_key(mw)
+        self._webview_needs_profile_reset = False
         self.webview.setObjectName("ankiModernOSWebView")
         try:
             self.webview.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -1131,7 +1166,15 @@ class AnkiModernHost:
             return
 
         self._ensure_comfortable_window_size(mw)
+        prev_webview = self.webview
         web = self._ensure_webview()
+        curr_profile_key = resolve_profile_key(mw)
+        reused_webview = prev_webview is not None and prev_webview is web
+        profile_switched = reused_webview and (
+            self._webview_needs_profile_reset or curr_profile_key != self._webview_profile_key
+        )
+        self._webview_profile_key = curr_profile_key
+        self._webview_needs_profile_reset = False
         try:
             self._apply_cocoa_immersive_titlebar(int(mw.winId()), True)
         except Exception:
@@ -1163,7 +1206,13 @@ class AnkiModernHost:
 
             self._ensure_rollover_watchers()
             self._check_day_rollover(source="show_modern_ui", force_reschedule=True)
-            self._emit_js_event("anki:collection-updated", {"source": "show_modern_ui"})
+            if profile_switched:
+                self._emit_js_event(
+                    "anki:profile-changed",
+                    {"profileKey": curr_profile_key or ""},
+                )
+            else:
+                self._emit_js_event("anki:collection-updated", {"source": "show_modern_ui"})
         except Exception as e:
             print(f"[Anki Studio] Error presenting Modern UI: {e}")
 

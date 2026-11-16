@@ -44,6 +44,11 @@ PRIVATE_CONFIG_KEYS = (
     "vacation_history",
     "vacation_frozen_dates",
     "custom_nickname",
+    "safety_ticket",
+    "last_sync_checked_map",
+    "sandbox_notetype_ids",
+    "profile_states",
+    "_legacy_unscoped_profile_state",
 )
 
 

@@ -622,6 +622,7 @@ export const dict: TranslationTable = {
   vacationSafeguardsCountSummary: "Đã bật {n} chế độ bảo vệ",
   vacationSafeguardsLabel: "Chính sách bảo vệ",
   vacationSafeguardsSummary: "Dừng thẻ mới · Dời thẻ ôn · Đóng băng chuỗi",
+  vacationStreakFrozen: "Chuỗi {n} ngày đã đóng băng",
   vacationShiftedCountBadge: "Đã dời {n} thẻ",
   vacationTabHistory: "Lịch sử",
   vacationTabSetup: "Thiết lập",

@@ -92,6 +92,8 @@ export interface PendingDayRolloverInfo {
 
 export interface AppState {
   isLoading: boolean;
+  /** Bumps on Anki profile switch so reused WebViews remount local component state. */
+  profileGeneration: number;
 
   // Navigation & Overlays
   activeTab: NavTab;
@@ -231,6 +233,7 @@ const initialLang = detectBrowserLanguage();
 
 const initialState: AppState = {
   isLoading: true,
+  profileGeneration: 0,
 
   activeTab: 'dashboard',
   inReviewMode: false,
@@ -660,16 +663,24 @@ export const appActions = {
         isInitialSyncing: false,
         syncJustFinished: silent ? state.syncJustFinished : false,
         decks: realDecks,
-        activeDeckId: state.activeDeckId || realDecks[0]?.id || null,
-        advancedStats: hasPopulatedStats ? incomingStats! : state.advancedStats,
+        activeDeckId: realDecks.some((d) => d.id === state.activeDeckId)
+          ? state.activeDeckId
+          : realDecks[0]?.id || null,
+        advancedStats: hasPopulatedStats
+          ? incomingStats!
+          : dashValid
+          ? incomingStats || EMPTY_ADVANCED_STATS
+          : state.advancedStats,
         theme: prefs?.theme ? normalizeThemeMode(prefs.theme) : state.theme,
         accentColor: prefs?.accentColor || state.accentColor,
         languagePref: (prefs?.language as LanguageOption) || state.languagePref,
         resolvedLang: effectiveLang,
-        customNickname: prefs?.customNickname ?? state.customNickname,
-        collapsedDeckIds: prefs?.collapsedDeckIds || state.collapsedDeckIds,
+        customNickname: dashValid && prefs ? (prefs.customNickname ?? '') : state.customNickname,
+        collapsedDeckIds: prefs?.collapsedDeckIds ?? (dashValid ? [] : state.collapsedDeckIds),
         sandboxNoteTypeIds: Array.isArray(prefs?.sandboxNoteTypeIds)
           ? prefs.sandboxNoteTypeIds.map((id) => String(id))
+          : dashValid
+          ? []
           : state.sandboxNoteTypeIds,
         showShortcutHints: prefs?.showShortcutHints !== undefined ? prefs.showShortcutHints : state.showShortcutHints,
         tipsHiddenOn: prefs?.tipsHiddenOn !== undefined ? prefs.tipsHiddenOn : state.tipsHiddenOn,
@@ -3441,6 +3452,81 @@ export const appActions = {
     if (isAnkiNativeEnv()) {
       callAnki('toggle_maximize', {}).catch(() => {});
     }
+  },
+
+  async handleProfileChanged() {
+    sessionVerifiedSyncTs = 0;
+    coldStartInProgress = false;
+    setAppState((prev) => ({
+      profileGeneration: prev.profileGeneration + 1,
+      activeTab: 'dashboard',
+      inReviewMode: false,
+      isSessionComplete: false,
+      isPreviewSession: false,
+      reviewScopeDeckId: '',
+      activeDeckId: null,
+      cmdKOpen: false,
+      quickAddOpen: false,
+      editingCardData: null,
+      settingsOpen: false,
+      vacationModalOpen: false,
+      icuModalOpen: false,
+      rescueModalOpen: false,
+      receiptModalOpen: false,
+      currentRescueReceipt: null,
+      customStudyModalOpen: false,
+      inspectorOpen: false,
+      syncing: false,
+      syncJustFinished: false,
+      lastSyncedTimestamp: 0,
+      lastSyncedText: translate(prev.resolvedLang, 'notSyncedShort'),
+      customNickname: '',
+      dashboard: EMPTY_DASHBOARD,
+      dayBoundary: null,
+      pendingDayRollover: null,
+      reviewSessionDayKey: null,
+      decks: [],
+      advancedStats: EMPTY_ADVANCED_STATS,
+      showAllDashboardDecks: false,
+      collapsedDeckIds: [],
+      sandboxNoteTypeIds: [],
+      reviewQueue: [],
+      currentCardIndex: 0,
+      isCardFlipped: false,
+      sessionStudiedCount: 0,
+      sessionCorrectCount: 0,
+      undoStack: [],
+      playingAudioFile: null,
+      inlineEditing: false,
+      editingField: null,
+      slashMenuOpen: false,
+      cmdKQuery: '',
+      cmdKSelectedIndex: 0,
+      cmdKResults: [],
+      cmdKCardStyles: {},
+      cmdKFrontCardStyles: {},
+      cmdKSearching: false,
+      libraryCards: [],
+      libraryCardStyles: {},
+      libraryFrontCardStyles: {},
+      libraryTotalCount: 0,
+      libraryFilteredCount: 0,
+      libraryFacetCounts: null,
+      libraryHasMoreFromBackend: false,
+      libraryAllTags: [],
+      librarySearching: false,
+      librarySearchQuery: '',
+      libraryVisibleCount: 24,
+      filterStatus: 'all',
+      filterDifficulty: 'all',
+      filterFlag: 'all',
+      filterTag: 'all',
+      filterDeckId: 'all',
+      librarySortBy: 'default',
+      selectedCardIds: [],
+      librarySelectionMode: false,
+    }));
+    await appActions.initFromAnki(true);
   },
 };
 

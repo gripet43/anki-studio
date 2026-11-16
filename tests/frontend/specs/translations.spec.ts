@@ -14,6 +14,7 @@ import {
   detectBrowserLanguage,
   detectOSPlatform,
   resolveLanguage,
+  translate,
   formatShortcut,
   formatRelativeSyncLabel,
   formatRelativeTimeString,
@@ -167,4 +168,13 @@ test('formatDetailedSyncTimestamp pads every field', () => {
   const localDate = new Date(2026, 0, 2, 3, 4, 5);
   equal(formatDetailedSyncTimestamp(localDate.getTime()), '2026-01-02 03:04:05');
   equal(formatDetailedSyncTimestamp(0), '');
+});
+
+section('i18n · vacation streak status copy');
+
+test('vacation sanctuary streak labels name the study streak and frozen state explicitly', () => {
+  equal(translate('zh-CN', 'streakDays', { n: 24 }), '连续打卡 24 天');
+  equal(translate('zh-CN', 'vacationStreakFrozen', { n: 24 }), '连续打卡 24 天已冻结');
+  equal(translate('en', 'streakDays', { n: 24 }), '24d streak');
+  equal(translate('en', 'vacationStreakFrozen', { n: 24 }), '24d streak frozen');
 });

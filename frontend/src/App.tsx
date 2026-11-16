@@ -20,6 +20,7 @@ import { buildThemeCssVars, resolveThemeMode } from './utils/themeTokens';
 export const App: React.FC = () => {
   const {
     activeTab,
+    profileGeneration,
     inReviewMode,
     cmdKOpen,
     quickAddOpen,
@@ -152,6 +153,10 @@ export const App: React.FC = () => {
       appActions.handleDayChanged(detail);
     };
 
+    const onProfileChanged = () => {
+      appActions.handleProfileChanged();
+    };
+
     let lastWakeCheckMs = 0;
     const onWakeCheck = (source: string) => {
       if (getAppState().isInitialSyncing) return;
@@ -181,6 +186,7 @@ export const App: React.FC = () => {
     }
 
     window.addEventListener('anki:collection-updated', onCollectionUpdated);
+    window.addEventListener('anki:profile-changed', onProfileChanged);
     window.addEventListener('anki:sync-started', onSyncStarted);
     window.addEventListener('anki:sync-finished', onSyncFinished);
     window.addEventListener('anki:toast', onAnkiToast);
@@ -197,6 +203,7 @@ export const App: React.FC = () => {
         }
       }
       window.removeEventListener('anki:collection-updated', onCollectionUpdated);
+      window.removeEventListener('anki:profile-changed', onProfileChanged);
       window.removeEventListener('anki:sync-started', onSyncStarted);
       window.removeEventListener('anki:sync-finished', onSyncFinished);
       window.removeEventListener('anki:toast', onAnkiToast);
@@ -337,7 +344,7 @@ export const App: React.FC = () => {
       {/* Main Workspace Area — Keyed inner wrapper for 160ms view enter animation (D) */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <div
-          key={activeTab}
+          key={`${profileGeneration}-${activeTab}`}
           className="ui-view-enter flex-1 flex flex-col min-w-0 h-full overflow-hidden"
         >
           {activeTab === 'dashboard' && <DashboardView />}
