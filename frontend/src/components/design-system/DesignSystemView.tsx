@@ -153,7 +153,7 @@ export const DesignSystemView: React.FC = () => {
             <div
               role="radiogroup"
               aria-label={t('designSystemAccentAria')}
-              className="grid grid-cols-2 gap-2.5 pt-1"
+              className="grid grid-cols-2 gap-2.5"
             >
               {ACCENT_COLOR_LIST.map((a) => {
                 const modeScale = isDark ? a.dark : a.light;
@@ -171,31 +171,17 @@ export const DesignSystemView: React.FC = () => {
                         appActions.setAccentColor(a.id);
                         showToast(t('savedAccentToast', { name: shortLabel }));
                       }}
-                      className={`relative w-full min-w-0 px-2.5 py-1.5 rounded-xl border text-[11px] flex items-center cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
+                      className={`w-full min-w-0 overflow-hidden px-2.5 py-1.5 rounded-xl border text-[11px] flex items-center gap-1.5 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
                         active
                           ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold shadow-2xs'
                           : 'border-black/10 dark:border-white/10 opacity-85 hover:opacity-100'
                       }`}
                     >
-                      <span className="flex items-center gap-1.5 min-w-0 w-full overflow-hidden">
-                        <span
-                          style={{ backgroundColor: modeScale.brand }}
-                          className="w-3.5 h-3.5 rounded-full shrink-0 ring-1 ring-black/10 dark:ring-white/10"
-                        />
-                        <span className="block min-w-0 flex-1 truncate text-start">{shortLabel}</span>
-                      </span>
-                      {a.isOfficial && (
-                        <span
-                          style={{
-                            backgroundColor: 'var(--bg-card)',
-                            borderColor: active ? modeScale.brand : modeScale.brandBorder,
-                            color: modeScale.brandText,
-                          }}
-                          className="pointer-events-none absolute -top-2.5 end-1.5 z-10 max-w-[calc(100%-10px)] truncate rounded-full border px-1.5 py-[2px] text-[9px] font-semibold leading-none shadow-2xs"
-                        >
-                          {t('officialBrandBadge')}
-                        </span>
-                      )}
+                      <span
+                        style={{ backgroundColor: modeScale.brand }}
+                        className="w-3.5 h-3.5 rounded-full shrink-0 ring-1 ring-black/10 dark:ring-white/10"
+                      />
+                      <span className="block min-w-0 flex-1 truncate text-start">{shortLabel}</span>
                     </button>
                   </Tooltip>
                 );

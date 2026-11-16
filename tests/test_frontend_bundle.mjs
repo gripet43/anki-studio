@@ -1384,13 +1384,11 @@ assert(
 );
 
 assert(
-  settingsSrc.includes('officialBrandBadge') &&
-    settingsSrc.includes('absolute -top-2.5 end-2') &&
-    settingsSrc.includes('w-full min-w-0') &&
-    designSystemSrc.includes('officialBrandBadge') &&
-    designSystemSrc.includes('absolute -top-2.5 end-1.5') &&
-    designSystemSrc.includes('w-full min-w-0'),
-  'Item #51: Official accent badge must be corner-anchored with bounded button width so long English/i18n badges (e.g. Recommended) never overflow adjacent grid cells'
+  !settingsSrc.includes('officialBrandBadge') &&
+    settingsSrc.includes('w-full min-w-0 overflow-hidden') &&
+    !designSystemSrc.includes('officialBrandBadge') &&
+    designSystemSrc.includes('w-full min-w-0 overflow-hidden'),
+  'Item #51: Accent picker cells must omit the Recommended/officialBrandBadge tag and keep bounded cell width with overflow-hidden'
 );
 
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

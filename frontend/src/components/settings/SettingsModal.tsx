@@ -377,7 +377,7 @@ export const SettingsModal: React.FC = () => {
                 <div
                   role="radiogroup"
                   aria-label={t('settingsThemeColorTitle')}
-                  className="grid grid-cols-4 gap-2.5 pt-1"
+                  className="grid grid-cols-4 gap-2.5"
                 >
                   {ACCENT_COLOR_LIST.map((a) => {
                     const active = accentColor === a.id;
@@ -405,7 +405,7 @@ export const SettingsModal: React.FC = () => {
                                 }
                               : undefined
                           }
-                          className={`w-full min-w-0 px-2.5 py-2 rounded-xl border flex items-center cursor-pointer transition-all text-start relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
+                          className={`w-full min-w-0 overflow-hidden px-2.5 py-2 rounded-xl border flex items-center gap-2 cursor-pointer transition-all text-start relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
                             active
                               ? 'ring-1 ring-[var(--brand)] shadow-xs'
                               : isDark
@@ -413,46 +413,32 @@ export const SettingsModal: React.FC = () => {
                               : 'border-[#E6E6EC] hover:border-black/20 bg-white hover:bg-[#FAFBFD]'
                           }`}
                         >
-                          <span className="flex items-center gap-2 min-w-0 w-full overflow-hidden">
-                            <span
-                              className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center shadow-inner ring-1 ring-black/10 dark:ring-white/15"
-                              style={{ backgroundColor: modeScale.brand }}
-                            >
-                              {active && (
-                                <svg
-                                  className="w-3 h-3 text-white"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="3.5"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  aria-hidden="true"
-                                >
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                              )}
-                            </span>
-                            <span
-                              className={`block min-w-0 flex-1 text-[11px] truncate leading-tight ${
-                                active ? 'font-semibold text-[var(--brand-text)]' : 'font-medium'
-                              }`}
-                            >
-                              {shortLabel}
-                            </span>
+                          <span
+                            className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center shadow-inner ring-1 ring-black/10 dark:ring-white/15"
+                            style={{ backgroundColor: modeScale.brand }}
+                          >
+                            {active && (
+                              <svg
+                                className="w-3 h-3 text-white"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
                           </span>
-                          {a.isOfficial && (
-                            <span
-                              style={{
-                                backgroundColor: 'var(--bg-card)',
-                                borderColor: active ? modeScale.brand : modeScale.brandBorder,
-                                color: modeScale.brandText,
-                              }}
-                              className="pointer-events-none absolute -top-2.5 end-2 z-10 max-w-[calc(100%-12px)] truncate rounded-full border px-1.5 py-[2px] text-[9px] font-semibold leading-none shadow-2xs"
-                            >
-                              {t('officialBrandBadge')}
-                            </span>
-                          )}
+                          <span
+                            className={`block min-w-0 flex-1 text-[11px] truncate leading-tight ${
+                              active ? 'font-semibold text-[var(--brand-text)]' : 'font-medium'
+                            }`}
+                          >
+                            {shortLabel}
+                          </span>
                         </button>
                       </Tooltip>
                     );
