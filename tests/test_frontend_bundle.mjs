@@ -1400,4 +1400,22 @@ assert(
   'Item #52: Closing or reopening Cmd+K global search must reset query/results cleanly, cancel stale in-flight requests, and restore input focus'
 );
 
+assert(
+  dashboardCssSrc.includes('.anki-native-card :where(*, *::before, *::after)') &&
+    dashboardCssSrc.includes('border-style: none') &&
+    dashboardCssSrc.includes('img:not([width])') &&
+    dashboardCssSrc.includes('.anki-native-card table:not([width]):not([style*="width"])') &&
+    dashboardCssSrc.includes('.library-card-answer:has(img, .anki-io-wrap, table)') &&
+    dashboardCssSrc.includes('.library-card-answer table') &&
+    reviewerSrc.includes('[&_img:not([width])]:w-auto') &&
+    mathRendererSrc.includes('export function hasSubstantiveMediaPreview') &&
+    librarySrc.includes('hasSubstantiveMediaPreview') &&
+    jsBundle.includes('[&_img:not([width])]:w-auto') &&
+    cssBundle.includes('.anki-native-card :where') &&
+    cssBundle.includes('img:not([width])') &&
+    cssBundle.includes('table:not([width])') &&
+    cssBundle.includes('.library-card-answer:has(img'),
+  'Item #53: Third-party card templates with attribute-sized icons (width/height), partial borders, full-width tables, and flipped Library card-back overflow clipping must hold cleanly (rebuild with `cd frontend && npm run build`)'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

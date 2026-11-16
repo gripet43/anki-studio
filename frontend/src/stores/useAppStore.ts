@@ -597,6 +597,54 @@ function applyInlineUpdateResponse(cardId: string, res: any) {
   }
 }
 
+export function applyQueueFlagToLibraryCards(
+  cards: LibraryCardItem[],
+  ids: string[],
+  field: 'suspended' | 'buried',
+  enabled: boolean,
+  applyToNote: boolean
+): LibraryCardItem[] {
+  const idSet = new Set(ids);
+  const nextStatus: LibraryCardItem['status'] = enabled ? field : 'due';
+  const nextDueText = enabled
+    ? tState(field === 'suspended' ? 'statusSuspended' : 'statusBuried')
+    : tState('statusDue');
+  return cards.map((c) => {
+    const cardTargeted =
+      idSet.has(c.id) || Boolean(c.siblingCardIds?.some((sid) => idSet.has(sid)));
+    if (!cardTargeted) return c;
+    if (!applyToNote && c.siblingCards && c.siblingCards.length > 1) {
+      const nextSibs = c.siblingCards.map((s) =>
+        idSet.has(s.id)
+          ? { ...s, [field]: enabled, status: nextStatus, dueText: nextDueText }
+          : s
+      );
+      const allFlagged = nextSibs.every((s) => Boolean(s[field]));
+      const firstActive = nextSibs.find((s) => !s[field]) || nextSibs[0];
+      return {
+        ...c,
+        siblingCards: nextSibs,
+        [field]: allFlagged,
+        status: firstActive.status,
+        dueText: firstActive.dueText,
+      };
+    }
+    const nextSibs = c.siblingCards?.map((s) => ({
+      ...s,
+      [field]: enabled,
+      status: nextStatus,
+      dueText: nextDueText,
+    }));
+    return {
+      ...c,
+      [field]: enabled,
+      status: nextStatus,
+      dueText: nextDueText,
+      ...(nextSibs ? { siblingCards: nextSibs } : {}),
+    };
+  });
+}
+
 // ---- Actions ----
 
 export const appActions = {
@@ -1873,6 +1921,8 @@ export const appActions = {
     });
     if (tab === 'stats' && isAnkiNativeEnv()) {
       appActions.refreshStatistics();
+    } else if (tab === 'library' && isAnkiNativeEnv()) {
+      appActions.searchLibraryDebounced();
     }
   },
 
@@ -3272,61 +3322,26 @@ export const appActions = {
     if (actionType === 'suspend' || actionType === 'unsuspend') {
       const shouldSuspend = actionType === 'suspend';
       const applyToNote = payload?.applyToNote !== false;
-      const idSet = new Set(ids);
       setAppState((prev) => ({
-        libraryCards: prev.libraryCards.map((c) => {
-          const cardTargeted =
-            idSet.has(c.id) || Boolean(c.siblingCardIds?.some((sid) => idSet.has(sid)));
-          if (!cardTargeted) return c;
-          if (!applyToNote && c.siblingCards && c.siblingCards.length > 1) {
-            const nextSibs = c.siblingCards.map((s) =>
-              idSet.has(s.id)
-                ? {
-                    ...s,
-                    suspended: shouldSuspend,
-                    status: (shouldSuspend ? 'suspended' : 'due') as LibraryCardItem['status'],
-                    dueText: shouldSuspend ? tState('statusSuspended') : tState('statusDue'),
-                  }
-                : s
-            );
-            const allSuspended = nextSibs.every((s) => s.suspended);
-            const firstActive = nextSibs.find((s) => !s.suspended) || nextSibs[0];
-            return {
-              ...c,
-              siblingCards: nextSibs,
-              suspended: allSuspended,
-              status: firstActive.status,
-              dueText: firstActive.dueText,
-            };
-          }
-          const nextSibs = c.siblingCards?.map((s) => ({
-            ...s,
-            suspended: shouldSuspend,
-            status: (shouldSuspend ? 'suspended' : 'due') as LibraryCardItem['status'],
-            dueText: shouldSuspend ? tState('statusSuspended') : tState('statusDue'),
-          }));
-          return {
-            ...c,
-            suspended: shouldSuspend,
-            status: (shouldSuspend ? 'suspended' : 'due') as LibraryCardItem['status'],
-            dueText: shouldSuspend ? tState('statusSuspended') : tState('statusDue'),
-            ...(nextSibs ? { siblingCards: nextSibs } : {}),
-          };
-        }),
+        libraryCards: applyQueueFlagToLibraryCards(
+          prev.libraryCards,
+          ids,
+          'suspended',
+          shouldSuspend,
+          applyToNote
+        ),
       }));
       showToast(`${shouldSuspend ? tState('batchSuspend') : tState('batchUnsuspend')} (${ids.length})`);
     } else if (actionType === 'bury' || actionType === 'unbury') {
       const shouldBury = actionType === 'bury';
+      const applyToNote = payload?.applyToNote !== false;
       setAppState((prev) => ({
-        libraryCards: prev.libraryCards.map((c) =>
-          ids.includes(c.id)
-            ? {
-                ...c,
-                buried: shouldBury,
-                status: (shouldBury ? 'buried' : 'due') as LibraryCardItem['status'],
-                dueText: shouldBury ? tState('statusBuried') : tState('statusDue'),
-              }
-            : c
+        libraryCards: applyQueueFlagToLibraryCards(
+          prev.libraryCards,
+          ids,
+          'buried',
+          shouldBury,
+          applyToNote
         ),
       }));
       showToast(`${shouldBury ? tState('batchBury') : tState('batchUnbury')} (${ids.length})`);

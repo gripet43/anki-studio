@@ -178,6 +178,26 @@
     --dashboard-track: #2A2C36;
     --dashboard-track-new: #3A3D48;
   }
+
+  /* Restore standard browser border/inline defaults inside third-party card templates & previews
+     so Tailwind Preflight (`border: 0 solid`, `img { display: block; height: auto }`) does not
+     draw 4-sided borders on `.word-list { border-left-style: solid; border-width: 4px }` or break
+     explicitly-sized inline template icons (`<img width="15px">` / `<img height="15px">`). */
+  .anki-native-card :where(*, *::before, *::after),
+  :is(.library-card-title, .library-card-answer, .library-card-snippet-body) :where(*, *::before, *::after) {
+    border-style: none;
+  }
+
+  .anki-native-card :where(img, svg),
+  :is(.library-card-title, .library-card-answer, .library-card-snippet-body) :where(img, svg) {
+    display: inline-block;
+  }
+
+  .anki-native-card :where(img[height]),
+  :is(.library-card-title, .library-card-answer, .library-card-snippet-body) :where(img[height]) {
+    height: revert-layer;
+    width: auto;
+  }
 }
 
 * {
@@ -379,17 +399,26 @@ mark[data-empty="true"]::after {
 
 .anki-native-card table,
 .library-card-title table,
+.library-card-answer table,
 .library-card-snippet-body table {
   max-width: 100% !important;
-  width: auto !important;
   table-layout: auto;
   border-collapse: collapse;
+}
+
+.anki-native-card table:not([width]):not([style*="width"]),
+.library-card-title table:not([width]):not([style*="width"]),
+.library-card-answer table:not([width]):not([style*="width"]),
+.library-card-snippet-body table:not([width]):not([style*="width"]) {
+  width: auto !important;
 }
 
 .anki-native-card td,
 .anki-native-card th,
 .library-card-title td,
 .library-card-title th,
+.library-card-answer td,
+.library-card-answer th,
 .library-card-snippet-body td,
 .library-card-snippet-body th {
   max-width: 100%;
@@ -401,7 +430,7 @@ mark[data-empty="true"]::after {
 .anki-native-card td img,
 .anki-native-card th img,
 .anki-native-card td#I_C img,
-:is(.library-card-title, .library-card-snippet-body) td img {
+:is(.library-card-title, .library-card-answer, .library-card-snippet-body) td img {
   display: inline-block !important;
   margin: 2px 4px 2px 0 !important;
   vertical-align: middle !important;
@@ -1116,10 +1145,13 @@ ruby rt {
 .library-table-preview img {
   display: inline-block;
   max-height: 1.5rem;
-  width: auto;
   vertical-align: middle;
   border-radius: 0.25rem;
   margin-inline-end: 0.375rem;
+}
+
+.library-table-preview img:not([width]) {
+  width: auto;
 }
 
 .library-card-body {
@@ -1244,6 +1276,9 @@ ruby rt {
 
 .library-card-title img {
   display: inline-block;
+}
+
+.library-card-title img:not([width]):not([height]) {
   margin-inline: auto;
 }
 
@@ -1323,8 +1358,10 @@ ruby rt {
 
 .library-card-answer {
   flex: 1;
+  min-width: 0;
   min-height: 42px;
   max-height: 42px;
+  overflow: hidden;
   font-size: 0.8125rem;
   line-height: 1.6;
   color: var(--text-secondary);
@@ -1552,6 +1589,7 @@ ruby rt {
    never escapes or slices vertically across the snippet container */
 :is(
   .library-card-title:not(:has(img, .anki-io-wrap, table)),
+  .library-card-answer:not(:has(img, .anki-io-wrap, table)),
   .library-card-snippet-body:not(:has(img, .anki-io-wrap, table))
 )
   :is(p, div, ul, ol, li, blockquote, pre, section, article, figure, h1, h2, h3, h4, h5, h6) {
@@ -1565,6 +1603,7 @@ ruby rt {
 
 :is(
   .library-card-title:not(:has(img, .anki-io-wrap, table)),
+  .library-card-answer:not(:has(img, .anki-io-wrap, table)),
   .library-card-snippet-body:not(:has(img, .anki-io-wrap, table))
 )
   span[class*="block"] {
@@ -1573,7 +1612,7 @@ ruby rt {
   padding: 0.0625rem 0.375rem;
 }
 
-:is(.library-card-title, .library-card-snippet-body) br + br {
+:is(.library-card-title, .library-card-answer, .library-card-snippet-body) br + br {
   display: none;
 }
 
@@ -1587,17 +1626,36 @@ ruby rt {
   max-height: 8.5rem;
 }
 
-:is(.library-card-title, .library-card-snippet-body) img {
-  display: block;
+.library-card-answer:has(img, .anki-io-wrap, table) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow: hidden;
+  max-height: 5.5rem;
+}
+
+:is(.library-card-title, .library-card-answer, .library-card-snippet-body) img {
   max-width: 100%;
   max-height: 6.75rem;
+  object-fit: contain;
+}
+
+.library-card-answer img {
+  max-height: 5rem;
+}
+
+:is(.library-card-title, .library-card-answer, .library-card-snippet-body) img:not([width]):not([height]) {
+  display: block;
   width: auto;
   height: auto;
-  object-fit: contain;
   border-radius: 0.5rem;
 }
 
-:is(.library-card-title, .library-card-snippet-body) .anki-io-wrap {
+:is(.library-card-title, .library-card-answer, .library-card-snippet-body) img:is([width], [height]) {
+  align-self: flex-start;
+}
+
+:is(.library-card-title, .library-card-answer, .library-card-snippet-body) .anki-io-wrap {
   display: inline-block;
   max-width: 100%;
   max-height: 7.25rem;
@@ -1606,10 +1664,15 @@ ruby rt {
   border-radius: 0.5rem;
 }
 
-:is(.library-card-title, .library-card-snippet-body) .anki-io-wrap img {
+:is(.library-card-title, .library-card-answer, .library-card-snippet-body) .anki-io-wrap img {
   max-height: 7.25rem;
   width: auto;
   height: auto;
+}
+
+.library-card-answer .anki-io-wrap,
+.library-card-answer .anki-io-wrap img {
+  max-height: 5.25rem;
 }
 
 .library-card-footer {
@@ -1697,7 +1760,7 @@ ruby rt {
   overflow: hidden;
 }
 
-.library-card--media .library-card-title img,
+.library-card--media .library-card-title img:not([width]):not([height]),
 .library-card--media .library-card-title svg,
 .library-card--media .library-card-title video,
 .library-card--media .library-card-title canvas,
@@ -1711,6 +1774,13 @@ ruby rt {
   border-radius: 6px;
   align-self: center;
   margin-inline: auto;
+}
+
+.library-card--media .library-card-title img:is([width], [height]) {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  align-self: center;
 }
 
 .library-card--media .library-card-title .anki-io-wrap img {

@@ -2048,7 +2048,11 @@ export const CardEditorModal: React.FC = () => {
                     ) : null}
                     {previewCardContent.rawQ.trim() ? (
                       <div
-                        className={`select-text break-words [&_img]:max-h-64 [&_img]:rounded-xl [&_img]:mx-auto [&_img]:my-2 [&_blockquote]:border-s-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:ps-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px] ${previewCardContent.questionSizeClass}`}
+                        className={`select-text break-words [&_img]:max-h-64 ${
+                          previewCardContent.hasInjectedFrontCardStyle
+                            ? ''
+                            : '[&_img:not([width]):not([height])]:rounded-xl [&_img:not([width]):not([height])]:mx-auto [&_img:not([width]):not([height])]:my-2 '
+                        }[&_blockquote]:border-s-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:ps-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px] ${previewCardContent.questionSizeClass}`}
                         dangerouslySetInnerHTML={{
                           __html: previewCardContent.questionHtml,
                         }}
@@ -2069,7 +2073,11 @@ export const CardEditorModal: React.FC = () => {
 
                         {previewCardContent.rawA.trim() ? (
                           <div
-                            className="text-[16px] sm:text-[17px] leading-relaxed font-medium select-text break-words [&_img]:max-h-64 [&_img]:rounded-xl [&_img]:my-2 [&_blockquote]:border-s-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:ps-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px]"
+                            className={`text-[16px] sm:text-[17px] leading-relaxed font-medium select-text break-words [&_img]:max-h-64 ${
+                              previewCardContent.hasInjectedCardStyle
+                                ? ''
+                                : '[&_img:not([width]):not([height])]:rounded-xl [&_img:not([width]):not([height])]:my-2 '
+                            }[&_blockquote]:border-s-[3px] [&_blockquote]:border-[var(--brand)] [&_blockquote]:ps-3 [&_blockquote]:my-2 [&_blockquote]:text-[#8E8E93] [&_blockquote]:italic [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ps-5 [&_ol]:my-2 [&_pre]:bg-black/5 dark:[&_pre]:bg-white/5 [&_pre]:p-2.5 [&_pre]:rounded-lg [&_pre]:font-mono [&_pre]:text-[13px]`}
                             dangerouslySetInnerHTML={{
                               __html: previewCardContent.answerHtml,
                             }}

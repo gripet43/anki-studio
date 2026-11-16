@@ -13,7 +13,11 @@ import {
   showToast,
   useAppStore,
 } from '../../stores/useAppStore';
-import { formatCardPreviewHtml, getDeckColorByHash } from '../../utils/mathRenderer';
+import {
+  formatCardPreviewHtml,
+  getDeckColorByHash,
+  hasSubstantiveMediaPreview,
+} from '../../utils/mathRenderer';
 import { Tooltip } from '../common/Tooltip';
 import { getClosestFromTarget } from '../../utils/domTarget';
 import { resolveThemeMode } from '../../utils/themeTokens';
@@ -423,6 +427,25 @@ export const LibraryView: React.FC = () => {
     filterFlag in ANKI_FLAG_PALETTE
       ? ANKI_FLAG_PALETTE[Number(filterFlag) as Exclude<CardFlagColor, 0>]
       : null;
+  const nonStatusScopeParts: string[] = [];
+  if (filterDeckId !== 'all' && activeDeckObj?.name) {
+    nonStatusScopeParts.push(activeDeckObj.name);
+  }
+  if (filterTag !== 'all') {
+    nonStatusScopeParts.push(`#${filterTag}`);
+  }
+  if (filterDifficulty !== 'all') {
+    nonStatusScopeParts.push(difficultyLabels[filterDifficulty]);
+  }
+  if (filterFlag === 'flagged') {
+    nonStatusScopeParts.push(t('anyFlaggedOption'));
+  } else if (activeFlagSpec) {
+    nonStatusScopeParts.push(t(`flagShort_${filterFlag}` as any));
+  }
+  if (librarySearchQuery.trim()) {
+    nonStatusScopeParts.push(`"${librarySearchQuery.trim()}"`);
+  }
+  const hasNonStatusFilter = nonStatusScopeParts.length > 0;
 
   return (
     <div className="flex-1 h-screen overflow-y-auto px-8 py-6 flex flex-col justify-between relative select-none">
@@ -607,8 +630,30 @@ export const LibraryView: React.FC = () => {
 
               {statusDropdownOpen && (
                 <div
-                  className={`absolute start-0 top-10 z-40 w-[220px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
+                  className={`absolute start-0 top-10 z-40 w-[232px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
                 >
+                  {hasNonStatusFilter && (
+                    <div className="px-2.5 py-1.5 mb-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.05] flex items-center justify-between gap-2 text-[10.5px]">
+                      <span className={`truncate ${subText}`}>
+                        {nonStatusScopeParts.join(' · ')}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          appActions.searchLibraryDebounced({
+                            query: '',
+                            difficulty: 'all',
+                            flag: 'all',
+                            tag: 'all',
+                            deckId: 'all',
+                          });
+                        }}
+                        className="shrink-0 font-semibold text-[var(--brand-text)] hover:underline cursor-pointer"
+                      >
+                        {t('resetFilters')}
+                      </button>
+                    </div>
+                  )}
                   {(
                     [
                       { key: 'all', dot: 'bg-[#8E8E93]' },
@@ -1369,9 +1414,7 @@ export const LibraryView: React.FC = () => {
                     ? 'bg-[#1A1B21] border-[#2A2C36] shadow-[0_1px_3px_rgba(0,0,0,0.02)] group-hover:border-[var(--brand-border)] group-hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]'
                     : 'bg-white border-[#EAECEF] shadow-[0_1px_3px_rgba(0,0,0,0.02)] group-hover:border-[var(--brand-border)] group-hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)]'
                 }`;
-                const hasFrontMedia = /<(img|svg|video|canvas|iframe)\b|anki-io-wrap|background-image/i.test(
-                  frontPreviewHtml || ''
-                );
+                const hasFrontMedia = hasSubstantiveMediaPreview(frontPreviewHtml);
                 const masteryColor =
                   card.mastery >= 90
                     ? 'var(--status-success)'

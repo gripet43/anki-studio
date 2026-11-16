@@ -15,6 +15,17 @@
 
 ## [Unreleased]
 
+## [v1.6.6] - 2026-11-16
+
+- **[Antigravity] 修复第三方卡片模版在标准复习页、卡片库正反面与编辑预览的图标放大、边框变形、表格缩窄及背面溢出问题**（改 [`frontend/src/index.css`](frontend/src/index.css)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/utils/mathRenderer.ts`](frontend/src/utils/mathRenderer.ts)、[`tests/frontend/specs/mathRenderer.spec.ts`](tests/frontend/specs/mathRenderer.spec.ts) 与 [`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - **恢复原生模板默认基线与属性尺寸尊重**：在 `@layer base` 内为 `.anki-native-card`、`.library-card-title`、`.library-card-answer` 与 `.library-card-snippet-body` 还原浏览器默认 `border-style: none`、`img/svg` 的 `inline-block` 排列及 `img[height]` 的 `height: revert-layer; width: auto`，并在 `index.css`、[`ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx) 与 [`CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx) 将 `width: auto`、圆角、上下边距限定于未显式声明宽高属性的内容图片，避免 `<img width="15px">` 等小图标被拉伸或断行、单边竖线被 Tailwind Preflight 画成四边黑框；同时把表格 `width: auto !important` 限定为 `:not([width]):not([style*="width"])` 以保留 `<table width=100%>` 多栏布局。
+  - **精准区分内联图标与实质媒体卡**：新增 `hasSubstantiveMediaPreview`，将宽高 ≤ 36px 的属性/内联小图标视作正文徽章而非大片媒体，防止纯文字词卡（如《托福绿宝书》）在卡片库误入 `.library-card--media` 相框模式。
+  - **卡片库背面（`.library-card-answer`）溢出裁切与排布收敛**：补齐 `.library-card-answer` 的 `min-width: 0; overflow: hidden;` 及 `:has(img, .anki-io-wrap, table)` 上限（`max-height: 5.5rem`），防止翻转后的富文本背面越过底部分割线遮挡操作按钮，同时令表格与行内小图标保持单行内联对齐。
+
+- **[Antigravity] 修复卡片库状态计数（如“已搁置”）作用域提示与实时同步**（改 [`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`tests/test_bridge.py`](tests/test_bridge.py)、[`tests/frontend/suite.ts`](tests/frontend/suite.ts) 与新增 [`tests/frontend/specs/libraryFacetSync.spec.ts`](tests/frontend/specs/libraryFacetSync.spec.ts)）：
+  - **状态变更即时刷新与乐观同步**：抽取 `applyQueueFlagToLibraryCards` 统一更新卡片及同笔记兄弟卡的 `suspended`/`buried` 状态，并在切换至卡片库页签（`setActiveTab('library')`）且存在既有筛选数据时主动后台静默重拉，保证外部浏览器或复习页执行搁置/解除搁置后计数与列表即时对齐。
+  - **多维筛选范围显式提示**：在卡片库状态下拉菜单通过 `hasNonStatusFilter` / `nonStatusScopeParts` 标注当前统计隶属的条件作用域（牌组/标签/难度/旗标/关键词），消除切换牌组或筛选后“全库与当前作用域数量差”造成的误解，升级版本至 `v1.6.6`。
+
 ## [v1.6.5] - 2026-11-16
 
 - **[Antigravity] 修复首页打开全局搜索后关闭再重新打开仍保留上次搜索词的问题**（改 [`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/search/CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)、新增 [`tests/frontend/specs/cmdkReset.spec.ts`](tests/frontend/specs/cmdkReset.spec.ts) 与 [`manifest.json`](manifest.json)）：

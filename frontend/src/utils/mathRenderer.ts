@@ -375,6 +375,50 @@ export function formatCardPreviewHtml(
   return normalized;
 }
 
+const ICON_DIMENSION_LIMIT_PX = 36;
+const SUBSTANTIVE_NON_IMG_MEDIA_RE = /<(video|canvas|iframe)\b|anki-io-wrap|background-image/i;
+const IMG_OR_SVG_TAG_RE = /<(img|svg)\b([^>]*)>/gi;
+
+function parseCssPxDimension(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const trimmed = raw.trim().toLowerCase();
+  const m = trimmed.match(/^(\d+(?:\.\d+)?)(?:px)?$/);
+  return m ? Number(m[1]) : null;
+}
+
+function isSmallInlineIconTag(attrs: string): boolean {
+  const attrWidth = attrs.match(/\bwidth\s*=\s*(?:["']([^"']+)["']|([^\s>]+))/i);
+  const attrHeight = attrs.match(/\bheight\s*=\s*(?:["']([^"']+)["']|([^\s>]+))/i);
+  const styleMatch = attrs.match(/\bstyle\s*=\s*(["'])([\s\S]*?)\1/i);
+  const styleBody = styleMatch?.[2] || '';
+  const styleW = styleBody.match(/(?:^|;)\s*width\s*:\s*([^;]+)/i)?.[1];
+  const styleH = styleBody.match(/(?:^|;)\s*height\s*:\s*([^;]+)/i)?.[1];
+
+  const w = parseCssPxDimension(attrWidth?.[1] ?? attrWidth?.[2]) ?? parseCssPxDimension(styleW);
+  const h = parseCssPxDimension(attrHeight?.[1] ?? attrHeight?.[2]) ?? parseCssPxDimension(styleH);
+  if (w !== null && w > 0 && w <= ICON_DIMENSION_LIMIT_PX && (h === null || h <= ICON_DIMENSION_LIMIT_PX)) {
+    return true;
+  }
+  if (h !== null && h > 0 && h <= ICON_DIMENSION_LIMIT_PX && (w === null || w <= ICON_DIMENSION_LIMIT_PX)) {
+    return true;
+  }
+  return false;
+}
+
+/** Returns true only when card preview markup includes substantive visual media rather than small UI icons. */
+export function hasSubstantiveMediaPreview(html: string | undefined | null): boolean {
+  if (!html) return false;
+  if (SUBSTANTIVE_NON_IMG_MEDIA_RE.test(html)) return true;
+  IMG_OR_SVG_TAG_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = IMG_OR_SVG_TAG_RE.exec(html)) !== null) {
+    if (!isSmallInlineIconTag(match[2] || '')) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Deterministic low-saturation SaaS palette color assignment based on deck ID or deck name hash (#6).
  */

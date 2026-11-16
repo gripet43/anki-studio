@@ -3525,6 +3525,129 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(self.config_store["vacation_frozen_dates"], [yesterday_iso])
         self.assertEqual(self.config_store["vacation_state"]["frozen_dates"], [yesterday_iso])
 
+    def test_45_manual_buried_queue_minus3_and_scoped_facets(self):
+        """Manual buried cards (queue=-3) must be counted in statusCounts['buried'] and reflect active tag scope."""
+        import sqlite3
+        from bridge.search_service import SearchService
+
+        conn = sqlite3.connect(":memory:")
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, tags TEXT, flds TEXT)")
+        cur.execute(
+            "CREATE TABLE cards (id INTEGER PRIMARY KEY, nid INTEGER, did INTEGER, ord INTEGER, type INTEGER, queue INTEGER, due INTEGER, lapses INTEGER, flags INTEGER, data TEXT)"
+        )
+        # 2 review cards tagged 逻辑判断 in deck 1 (Default), 5 manually buried (queue=-3) in deck 2 (错题) without 逻辑判断
+        for cid in range(1, 3):
+            cur.execute("INSERT INTO notes VALUES (?, ' 逻辑判断 ', ?)", (100 + cid, f"Q{cid}\x1fA{cid}"))
+            cur.execute("INSERT INTO cards VALUES (?, ?, 1, 0, 2, 2, 25, 0, 0, '')", (cid, 100 + cid))
+        for cid in range(3, 8):
+            cur.execute("INSERT INTO notes VALUES (?, ' ai popclip 错题 ', ?)", (100 + cid, f"BQ{cid}\x1fBA{cid}"))
+            cur.execute("INSERT INTO cards VALUES (?, ?, 2, 0, 2, -3, 10, 0, 0, '')", (cid, 100 + cid))
+        conn.commit()
+
+        class _DbWrap:
+            def __init__(self, c):
+                self.conn = c
+
+            def all(self, sql, *args):
+                return self.conn.execute(sql, args).fetchall()
+
+            def scalar(self, sql, *args):
+                row = self.conn.execute(sql, args).fetchone()
+                return row[0] if row else None
+
+        class _ScopedCol:
+            def __init__(self, c):
+                self.db = _DbWrap(c)
+
+                class Sched:
+                    today = 10
+
+                class Decks:
+                    @staticmethod
+                    def get(did, default=False):
+                        return {"id": int(did), "name": "错题" if int(did) == 2 else "Default"}
+
+                class Tags:
+                    @staticmethod
+                    def all():
+                        return ["逻辑判断", "ai", "popclip", "错题"]
+
+                self.sched = Sched()
+                self.decks = Decks()
+                self.tags = Tags()
+
+            def find_cards(self, query):
+                rows = self.db.all(
+                    "SELECT c.id, c.type, c.queue, c.due, c.did, n.tags "
+                    "FROM cards c JOIN notes n ON c.nid = n.id ORDER BY c.id ASC"
+                )
+                tokens = query.split()
+                out = []
+                for cid, ctype, queue, due, did, tags_str in rows:
+                    if "is:buried" in tokens and queue not in (-2, -3):
+                        continue
+                    if "-is:buried" in tokens and queue in (-2, -3):
+                        continue
+                    if "is:suspended" in tokens and queue != -1:
+                        continue
+                    if "-is:suspended" in tokens and queue == -1:
+                        continue
+                    if "is:new" in tokens and not (ctype == 0 or queue == 0):
+                        continue
+                    if "is:review" in tokens and not (ctype == 2 and queue == 2):
+                        continue
+                    if "(is:due" in query and not (queue in (1, 3) or (queue == 2 and due <= 10)):
+                        continue
+                    if "-is:due" in tokens and (queue in (1, 3) or (queue == 2 and due <= 10)):
+                        continue
+                    if "rated:1" in tokens:
+                        continue
+                    matched_tag = True
+                    for tok in tokens:
+                        if tok.startswith('tag:"') and tok[5:-1] not in tags_str.split():
+                            matched_tag = False
+                    if not matched_tag:
+                        continue
+                    out.append(int(cid))
+                return out
+
+            def get_card(self, cid):
+                row = self.db.conn.execute(
+                    "SELECT id, nid, did, type, queue, due, lapses, flags FROM cards WHERE id = ?",
+                    (int(cid),),
+                ).fetchone()
+                nrow = self.db.conn.execute(
+                    "SELECT flds, tags FROM notes WHERE id = ?",
+                    (int(row[1]),),
+                ).fetchone()
+                flds = nrow[0].split("\x1f")
+                note = MockNote(row[1], {"正面": flds[0], "释义": flds[1]}, nrow[1].split(), cids=[row[0]])
+                c = MockCard(row[0], note, queue=row[4], ctype=row[3], due=row[5], ivl=5)
+                c.did = row[2]
+                c.lapses = row[6]
+                c.flags = row[7]
+                return c
+
+        svc = SearchService(col_getter=lambda: _ScopedCol(conn))
+        try:
+            res_all = svc.search_cards({"query": "", "status": "all", "tag": "all", "language": "zh-CN"})
+            self.assertEqual(res_all["facetCounts"]["statusCounts"]["all"], 7)
+            self.assertEqual(res_all["facetCounts"]["statusCounts"]["buried"], 5)
+            self.assertEqual(res_all["facetCounts"]["statusCounts"]["review"], 2)
+
+            res_buried = svc.search_cards({"query": "", "status": "buried", "tag": "all", "language": "zh-CN"})
+            self.assertEqual(res_buried["filteredCount"], 5)
+            self.assertEqual(len(res_buried["cards"]), 5)
+            self.assertTrue(all(c["buried"] and c["status"] == "buried" for c in res_buried["cards"]))
+
+            # When narrowed by tag=逻辑判断, buried count reflects that subset (0) while tag=all restores 5
+            res_tagged = svc.search_cards({"query": "", "status": "all", "tag": "逻辑判断", "language": "zh-CN"})
+            self.assertEqual(res_tagged["facetCounts"]["statusCounts"]["all"], 2)
+            self.assertEqual(res_tagged["facetCounts"]["statusCounts"]["buried"], 0)
+        finally:
+            conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,8 +4,11 @@
 // 这里守住三件事：HTML 实体不能在公式里变字面量、函数名是正体、原始 < > 不被当标签。
 // ============================================================================
 
-import { section, test, ok, doesNotMatch } from '../harness';
-import { renderMathAndRichHtml } from '../../../frontend/src/utils/mathRenderer';
+import { section, test, ok, equal, doesNotMatch } from '../harness';
+import {
+  renderMathAndRichHtml,
+  hasSubstantiveMediaPreview,
+} from '../../../frontend/src/utils/mathRenderer';
 
 section('math renderer · entities');
 
@@ -65,4 +68,49 @@ test('multi-cloze question and answer render active pills and plain inactive clo
   const q2 = renderMathAndRichHtml(src, true, 2);
   ok(q2.includes('class="cloze-inactive" data-ordinal="1">哈哈</span>'));
   ok(q2.includes('class="anki-cloze-question">[...]</span>'));
+});
+
+section('math renderer · substantive media preview');
+
+test('tiny attribute-sized icons and inline UI badges do not classify text cards as media cards', () => {
+  equal(
+    hasSubstantiveMediaPreview(
+      '<table width="100%"><tr><td>Word List 1</td><td><img src="0-books.png" width="15px"><a href="eudic://dict//sweat">Eudic</a></td></tr></table><div>sweat</div>'
+    ),
+    false,
+    'TOEFL 绿宝书 15px 词典图标不应被判为大图媒体卡'
+  );
+  equal(
+    hasSubstantiveMediaPreview('<img src="badge.png" style="width:16px;height:16px"> <span>note</span>'),
+    false,
+    '内联样式小于等于 36px 的图标不应被判为媒体卡'
+  );
+  equal(
+    hasSubstantiveMediaPreview('<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/></svg><span>ok</span>'),
+    false,
+    '小型内联 SVG 图标不应被判为媒体卡'
+  );
+});
+
+test('real images, image occlusion, and mixed icon + photo cards still detect substantive media', () => {
+  equal(
+    hasSubstantiveMediaPreview('<div>Anatomy <img src="diagram.png"></div>'),
+    true,
+    '未限定小尺寸的图片应保留媒体卡识别'
+  );
+  equal(
+    hasSubstantiveMediaPreview('<div>Chart <img src="chart.png" width="240"></div>'),
+    true,
+    '显式大尺寸图片（width="240"）应识别为媒体卡'
+  );
+  equal(
+    hasSubstantiveMediaPreview('<div class="anki-io-wrap"><img src="io.png" width="18"></div>'),
+    true,
+    'Image Occlusion 容器应始终识别为媒体卡'
+  );
+  equal(
+    hasSubstantiveMediaPreview('<div><img src="0-books.png" width="15px"> Eudic <img src="photo.jpg"></div>'),
+    true,
+    '同时包含小图标与正文配图时仍应识别为媒体卡'
+  );
 });

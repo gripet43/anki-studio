@@ -2084,7 +2084,11 @@ export const ReviewerView: React.FC = () => {
                                   : undefined
                                 : { fontSize: `${Math.round(frontBaseFontPx * scaleFactor * 10) / 10}px` }
                             }
-                            className={`${frontTypographyClass} break-words [&_img]:max-h-[var(--reviewer-img-max-h)] [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-xl [&_img]:my-2 [&_img]:cursor-zoom-in [&_a_img]:cursor-pointer [&_button_img]:cursor-pointer [&_.anki-io-wrap]:cursor-zoom-in [&_.anki-io-wrap_img]:!my-0 [&_.anki-io-wrap_img]:!max-h-[var(--reviewer-io-max-h)]`}
+                            className={`${frontTypographyClass} break-words ${
+                              isNativeStyledFront
+                                ? '[&_img]:max-h-[var(--reviewer-img-max-h)] [&_img:not([width])]:w-auto [&_img]:max-w-full [&_img]:cursor-zoom-in [&_a_img]:cursor-pointer [&_button_img]:cursor-pointer [&_.anki-io-wrap]:cursor-zoom-in [&_.anki-io-wrap_img]:!my-0 [&_.anki-io-wrap_img]:!max-h-[var(--reviewer-io-max-h)]'
+                                : '[&_img]:max-h-[var(--reviewer-img-max-h)] [&_img:not([width])]:w-auto [&_img]:max-w-full [&_img:not([width]):not([height])]:rounded-xl [&_img:not([width]):not([height])]:my-2 [&_img]:cursor-zoom-in [&_a_img]:cursor-pointer [&_button_img]:cursor-pointer [&_.anki-io-wrap]:cursor-zoom-in [&_.anki-io-wrap_img]:!my-0 [&_.anki-io-wrap_img]:!max-h-[var(--reviewer-io-max-h)]'
+                            }`}
                             dangerouslySetInnerHTML={{
                               __html: renderMathAndRichHtml(frontHtmlContent, !isCardFlipped),
                             }}
@@ -2128,8 +2132,8 @@ export const ReviewerView: React.FC = () => {
                               }
                               className={`select-text cursor-text break-words ${
                                 isNativeStyledBack
-                                  ? 'w-full text-[16px] leading-relaxed [&_img]:max-h-[var(--reviewer-img-max-h)] [&_img]:w-auto [&_img]:max-w-full [&_img]:cursor-zoom-in [&_a_img]:cursor-pointer [&_button_img]:cursor-pointer'
-                                  : 'font-medium leading-relaxed whitespace-pre-wrap [&_img]:max-h-[var(--reviewer-img-max-h)] [&_img]:w-auto [&_img]:max-w-full [&_img]:rounded-xl [&_img]:my-3 [&_img]:cursor-zoom-in [&_a_img]:cursor-pointer [&_button_img]:cursor-pointer [&_.anki-io-wrap]:cursor-zoom-in [&_.anki-io-wrap_img]:!my-0 [&_.anki-io-wrap_img]:!max-h-[var(--reviewer-io-max-h)]'
+                                  ? 'w-full text-[16px] leading-relaxed [&_img]:max-h-[var(--reviewer-img-max-h)] [&_img:not([width])]:w-auto [&_img]:max-w-full [&_img]:cursor-zoom-in [&_a_img]:cursor-pointer [&_button_img]:cursor-pointer'
+                                  : 'font-medium leading-relaxed whitespace-pre-wrap [&_img]:max-h-[var(--reviewer-img-max-h)] [&_img:not([width])]:w-auto [&_img]:max-w-full [&_img:not([width]):not([height])]:rounded-xl [&_img:not([width]):not([height])]:my-3 [&_img]:cursor-zoom-in [&_a_img]:cursor-pointer [&_button_img]:cursor-pointer [&_.anki-io-wrap]:cursor-zoom-in [&_.anki-io-wrap_img]:!my-0 [&_.anki-io-wrap_img]:!max-h-[var(--reviewer-io-max-h)]'
                               } [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[0.85em] ${
                                 isDark
                                   ? 'text-[#EFEFF5] [&_code]:bg-white/10'
