@@ -3201,9 +3201,17 @@ export const appActions = {
         });
         if (res?.cardId) createdCardId = res.cardId;
         if (res?.noteId) createdNoteId = res.noteId;
+        const createdCount =
+          typeof res?.createdCount === 'number' && res.createdCount > 0
+            ? res.createdCount
+            : payload.createReverseCard
+            ? 2
+            : 1;
         await appActions.initFromAnki(false);
         trackAnalytics('feature_use', { feature: 'quick_add' });
-        showToast(tState('addToDeckBtn', { deck: targetDeckName }));
+        showToast(
+          tState('cardAddedToast', { count: createdCount, deck: targetDeckName })
+        );
         return;
       } catch {}
     }
@@ -3258,7 +3266,12 @@ export const appActions = {
       cmdKResults: [...cardsToPrepend, ...prev.cmdKResults],
     }));
 
-    showToast(tState('addToDeckBtn', { deck: targetDeckName }));
+    showToast(
+      tState('cardAddedToast', {
+        count: cardsToPrepend.length,
+        deck: targetDeckName,
+      })
+    );
   },
 
   toggleCardSelection(cardId: string) {

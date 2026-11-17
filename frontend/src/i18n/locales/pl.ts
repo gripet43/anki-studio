@@ -48,6 +48,7 @@ export const dict: TranslationTable = {
   activeProfileNameSub: "Aktywna nazwa profilu: {name}",
   addTagBtn: "+ Etykieta",
   addToDeckBtn: "Dodaj do „{deck}”",
+  cardAddedToast: "Dodano {count} kart(y) do {deck}",
   continuousCardCreation: "Ciągłe tworzenie",
   continuousCardCreationHint: "Pozostaw okno otwarte po dodaniu i wyczyść pola; talia, typ notatki i tagi zostaną zachowane",
   allClearedSub: "Powtórzono dziś {n} kart",

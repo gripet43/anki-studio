@@ -48,6 +48,7 @@ export const dict: TranslationTable = {
   activeProfileNameSub: "Nom du profil actif : {name}",
   addTagBtn: "+ Étiquette",
   addToDeckBtn: "Ajouter à {deck}",
+  cardAddedToast: "{count} carte(s) ajoutée(s) à {deck}",
   continuousCardCreation: "Création continue",
   continuousCardCreationHint: "Garder cette fenêtre ouverte après l’ajout et vider les champs ; le paquet, le type de note et les étiquettes sont conservés",
   allClearedSub: "{n} cartes révisées aujourd'hui",

@@ -48,6 +48,7 @@ export const dict: TranslationTable = {
   activeProfileNameSub: "Tên hồ sơ đang dùng: {name}",
   addTagBtn: "+ Nhãn",
   addToDeckBtn: "Thêm vào \"{deck}\"",
+  cardAddedToast: "Đã thêm {count} thẻ vào {deck}",
   continuousCardCreation: "Tạo thẻ liên tục",
   continuousCardCreationHint: "Giữ cửa sổ này mở sau khi thêm và xóa nội dung; bộ bài, loại ghi chú và thẻ được giữ lại",
   allClearedSub: "Đã ôn tập {n} thẻ hôm nay",

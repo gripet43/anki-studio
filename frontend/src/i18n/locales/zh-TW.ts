@@ -48,6 +48,7 @@ export const dict: TranslationTable = {
   activeProfileNameSub: "目前生效名稱：{name}",
   addTagBtn: "+ 新增",
   addToDeckBtn: "新增至「{deck}」",
+  cardAddedToast: "已新增 {count} 張卡片至「{deck}」",
   continuousCardCreation: "連續製卡",
   continuousCardCreationHint: "新增後保留視窗並清空正文；牌組、卡型與標籤保留",
   allClearedSub: "今日共完成 {n} 張卡片複習",

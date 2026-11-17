@@ -15,6 +15,14 @@
 
 ## [Unreleased]
 
+## [v1.6.8] - 2026-11-17
+
+- **[DeepSeek] 修复制卡成功提示：不再复用「添加至」按钮文案**（改 [`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts) 与 16 语言词典）：
+  - 新增 `cardAddedToast`：成功后显示完成态文案「已添加 {count} 张卡片至「{deck}」」，与按钮的「添加至「{deck}」」明确区分；
+  - 张数优先取后端 `createdCount`，反向卡等一次生成多张时也能正确显示；开发/离线回退路径按实际插入数量显示；
+  - 连续制卡模式下同样在每次添加后显示该成功提示，不再出现「看起来什么都没发生」的错觉。
+  - **验证**：`tsc --noEmit`、前端单元 141 项、Bundle 审计、Python 168 项、场景冒烟 705/705 + 前端静态审计 24/24、打包全绿。版本 1.6.7 → 1.6.8。
+
 ## [v1.6.7] - 2026-11-17
 
 - **[DeepSeek] 新建卡片窗口新增「连续制卡」模式开关**（改 [`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/components/quick-add/TowerWysiwygEditor.tsx`](frontend/src/components/quick-add/TowerWysiwygEditor.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`config.default.json`](config.default.json)、[`config.md`](config.md)、16 语言词典与 [`tests/test_bridge.py`](tests/test_bridge.py)/[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
