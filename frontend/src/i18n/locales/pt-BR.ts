@@ -48,6 +48,8 @@ export const dict: TranslationTable = {
   activeProfileNameSub: "Nome do perfil ativo: {name}",
   addTagBtn: "+ Etiqueta",
   addToDeckBtn: "Adicionar a {deck}",
+  continuousCardCreation: "Criação contínua",
+  continuousCardCreationHint: "Manter esta janela aberta após adicionar e limpar os campos; baralho, tipo de nota e etiquetas são mantidos",
   allClearedSub: "{n} cartões revisados hoje",
   allClearedTitle: "Parabéns! Todos os baralhos foram concluídos!",
   allDecksManage: "Gerenciar baralhos ›",

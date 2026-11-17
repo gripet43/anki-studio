@@ -48,6 +48,8 @@ export const dict: TranslationTable = {
   activeProfileNameSub: "Aktiver Profilname: {name}",
   addTagBtn: "+ Schlagwort",
   addToDeckBtn: "Zu „{deck}“ hinzufügen",
+  continuousCardCreation: "Fortlaufend erstellen",
+  continuousCardCreationHint: "Fenster nach dem Hinzufügen offen halten und Felder leeren; Stapel, Notiztyp und Tags bleiben erhalten",
   allClearedSub: "Heute {n} Karten wiederholt",
   allClearedTitle: "Glückwunsch! Alle Stapel für heute abgeschlossen!",
   allDecksManage: "Stapel verwalten ›",

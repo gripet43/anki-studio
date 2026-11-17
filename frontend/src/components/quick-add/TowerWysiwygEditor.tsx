@@ -28,6 +28,8 @@ export interface TowerWysiwygEditorProps {
   nextClozeOrd?: number;
   onOpenImageOcclusion?: () => void;
   hasImageOcclusion?: boolean;
+  /** 递增这个值时把焦点移到正文编辑器（连续制卡重置后使用）。 */
+  focusRequest?: number;
 }
 
 const ZWSP = '\u200B';
@@ -122,6 +124,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
   nextClozeOrd,
   onOpenImageOcclusion,
   hasImageOcclusion = false,
+  focusRequest,
 }) => {
   const { resolvedLang, envInfo } = useAppStore();
   const t = (key: any, params?: Record<string, string | number>) =>
@@ -417,6 +420,15 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
       setCharCount(computeVisibleCharCount(editorRef.current));
     }
   }, [value, mediaBaseUrl]);
+
+  // 连续制卡：清空正文后把焦点交还给正文编辑器，便于直接敲下一张。
+  useEffect(() => {
+    if (!focusRequest) return;
+    const raf = window.requestAnimationFrame(() => {
+      editorRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [focusRequest]);
 
   const handleInput = () => {
     if (!editorRef.current) return;

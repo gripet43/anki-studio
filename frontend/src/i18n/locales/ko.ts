@@ -48,6 +48,8 @@ export const dict: TranslationTable = {
   activeProfileNameSub: "현재 적용된 이름: {name}",
   addTagBtn: "+ 태그",
   addToDeckBtn: "'{deck}'에 추가",
+  continuousCardCreation: "연속 카드 만들기",
+  continuousCardCreationHint: "추가 후 창을 열어 두고 본문을 비웁니다. 덱, 노트 유형, 태그는 유지됩니다",
   allClearedSub: "오늘 총 {n}장의 카드를 복습했습니다",
   allClearedTitle: "축하합니다! 모든 덱 학습을 완료했습니다!",
   allDecksManage: "전체 덱 관리 ›",

@@ -48,6 +48,8 @@ export const dict: TranslationTable = {
   activeProfileNameSub: "Активное имя профиля: {name}",
   addTagBtn: "+ Метка",
   addToDeckBtn: "Добавить в «{deck}»",
+  continuousCardCreation: "Непрерывное создание",
+  continuousCardCreationHint: "Оставить окно открытым после добавления и очистить поля; колода, тип заметки и теги сохраняются",
   allClearedSub: "Сегодня повторено {n} карточек",
   allClearedTitle: "Поздравляем! Все колоды на сегодня пройдены!",
   allDecksManage: "Управление колодами ›",

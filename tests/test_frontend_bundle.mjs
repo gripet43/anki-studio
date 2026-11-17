@@ -332,6 +332,8 @@ assert(
     editSrc.includes('check_duplicate_note') &&
     editSrc.includes('createReverseCard') &&
     editorSrc.includes('localDuplicateInfo') &&
+    editorSrc.includes('continuousCardCreation') &&
+    editorSrc.includes('continuousCardCreationHint') &&
     !editorSrc.includes('pinnedFront') &&
     !editorSrc.includes('pinnedBack') &&
     !editorSrc.includes('pinnedTags') &&

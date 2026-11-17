@@ -171,6 +171,7 @@ export const CardEditorModal: React.FC = () => {
     cmdKFrontCardStyles,
     libraryCardStyles,
     libraryFrontCardStyles,
+    continuousCardCreation,
   } = useAppStore();
 
   const resolvedTheme = resolveThemeMode(theme, systemDark);
@@ -226,6 +227,7 @@ export const CardEditorModal: React.FC = () => {
 
   // Interactive Card Preview State ('edit' vs 'preview')
   const [editorMode, setEditorMode] = useState<'edit' | 'preview'>('edit');
+  const [frontFocusRequest, setFrontFocusRequest] = useState(0);
   const [previewFlipped, setPreviewFlipped] = useState(false);
   const [previewClozeOrd, setPreviewClozeOrd] = useState<number>(1);
   const [previewReverseDir, setPreviewReverseDir] = useState<'forward' | 'reverse'>('forward');
@@ -481,6 +483,7 @@ export const CardEditorModal: React.FC = () => {
       return;
     }
     const excludeNoteId = editingCardData?.noteId || '';
+    let cancelled = false;
     const timer = setTimeout(() => {
       callAnki<{
         isDuplicate: boolean;
@@ -491,14 +494,18 @@ export const CardEditorModal: React.FC = () => {
         excludeNoteId,
       })
         .then((res) => {
-          if (res) {
+          // 连续制卡重置后，上一张卡的异步查重可能才返回；丢弃过期结果。
+          if (!cancelled && res) {
             setBackendDupCount(res.duplicateCount || 0);
             setBackendDupPreview(res.matchedPreview || '');
           }
         })
         .catch(() => {});
     }, 220);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [normalizedFrontForDup, quickAddOpen, editingCardData?.noteId]);
 
   const effectiveDuplicateCount = Math.max(localDuplicateInfo.count, backendDupCount);
@@ -515,7 +522,9 @@ export const CardEditorModal: React.FC = () => {
   // Dirty state computation
   const hasChanges = useMemo(() => {
     if (!isEditMode) {
-      return Boolean(front.trim() || back.trim() || tags.length > 0);
+      if (front.trim() || back.trim()) return true;
+      if (tags.length !== originalSnapshot.tags.length) return true;
+      return tags.some((tItem, idx) => tItem !== originalSnapshot.tags[idx]);
     }
     if (selectedDeckId !== originalSnapshot.deckId) return true;
     if (tags.length !== originalSnapshot.tags.length) return true;
@@ -920,6 +929,35 @@ export const CardEditorModal: React.FC = () => {
     ? noteFieldOrder.some((k) => Boolean((allFieldsMap[k] || '').trim()))
     : (IMAGE_OCCLUSION_AUTHORING_ENABLED && Boolean(ioPayload?.occlusions)) || Boolean(front.trim()));
 
+  // 连续制卡：保存成功后保留窗口，清空正文，保留牌组、卡型与标签。
+  const resetComposerForNextCard = () => {
+    setFront('');
+    setBack('');
+    setAdditionalFields({});
+    setAllFieldsMap({});
+    setNoteFieldOrder([]);
+    setOriginalFieldsMap({});
+    setIoPayload(null);
+    setEditorMode('edit');
+    setPreviewFlipped(false);
+    setPreviewClozeOrd(1);
+    setPreviewReverseDir('forward');
+    setBackendDupCount(0);
+    setBackendDupPreview('');
+    setTagInput('');
+    setShowTagInput(false);
+    setConfirmDiscardOpen(false);
+    setDeckDropdownOpen(false);
+    setNoteTypeDropdownOpen(false);
+    setOriginalSnapshot({
+      front: '',
+      back: '',
+      tags,
+      deckId: selectedDeckId,
+    });
+    setFrontFocusRequest((n) => n + 1);
+  };
+
   const handleSubmit = async () => {
     // 双保险：即使某个快捷键/按钮漏了禁用，也绝不能把只读的遮挡卡写回去。
     if (readOnlyImageOcclusion || isIoModelSelected || !canSubmit || submitting) return;
@@ -997,7 +1035,11 @@ export const CardEditorModal: React.FC = () => {
             : undefined,
         });
 
-        setAppState({ quickAddOpen: false });
+        if (continuousCardCreation) {
+          resetComposerForNextCard();
+        } else {
+          setAppState({ quickAddOpen: false });
+        }
       }
     } finally {
       setSubmitting(false);
@@ -1593,6 +1635,7 @@ export const CardEditorModal: React.FC = () => {
                   showCloze={true}
                   clozeMode={clozeGroupingMode}
                   nextClozeOrd={nextSplitClozeOrd}
+                  focusRequest={frontFocusRequest}
                   onOpenImageOcclusion={
                     IMAGE_OCCLUSION_AUTHORING_ENABLED ? () => setIoEditorOpen(true) : undefined
                   }
@@ -2151,7 +2194,48 @@ export const CardEditorModal: React.FC = () => {
           }`}
         >
           {/* Left Status (Unsaved changes or pending cloze conversion hint) */}
-          <div className="flex items-center gap-3 text-[11px] text-[#8E8E93]">
+          <div className="flex items-center gap-3 text-[11px] text-[#8E8E93] min-w-0">
+            {!isEditMode && !readOnlyImageOcclusion && (
+              <Tooltip variant="compact" content={t('continuousCardCreationHint')} side="top">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={continuousCardCreation}
+                  disabled={submitting}
+                  onClick={() =>
+                    appActions.updatePreferences({
+                      continuousCardCreation: !continuousCardCreation,
+                    })
+                  }
+                  className={`inline-flex items-center gap-2 shrink-0 cursor-pointer select-none rounded-lg py-1 pe-1 transition-opacity ${
+                    submitting ? 'opacity-50 cursor-wait' : ''
+                  }`}
+                >
+                  <span
+                    className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
+                      continuousCardCreation
+                        ? 'bg-[var(--brand)]'
+                        : isDark
+                        ? 'bg-white/20'
+                        : 'bg-black/15'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
+                        continuousCardCreation ? 'translate-x-3.5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </span>
+                  <span
+                    className={`font-medium whitespace-nowrap ${
+                      continuousCardCreation ? 'text-[var(--brand-text)]' : ''
+                    }`}
+                  >
+                    {t('continuousCardCreation')}
+                  </span>
+                </button>
+              </Tooltip>
+            )}
             {isEditMode && needsClozeSaveConversion ? (
               <span className="text-[var(--status-warning)] font-medium flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]" />

@@ -26,6 +26,9 @@
   `Anki Studio` 菜单，以及原生工具栏上的彩色胶囊按钮。
 - `show_shortcut_hints`：`true` / `false`
   是否在界面上显示快捷键提示。默认关闭。
+- `continuous_card_creation`：`true` / `false`（默认 `false`）
+  新建卡片时是否默认开启「连续制卡」：添加成功后保留制卡窗口并清空正文，
+  保留当前牌组、卡型与标签，方便连续录入。
 
 ## 界面状态
 

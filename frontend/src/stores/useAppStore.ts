@@ -143,6 +143,8 @@ export interface AppState {
   resolvedLang: ResolvedLanguage;
   customNickname: string;
   showShortcutHints: boolean;
+  /** 连续制卡：添加后保留窗口并清空正文，保留牌组/卡型/标签。 */
+  continuousCardCreation: boolean;
   /** 首页牌组标题旁的学习小贴士「今天不再显示」日期（YYYY-MM-DD）。 */
   tipsHiddenOn: string;
   /** 匿名使用统计开关（只上报匿名计数，不含卡片内容）。 */
@@ -272,6 +274,7 @@ const initialState: AppState = {
   resolvedLang: initialLang,
   customNickname: '',
   showShortcutHints: false,
+  continuousCardCreation: false,
   tipsHiddenOn: '',
   analyticsEnabled: true,
   answerButtonMode: 'binary',
@@ -768,6 +771,10 @@ export const appActions = {
           ? []
           : state.sandboxNoteTypeIds,
         showShortcutHints: prefs?.showShortcutHints !== undefined ? prefs.showShortcutHints : state.showShortcutHints,
+        continuousCardCreation:
+          prefs?.continuousCardCreation !== undefined
+            ? Boolean(prefs.continuousCardCreation)
+            : state.continuousCardCreation,
         tipsHiddenOn: prefs?.tipsHiddenOn !== undefined ? prefs.tipsHiddenOn : state.tipsHiddenOn,
         analyticsEnabled: prefs?.analyticsEnabled !== undefined ? prefs.analyticsEnabled : state.analyticsEnabled,
         answerButtonMode: prefs?.answerButtonMode === 'four' ? 'four' : 'binary',
@@ -992,6 +999,7 @@ export const appActions = {
     customNickname?: string;
     collapsedDeckIds?: string[];
     showShortcutHints?: boolean;
+    continuousCardCreation?: boolean;
     tipsHiddenOn?: string;
     analyticsEnabled?: boolean;
     answerButtonMode?: 'binary' | 'four';
@@ -1011,6 +1019,9 @@ export const appActions = {
       ...(patch.customNickname !== undefined ? { customNickname: patch.customNickname } : {}),
       ...(patch.collapsedDeckIds ? { collapsedDeckIds: patch.collapsedDeckIds } : {}),
       ...(patch.showShortcutHints !== undefined ? { showShortcutHints: patch.showShortcutHints } : {}),
+      ...(patch.continuousCardCreation !== undefined
+        ? { continuousCardCreation: Boolean(patch.continuousCardCreation) }
+        : {}),
       ...(patch.tipsHiddenOn !== undefined ? { tipsHiddenOn: patch.tipsHiddenOn } : {}),
       ...(patch.analyticsEnabled !== undefined ? { analyticsEnabled: patch.analyticsEnabled } : {}),
       ...(patch.answerButtonMode !== undefined ? { answerButtonMode: patch.answerButtonMode } : {}),

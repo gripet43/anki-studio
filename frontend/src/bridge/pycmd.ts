@@ -346,6 +346,8 @@ export interface UserPreferences {
   analyticsEnabled?: boolean;
   /** 答题按钮布局：'binary'（简洁双按钮，默认）或 'four'（原生四按钮）。 */
   answerButtonMode?: 'binary' | 'four';
+  /** 连续制卡：添加后保留窗口、清空正文，保留牌组/卡型/标签。 */
+  continuousCardCreation?: boolean;
   /** 学习模式卡片显示正面时是否自动播放正面音频（默认关闭）。 */
   autoPlayFrontAudio?: boolean;
   /** 学习模式翻面显示答案时是否自动播放背面音频；无背面音频时回退播放正面音频（默认开启）。 */

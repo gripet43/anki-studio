@@ -8,6 +8,7 @@
   "language": "auto",
   "collapsed_deck_ids": [],
   "show_shortcut_hints": false,
+  "continuous_card_creation": false,
   "auto_play_front_audio": false,
   "auto_play_back_audio": true
 }

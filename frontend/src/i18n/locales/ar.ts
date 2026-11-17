@@ -48,6 +48,8 @@ export const dict: TranslationTable = {
   activeProfileNameSub: "اسم الملف النشط: {name}",
   addTagBtn: "+ وسم",
   addToDeckBtn: "إضافة إلى «{deck}»",
+  continuousCardCreation: "إنشاء متواصل",
+  continuousCardCreationHint: "إبقاء النافذة مفتوحة بعد الإضافة ومسح الحقول؛ يتم الاحتفاظ بالرزمة ونوع الملاحظة والوسوم",
   allClearedSub: "تمت مراجعة {n} بطاقة اليوم",
   allClearedTitle: "تهانينا! أكملت جميع الرزم لهذا اليوم!",
   allDecksManage: "إدارة الرزم ›",

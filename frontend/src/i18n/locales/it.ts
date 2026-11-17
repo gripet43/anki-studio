@@ -48,6 +48,8 @@ export const dict: TranslationTable = {
   activeProfileNameSub: "Nome profilo attivo: {name}",
   addTagBtn: "+ Etichetta",
   addToDeckBtn: "Aggiungi a {deck}",
+  continuousCardCreation: "Creazione continua",
+  continuousCardCreationHint: "Mantieni questa finestra aperta dopo l’aggiunta e svuota i campi; mazzo, tipo di nota e tag vengono conservati",
   allClearedSub: "Ripassate {n} carte oggi",
   allClearedTitle: "Complimenti! Hai completato tutti i mazzi!",
   allDecksManage: "Gestisci mazzi ›",

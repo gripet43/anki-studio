@@ -677,6 +677,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 "customNickname": "Dr. Lee",
                 "collapsedDeckIds": ["1"],
                 "showShortcutHints": True,
+                "continuousCardCreation": True,
                 "autoPlayFrontAudio": True,
                 "autoPlayBackAudio": False,
                 "reviewStageWidth": "wide",
@@ -687,6 +688,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(prefs_res["data"]["preferences"]["language"], "en")
         self.assertEqual(prefs_res["data"]["preferences"]["customNickname"], "Dr. Lee")
         self.assertTrue(prefs_res["data"]["preferences"]["showShortcutHints"])
+        self.assertTrue(prefs_res["data"]["preferences"]["continuousCardCreation"])
         self.assertTrue(prefs_res["data"]["preferences"]["autoPlayFrontAudio"])
         self.assertFalse(prefs_res["data"]["preferences"]["autoPlayBackAudio"])
         self.assertEqual(prefs_res["data"]["preferences"]["reviewStageWidth"], "wide")
@@ -695,6 +697,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         get_prefs = self._call("get_preferences", {})
         self.assertEqual(get_prefs["status"], "success")
         self.assertTrue(get_prefs["data"]["showShortcutHints"])
+        self.assertTrue(get_prefs["data"]["continuousCardCreation"])
         self.assertTrue(get_prefs["data"]["autoPlayFrontAudio"])
         self.assertFalse(get_prefs["data"]["autoPlayBackAudio"])
         self.assertEqual(get_prefs["data"]["reviewStageWidth"], "wide")
@@ -703,6 +706,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         dash_prefs = self._call("get_dashboard", {})["data"]["preferences"]
         self.assertTrue(dash_prefs["autoPlayFrontAudio"])
         self.assertFalse(dash_prefs["autoPlayBackAudio"])
+        self.assertTrue(dash_prefs["continuousCardCreation"])
 
         # Legacy oled migrates cleanly -> dark; auto & invalid normalize cleanly
         oled_mig = self._call("save_preferences", {"theme": "oled"})

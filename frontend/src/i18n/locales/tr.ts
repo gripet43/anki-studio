@@ -48,6 +48,8 @@ export const dict: TranslationTable = {
   activeProfileNameSub: "Aktif profil adı: {name}",
   addTagBtn: "+ Etiket",
   addToDeckBtn: "{deck} Destesine Ekle",
+  continuousCardCreation: "Sürekli oluşturma",
+  continuousCardCreationHint: "Ekleme sonrası pencereyi açık tut ve alanları temizle; deste, not türü ve etiketler korunur",
   allClearedSub: "Bugün {n} kart çalışıldı",
   allClearedTitle: "Tebrikler! Tüm desteleri tamamladınız!",
   allDecksManage: "Desteleri Yönet ›",

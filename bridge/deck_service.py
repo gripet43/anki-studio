@@ -507,6 +507,7 @@ class DeckService:
                     "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
                     "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                     "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
+                    "continuousCardCreation": bool(cfg.get("continuous_card_creation", False)),
                     "tipsHiddenOn": str(cfg.get("dashboard_tips_hidden_on") or ""),
                     "analyticsEnabled": bool(cfg.get("analytics_enabled", True)),
                     "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),

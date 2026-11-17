@@ -241,6 +241,7 @@ class BridgeRouter:
             "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
             "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
             "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
+            "continuousCardCreation": bool(cfg.get("continuous_card_creation", False)),
             "tipsHiddenOn": self._tips_hidden_on(cfg),
             "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),
             "autoPlayFrontAudio": auto_play_front_audio,
@@ -266,6 +267,10 @@ class BridgeRouter:
             patch["sandbox_notetype_ids"] = [str(x) for x in data["sandboxNoteTypeIds"] if str(x).strip()]
         if "showShortcutHints" in data:
             patch["show_shortcut_hints"] = bool(data["showShortcutHints"])
+        if "continuousCardCreation" in data:
+            patch["continuous_card_creation"] = self.deck_service._coerce_bool(
+                data["continuousCardCreation"], False
+            )
         if "analyticsEnabled" in data:
             patch["analytics_enabled"] = bool(data["analyticsEnabled"])
         if "answerButtonMode" in data:
@@ -315,6 +320,7 @@ class BridgeRouter:
                 "collapsedDeckIds": saved.get("collapsed_deck_ids", []),
                 "sandboxNoteTypeIds": [str(x) for x in (saved.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(saved.get("show_shortcut_hints", False)),
+                "continuousCardCreation": bool(saved.get("continuous_card_creation", False)),
                 "tipsHiddenOn": str(saved.get("dashboard_tips_hidden_on") or ""),
                 "analyticsEnabled": bool(saved.get("analytics_enabled", True)),
                 "answerButtonMode": str(saved.get("answer_button_mode") or "binary"),

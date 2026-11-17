@@ -15,6 +15,15 @@
 
 ## [Unreleased]
 
+## [v1.6.7] - 2026-11-17
+
+- **[DeepSeek] 新建卡片窗口新增「连续制卡」模式开关**（改 [`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/components/quick-add/TowerWysiwygEditor.tsx`](frontend/src/components/quick-add/TowerWysiwygEditor.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`config.default.json`](config.default.json)、[`config.md`](config.md)、16 语言词典与 [`tests/test_bridge.py`](tests/test_bridge.py)/[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - 弹窗**左下角**新增 `连续制卡` 开关（仅在新建卡片时显示，编辑已有卡片时隐藏）；状态持久化为配置项 `continuous_card_creation`，默认关闭。
+  - 开启后，添加成功的卡片**不再关闭窗口**：自动清空题目/答案/附加字段并回到编辑态，**保留当前牌组、卡型与标签**（方便同一牌组连续录入、批量打标签），焦点自动回到题目输入框；顶部仍会显示「已添加至…」toast。
+  - 关闭开关后恢复原有「添加后关闭」行为；编辑模式、取消/Esc、未保存确认逻辑不变；关闭后重新打开仍保留用户的开关选择。
+  - 同时给查重请求加取消标记，避免连续制卡重置后上一张卡的异步查重结果回填到下一张卡。
+  - **验证**：`tsc --noEmit`、前端单元 141 项、Bundle 审计、Python 168 项、场景冒烟 705/705 + 前端静态审计 24/24、打包全绿。版本 1.6.6 → 1.6.7。
+
 ## [v1.6.6] - 2026-11-16
 
 - **[Antigravity] 修复第三方卡片模版在标准复习页、卡片库正反面与编辑预览的图标放大、边框变形、表格缩窄及背面溢出问题**（改 [`frontend/src/index.css`](frontend/src/index.css)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/utils/mathRenderer.ts`](frontend/src/utils/mathRenderer.ts)、[`tests/frontend/specs/mathRenderer.spec.ts`](tests/frontend/specs/mathRenderer.spec.ts) 与 [`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
