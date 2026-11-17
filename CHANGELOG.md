@@ -11,6 +11,8 @@
 > 3. **验证门禁**：改动后必须运行 `node tests/test_frontend_bundle.mjs` 和 `python3 -m unittest discover tests` 确保测试 100% 通过，并执行 `npm run build` 打包。
 > 4. **Git 提交通知**：推荐使用标准 Git Commit 记录变更，便于回溯 diff。
 
+> 注：`docs/DESIGN_AND_DEV_GUIDELINES.md`、`docs/DEVELOPMENT.md` 与 `docs/ANKIWEB_LISTING.md` 已移至内部维护目录，不再随公开仓库分发；以下历史条目中的文件名仅保留记录用途。
+
 ---
 
 ## [Unreleased]
@@ -235,7 +237,7 @@
     - 常规门禁同样全绿：`tsc --noEmit` 干净、前端单元 84 项、Bundle 审计通过、Python **141 项**。
   - **未修、留给下一轮**：`build_ankiaddon.py` 在干净 clone 下还依赖一个不在版本库里的 `config.json`（仓库 `.gitignore` 忽略它，里面是私人字段），报告把这算作「干净 clone 不能一键打包」的另一半原因。这属于发布流程设计而非跨平台缺陷，本次不动。
 
-- **[DeepSeek] 纯文档修正：把三处「注释与实际不符」的地方拉齐**（改 [`bridge/analytics_service.py`](bridge/analytics_service.py)、[`docs/DESIGN_AND_DEV_GUIDELINES.md`](docs/DESIGN_AND_DEV_GUIDELINES.md)、[`frontend/tailwind.config.ts`](frontend/tailwind.config.ts)；**无运行时行为变化，不需要重新打包**，1.5.3 的发布产物保持冻结）：
+- **[DeepSeek] 纯文档修正：把三处「注释与实际不符」的地方拉齐**（改 [`bridge/analytics_service.py`](bridge/analytics_service.py)、`docs/DESIGN_AND_DEV_GUIDELINES.md`、[`frontend/tailwind.config.ts`](frontend/tailwind.config.ts)；**无运行时行为变化，不需要重新打包**，1.5.3 的发布产物保持冻结）：
   - **`analytics_service.py` 的模块 docstring 与实际相反**：原文写「endpoint 为空时是 no-op，**这也是默认状态**，等 `scripts/analytics-worker/` 的 Worker 部署后再配」—— 实际从 v1.4.33 起就是**默认开启**，`DEFAULT_ENDPOINT` 早已指向线上 Worker，`enabled()` 缺省 `True`。这种「注释说没上报、代码在天天上报」的落差属于最该修的一类文档债，容易被后来的人当成隐私承诺引用。现已改为如实描述：默认开启、两种关闭方式（`analytics_enabled: false`，或把 `analytics_endpoint` 设成空串）、国家由 Worker 侧从 `cf.country` 推断而非客户端上报。同时把 `DEFAULT_ENDPOINT` 上方那句「部署 Worker 后填写，例如 https://stats.example.com/v1/events」改成说明这是线上正式端点、用户可改自建或清空。
   - **`DESIGN_AND_DEV_GUIDELINES.md` 的焦点环规范写死了旧品牌色**：原文要求 `outline: 2px solid #5E5CE6`，而代码用的是 `var(--brand)`。这不只是色值过期（`indigo` 早已复用为官方经典蓝 `#3076C3`），更重要的是**规范本身会诱导后来者写死十六进制** —— accent 是用户可切换的 8 套色板之一，写死任何字面色值都会在换色后与界面其余部分脱节。现改为 `var(--brand)` 并补充这条理由。
   - **`frontend/tailwind.config.ts` 是彻底不生效的历史文件**：项目已迁到 Tailwind v4（`index.css` 用 `@import "tailwindcss"` + `@custom-variant dark` + `@theme`），全仓库**没有任何 `@config` 指令**，v4 的 Vite 插件不会读它；`brand-*` / `surface-*` 工具类在 `src/` 里也一次都没用过（实测 `grep` 零命中）。它里面还留着 `brand.indigo: '#5E5CE6'` 这个过期值，是纯粹的误导源。本次在文件头写明「不参与构建 + 真正令牌来源是 `themeTokens.ts` 与 `index.css` 的 `:root`」，并把色值对齐到 `#3076C3`；文件保留（删掉属于构建结构变更，不在本次范围内）。
@@ -279,7 +281,7 @@
 
 ## [v1.5.0] - 2026-11-13
 
-- **[WorkBuddy] 版本号收敛：v1.4.7–v1.4.66 的 60 个补丁版本合并为 1.5.0**（改 [`manifest.json`](manifest.json)、[`CHANGELOG.md`](CHANGELOG.md)、[`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)）：
+- **[WorkBuddy] 版本号收敛：v1.4.7–v1.4.66 的 60 个补丁版本合并为 1.5.0**（改 [`manifest.json`](manifest.json)、[`CHANGELOG.md`](CHANGELOG.md)、`docs/ANKIWEB_LISTING.md`）：
   - **为什么合并**：一天之内连打 60 个 patch 版本，语义化版本已经退化成流水号。AnkiWeb 只认 `mod` 时间戳、发布不受影响，但版本号是给人看的——「1.4.37 引入的」这种定位方式一旦失效，回滚和排查都失去锚点。这批改动同属一个主题（沙盒渲染 + 复习器 + 卡片库 + 测试体系），够格作为一个 minor。
   - **处理方式**：**不删除历史**。下面 v1.4.66 及更早的各条原样保留，作为逐次改动的施工记录；1.5.0 只是给这一段一个可引用的版本名。后续再发版从 1.5.1 继续，不再逐个补丁跳号。
   - **本批内容概览**（细节见下方各条）：
@@ -534,7 +536,7 @@
 
 ## [v1.4.35] - 2026-11-13
 
-- **[DeepSeek] 更新 AnkiWeb 上架描述：移除「不发网络请求」旧声明，补新功能（16 种语言同步）**（改 [`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)、[`README.md`](README.md)）：
+- **[DeepSeek] 更新 AnkiWeb 上架描述：移除「不发网络请求」旧声明，补新功能（16 种语言同步）**（改 `docs/ANKIWEB_LISTING.md`、[`README.md`](README.md)）：
   - **修正事实性声明**：`No network requests` / 「不发任何网络请求」已不成立（新增了可选匿名统计），改为「隐私优先」说明——卡片内容、牌组名、标签与搜索词永不上传；匿名使用计数可在设置中关闭；写操作仍走 Anki 官方 API，AnkiWeb 同步不受影响。
   - **补充新功能**：卡片库与检索（多选批量编辑/暂停/搁置/移动/删除）、脚本型卡组兼容（选择题模板 / Image Occlusion 沙盒渲染）、学习小贴士（牌组旁每日原则）。
   - 英文 + 15 种语言段落全部同步，列表头版本号更新为 v1.4.35。
@@ -716,7 +718,7 @@
 
 ## [v1.4.12] - 2026-11-13
 
-- **[DeepSeek] 新增真实 .apkg 卡组显示兼容性测试（17 个 AnkiWeb 排名卡组）+ 修复 @charset 导致的模板 CSS 作用域失效**（新增 [`tests/apkg/`](tests/apkg/README.md)（`run.py` / `render_check.mjs` / `decks.json` / `known_issues.json`）；改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`tests/scenarios/gate.sh`](tests/scenarios/gate.sh)、[`tests/test_general_fixes.py`](tests/test_general_fixes.py)、[`README.md`](README.md)、[`docs/DESIGN_AND_DEV_GUIDELINES.md`](docs/DESIGN_AND_DEV_GUIDELINES.md)）：
+- **[DeepSeek] 新增真实 .apkg 卡组显示兼容性测试（17 个 AnkiWeb 排名卡组）+ 修复 @charset 导致的模板 CSS 作用域失效**（新增 [`tests/apkg/`](tests/apkg/README.md)（`run.py` / `render_check.mjs` / `decks.json` / `known_issues.json`）；改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`tests/scenarios/gate.sh`](tests/scenarios/gate.sh)、[`tests/test_general_fixes.py`](tests/test_general_fixes.py)、[`README.md`](README.md)、`docs/DESIGN_AND_DEV_GUIDELINES.md`）：
   - **测试框架**：每个 `.apkg` 导入临时隔离 collection（不碰真实数据），按卡型抽样走 `ReviewService` / `SearchService` 真实序列化管线，再由 Node 端用界面同一个 `renderMathAndRichHtml` 渲染抽样 HTML。断言覆盖空卡面、`<script>` / `[sound:]` / 模板占位符残留、图片相对路径、公式实体、正反两面 `display:none` 语义、搜索接口正/背面样式下发等。17 个卡组约 16 秒；卡组文件不随仓库分发（默认 `~/Downloads`，可用 `--dir` / `ANKI_STUDIO_APKG_DIR`），缺失时 SKIP 不失败；`gate.sh --with-apkg` 可并入场景门禁。
   - **修复真实 bug**：`scope_card_css` 遇到以分号结束的 at-rule（`@charset` / `@namespace`）时，会把后面的第一个选择器粘成 at-rule 前缀，导致该规则既不作用域化、也不参与「背面揭开隐藏」。JLPT10k 的模板 CSS 首行正是 `@charset "UTF-8";`。新增状态机区分「选择器区 / 声明区」，并补 2 项 Python 回归。
   - **断言口径修正**：公式里的 `&gt;` / `&nbsp;` 属于前端可解码实体，不再误报；`display:none` 只认声明区，不误报 `[style*='display: none']` 这类选择器。
@@ -734,7 +736,7 @@
 
 ## [v1.4.10] - 2026-11-13
 
-- **[DeepSeek] 卡面正面 / 背面样式彻底分离：搜索预览与编辑器一并修复（通用问题，不是单卡包）**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`frontend/src/components/search/CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`docs/DESIGN_AND_DEV_GUIDELINES.md`](docs/DESIGN_AND_DEV_GUIDELINES.md)；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 1 项并强化既有断言）：
+- **[DeepSeek] 卡面正面 / 背面样式彻底分离：搜索预览与编辑器一并修复（通用问题，不是单卡包）**（改 [`bridge/media_utils.py`](bridge/media_utils.py)、[`bridge/review_service.py`](bridge/review_service.py)、[`bridge/search_service.py`](bridge/search_service.py)、[`frontend/src/components/search/CommandPaletteModal.tsx`](frontend/src/components/search/CommandPaletteModal.tsx)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、`docs/DESIGN_AND_DEV_GUIDELINES.md`；[`tests/test_general_fixes.py`](tests/test_general_fixes.py) 新增 1 项并强化既有断言）：
   - **普遍性实测**：本机 collection 的 36 个卡型里 **10 个**（16,411 / 66,256 张卡，约 **25%**）在正面使用 `display:none` 或 `{{hint}}` 隐藏内容：JLPT10k（10,641）、双类型文法卡组（3,241）、UVBasic-English（997）、Ultimate Geography（978）、Cloze Overlapping（463）等。所以这是通用缺陷，不是柯林斯 / 考研英语某个卡包的问题。
   - **修法（正反双作用域）**：`render_native_card_sides` 现在产出两份作用域 CSS——背面 `.anki-native-card`（`reveal_hidden=True`，揭开隐藏段落）与正面 `.anki-native-card-front`（`reveal_hidden=False`，保留 `display:none`）；`wrap_card_with_styles(..., front=True)` 的正面容器同时挂两个类。两面同屏（Cmd+K 预览）时 display 规则互不覆盖。
   - **搜索 / 预览**：`search_cards` 新增 `cardFrontStyles`（按卡型去重）；`useAppStore` 新增 `cmdKFrontCardStyles` / `libraryFrontCardStyles`；Cmd+K 右侧预览与编辑器预览都改为按面选 CSS（正面保留隐藏、背面揭开）。
@@ -771,7 +773,7 @@
     - **安全隔离沙盒组件（`SandboxCardFrame.tsx`）**：使用 `<iframe sandbox="allow-scripts" srcDoc={...}>`（严格不加 `allow-same-origin`，隔绝父页面 `window.pycmd` 特权桥），内置：① `window.pycmd` 白名单转发 shim（支持 `ans` 翻面、`ease1..4` 评分、`play:...` 音频重播）；② 翻面就地更新 `#qa` DOM 并重跑脚本（零白闪）；③ `ResizeObserver` + 图片 `load` 自适应高度回传；④ 焦点在 iframe 内时转发 `Space` / `Enter` / `1~4` 快捷键回父页面。
     - **按卡型（Note Type）一键切换并持久化记忆**：在 `ReviewerView.tsx` 顶栏新增原生沙盒模式开关按钮，通过 `toggle_notetype_sandbox` 按 `notetypeId` 写入 `sandbox_notetype_ids` 配置，一次选择永久记住。
 
-- **[DeepSeek] 补前端测试盲区 + 新增运行时 patch 自检 + 同步文档**（新增 [`tests/frontend/`](tests/frontend/README.md)、[`bridge/compat.py`](bridge/compat.py)、[`tests/test_patch_health.py`](tests/test_patch_health.py)；改 [`bridge/router.py`](bridge/router.py)、[`__init__.py`](__init__.py)、[`README.md`](README.md)、[`config.md`](config.md)、[`docs/DESIGN_AND_DEV_GUIDELINES.md`](docs/DESIGN_AND_DEV_GUIDELINES.md)、[`tests/scenarios/README.md`](tests/scenarios/README.md)）：
+- **[DeepSeek] 补前端测试盲区 + 新增运行时 patch 自检 + 同步文档**（新增 [`tests/frontend/`](tests/frontend/README.md)、[`bridge/compat.py`](bridge/compat.py)、[`tests/test_patch_health.py`](tests/test_patch_health.py)；改 [`bridge/router.py`](bridge/router.py)、[`__init__.py`](__init__.py)、[`README.md`](README.md)、[`config.md`](config.md)、`docs/DESIGN_AND_DEV_GUIDELINES.md`、[`tests/scenarios/README.md`](tests/scenarios/README.md)）：
   - **1. 前端单元套件 `tests/frontend/`（58 项，零新增依赖）**：现有门禁只有字符串审计，拦得住「护栏被误删」，拦不住「逻辑算错」。新增 `run.mjs` 复用 `frontend/node_modules` 里 Vite 已装的 esbuild，把 suite 打成 CJS 后由 Node 执行，`react-dom/server` 做叶子组件静态渲染，不需要 vitest/jsdom。覆盖：`themeTokens`（8 强调色 × 3 主题令牌与 CSS 变量契约、OLED/Dark/Light 明度序）、`deckPalette`（5 步轮转、首卡=品牌色、正负索引回绕、**色相偏移 ≤15° 不出族**、不改入参）、`mediaUrl`（编码只做一次、`http/data/blob/file://` 放行、`data-anki-media` 兜底、`<img>` 重写幂等、cloze/`[sound:]` 不被误伤）、`translations`（16 语言别名归一、`pref → Anki → browser` 回退链、RTL、快捷键跨平台、相对时间）、`render`（Logo / SyncStateIcon 四状态 / StreakFlameBackdrop 的静态渲染与 a11y 属性）。已做负向对照确认失败会以非 0 退出。
   - **2. 运行时兼容性自检 `bridge/compat.py`**：所有 patch 都是 `try/except` 包住的私有接口接管，失败时「不崩但静默降级」（用户只会看到原生黄 tooltip/进度弹窗回来了）。新增 `collect_health()` 汇总 Anki 版本（按 `int_version()` 口径换算并与 `manifest.json` 的 `min_point_version` 交叉校验）+ 4 个补丁 + 8 个生命周期钩子的生效状态，`state: ok|degraded`，逐条给出原因；`AnkiModernHost.refresh_patch_health()` 在 `initialize()` 末尾执行，降级时打印 `patch health` 报告，healthy 仅在 `debug_mode` 下打印；新增 IPC action `get_patch_health`（`BridgeRouter` 新增可选 `health_getter`，默认返回 `{}`，不破坏既有构造调用）。
   - **3. 测试**：`tests/test_patch_health.py` 共 20 项，覆盖版本换算边界（`26.09.4→260904`、`2.1.66→20166`）、缺失补丁/必需钩子必须 degraded 且点名、可选钩子缺失不降级、未知/过低版本、`format_health_summary`、Router action 三种情形（注入报告/默认空/health getter 抛异常仍返回结构化解），以及脱离 Anki 运行时 `refresh_patch_health()` 不抛异常。Python 单测 50 → **70**。
@@ -880,13 +882,13 @@
   - **性能实测**：`render_output` 走 Rust 后端，100 张卡全字段序列化从 40 ms 起（0.40 ms/卡，含原有的 FSRS 预测与 revlog 查询），可以忽略。`browser=True` 只是为了不触发 `card_did_render` 钩子（那是给真正复习界面用的，批量序列化会误伤别的插件）。
   - **新增 `test_28_review_back_uses_native_template_not_second_field`**：锁住「背面含拓展字段 / 正面维持 field[0] / 脏东西清干净 / hint 内容露出 / 音频从 `answer_av_tags` 补回 / `browser=True` / 无引擎时降级」七件事。
 
-- **[WorkBuddy] 仓库转 public 后的收尾：README 补预览图与缺失的测试命令，清掉「仓库还是私有」的过期说明**（改 [`README.md`](README.md)、[`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)、[`tests/WINDOWS_HANDOFF.md`](tests/WINDOWS_HANDOFF.md)）：
+- **[WorkBuddy] 仓库转 public 后的收尾：README 补预览图与缺失的测试命令，清掉「仓库还是私有」的过期说明**（改 [`README.md`](README.md)、`docs/ANKIWEB_LISTING.md`、[`tests/WINDOWS_HANDOFF.md`](tests/WINDOWS_HANDOFF.md)）：
   - **README 顶部加了预览 GIF**（复用 `docs/assets/anki-studio-preview.gif`，相对路径引用，GitHub 侧直接渲染），并为「预览图」新增第 4 小节，写明生成脚本与可调参数。
   - **补上 README 漏写的门禁命令**：原来「自动化测试与体检」只列了 `node tests/test_frontend_bundle.mjs`，漏了 `python3 -m unittest discover -s tests`，照文档做的人会漏跑一半测试。现补齐并注明「两组全绿再提交，改完还要 `npm run build`」。
   - **两处「仓库是私有的」已过期**：仓库已于 2026-11-12 转为 public（`github.com/gripet43/anki-studio` 与 raw 直链均匿名可访问，实测 200）。`docs/ANKIWEB_LISTING.md` §3 改为「已公开，上传前确认文件已推送到 main」；`tests/WINDOWS_HANDOFF.md` 的前置条件改为「可直接匿名 clone，推送才需要凭据」。
   - 历史条目（v1.4.0 第 3 点）里「发布前必须转为 public」的表述保留不动——那是当时的记录，事实已在上一条完成。
 
-- **[WorkBuddy] 重做 AnkiWeb 预览 GIF：定位到「JPEG 白噪声污染调色板」这一真凶，并把生成过程脚本化**（改 [`docs/assets/anki-studio-preview.gif`](docs/assets/anki-studio-preview.gif)、新增 [`scripts/build_preview_gif.py`](scripts/build_preview_gif.py)、[`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)）：
+- **[WorkBuddy] 重做 AnkiWeb 预览 GIF：定位到「JPEG 白噪声污染调色板」这一真凶，并把生成过程脚本化**（改 [`docs/assets/anki-studio-preview.gif`](docs/assets/anki-studio-preview.gif)、新增 [`scripts/build_preview_gif.py`](scripts/build_preview_gif.py)、`docs/ANKIWEB_LISTING.md`）：
   - **起因**：用户反馈旧版预览图「不是很好看」，并补了 4 张 2944×2086 的 macOS 整窗截图（今日概览 / 全局搜索 / 进度减负 / 休假模式，统一构图、纯白外底）。
   - **真凶是 JPEG 的白色噪声，不是缩放**：截图白底带 ±1 色度噪声，中位切分于是把调色板里的 4~6 个名额发给了几乎相同的白。量化后**纯白像素从 58% 掉到 0%**，整片底色被压到 252 一类「脏白」——观感就是整屏发灰、底色带噪点。修法：量化前把 `min(R,G,B) >= 250` 的像素统一拍成 255。修完 GIF 与源图逐点比对，平区域颜色差值为 **(0,0,0)**，全图平均色差 MAE 0.38–0.53。
   - **全局调色板：试了，然后否掉**。本想共用一套调色板避免换帧跳色，实测共用调色板要迁就四帧平均分布，单帧 **MAE 2.32**，而逐帧自适应只要 **0.24**，差一个数量级（纯白直接归零）。硬切播放时每帧独立出现，跳色问题本就不存在，已回退为逐帧自适应量化，并在脚本 docstring 里写明「别再改回去」。
@@ -896,7 +898,7 @@
   - **脚本化**：原来是一次性命令拼的，改不动也复现不了。新增 `scripts/build_preview_gif.py`，`--width / --hold-ms / --fade-steps / --fade-ms / --loop-back` 全参数化，并校验各帧尺寸一致。
   - **已知短板（未解决，已在文档标注）**：四帧里只有首页是亮屏，后三帧是弹窗叠加「压暗 + 高斯模糊」的背景，平均亮度 243.9 → 181.9 / 161.2 / 156.1，纯白占比 58% → 31/18/17%。这是模态层的真实表现，不宜调色补偿；循环时会有「一帧亮、三帧灰」的落差，待补亮屏截图（卡片库 / 复习界面）后替换掉其中一帧。
 
-- **[WorkBuddy] 改写 AnkiWeb Title 策略：从「功能描述优先」改为「各语言母语词串联」，并补 Description 的渲染风险兜底**（改 [`docs/ANKIWEB_LISTING.md`](docs/ANKIWEB_LISTING.md)）：
+- **[WorkBuddy] 改写 AnkiWeb Title 策略：从「功能描述优先」改为「各语言母语词串联」，并补 Description 的渲染风险兜底**（改 `docs/ANKIWEB_LISTING.md`）：
   - **原方案被用户判为理解偏差**：上一版推荐 `Anki Studio — immersive desktop workspace · 16 languages`，逻辑是"功能优先、语言数量次要"。用户指出真实意图是——标题里直接排开各语言中「工作室」这个词，让任何语言的读者扫一眼就认出自己的母语词，从而**零成本**得出"这个插件我看得懂"。`16 languages` 是数字，需要读者额外推理一步才转化为信任，效果弱于母语词本身。
   - **现推荐（72 字符，未超 80 上限）**：`Anki Studio · 工作室 · スタジオ · 스튜디오 · Estudio · Atelier · Werkstatt · Студия`。排序按覆盖面：中文（简繁同形）→ 日 → 韩 → 西（葡语 `Estúdio` 仅差一个重音符，可覆盖）→ 法 → 德（荷语 `Werkplaats` 同源可类推）→ 俄（乌克兰语、保加利亚语近似）。
   - **7 个是硬上限**：以 ` · ` 分隔逐个实测，第 8 个词（`Estúdio` 或 `Stüdyo`）会把标题顶到 **82 / 81 字符**，无解。余下 8 字符放不下任何有意义的词。
