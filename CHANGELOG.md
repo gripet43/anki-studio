@@ -2,15 +2,6 @@
 
 本文件严格遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范，并采用 [语义化版本 (Semantic Versioning)](https://semver.org/lang/zh-CN/)。
 
-> [!IMPORTANT]
-> ### 🤖 多助手协同开发协议 (Multi-Assistant Collaboration Protocol)
-> 本项目由多位 AI 助手（如 Gemini、Antigravity、Claude 等）与人类开发者共同维护。为确保协同开发不发生逻辑冲突、踩踏覆盖或设计降级，所有助手在此项目工作时必须遵守以下规范：
-> 1. **开工前必读**：开始任何任务前，必须首先阅读本文件 (`CHANGELOG.md`) 的最新记录，了解上一位助手的改动细节与设计决策。
-> 2. **完工后必记**：完成任何代码修改、Bug 修复或 UI 调整后，必须在本文件顶部的 `[Unreleased]` 或最新版本段落中追加本次改动的详细条目，格式为：
->    `- [助手标识] 变更描述（标注改动的核心文件与原因）`
-> 3. **验证门禁**：改动后必须运行 `node tests/test_frontend_bundle.mjs` 和 `python3 -m unittest discover tests` 确保测试 100% 通过，并执行 `npm run build` 打包。
-> 4. **Git 提交通知**：推荐使用标准 Git Commit 记录变更，便于回溯 diff。
-
 > 注：`docs/DESIGN_AND_DEV_GUIDELINES.md`、`docs/DEVELOPMENT.md` 与 `docs/ANKIWEB_LISTING.md` 已移至内部维护目录，不再随公开仓库分发；以下历史条目中的文件名仅保留记录用途。
 
 ---
