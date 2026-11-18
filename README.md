@@ -57,6 +57,7 @@
 - **Anki Requirement**: **Anki 26.09.4 or later** (`min_point_version: 260904`, Qt6 / Python 3.13) on macOS, Windows, and Linux.
 - **100% Native Anki Writes**: All writes go exclusively through Anki's official Python API (`col.update_card`, `col.sched.*`), letting Anki maintain `mod` / `usn` directly so **AnkiWeb sync remains untouched**.
 - **Privacy First**: Card contents, deck names, tags, and search queries **never leave your device**. Optional anonymous usage counters (launches, daily activity, session-size buckets, feature usage) can be disabled anytime in **Settings → About**, or pointed to a self-hosted endpoint (`scripts/analytics-worker/`).
+- **AI Disclosure**: Most of the code was written with AI under my direction, and verified jointly by me and AI through automated unit/smoke tests plus manual testing on real decks across macOS and Windows.
 
 ---
 
