@@ -8,6 +8,17 @@
 
 ## [Unreleased]
 
+## [v1.6.9] - 2026-11-18
+
+- **[Antigravity] 卡片库默认排序改为「最新添加」、首页进度圆环改为百分数展示、编辑器新增「清除格式」**：
+  - **卡片库默认「最新添加」排序**（改 [`bridge/search_service.py`](bridge/search_service.py)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`tests/test_bridge.py`](tests/test_bridge.py)、[`tests/frontend/suite.ts`](tests/frontend/suite.ts)、新增 [`tests/frontend/specs/libraryDefaultSort.spec.ts`](tests/frontend/specs/libraryDefaultSort.spec.ts)）：
+    - 后端 `search_cards` 在 `sortBy` 缺省或为空时默认采用 `"newest"` 并按 `-int(entry[0])` 预排序切片分页，保留显式 `"default"` 与其他排序模式；
+    - 前端统一通过 `DEFAULT_LIBRARY_SORT = 'newest'`、`createEmptyLibraryState()` 与 `resetLibraryFilters()` 保持冷启动、切档、清空筛选与表头二次点击同步回归 `'newest'`，并同步修正 `hasActiveLibraryFilters` 与 `compareNewestCardIds` 纯数字 ID 比较逻辑。
+  - **首页进度圆环百分数展示**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`tests/frontend/suite.ts`](tests/frontend/suite.ts)、新增 [`tests/frontend/specs/dashboardRing.spec.ts`](tests/frontend/specs/dashboardRing.spec.ts)）：
+    - 提取 `computeHeroProgressRing`，将中心主指标改为动画百分数 `{animatedProgressPct}%` 搭配 `{completed} / {totalWorkload}` 副行，完善 `0` 任务量与超 `100%` 边界处理，同步校准 `role="progressbar"` 的 `aria-valuenow` / `aria-valuemax` / `aria-valuetext` 与休假/同步状态表现。
+  - **富文本编辑器新增「清除格式」**（改 [`frontend/src/components/quick-add/TowerWysiwygEditor.tsx`](frontend/src/components/quick-add/TowerWysiwygEditor.tsx)、[`frontend/src/i18n/translations.ts`](frontend/src/i18n/translations.ts)、`frontend/src/i18n/locales/*.ts`、[`tests/frontend/suite.ts`](tests/frontend/suite.ts)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)、新增 [`tests/frontend/specs/editorClearFormat.spec.ts`](tests/frontend/specs/editorClearFormat.spec.ts)）：
+    - 16 套语言词典新增 `editorToolClearFormat`；工具栏新增带 `<Tooltip variant="compact">` 的清除格式按钮（`clearFormatting` / `applyClearFormatting`），支持全选、跨块/局部选区与折叠光标，清理加粗/斜体/下划线/颜色/高亮/内联样式/标题格式并保留单步 Undo；同步保留图片、`.anki-io-wrap`、`.anki-cloze-pill`（含 `.anki-cloze-prefix` 的 `contenteditable="false"`）、`{{c1::...}}` 与 LaTeX 公式，导出纯函数 `stripFormattingFromHtml`。
+
 ## [v1.6.8] - 2026-11-17
 
 - **[DeepSeek] 修复制卡成功提示：不再复用「添加至」按钮文案**（改 [`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts) 与 16 语言词典）：

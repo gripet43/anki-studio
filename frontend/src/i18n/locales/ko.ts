@@ -222,6 +222,7 @@ export const dict: TranslationTable = {
   editorMarkBtnLabel: "형광펜",
   editorToolAlign: "정렬 방식",
   editorToolBold: "굵게 ({key})",
+  editorToolClearFormat: "서식 지우기",
   editorToolCode: "코드 블록",
   editorToolDivider: "구분선",
   editorToolEmoji: "이모지 삽입",

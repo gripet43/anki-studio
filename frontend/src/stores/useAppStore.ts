@@ -233,6 +233,33 @@ export interface AppState {
 const initialPlatform = detectOSPlatform();
 const initialLang = detectBrowserLanguage();
 
+export const DEFAULT_LIBRARY_SORT: LibrarySortOption = 'newest';
+
+/** Build a fresh default Library state slice (used for initial load & profile switches). */
+export function createEmptyLibraryState() {
+  return {
+    libraryCards: [] as LibraryCardItem[],
+    libraryCardStyles: {} as Record<string, string>,
+    libraryFrontCardStyles: {} as Record<string, string>,
+    libraryTotalCount: 0,
+    libraryFilteredCount: 0,
+    libraryFacetCounts: null as LibraryFacetCounts | null,
+    libraryHasMoreFromBackend: false,
+    libraryAllTags: [] as string[],
+    librarySearching: false,
+    librarySearchQuery: '',
+    libraryVisibleCount: 24,
+    filterStatus: 'all' as AppState['filterStatus'],
+    filterDifficulty: 'all' as AppState['filterDifficulty'],
+    filterFlag: 'all' as FlagFilterValue,
+    filterTag: 'all',
+    filterDeckId: 'all',
+    librarySortBy: DEFAULT_LIBRARY_SORT,
+    selectedCardIds: [] as string[],
+    librarySelectionMode: false,
+  };
+}
+
 const initialState: AppState = {
   isLoading: true,
   profileGeneration: 0,
@@ -323,26 +350,8 @@ const initialState: AppState = {
   cmdKFrontCardStyles: {},
   cmdKSearching: false,
 
-  libraryCards: [],
-  libraryCardStyles: {},
-  libraryFrontCardStyles: {},
-  libraryTotalCount: 0,
-  libraryFilteredCount: 0,
-  libraryFacetCounts: null,
-  libraryHasMoreFromBackend: false,
-  libraryAllTags: [],
-  librarySearching: false,
   libraryViewMode: 'gallery',
-  librarySearchQuery: '',
-  libraryVisibleCount: 24,
-  filterStatus: 'all',
-  filterDifficulty: 'all',
-  filterFlag: 'all',
-  filterTag: 'all',
-  filterDeckId: 'all',
-  librarySortBy: 'default',
-  selectedCardIds: [],
-  librarySelectionMode: false,
+  ...createEmptyLibraryState(),
 
   toastMessage: null,
 };
@@ -1129,6 +1138,18 @@ export const appActions = {
         setAppState({ librarySearching: false });
       }
     }, 200);
+  },
+
+  resetLibraryFilters() {
+    appActions.searchLibraryDebounced({
+      query: '',
+      status: 'all',
+      difficulty: 'all',
+      flag: 'all',
+      tag: 'all',
+      deckId: 'all',
+      sortBy: DEFAULT_LIBRARY_SORT,
+    });
   },
 
   async loadMoreLibraryCards() {
@@ -3590,25 +3611,7 @@ export const appActions = {
       editingField: null,
       slashMenuOpen: false,
       ...EMPTY_CMDK_STATE,
-      libraryCards: [],
-      libraryCardStyles: {},
-      libraryFrontCardStyles: {},
-      libraryTotalCount: 0,
-      libraryFilteredCount: 0,
-      libraryFacetCounts: null,
-      libraryHasMoreFromBackend: false,
-      libraryAllTags: [],
-      librarySearching: false,
-      librarySearchQuery: '',
-      libraryVisibleCount: 24,
-      filterStatus: 'all',
-      filterDifficulty: 'all',
-      filterFlag: 'all',
-      filterTag: 'all',
-      filterDeckId: 'all',
-      librarySortBy: 'default',
-      selectedCardIds: [],
-      librarySelectionMode: false,
+      ...createEmptyLibraryState(),
     }));
     await appActions.initFromAnki(true);
   },

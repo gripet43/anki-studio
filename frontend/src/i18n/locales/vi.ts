@@ -222,6 +222,7 @@ export const dict: TranslationTable = {
   editorMarkBtnLabel: "Tô sáng",
   editorToolAlign: "Căn lề",
   editorToolBold: "In đậm ({key})",
+  editorToolClearFormat: "Xóa định dạng",
   editorToolCode: "Khối mã",
   editorToolDivider: "Đường kẻ ngang",
   editorToolEmoji: "Chèn biểu tượng cảm xúc",

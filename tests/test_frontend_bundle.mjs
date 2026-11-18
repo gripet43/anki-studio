@@ -1420,4 +1420,37 @@ assert(
   'Item #53: Third-party card templates with attribute-sized icons (width/height), partial borders, full-width tables, and flipped Library card-back overflow clipping must hold cleanly (rebuild with `cd frontend && npm run build`)'
 );
 
+const suiteTsSrc = readText(path.resolve(ADDON_ROOT, 'tests/frontend/suite.ts'));
+assert(
+  dashboardSrc.includes('export function computeHeroProgressRing') &&
+    dashboardSrc.includes('animatedProgressPct') &&
+    dashboardSrc.includes('progressPct') &&
+    /aria-valuemax=\{[\s\S]*?:\s*100\s*\}/.test(dashboardSrc) &&
+    suiteTsSrc.includes("import './specs/dashboardRing.spec'") &&
+    fs.existsSync(path.resolve(ADDON_ROOT, 'tests/frontend/specs/dashboardRing.spec.ts')),
+  'Item #54a: Dashboard hero progress ring must display rounded percentage with 0-100 progressbar ARIA and unit spec coverage'
+);
+
+assert(
+  storeSrc.includes("export const DEFAULT_LIBRARY_SORT: LibrarySortOption = 'newest'") &&
+    storeSrc.includes('librarySortBy: DEFAULT_LIBRARY_SORT') &&
+    searchSrc.includes('str(data.get("sortBy") or "newest")') &&
+    librarySrc.includes('librarySortBy !== DEFAULT_LIBRARY_SORT') &&
+    librarySrc.includes('resetLibraryFilters') &&
+    suiteTsSrc.includes("import './specs/libraryDefaultSort.spec'") &&
+    fs.existsSync(path.resolve(ADDON_ROOT, 'tests/frontend/specs/libraryDefaultSort.spec.ts')),
+  'Item #54b: Library default sort order must default to newest across store, backend, Reset Filters, and unit spec coverage'
+);
+
+assert(
+  wysiwygSrc.includes("t('editorToolClearFormat')") &&
+    wysiwygSrc.includes('export function stripFormattingFromHtml') &&
+    wysiwygSrc.includes('const clearFormatting = () =>') &&
+    translationsSrc.includes('editorToolClearFormat:') &&
+    jsBundle.includes('Clear Formatting') &&
+    suiteTsSrc.includes("import './specs/editorClearFormat.spec'") &&
+    fs.existsSync(path.resolve(ADDON_ROOT, 'tests/frontend/specs/editorClearFormat.spec.ts')),
+  'Item #54c: TowerWysiwygEditor must expose Clear Formatting with i18n parity, built bundle artifact, and unit spec coverage (rebuild with `cd frontend && npm run build`)'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

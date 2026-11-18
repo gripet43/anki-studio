@@ -222,6 +222,7 @@ export const dict: TranslationTable = {
   editorMarkBtnLabel: "Markeren",
   editorToolAlign: "Uitlijning",
   editorToolBold: "Vet ({key})",
+  editorToolClearFormat: "Opmaak wissen",
   editorToolCode: "Codeblok",
   editorToolDivider: "Scheidingslijn",
   editorToolEmoji: "Emoji invoegen",

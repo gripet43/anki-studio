@@ -3,11 +3,14 @@ import {
   ANKI_FLAG_PALETTE,
   CardFlagColor,
   isAnkiNativeEnv,
+  LibraryCardItem,
   LibrarySortOption,
 } from '../../bridge/pycmd';
 import { translate } from '../../i18n/translations';
 import {
   appActions,
+  AppState,
+  DEFAULT_LIBRARY_SORT,
   FlagFilterValue,
   setAppState,
   showToast,
@@ -22,6 +25,107 @@ import { Tooltip } from '../common/Tooltip';
 import { getClosestFromTarget } from '../../utils/domTarget';
 import { resolveThemeMode } from '../../utils/themeTokens';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
+
+/** Ordered Library sort menu options (default `'newest'` first). */
+export const LIBRARY_SORT_OPTIONS: readonly LibrarySortOption[] = [
+  'newest',
+  'lapses_desc',
+  'due_asc',
+  'ivl_asc',
+  'ivl_desc',
+  'stability_asc',
+  'front_asc',
+];
+
+function compareNewestCardIds(aId: string, bId: string): number {
+  const aTrim = String(aId).trim();
+  const bTrim = String(bId).trim();
+  const aNum = Number(aTrim);
+  const bNum = Number(bTrim);
+  if (aTrim !== '' && bTrim !== '' && Number.isFinite(aNum) && Number.isFinite(bNum)) {
+    return bNum - aNum;
+  }
+  return bTrim.localeCompare(aTrim, undefined, { numeric: true });
+}
+
+/** Client-side sort fallback for non-native preview/unit tests, matching backend order. */
+export function sortLibraryCards(
+  cards: LibraryCardItem[],
+  sortBy: LibrarySortOption
+): LibraryCardItem[] {
+  if (sortBy === 'default') return [...cards];
+  const sorted = [...cards];
+  sorted.sort((a, b) => {
+    if (sortBy === 'lapses_desc') {
+      const diff = (b.lapses || 0) - (a.lapses || 0);
+      return diff !== 0 ? diff : b.reps - a.reps;
+    }
+    if (sortBy === 'ivl_asc') {
+      return (a.intervalDays || 0) - (b.intervalDays || 0);
+    }
+    if (sortBy === 'ivl_desc') {
+      return (b.intervalDays || 0) - (a.intervalDays || 0);
+    }
+    if (sortBy === 'stability_asc') {
+      return (a.mastery || 0) - (b.mastery || 0);
+    }
+    if (sortBy === 'front_asc') {
+      return a.front.localeCompare(b.front);
+    }
+    if (sortBy === 'due_asc') {
+      const rank = (c: LibraryCardItem) =>
+        c.status === 'due' ? 0 : c.status === 'new' ? 1 : c.status === 'review' ? 2 : 3;
+      const rDiff = rank(a) - rank(b);
+      return rDiff !== 0 ? rDiff : (a.dueRaw || 0) - (b.dueRaw || 0);
+    }
+    if (sortBy === 'newest') {
+      return compareNewestCardIds(a.id, b.id);
+    }
+    return 0;
+  });
+  return sorted;
+}
+
+/** Compute whether Library filters or a non-default sort override are active. */
+export function hasActiveLibraryFilters(filters: {
+  filterStatus: AppState['filterStatus'];
+  filterDifficulty: AppState['filterDifficulty'];
+  filterFlag: FlagFilterValue;
+  filterTag: string;
+  filterDeckId: string;
+  librarySearchQuery: string;
+  librarySortBy: LibrarySortOption;
+}): { hasNarrowingFilter: boolean; hasActiveFilters: boolean } {
+  const hasNarrowingFilter =
+    filters.filterStatus !== 'all' ||
+    filters.filterDifficulty !== 'all' ||
+    filters.filterFlag !== 'all' ||
+    filters.filterTag !== 'all' ||
+    filters.filterDeckId !== 'all' ||
+    filters.librarySearchQuery.trim().length > 0;
+  return {
+    hasNarrowingFilter,
+    hasActiveFilters: hasNarrowingFilter || filters.librarySortBy !== DEFAULT_LIBRARY_SORT,
+  };
+}
+
+/** Cycle table header sort overrides and return to DEFAULT_LIBRARY_SORT when toggled off. */
+export function getNextTableSort(
+  current: LibrarySortOption,
+  column: 'front' | 'stability' | 'due'
+): LibrarySortOption {
+  if (column === 'front') {
+    return current === 'front_asc' ? DEFAULT_LIBRARY_SORT : 'front_asc';
+  }
+  if (column === 'stability') {
+    return current === 'stability_asc' ? DEFAULT_LIBRARY_SORT : 'stability_asc';
+  }
+  return current === 'due_asc'
+    ? 'lapses_desc'
+    : current === 'lapses_desc'
+    ? DEFAULT_LIBRARY_SORT
+    : 'due_asc';
+}
 
 export const LibraryView: React.FC = () => {
   const {
@@ -278,37 +382,7 @@ export const LibraryView: React.FC = () => {
       return true;
     });
 
-    if (librarySortBy === 'default') return base;
-    const sorted = [...base];
-    sorted.sort((a, b) => {
-      if (librarySortBy === 'lapses_desc') {
-        const diff = (b.lapses || 0) - (a.lapses || 0);
-        return diff !== 0 ? diff : b.reps - a.reps;
-      }
-      if (librarySortBy === 'ivl_asc') {
-        return (a.intervalDays || 0) - (b.intervalDays || 0);
-      }
-      if (librarySortBy === 'ivl_desc') {
-        return (b.intervalDays || 0) - (a.intervalDays || 0);
-      }
-      if (librarySortBy === 'stability_asc') {
-        return (a.mastery || 0) - (b.mastery || 0);
-      }
-      if (librarySortBy === 'front_asc') {
-        return a.front.localeCompare(b.front);
-      }
-      if (librarySortBy === 'due_asc') {
-        const rank = (c: typeof a) =>
-          c.status === 'due' ? 0 : c.status === 'new' ? 1 : c.status === 'review' ? 2 : 3;
-        const rDiff = rank(a) - rank(b);
-        return rDiff !== 0 ? rDiff : (a.dueRaw || 0) - (b.dueRaw || 0);
-      }
-      if (librarySortBy === 'newest') {
-        return String(b.id).localeCompare(String(a.id));
-      }
-      return 0;
-    });
-    return sorted;
+    return sortLibraryCards(base, librarySortBy);
   }, [
     libraryCards,
     librarySearchQuery,
@@ -328,14 +402,15 @@ export const LibraryView: React.FC = () => {
     : filteredCards.length;
   const canLoadMore =
     filteredCards.length > libraryVisibleCount || libraryHasMoreFromBackend;
-  const hasNarrowingFilter =
-    filterStatus !== 'all' ||
-    filterDifficulty !== 'all' ||
-    filterFlag !== 'all' ||
-    filterTag !== 'all' ||
-    filterDeckId !== 'all' ||
-    librarySearchQuery.trim().length > 0;
-  const hasActiveFilters = hasNarrowingFilter || librarySortBy !== 'default';
+  const { hasNarrowingFilter, hasActiveFilters } = hasActiveLibraryFilters({
+    filterStatus,
+    filterDifficulty,
+    filterFlag,
+    filterTag,
+    filterDeckId,
+    librarySearchQuery,
+    librarySortBy,
+  });
 
   const selectedObjects = libraryCards.filter((c) => selectedCardIds.includes(c.id));
   const allSelectedSuspended =
@@ -1163,15 +1238,7 @@ export const LibraryView: React.FC = () => {
             {hasActiveFilters && (
               <button
                 onClick={() => {
-                  appActions.searchLibraryDebounced({
-                    query: '',
-                    status: 'all',
-                    difficulty: 'all',
-                    flag: 'all',
-                    tag: 'all',
-                    deckId: 'all',
-                    sortBy: 'default',
-                  });
+                  appActions.resetLibraryFilters();
                   showToast(t('resetFilters'));
                 }}
                 className={`h-8 px-3.5 rounded-full text-[12px] font-medium cursor-pointer transition-all active:scale-95 ${
@@ -1228,7 +1295,7 @@ export const LibraryView: React.FC = () => {
               >
                 <svg
                   className={`w-3.5 h-3.5 shrink-0 transition-colors ${
-                    librarySortBy !== 'default'
+                    librarySortBy !== DEFAULT_LIBRARY_SORT
                       ? 'text-[var(--brand-text)]'
                       : 'text-[var(--text-secondary)]'
                   }`}
@@ -1253,7 +1320,7 @@ export const LibraryView: React.FC = () => {
                 </span>
                 <span
                   className={`font-medium tracking-tight transition-colors ${
-                    librarySortBy !== 'default'
+                    librarySortBy !== DEFAULT_LIBRARY_SORT
                       ? 'text-[var(--brand-text)]'
                       : 'text-[var(--text-primary)]'
                   }`}
@@ -1278,18 +1345,7 @@ export const LibraryView: React.FC = () => {
                 <div
                   className={`absolute end-0 top-10 z-40 w-[230px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
                 >
-                  {(
-                    [
-                      'default',
-                      'lapses_desc',
-                      'due_asc',
-                      'ivl_asc',
-                      'ivl_desc',
-                      'stability_asc',
-                      'front_asc',
-                      'newest',
-                    ] as LibrarySortOption[]
-                  ).map((optKey) => {
+                  {LIBRARY_SORT_OPTIONS.map((optKey) => {
                     const isSelected = librarySortBy === optKey;
                     return (
                       <button
@@ -1371,22 +1427,7 @@ export const LibraryView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setAppState({
-                    filterStatus: 'all',
-                    filterDifficulty: 'all',
-                    filterFlag: 'all',
-                    filterTag: 'all',
-                    filterDeckId: 'all',
-                    librarySearchQuery: '',
-                  });
-                  appActions.searchLibraryDebounced({
-                    query: '',
-                    status: 'all',
-                    difficulty: 'all',
-                    flag: 'all',
-                    tag: 'all',
-                    deckId: 'all',
-                  });
+                  appActions.resetLibraryFilters();
                 }}
                 className="btn-primary mt-2 !h-9 !px-4 !text-[12px]"
               >
@@ -1922,7 +1963,7 @@ export const LibraryView: React.FC = () => {
                     <th
                       onClick={() =>
                         appActions.searchLibraryDebounced({
-                          sortBy: librarySortBy === 'front_asc' ? 'default' : 'front_asc',
+                          sortBy: getNextTableSort(librarySortBy, 'front'),
                         })
                       }
                       className="py-3 px-4 cursor-pointer hover:text-[var(--brand-text)] select-none"
@@ -1936,7 +1977,7 @@ export const LibraryView: React.FC = () => {
                     <th
                       onClick={() =>
                         appActions.searchLibraryDebounced({
-                          sortBy: librarySortBy === 'stability_asc' ? 'default' : 'stability_asc',
+                          sortBy: getNextTableSort(librarySortBy, 'stability'),
                         })
                       }
                       className="py-3 px-4 w-20 cursor-pointer hover:text-[var(--brand-text)] select-none"
@@ -1947,12 +1988,7 @@ export const LibraryView: React.FC = () => {
                     <th
                       onClick={() =>
                         appActions.searchLibraryDebounced({
-                          sortBy:
-                            librarySortBy === 'due_asc'
-                              ? 'lapses_desc'
-                              : librarySortBy === 'lapses_desc'
-                              ? 'default'
-                              : 'due_asc',
+                          sortBy: getNextTableSort(librarySortBy, 'due'),
                         })
                       }
                       className="py-3 px-4 w-28 cursor-pointer hover:text-[var(--brand-text)] select-none"

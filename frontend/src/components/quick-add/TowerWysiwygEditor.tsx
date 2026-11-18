@@ -89,6 +89,1034 @@ function computeVisibleCharCount(container: HTMLElement | null): number {
   return rawText.length;
 }
 
+const INLINE_FORMAT_TAGS = new Set([
+  'b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del',
+  'sub', 'sup', 'small', 'big', 'tt', 'code', 'kbd', 'samp', 'var',
+  'font', 'mark', 'abbr', 'cite', 'q', 'dfn', 'span',
+]);
+
+const BLOCK_RESET_TAGS = new Set([
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'blockquote', 'pre', 'address', 'center',
+]);
+
+const BLOCK_LIKE_TAGS = new Set([
+  'p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'blockquote', 'pre', 'address', 'center',
+  'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'hr',
+]);
+
+const VOID_HTML_TAGS = new Set([
+  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+  'link', 'meta', 'param', 'source', 'track', 'wbr',
+]);
+
+const OPAQUE_PROTECTED_TAGS = new Set([
+  'img', 'svg', 'math', 'video', 'audio', 'source', 'br', 'hr', 'mjx-container',
+]);
+
+const TABLE_ELEMENT_TAGS = new Set([
+  'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col', 'caption',
+]);
+
+const STRIPPED_FORMAT_ATTRS = new Set([
+  'style', 'class', 'color', 'face', 'size', 'bgcolor', 'align',
+]);
+
+function hasAnyClass(classListStr: string, targets: string[]): boolean {
+  if (!classListStr) return false;
+  const tokens = classListStr.trim().split(/\s+/);
+  return targets.some((t) => tokens.includes(t));
+}
+
+function isOpaqueProtectedTagAndClasses(tag: string, classStr: string): boolean {
+  if (OPAQUE_PROTECTED_TAGS.has(tag)) return true;
+  return hasAnyClass(classStr, ['anki-io-wrap', 'anki-cloze-prefix', 'katex']);
+}
+
+function isClozeWrapperClasses(classStr: string): boolean {
+  return hasAnyClass(classStr, ['anki-cloze-pill', 'anki-cloze-body']);
+}
+
+type HtmlAstNode =
+  | { kind: 'text'; text: string }
+  | { kind: 'comment'; raw: string }
+  | {
+      kind: 'element';
+      tag: string;
+      attrs: Array<{ name: string; raw: string }>;
+      selfClosing: boolean;
+      children: HtmlAstNode[];
+    };
+
+function findTagCloseEnd(html: string, startAfterOpen: number): number {
+  let quote: '"' | "'" | null = null;
+  for (let i = startAfterOpen; i < html.length; i++) {
+    const ch = html[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === '<') {
+      return -1;
+    } else if (ch === '>') {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function parseTagAttributes(rawAttrs: string): Array<{ name: string; raw: string }> {
+  const attrs: Array<{ name: string; raw: string }> = [];
+  let i = 0;
+  while (i < rawAttrs.length) {
+    while (i < rawAttrs.length && /\s/.test(rawAttrs[i])) i++;
+    if (i >= rawAttrs.length) break;
+    const start = i;
+    while (i < rawAttrs.length && !/[\s=/>]/.test(rawAttrs[i])) i++;
+    const name = rawAttrs.slice(start, i).toLowerCase();
+    if (!name) {
+      i++;
+      continue;
+    }
+    while (i < rawAttrs.length && /\s/.test(rawAttrs[i])) i++;
+    if (rawAttrs[i] === '=') {
+      i++;
+      while (i < rawAttrs.length && /\s/.test(rawAttrs[i])) i++;
+      const q = rawAttrs[i];
+      if (q === '"' || q === "'") {
+        i++;
+        while (i < rawAttrs.length && rawAttrs[i] !== q) i++;
+        if (i < rawAttrs.length) i++;
+      } else {
+        while (i < rawAttrs.length && !/\s/.test(rawAttrs[i])) i++;
+      }
+    }
+    attrs.push({ name, raw: rawAttrs.slice(start, i) });
+  }
+  return attrs;
+}
+
+function parseHtmlToAst(html: string): HtmlAstNode[] {
+  const rootChildren: HtmlAstNode[] = [];
+  const stack: Array<{ tag: string; children: HtmlAstNode[] }> = [
+    { tag: '#root', children: rootChildren },
+  ];
+  let cursor = 0;
+  let textBuf = '';
+
+  const flushText = () => {
+    if (textBuf) {
+      stack[stack.length - 1].children.push({ kind: 'text', text: textBuf });
+      textBuf = '';
+    }
+  };
+
+  while (cursor < html.length) {
+    const lt = html.indexOf('<', cursor);
+    if (lt === -1) {
+      textBuf += html.slice(cursor);
+      break;
+    }
+    if (lt > cursor) {
+      textBuf += html.slice(cursor, lt);
+    }
+
+    if (html.startsWith('<!--', lt)) {
+      const commentEnd = html.indexOf('-->', lt + 4);
+      if (commentEnd === -1) {
+        textBuf += html.slice(lt);
+        break;
+      }
+      flushText();
+      stack[stack.length - 1].children.push({
+        kind: 'comment',
+        raw: html.slice(lt, commentEnd + 3),
+      });
+      cursor = commentEnd + 3;
+      continue;
+    }
+
+    const isClosing = html[lt + 1] === '/';
+    const nameStart = isClosing ? lt + 2 : lt + 1;
+    const nameMatch = /^([A-Za-z][A-Za-z0-9:-]*)(?=[\s/>]|$)/.exec(html.slice(nameStart));
+    const closeIdx = nameMatch ? findTagCloseEnd(html, nameStart + nameMatch[1].length) : -1;
+
+    if (!nameMatch || closeIdx === -1) {
+      textBuf += '<';
+      cursor = lt + 1;
+      continue;
+    }
+
+    flushText();
+    const tag = nameMatch[1].toLowerCase();
+
+    if (isClosing) {
+      for (let s = stack.length - 1; s >= 1; s--) {
+        if (stack[s].tag === tag) {
+          stack.length = s;
+          break;
+        }
+      }
+      cursor = closeIdx + 1;
+      continue;
+    }
+
+    let rawInside = html.slice(nameStart + nameMatch[1].length, closeIdx);
+    const explicitSelfClose = /\/\s*$/.test(rawInside);
+    if (explicitSelfClose) {
+      rawInside = rawInside.replace(/\/\s*$/, '');
+    }
+    const selfClosing = explicitSelfClose || VOID_HTML_TAGS.has(tag);
+    const elNode: HtmlAstNode = {
+      kind: 'element',
+      tag,
+      attrs: parseTagAttributes(rawInside),
+      selfClosing,
+      children: [],
+    };
+    stack[stack.length - 1].children.push(elNode);
+    if (!selfClosing) {
+      stack.push({ tag, children: elNode.children });
+    }
+    cursor = closeIdx + 1;
+  }
+
+  flushText();
+  return rootChildren;
+}
+
+function getAstClassAttr(el: Extract<HtmlAstNode, { kind: 'element' }>): string {
+  const found = el.attrs.find((a) => a.name === 'class');
+  if (!found) return '';
+  const m = /^class\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/i.exec(found.raw);
+  return m ? (m[1] ?? m[2] ?? m[3] ?? '') : '';
+}
+
+function convertAstPreNewlines(nodes: HtmlAstNode[]): HtmlAstNode[] {
+  const out: HtmlAstNode[] = [];
+  for (const node of nodes) {
+    if (node.kind === 'text') {
+      const parts = node.text.split(/\r\n|\r|\n/);
+      parts.forEach((part, idx) => {
+        if (part) out.push({ kind: 'text', text: part });
+        if (idx < parts.length - 1) {
+          out.push({ kind: 'element', tag: 'br', attrs: [], selfClosing: true, children: [] });
+        }
+      });
+    } else if (node.kind === 'element') {
+      out.push({ ...node, children: convertAstPreNewlines(node.children) });
+    } else {
+      out.push(node);
+    }
+  }
+  return out;
+}
+
+function astHasBlockChild(nodes: HtmlAstNode[]): boolean {
+  return nodes.some((n) => n.kind === 'element' && BLOCK_LIKE_TAGS.has(n.tag));
+}
+
+function isAstBrNode(node: HtmlAstNode | undefined): boolean {
+  return Boolean(node && node.kind === 'element' && node.tag === 'br');
+}
+
+function cleanHtmlAstNodes(nodes: HtmlAstNode[], insideCellOrList: boolean): HtmlAstNode[] {
+  const out: HtmlAstNode[] = [];
+
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (node.kind !== 'element') {
+      out.push(node);
+      continue;
+    }
+
+    const { tag, attrs, selfClosing } = node;
+    const classStr = getAstClassAttr(node);
+
+    if (tag === 'script' || tag === 'style') {
+      continue;
+    }
+    if (isOpaqueProtectedTagAndClasses(tag, classStr)) {
+      out.push(node);
+      continue;
+    }
+    if (isClozeWrapperClasses(classStr)) {
+      out.push({
+        ...node,
+        children: cleanHtmlAstNodes(node.children, true),
+      });
+      continue;
+    }
+    if (TABLE_ELEMENT_TAGS.has(tag)) {
+      const nextInside = tag === 'td' || tag === 'th' ? true : insideCellOrList;
+      out.push({
+        ...node,
+        children: cleanHtmlAstNodes(node.children, nextInside),
+      });
+      continue;
+    }
+    if (tag === 'ul' || tag === 'ol' || tag === 'li') {
+      const nextInside = tag === 'li' ? true : insideCellOrList;
+      out.push({
+        ...node,
+        attrs: attrs.filter((a) => !STRIPPED_FORMAT_ATTRS.has(a.name)),
+        children: cleanHtmlAstNodes(node.children, nextInside),
+      });
+      continue;
+    }
+    if (INLINE_FORMAT_TAGS.has(tag)) {
+      out.push(...cleanHtmlAstNodes(node.children, insideCellOrList));
+      continue;
+    }
+    if (BLOCK_RESET_TAGS.has(tag)) {
+      const prepared = tag === 'pre' ? convertAstPreNewlines(node.children) : node.children;
+      const cleanedChildren = cleanHtmlAstNodes(prepared, insideCellOrList);
+      if (insideCellOrList || astHasBlockChild(cleanedChildren)) {
+        if (insideCellOrList && out.length > 0 && !isAstBrNode(out[out.length - 1])) {
+          out.push({ kind: 'element', tag: 'br', attrs: [], selfClosing: true, children: [] });
+        }
+        out.push(...cleanedChildren);
+        const nextNode = nodes[i + 1];
+        if (insideCellOrList && nextNode && !isAstBrNode(nextNode)) {
+          out.push({ kind: 'element', tag: 'br', attrs: [], selfClosing: true, children: [] });
+        }
+      } else {
+        out.push({
+          kind: 'element',
+          tag: 'p',
+          attrs: [],
+          selfClosing: false,
+          children: cleanedChildren,
+        });
+      }
+      continue;
+    }
+
+    out.push({
+      ...node,
+      attrs: attrs.filter((a) => !STRIPPED_FORMAT_ATTRS.has(a.name)),
+      selfClosing,
+      children: cleanHtmlAstNodes(node.children, insideCellOrList),
+    });
+  }
+
+  return out;
+}
+
+function serializeHtmlAst(nodes: HtmlAstNode[]): string {
+  return nodes
+    .map((node) => {
+      if (node.kind === 'text') return node.text;
+      if (node.kind === 'comment') return node.raw;
+      const attrStr = node.attrs.length > 0 ? ' ' + node.attrs.map((a) => a.raw).join(' ') : '';
+      if (node.selfClosing || VOID_HTML_TAGS.has(node.tag)) {
+        return `<${node.tag}${attrStr}>`;
+      }
+      return `<${node.tag}${attrStr}>${serializeHtmlAst(node.children)}</${node.tag}>`;
+    })
+    .join('');
+}
+
+/**
+ * Pure HTML formatting cleaner matching the live WYSIWYG "Clear Formatting" rules.
+ * Strips inline formatting (`<b>`, `<i>`, `<span style>`, `<font>`, `<mark>`, `<code>`, etc.)
+ * and normalizes block headings/quotes/code blocks to `<p>` while preserving `<img>`,
+ * `.anki-io-wrap`, `.anki-cloze-pill`, table contrast styles, list structure, links,
+ * Math/LaTeX delimiters, and raw `{{c1::...}}` cloze syntax.
+ */
+export function stripFormattingFromHtml(html: string): string {
+  if (!html) return '';
+  const ast = parseHtmlToAst(html);
+  const cleaned = cleanHtmlAstNodes(ast, false);
+  return serializeHtmlAst(cleaned);
+}
+
+// ── Live DOM helpers for Clear Formatting (keeps Chromium UndoStack intact) ──
+
+const COLLAPSED_BLOCK_SELECTOR =
+  'h1,h2,h3,h4,h5,h6,blockquote,pre,center,address,p,div,li,td,th';
+
+function isOpaqueProtectedDom(el: Element): boolean {
+  const tag = el.tagName.toLowerCase();
+  return isOpaqueProtectedTagAndClasses(tag, el.getAttribute('class') || '');
+}
+
+function isClozeWrapperDom(el: Element): boolean {
+  return el.classList.contains('anki-cloze-pill') || el.classList.contains('anki-cloze-body');
+}
+
+function stripDomFormatAttrs(el: Element): void {
+  STRIPPED_FORMAT_ATTRS.forEach((attr) => el.removeAttribute(attr));
+}
+
+function hasAnyFormatAttr(el: Element): boolean {
+  for (const attr of STRIPPED_FORMAT_ATTRS) {
+    if (el.hasAttribute(attr)) return true;
+  }
+  return false;
+}
+
+function convertDomPreNewlinesToBr(preEl: Element): void {
+  const walker = document.createTreeWalker(preEl, NodeFilter.SHOW_TEXT);
+  const texts: Text[] = [];
+  let t = walker.nextNode() as Text | null;
+  while (t) {
+    if (/\r|\n/.test(t.data)) texts.push(t);
+    t = walker.nextNode() as Text | null;
+  }
+  for (const node of texts) {
+    const parts = node.data.split(/\r\n|\r|\n/);
+    const frag = document.createDocumentFragment();
+    parts.forEach((part, idx) => {
+      if (part) frag.appendChild(document.createTextNode(part));
+      if (idx < parts.length - 1) frag.appendChild(document.createElement('br'));
+    });
+    node.parentNode?.replaceChild(frag, node);
+  }
+}
+
+function domHasBlockChild(el: Element): boolean {
+  return Array.from(el.children).some((c) => BLOCK_LIKE_TAGS.has(c.tagName.toLowerCase()));
+}
+
+function pruneEmptyFormatShells(root: ParentNode): void {
+  const children = Array.from(root.childNodes);
+  for (const child of children) {
+    if (child.nodeType !== Node.ELEMENT_NODE) continue;
+    const el = child as Element;
+    pruneEmptyFormatShells(el);
+    const tag = el.tagName.toLowerCase();
+    if (
+      INLINE_FORMAT_TAGS.has(tag) &&
+      !isOpaqueProtectedDom(el) &&
+      !isClozeWrapperDom(el) &&
+      (el.textContent || '') === '' &&
+      !el.querySelector('img, svg, math, video, audio, br, hr, .anki-io-wrap, .anki-cloze-pill')
+    ) {
+      el.remove();
+    }
+  }
+}
+
+function cleanDomChildren(parent: ParentNode, insideCellOrList: boolean): void {
+  const children = Array.from(parent.childNodes);
+  for (const child of children) {
+    if (child.nodeType !== Node.ELEMENT_NODE) continue;
+    const el = child as Element;
+    const tag = el.tagName.toLowerCase();
+
+    if (tag === 'script' || tag === 'style') {
+      el.remove();
+      continue;
+    }
+    if (isOpaqueProtectedDom(el)) {
+      continue;
+    }
+    if (isClozeWrapperDom(el)) {
+      cleanDomChildren(el, true);
+      continue;
+    }
+    if (TABLE_ELEMENT_TAGS.has(tag)) {
+      cleanDomChildren(el, tag === 'td' || tag === 'th' ? true : insideCellOrList);
+      continue;
+    }
+    if (tag === 'ul' || tag === 'ol' || tag === 'li') {
+      stripDomFormatAttrs(el);
+      cleanDomChildren(el, tag === 'li' ? true : insideCellOrList);
+      continue;
+    }
+    if (INLINE_FORMAT_TAGS.has(tag)) {
+      cleanDomChildren(el, insideCellOrList);
+      const frag = document.createDocumentFragment();
+      while (el.firstChild) frag.appendChild(el.firstChild);
+      parent.replaceChild(frag, el);
+      continue;
+    }
+    if (BLOCK_RESET_TAGS.has(tag)) {
+      if (tag === 'pre') convertDomPreNewlinesToBr(el);
+      cleanDomChildren(el, insideCellOrList);
+      if (insideCellOrList || domHasBlockChild(el)) {
+        const frag = document.createDocumentFragment();
+        const prevEl = el.previousSibling as Element | null;
+        if (
+          insideCellOrList &&
+          prevEl &&
+          !(prevEl.nodeType === Node.ELEMENT_NODE && prevEl.tagName.toLowerCase() === 'br')
+        ) {
+          frag.appendChild(document.createElement('br'));
+        }
+        while (el.firstChild) frag.appendChild(el.firstChild);
+        const nextEl = el.nextSibling as Element | null;
+        if (
+          insideCellOrList &&
+          nextEl &&
+          !(nextEl.nodeType === Node.ELEMENT_NODE && nextEl.tagName.toLowerCase() === 'br')
+        ) {
+          frag.appendChild(document.createElement('br'));
+        }
+        parent.replaceChild(frag, el);
+      } else {
+        const p = document.createElement('p');
+        while (el.firstChild) p.appendChild(el.firstChild);
+        parent.replaceChild(p, el);
+      }
+      continue;
+    }
+    stripDomFormatAttrs(el);
+    cleanDomChildren(el, insideCellOrList);
+  }
+}
+
+function getNodePath(root: Node, target: Node): number[] | null {
+  const path: number[] = [];
+  let cur: Node | null = target;
+  while (cur && cur !== root) {
+    const parent: Node | null = cur.parentNode;
+    if (!parent) return null;
+    const idx = Array.prototype.indexOf.call(parent.childNodes, cur);
+    if (idx < 0) return null;
+    path.unshift(idx);
+    cur = parent;
+  }
+  return cur === root ? path : null;
+}
+
+function resolveNodePath(root: Node, path: number[]): Node | null {
+  let cur: Node = root;
+  for (const idx of path) {
+    if (!cur.childNodes || idx >= cur.childNodes.length) return null;
+    cur = cur.childNodes[idx];
+  }
+  return cur;
+}
+
+function getVisibleTextOffset(container: Node, node: Node, offset: number): number {
+  const r = document.createRange();
+  r.setStart(container, 0);
+  r.setEnd(node, offset);
+  const frag = r.cloneContents();
+  frag.querySelectorAll('.anki-cloze-prefix').forEach((p) => p.remove());
+  return (frag.textContent || '').replace(/\u200B/g, '').length;
+}
+
+function resolveVisibleTextPoint(container: Node, targetOffset: number): { node: Node; offset: number } {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      let cur: Node | null = node.parentNode;
+      while (cur && cur !== container) {
+        if (cur.nodeType === Node.ELEMENT_NODE && (cur as Element).classList.contains('anki-cloze-prefix')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        cur = cur.parentNode;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  let remaining = targetOffset;
+  let lastText: Text | null = null;
+  let t = walker.nextNode() as Text | null;
+  while (t) {
+    lastText = t;
+    const cleanLen = t.data.replace(/\u200B/g, '').length;
+    if (remaining <= cleanLen) {
+      let rawIdx = 0;
+      let vis = 0;
+      while (rawIdx < t.data.length && vis < remaining) {
+        if (t.data[rawIdx] !== '\u200B') vis++;
+        rawIdx++;
+      }
+      return { node: t, offset: rawIdx };
+    }
+    remaining -= cleanLen;
+    t = walker.nextNode() as Text | null;
+  }
+  if (lastText) return { node: lastText, offset: lastText.data.length };
+  return { node: container, offset: container.childNodes.length };
+}
+
+function restoreVisibleSelection(container: Node, startOffset: number, endOffset: number): void {
+  const sel = window.getSelection();
+  if (!sel) return;
+  const startPt = resolveVisibleTextPoint(container, startOffset);
+  const endPt = endOffset === startOffset ? startPt : resolveVisibleTextPoint(container, endOffset);
+  const r = document.createRange();
+  r.setStart(startPt.node, startPt.offset);
+  r.setEnd(endPt.node, endPt.offset);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+function selectAllContentsAndInsertHtml(target: HTMLElement, html: string): void {
+  const sel = window.getSelection();
+  if (!sel) return;
+  const r = document.createRange();
+  r.selectNodeContents(target);
+  sel.removeAllRanges();
+  sel.addRange(r);
+  document.execCommand('insertHTML', false, html);
+}
+
+/**
+ * Only fires `removeFormat` when Blink still reports an active pending typing style
+ * (prevents pushing a redundant second Undo entry after `insertHTML` already cleared inline tags).
+ */
+function clearPendingInlineTypingFormatIfActive(): void {
+  const cmds = ['bold', 'italic', 'underline', 'strikeThrough', 'subscript', 'superscript'];
+  try {
+    if (cmds.some((cmd) => document.queryCommandState(cmd))) {
+      document.execCommand('removeFormat');
+    }
+  } catch {
+    // Ignore in environments where queryCommandState throws
+  }
+}
+
+/**
+ * Replaces `editor` contents via `insertHTML`, preserving any leading untouched
+ * heading/blockquote/pre blocks so Blink never merges following `<p>` blocks into a leading `<h1>`.
+ * Returns false if `.anki-io-wrap` sits inside the target tail (caller falls back to per-block replace).
+ */
+function replaceEditorCleanTail(
+  editor: HTMLElement,
+  edClone: HTMLElement,
+  firstTouchedBlock: Element | null
+): boolean {
+  const sel = window.getSelection();
+  if (!sel) return false;
+
+  const firstEl = editor.firstElementChild;
+  const topTarget = firstTouchedBlock
+    ? Array.from(editor.children).find((ch) => ch === firstTouchedBlock || ch.contains(firstTouchedBlock)) || null
+    : null;
+  const firstIsUntouchedHeading =
+    Boolean(firstEl) &&
+    Boolean(topTarget) &&
+    topTarget !== firstEl &&
+    BLOCK_RESET_TAGS.has(firstEl!.tagName.toLowerCase());
+
+  if (!firstIsUntouchedHeading) {
+    if (editor.querySelector('.anki-io-wrap')) return false;
+    selectAllContentsAndInsertHtml(editor, edClone.innerHTML);
+    return true;
+  }
+
+  // Walk past any leading untouched heading/blockquote/pre blocks up to `topTarget`
+  const prevSibling = topTarget!.previousElementSibling;
+  if (!prevSibling) return false;
+  const prevIdx = Array.prototype.indexOf.call(edClone.childNodes, resolveNodePath(edClone, getNodePath(editor, prevSibling) || []));
+  if (prevIdx < 0) return false;
+
+  const tailNodes = Array.from(edClone.childNodes).slice(prevIdx + 1);
+  const tailContainer = document.createElement('div');
+  tailNodes.forEach((n) => tailContainer.appendChild(n.cloneNode(true)));
+  if (tailContainer.querySelector('.anki-io-wrap')) return false;
+
+  const rTail = document.createRange();
+  rTail.setStartAfter(prevSibling);
+  rTail.setEnd(editor, editor.childNodes.length);
+  sel.removeAllRanges();
+  sel.addRange(rTail);
+  document.execCommand('insertHTML', false, tailContainer.innerHTML);
+  return true;
+}
+
+function cleanRangeInsideScope(
+  scope: HTMLElement,
+  rStartNode: Node,
+  rStartOff: number,
+  rEndNode: Node,
+  rEndOff: number,
+  insideCellOrList: boolean
+): string | null {
+  const startPath = getNodePath(scope, rStartNode);
+  const endPath = getNodePath(scope, rEndNode);
+  if (!startPath || !endPath) return null;
+
+  const clone = scope.cloneNode(true) as HTMLElement;
+  const cStart = resolveNodePath(clone, startPath);
+  const cEnd = resolveNodePath(clone, endPath);
+  if (!cStart || !cEnd) return null;
+
+  const bodyStart = findClosestElement(cStart, '.anki-cloze-body', clone);
+  const bodyEnd = findClosestElement(cEnd, '.anki-cloze-body', clone);
+
+  // If selection sits completely inside one .anki-cloze-body, clean inside that body clone
+  // without ever splitting the outer .anki-cloze-pill!
+  if (bodyStart && bodyStart === bodyEnd) {
+    const bodyPath = getNodePath(clone, bodyStart);
+    const cleanedBody = cleanRangeInsideScope(
+      bodyStart,
+      cStart,
+      rStartOff,
+      cEnd,
+      rEndOff,
+      true
+    );
+    if (cleanedBody !== null && bodyPath) {
+      const targetBody = resolveNodePath(clone, bodyPath) as HTMLElement | null;
+      if (targetBody) {
+        targetBody.innerHTML = cleanedBody;
+        return clone.innerHTML;
+      }
+    }
+  }
+
+  const pillStart = findClosestElement(cStart, '.anki-cloze-pill', clone);
+  const pillEnd = findClosestElement(cEnd, '.anki-cloze-pill', clone);
+
+  const afterR = document.createRange();
+  if (pillEnd && pillEnd !== pillStart) {
+    afterR.setStartAfter(pillEnd);
+  } else {
+    afterR.setStart(cEnd, rEndOff);
+  }
+  afterR.setEnd(clone, clone.childNodes.length);
+  const afterFrag = afterR.extractContents();
+  pruneEmptyFormatShells(afterFrag);
+
+  const beforeR = document.createRange();
+  beforeR.setStart(clone, 0);
+  if (pillStart && pillStart !== pillEnd) {
+    beforeR.setEndBefore(pillStart);
+  } else {
+    beforeR.setEnd(cStart, rStartOff);
+  }
+  const beforeFrag = beforeR.extractContents();
+  pruneEmptyFormatShells(beforeFrag);
+
+  cleanDomChildren(clone, insideCellOrList);
+  const midFrag = document.createDocumentFragment();
+  while (clone.firstChild) midFrag.appendChild(clone.firstChild);
+
+  clone.appendChild(beforeFrag);
+  clone.appendChild(midFrag);
+  clone.appendChild(afterFrag);
+  return clone.innerHTML;
+}
+
+function unwrapInlineTargetInClone(
+  cloneScope: HTMLElement,
+  inlinePath: number[],
+  insideClozeBody: boolean
+): boolean {
+  const clonedInline = resolveNodePath(cloneScope, inlinePath);
+  if (!clonedInline || clonedInline.nodeType !== Node.ELEMENT_NODE || !clonedInline.parentNode) {
+    return false;
+  }
+  cleanDomChildren(clonedInline as Element, insideClozeBody);
+  const frag = document.createDocumentFragment();
+  while (clonedInline.firstChild) frag.appendChild(clonedInline.firstChild);
+  clonedInline.parentNode.replaceChild(frag, clonedInline);
+  return true;
+}
+
+function findOutermostInlineFormat(
+  node: Node,
+  boundary: HTMLElement,
+  editorRoot: HTMLElement
+): HTMLElement | null {
+  let outerInline: HTMLElement | null = null;
+  let cur: Node | null = node.nodeType === Node.TEXT_NODE ? node.parentNode : node;
+  while (cur && cur !== boundary && cur !== editorRoot) {
+    if (cur.nodeType === Node.ELEMENT_NODE) {
+      const el = cur as HTMLElement;
+      if (
+        !isOpaqueProtectedDom(el) &&
+        !isClozeWrapperDom(el) &&
+        INLINE_FORMAT_TAGS.has(el.tagName.toLowerCase())
+      ) {
+        outerInline = el;
+      }
+    }
+    cur = cur.parentNode;
+  }
+  return outerInline;
+}
+
+function clearCollapsedCaretFormatting(editor: HTMLElement, range: Range): void {
+  const caretOffsetInEd = getVisibleTextOffset(editor, range.startContainer, range.startOffset);
+  const clozeBody = findClosestElement(range.startContainer, '.anki-cloze-body', editor);
+  const blockEl = findClosestElement(range.startContainer, COLLAPSED_BLOCK_SELECTOR, editor);
+  const outerInline = findOutermostInlineFormat(
+    range.startContainer,
+    clozeBody || blockEl || editor,
+    editor
+  );
+
+  const blockIsReset =
+    Boolean(blockEl) &&
+    BLOCK_RESET_TAGS.has(blockEl!.tagName.toLowerCase()) &&
+    !findClosestElement(blockEl!.parentNode, 'li,td,th', editor);
+  const blockHasAttrs =
+    Boolean(blockEl) &&
+    !TABLE_ELEMENT_TAGS.has(blockEl!.tagName.toLowerCase()) &&
+    !isOpaqueProtectedDom(blockEl!) &&
+    hasAnyFormatAttr(blockEl!);
+
+  if (!outerInline && !blockIsReset && !blockHasAttrs) {
+    clearPendingInlineTypingFormatIfActive();
+    return;
+  }
+
+  if (blockIsReset) {
+    document.execCommand('formatBlock', false, '<p>');
+  }
+
+  const curSel = window.getSelection();
+  const curRange = curSel && curSel.rangeCount > 0 ? curSel.getRangeAt(0) : null;
+  const curNode = curRange ? curRange.startContainer : range.startContainer;
+  const curBlock = findClosestElement(curNode, COLLAPSED_BLOCK_SELECTOR, editor);
+  const curClozeBody = findClosestElement(curNode, '.anki-cloze-body', editor);
+  const curOuterInline = findOutermostInlineFormat(
+    curNode,
+    curClozeBody || curBlock || editor,
+    editor
+  );
+
+  const curBlockHasAttrs =
+    Boolean(curBlock) &&
+    !TABLE_ELEMENT_TAGS.has(curBlock!.tagName.toLowerCase()) &&
+    !isOpaqueProtectedDom(curBlock!) &&
+    hasAnyFormatAttr(curBlock!);
+
+  const updatedEdOffset = curRange
+    ? getVisibleTextOffset(editor, curRange.startContainer, curRange.startOffset)
+    : caretOffsetInEd;
+
+  if (curBlock && curBlockHasAttrs) {
+    const edClone = editor.cloneNode(true) as HTMLElement;
+    const blockPath = getNodePath(editor, curBlock);
+    const clonedBlock = blockPath ? (resolveNodePath(edClone, blockPath) as HTMLElement | null) : null;
+    if (clonedBlock) {
+      stripDomFormatAttrs(clonedBlock);
+      if (curOuterInline) {
+        const inlinePath = getNodePath(curBlock, curOuterInline);
+        if (inlinePath) unwrapInlineTargetInClone(clonedBlock, inlinePath, Boolean(curClozeBody));
+      }
+      if (replaceEditorCleanTail(editor, edClone, curBlock)) {
+        restoreVisibleSelection(editor, updatedEdOffset, updatedEdOffset);
+      } else if (curOuterInline) {
+        const scopeClone = curBlock.cloneNode(true) as HTMLElement;
+        const inlinePath = getNodePath(curBlock, curOuterInline);
+        if (inlinePath && unwrapInlineTargetInClone(scopeClone, inlinePath, Boolean(curClozeBody))) {
+          selectAllContentsAndInsertHtml(curBlock, scopeClone.innerHTML);
+          restoreVisibleSelection(editor, updatedEdOffset, updatedEdOffset);
+        }
+      }
+    }
+  } else if (curOuterInline) {
+    const scope = curBlock || editor;
+    const scopeOffset = curRange
+      ? getVisibleTextOffset(scope, curRange.startContainer, curRange.startOffset)
+      : updatedEdOffset;
+    const scopeClone = scope.cloneNode(true) as HTMLElement;
+    const inlinePath = getNodePath(scope, curOuterInline);
+    if (inlinePath && unwrapInlineTargetInClone(scopeClone, inlinePath, Boolean(curClozeBody))) {
+      selectAllContentsAndInsertHtml(scope, scopeClone.innerHTML);
+      restoreVisibleSelection(scope, scopeOffset, scopeOffset);
+    }
+  }
+
+  clearPendingInlineTypingFormatIfActive();
+}
+
+function clearPartialSelectionFormatting(
+  editor: HTMLElement,
+  initialRange: Range,
+  selStartOff: number,
+  selEndOff: number
+): void {
+  const sel = window.getSelection();
+  if (!sel) return;
+  let range = initialRange;
+
+  const resetBlocks = Array.from(
+    editor.querySelectorAll('h1,h2,h3,h4,h5,h6,blockquote,pre,center,address')
+  ).filter((b) => {
+    if (findClosestElement(b, '.anki-io-wrap', editor)) return false;
+    if (findClosestElement(b.parentNode, 'li,td,th', editor)) return false;
+    return range.intersectsNode(b);
+  });
+
+  if (resetBlocks.length > 0) {
+    for (const b of resetBlocks) {
+      if (!editor.contains(b)) continue;
+      const br = document.createRange();
+      br.selectNodeContents(b);
+      sel.removeAllRanges();
+      sel.addRange(br);
+      document.execCommand('formatBlock', false, '<p>');
+    }
+    restoreVisibleSelection(editor, selStartOff, selEndOff);
+    if (sel.rangeCount === 0) return;
+    range = sel.getRangeAt(0);
+  }
+
+  const startBlock = findClosestElement(range.startContainer, COLLAPSED_BLOCK_SELECTOR, editor);
+  const endBlock = findClosestElement(range.endContainer, COLLAPSED_BLOCK_SELECTOR, editor);
+
+  if (startBlock && startBlock === endBlock && !isOpaqueProtectedDom(startBlock)) {
+    const tag = startBlock.tagName.toLowerCase();
+    const insideCellOrList = tag === 'li' || tag === 'td' || tag === 'th';
+    const cleaned = cleanRangeInsideScope(
+      startBlock,
+      range.startContainer,
+      range.startOffset,
+      range.endContainer,
+      range.endOffset,
+      insideCellOrList
+    );
+    if (cleaned !== null) {
+      const blockHasAttrs =
+        !TABLE_ELEMENT_TAGS.has(tag) && hasAnyFormatAttr(startBlock);
+
+      if (blockHasAttrs) {
+        const edClone = editor.cloneNode(true) as HTMLElement;
+        const bp = getNodePath(editor, startBlock);
+        const cb = bp ? (resolveNodePath(edClone, bp) as HTMLElement | null) : null;
+        if (cb) {
+          cb.innerHTML = cleaned;
+          stripDomFormatAttrs(cb);
+          if (edClone.innerHTML !== editor.innerHTML) {
+            if (!replaceEditorCleanTail(editor, edClone, startBlock) && cleaned !== startBlock.innerHTML) {
+              selectAllContentsAndInsertHtml(startBlock, cleaned);
+            }
+          }
+        }
+      } else if (cleaned !== startBlock.innerHTML) {
+        selectAllContentsAndInsertHtml(startBlock, cleaned);
+      }
+      if (selEndOff > selStartOff) restoreVisibleSelection(editor, selStartOff, selEndOff);
+      clearPendingInlineTypingFormatIfActive();
+    }
+    return;
+  }
+
+  if (!startBlock && !endBlock) {
+    const cleaned = cleanRangeInsideScope(
+      editor,
+      range.startContainer,
+      range.startOffset,
+      range.endContainer,
+      range.endOffset,
+      false
+    );
+    if (cleaned !== null && cleaned !== editor.innerHTML) {
+      selectAllContentsAndInsertHtml(editor, cleaned);
+      if (selEndOff > selStartOff) restoreVisibleSelection(editor, selStartOff, selEndOff);
+      clearPendingInlineTypingFormatIfActive();
+    }
+    return;
+  }
+
+  const edClone = editor.cloneNode(true) as HTMLElement;
+  const allBlocks = Array.from(editor.querySelectorAll(COLLAPSED_BLOCK_SELECTOR)).filter((b) => {
+    if (isOpaqueProtectedDom(b) || findClosestElement(b, '.anki-io-wrap', editor)) return false;
+    if (domHasBlockChild(b)) return false;
+    return range.intersectsNode(b);
+  });
+
+  const blockUpdates: Array<{ bp: number[]; cleaned: string; stripAttrs: boolean }> = [];
+  for (const b of allBlocks) {
+    const bp = getNodePath(editor, b);
+    if (!bp) continue;
+    const isStart = b === startBlock || b.contains(range.startContainer);
+    const isEnd = b === endBlock || b.contains(range.endContainer);
+    const sNode = isStart ? range.startContainer : b;
+    const sOff = isStart ? range.startOffset : 0;
+    const eNode = isEnd ? range.endContainer : b;
+    const eOff = isEnd ? range.endOffset : b.childNodes.length;
+    const tag = b.tagName.toLowerCase();
+    const cleaned = cleanRangeInsideScope(
+      b as HTMLElement,
+      sNode,
+      sOff,
+      eNode,
+      eOff,
+      tag === 'li' || tag === 'td' || tag === 'th'
+    );
+    if (cleaned !== null) {
+      blockUpdates.push({ bp, cleaned, stripAttrs: !TABLE_ELEMENT_TAGS.has(tag) });
+    }
+  }
+
+  for (const upd of blockUpdates) {
+    const cb = resolveNodePath(edClone, upd.bp) as HTMLElement | null;
+    if (!cb) continue;
+    cb.innerHTML = upd.cleaned;
+    if (upd.stripAttrs) stripDomFormatAttrs(cb);
+  }
+
+  const firstTouchedBlock = allBlocks[0] || null;
+  if (edClone.innerHTML !== editor.innerHTML && !replaceEditorCleanTail(editor, edClone, firstTouchedBlock)) {
+    for (const upd of blockUpdates) {
+      const liveBlock = resolveNodePath(editor, upd.bp) as HTMLElement | null;
+      if (liveBlock && liveBlock.innerHTML !== upd.cleaned) {
+        selectAllContentsAndInsertHtml(liveBlock, upd.cleaned);
+      }
+    }
+  }
+
+  if (selEndOff > selStartOff) restoreVisibleSelection(editor, selStartOff, selEndOff);
+  clearPendingInlineTypingFormatIfActive();
+}
+
+function applyClearFormatting(editor: HTMLElement): void {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  if (!editor.contains(range.commonAncestorContainer)) return;
+  if (findClosestElement(range.commonAncestorContainer, '.anki-io-wrap', editor)) return;
+
+  if (range.collapsed) {
+    clearCollapsedCaretFormatting(editor, range);
+    return;
+  }
+
+  const selStartOff = getVisibleTextOffset(editor, range.startContainer, range.startOffset);
+  const selEndOff = getVisibleTextOffset(editor, range.endContainer, range.endOffset);
+
+  const preRange = document.createRange();
+  preRange.setStart(editor, 0);
+  preRange.setEnd(range.startContainer, range.startOffset);
+  const postRange = document.createRange();
+  postRange.setStart(range.endContainer, range.endOffset);
+  postRange.setEnd(editor, editor.childNodes.length);
+
+  const hasVisibleBoundaryMedia = (r: Range) =>
+    Boolean(r.cloneContents().querySelector('img, table, .anki-io-wrap'));
+  const coversAll =
+    preRange.toString().replace(/\u200B/g, '').trim().length === 0 &&
+    !hasVisibleBoundaryMedia(preRange) &&
+    postRange.toString().replace(/\u200B/g, '').trim().length === 0 &&
+    !hasVisibleBoundaryMedia(postRange);
+  const hasProtectedIoBlock = Boolean(editor.querySelector('.anki-io-wrap'));
+
+  if (coversAll && !hasProtectedIoBlock) {
+    const firstEl = editor.firstElementChild;
+    if (firstEl && BLOCK_RESET_TAGS.has(firstEl.tagName.toLowerCase())) {
+      const hr = document.createRange();
+      hr.selectNodeContents(firstEl);
+      sel.removeAllRanges();
+      sel.addRange(hr);
+      document.execCommand('formatBlock', false, '<p>');
+    }
+    const edClone = editor.cloneNode(true) as HTMLElement;
+    cleanDomChildren(edClone, false);
+    if (edClone.innerHTML !== editor.innerHTML) {
+      selectAllContentsAndInsertHtml(editor, edClone.innerHTML);
+      if (selEndOff > selStartOff) restoreVisibleSelection(editor, selStartOff, selEndOff);
+    }
+    clearPendingInlineTypingFormatIfActive();
+    return;
+  }
+
+  clearPartialSelectionFormatting(editor, range, selStartOff, selEndOff);
+}
+
 const STUDY_EMOJIS = [
   '💡', '⭐', '⚠️', '📌', '✅',
   '❌', '📝', '🔍', '🎯', '🚀',
@@ -330,10 +1358,16 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
   /**
    * Synchronizes `data-empty` attributes on `.anki-cloze-body` and `<mark>` in-place
-   * without destroying active Text nodes or interrupting IME composition.
+   * without destroying active Text nodes or interrupting IME composition, and ensures
+   * `.anki-cloze-prefix` keeps `contenteditable="false"` after `execCommand('insertHTML')`.
    */
   const syncInlinePillsInPlace = (stripExtraZwsp: boolean) => {
     if (!editorRef.current) return;
+    editorRef.current.querySelectorAll('.anki-cloze-prefix').forEach((prefix) => {
+      if (prefix.getAttribute('contenteditable') !== 'false') {
+        prefix.setAttribute('contenteditable', 'false');
+      }
+    });
     const bodies = editorRef.current.querySelectorAll('.anki-cloze-body, mark');
     bodies.forEach((el) => {
       const raw = el.textContent || '';
@@ -492,6 +1526,16 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
     if (!editorRef.current) return;
     focusAndRestoreSelection();
     document.execCommand(command, false, arg);
+    updateActiveFormats();
+    handleInput();
+  };
+
+  const clearFormatting = () => {
+    if (!editorRef.current) return;
+    closeAllDropdowns();
+    focusAndRestoreSelection();
+    applyClearFormatting(editorRef.current);
+    syncInlinePillsInPlace(true);
     updateActiveFormats();
     handleInput();
   };
@@ -1574,6 +2618,26 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                   <line x1="3" y1="12" x2="13" y2="12" />
                   <line x1="3" y1="6" x2="13" y2="6" />
                   <line x1="3" y1="18" x2="13" y2="18" />
+                </svg>
+              </button>
+            </Tooltip>
+
+            {/* Clear Formatting */}
+            <Tooltip variant="compact" content={t('editorToolClearFormat')}>
+              <button
+                type="button"
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={clearFormatting}
+                aria-label={t('editorToolClearFormat')}
+                className={iconBtnClass}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M4 7V4h16v3" />
+                  <path d="M5 20h6" />
+                  <path d="M13 4 8 20" />
+                  <path d="m15 15 5 5" />
+                  <path d="m20 15-5 5" />
                 </svg>
               </button>
             </Tooltip>

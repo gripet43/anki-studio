@@ -30,6 +30,9 @@ import './specs/reviewAudio.spec';
 import './specs/dayRollover.spec';
 import './specs/cmdkReset.spec';
 import './specs/libraryFacetSync.spec';
+import './specs/dashboardRing.spec';
+import './specs/libraryDefaultSort.spec';
+import './specs/editorClearFormat.spec';
 
 import { report } from './harness';
 

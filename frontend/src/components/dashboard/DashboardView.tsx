@@ -24,6 +24,45 @@ import {
 import { StreakFlameBackdrop } from './StreakFlameBackdrop';
 import { SyncStatusPill } from './SyncStatusPill';
 
+export const HERO_RING_RADIUS = 48;
+export const HERO_RING_CIRCUMFERENCE = 2 * Math.PI * HERO_RING_RADIUS;
+
+export interface HeroProgressRingMetrics {
+  completed: number;
+  totalWorkload: number;
+  pct: number;
+  progressPct: number;
+  strokeDashoffset: number;
+}
+
+/**
+ * Computes normalized completion ratio, rounded 0-100 percentage, and SVG stroke
+ * offset for the Dashboard hero progress ring across empty, partial, and 100% states.
+ */
+export function computeHeroProgressRing(
+  completedRaw: number,
+  totalWorkloadRaw: number,
+  circumference = HERO_RING_CIRCUMFERENCE
+): HeroProgressRingMetrics {
+  const completed = Number.isFinite(completedRaw) ? Math.max(0, completedRaw) : 0;
+  const totalWorkload = Number.isFinite(totalWorkloadRaw) ? Math.max(0, totalWorkloadRaw) : 0;
+  const pct =
+    totalWorkload > 0
+      ? Math.min(1, Math.max(0, completed / totalWorkload))
+      : completed > 0
+      ? 1
+      : 0;
+  const progressPct = Math.round(pct * 100);
+  const strokeDashoffset = circumference * (1 - pct);
+  return {
+    completed,
+    totalWorkload,
+    pct,
+    progressPct,
+    strokeDashoffset,
+  };
+}
+
 export const DashboardView: React.FC = () => {
   const {
     isInitialSyncing,
@@ -68,25 +107,23 @@ export const DashboardView: React.FC = () => {
   const cardSurface = 'dashboard-surface';
   const subText = 'dashboard-subtext';
 
-  const completed = dashboard.todayStats.completed;
   const totalPending = dashboard.todayStats.totalPending;
-  const totalWorkload =
+  const rawTotalWorkload =
     dashboard.todayStats.totalTodayWorkload !== undefined
       ? dashboard.todayStats.totalTodayWorkload
-      : completed + totalPending;
+      : dashboard.todayStats.completed + totalPending;
 
-  const radius = 48;
-  const circumference = 2 * Math.PI * radius;
-  const pct =
-    totalWorkload > 0
-      ? Math.min(1, completed / totalWorkload)
-      : completed > 0
-      ? 1
-      : 0;
-  const strokeDashoffset = circumference * (1 - pct);
+  const radius = HERO_RING_RADIUS;
+  const circumference = HERO_RING_CIRCUMFERENCE;
+  const {
+    completed,
+    totalWorkload,
+    progressPct,
+    strokeDashoffset,
+  } = computeHeroProgressRing(dashboard.todayStats.completed, rawTotalWorkload, circumference);
 
-  // Number count-up strictly for the two hero metrics: today's progress & current streak days (G)
-  const animatedCompleted = useCountUp(completed, 400);
+  // Number count-up strictly for the two hero metrics: today's progress (%) & current streak days (G)
+  const animatedProgressPct = useCountUp(progressPct, 400);
   const animatedStreakDays = useCountUp(dashboard.streak.current, 400);
 
   const topLevelDecks = decks.filter((d) => !d.isChild);
@@ -573,10 +610,14 @@ export const DashboardView: React.FC = () => {
                   openDelay={180}
                   closeDelay={150}
                   ariaLabel={isVacationActive ? t('vacationModalTitle') : t('todayProgressTitle')}
-                  repositionKey={`${isVacationActive}-${completed}-${totalWorkload}-${vacRemaining}`}
+                  repositionKey={`${isSyncPending}-${isVacationActive}-${completed}-${totalWorkload}-${vacRemaining}`}
                   content={
                     <div className="leading-[1.6] text-[var(--text-primary)]">
-                      {isVacationActive
+                      {isSyncPending
+                        ? syncing
+                          ? t('syncingAnkiWebAria')
+                          : t('loadingLocalCollection')
+                        : isVacationActive
                         ? `${t('vacationActiveBadge')} · ${vacRemaining}/${vacDays} ${t('daysUnit')}`
                         : t('todayProgressTooltip', {
                             done: completed,
@@ -589,12 +630,35 @@ export const DashboardView: React.FC = () => {
                     tabIndex={0}
                     className="relative w-[104px] h-[104px] shrink-0 flex items-center justify-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                     role="progressbar"
-                    aria-valuenow={isVacationActive ? vacRemaining : completed}
-                    aria-valuemin={0}
-                    aria-valuemax={isVacationActive ? vacDays : totalWorkload}
+                    aria-valuenow={
+                      isSyncPending
+                        ? undefined
+                        : isVacationActive
+                        ? vacRemaining
+                        : progressPct
+                    }
+                    aria-valuemin={isSyncPending ? undefined : 0}
+                    aria-valuemax={
+                      isSyncPending
+                        ? undefined
+                        : isVacationActive
+                        ? vacDays
+                        : 100
+                    }
+                    aria-valuetext={
+                      isSyncPending
+                        ? t('syncing')
+                        : isVacationActive
+                        ? `${vacRemaining}/${vacDays} ${t('daysUnit')}`
+                        : `${progressPct}% · ${t('todayProgressTooltip', {
+                            done: completed,
+                            total: totalWorkload,
+                          })}`
+                    }
+                    aria-busy={isSyncPending || undefined}
                     aria-label={isVacationActive ? t('vacationModalTitle') : t('todayProgressTitle')}
                   >
-                  <svg className="w-full h-full -rotate-90" viewBox="0 0 112 112">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 112 112" aria-hidden="true">
                     <circle
                       cx="56"
                       cy="56"
@@ -653,11 +717,20 @@ export const DashboardView: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        <span className={`text-[26px] font-extrabold leading-none tracking-tight tabular-nums ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}>
-                          {animatedCompleted}
+                        <span
+                          dir="ltr"
+                          className={`text-[24px] font-extrabold leading-none tracking-tight tabular-nums ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}
+                        >
+                          {animatedProgressPct}
+                          <span className={`text-[12px] font-semibold ms-0.5 ${subText}`}>
+                            %
+                          </span>
                         </span>
-                        <span className={`text-[11px] ${subText} mt-1.5 font-medium tabular-nums`}>
-                          / {totalWorkload} {t('cardsUnit')}
+                        <span
+                          dir="ltr"
+                          className={`text-[10.5px] ${subText} mt-1.5 font-medium tabular-nums`}
+                        >
+                          {completed} / {totalWorkload}
                         </span>
                       </>
                     )}

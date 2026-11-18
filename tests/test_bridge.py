@@ -581,17 +581,24 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertIn(101, self.mock_col.removed_notes)
 
     def test_04_search_cards_due_vs_review_classification_and_pagination(self):
-        """Bugs #9 & #14: Verify future review cards are classified as 'review' (not 'due') and pagination works."""
+        """Bugs #9 & #14: Verify future review cards are classified as 'review' (not 'due'), default sort is newest-first, and pagination works."""
         page1 = self._call("search_cards", {"query": "", "status": "all", "offset": 0, "limit": 1})["data"]
         self.assertEqual(page1["total"], 2)
         self.assertEqual(len(page1["cards"]), 1)
         self.assertTrue(page1["hasMore"])
-        self.assertEqual(page1["cards"][0]["status"], "due")
+        self.assertEqual(page1["cards"][0]["id"], "202")
+        self.assertEqual(page1["cards"][0]["status"], "review")
 
         page2 = self._call("search_cards", {"query": "", "status": "all", "offset": 1, "limit": 1})["data"]
         self.assertEqual(len(page2["cards"]), 1)
         self.assertFalse(page2["hasMore"])
-        self.assertEqual(page2["cards"][0]["status"], "review")
+        self.assertEqual(page2["cards"][0]["id"], "201")
+        self.assertEqual(page2["cards"][0]["status"], "due")
+
+        # Explicit sortBy='default' preserves Anki find_cards order (201 then 202)
+        legacy_p1 = self._call("search_cards", {"query": "", "status": "all", "sortBy": "default", "offset": 0, "limit": 1})["data"]
+        self.assertEqual(legacy_p1["cards"][0]["id"], "201")
+        self.assertEqual(legacy_p1["cards"][0]["status"], "due")
 
         # Verify suspended and buried status classifications
         self.mock_col._cards[201].queue = -1
@@ -2451,7 +2458,8 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.mock_col.db.conn.commit()
         card.render_output = lambda *a, **k: StubSearchOutput()
 
-        search_item = self._call("search_cards", {"query": "", "limit": 10})["data"]["cards"][0]
+        search_cards = self._call("search_cards", {"query": "", "limit": 10})["data"]["cards"]
+        search_item = next(c for c in search_cards if c["id"] == "201")
         self.assertEqual(search_item["front"], "她比我高。")
         self.assertNotEqual(search_item["front"], "2005")
 
@@ -3651,6 +3659,126 @@ class BridgeRouterAuditTest(unittest.TestCase):
             self.assertEqual(res_tagged["facetCounts"]["statusCounts"]["buried"], 0)
         finally:
             conn.close()
+
+    def test_46_search_cards_default_newest_sort_and_pagination(self):
+        """Verify search_cards defaults to newest-first (-id), skips off-page serialization, and preserves all sortBy modes."""
+        from anki_modern_os.bridge.search_service import SearchService
+
+        # Cards intentionally added in non-monotonic order in find_cards and with
+        # non-monotonic front text / due / lapses / intervals so every sort differs.
+        note1 = MockNote(1001, {"正面": "Zebra", "释义": "z"}, ["t1"], cids=[5001])
+        note2 = MockNote(1002, {"正面": "Alpha", "释义": "a"}, ["t1"], cids=[5002])
+        note3 = MockNote(1003, {"正面": "Middle", "释义": "m"}, ["t1"], cids=[5003])
+        note4 = MockNote(1004, {"正面": "Beta", "释义": "b"}, ["t1"], cids=[5004])
+
+        c1 = MockCard(5001, note1, queue=2, ctype=2, due=10, ivl=30)
+        c1.lapses = 4
+        c1.flags = 1
+        c2 = MockCard(5002, note2, queue=2, ctype=2, due=20, ivl=5)
+        c2.lapses = 2
+        c2.flags = 1
+        c3 = MockCard(5003, note3, queue=0, ctype=0, due=3, ivl=0)
+        c3.lapses = 0
+        c3.flags = 0
+        c4 = MockCard(5004, note4, queue=2, ctype=2, due=15, ivl=12)
+        c4.lapses = 3
+        c4.flags = 1
+
+        cards_by_id = {5001: c1, 5002: c2, 5003: c3, 5004: c4}
+        notes_by_id = {1001: note1, 1002: note2, 1003: note3, 1004: note4}
+        find_order = [5002, 5004, 5001, 5003]
+        serialized_cids = []
+
+        class _SortTestCol:
+            def __init__(self):
+                self.sched = SimpleNamespace(today=10)
+                self.decks = SimpleNamespace(get=lambda did, default=False: {"id": int(did), "name": "Default"})
+                self.tags = SimpleNamespace(all=lambda: ["t1"])
+
+            def card_count(self):
+                return len(cards_by_id)
+
+            def note_count(self):
+                return len(notes_by_id)
+
+            def find_cards(self, query):
+                if "-flag:0" in query or "flag:1" in query:
+                    return [5002, 5004, 5001]
+                if "is:" in query or "rated:" in query:
+                    return []
+                return list(find_order)
+
+            def get_card(self, cid):
+                return cards_by_id[int(cid)]
+
+            def get_note(self, nid):
+                return notes_by_id[int(nid)]
+
+        svc = SearchService(col_getter=lambda: _SortTestCol())
+        orig_serialize = svc._serialize_library_card
+
+        def tracked_serialize(col, cid, *args, **kwargs):
+            serialized_cids.append(int(cid))
+            return orig_serialize(col, cid, *args, **kwargs)
+
+        svc._serialize_library_card = tracked_serialize
+
+        # 1. Omitted, None, empty, whitespace, and explicit 'newest' all return newest-first IDs
+        for payload in (
+            {"query": "", "includeFacets": False},
+            {"query": "", "sortBy": None, "includeFacets": False},
+            {"query": "", "sortBy": "", "includeFacets": False},
+            {"query": "", "sortBy": "   ", "includeFacets": False},
+            {"query": "", "sortBy": "newest", "includeFacets": False},
+        ):
+            serialized_cids.clear()
+            res = svc.search_cards(payload)
+            self.assertEqual([c["id"] for c in res["cards"]], ["5004", "5003", "5002", "5001"])
+
+        # 2. Paginated default 'newest' only serializes the requested slice (offset=1, limit=2)
+        serialized_cids.clear()
+        page = svc.search_cards({"query": "", "offset": 1, "limit": 2, "includeFacets": False})
+        self.assertEqual([c["id"] for c in page["cards"]], ["5003", "5002"])
+        self.assertEqual(serialized_cids, [5003, 5002])
+        self.assertEqual(page["filteredCount"], 4)
+        self.assertTrue(page["hasMore"])
+
+        # 3. Default 'newest' with difficulty/flag post-filter still yields newest-first & accurate pagination
+        filtered = svc.search_cards(
+            {"query": "", "difficulty": "high", "flag": "1", "offset": 0, "limit": 1, "includeFacets": False}
+        )
+        self.assertEqual([c["id"] for c in filtered["cards"]], ["5004"])
+        self.assertEqual(filtered["filteredCount"], 3)
+        self.assertTrue(filtered["hasMore"])
+
+        filtered_p2 = svc.search_cards(
+            {"query": "", "difficulty": "high", "flag": "1", "offset": 1, "limit": 2, "includeFacets": False}
+        )
+        self.assertEqual([c["id"] for c in filtered_p2["cards"]], ["5002", "5001"])
+        self.assertFalse(filtered_p2["hasMore"])
+
+        # 4. groupByNote=False also defaults to newest-first
+        ungrouped = svc.search_cards({"query": "", "groupByNote": False, "includeFacets": False})
+        self.assertEqual([c["id"] for c in ungrouped["cards"]], ["5004", "5003", "5002", "5001"])
+
+        # 5. Explicit sortBy='default' preserves find_cards order, and other sort modes keep working
+        legacy = svc.search_cards({"query": "", "sortBy": "default", "includeFacets": False})
+        self.assertEqual([c["id"] for c in legacy["cards"]], ["5002", "5004", "5001", "5003"])
+
+        front_sorted = svc.search_cards({"query": "", "sortBy": "front_asc", "includeFacets": False})
+        self.assertEqual([c["id"] for c in front_sorted["cards"]], ["5002", "5004", "5003", "5001"])
+
+        lapses_sorted = svc.search_cards({"query": "", "sortBy": "lapses_desc", "includeFacets": False})
+        self.assertEqual([c["id"] for c in lapses_sorted["cards"]], ["5001", "5004", "5002", "5003"])
+
+        ivl_asc_sorted = svc.search_cards({"query": "", "sortBy": "ivl_asc", "includeFacets": False})
+        self.assertEqual([c["id"] for c in ivl_asc_sorted["cards"]], ["5003", "5002", "5004", "5001"])
+
+        ivl_desc_sorted = svc.search_cards({"query": "", "sortBy": "ivl_desc", "includeFacets": False})
+        self.assertEqual([c["id"] for c in ivl_desc_sorted["cards"]], ["5001", "5004", "5002", "5003"])
+
+        due_sorted = svc.search_cards({"query": "", "sortBy": "due_asc", "includeFacets": False})
+        self.assertEqual([c["id"] for c in due_sorted["cards"]], ["5001", "5004", "5002", "5003"])
 
 
 if __name__ == "__main__":

@@ -81,6 +81,7 @@ class SearchService:
         - difficulty: 'all' | 'high' | 'medium' | 'low'
         - tag: tag name or 'all'
         - deckId: deck id or 'all'
+        - sortBy: 'newest' (default) | 'default' | 'due_asc' | 'lapses_desc' | 'ivl_asc' | 'ivl_desc' | 'stability_asc' | 'front_asc'
         - offset: pagination start index (default 0)
         - limit: max cards per page (default 200)
         """
@@ -104,7 +105,7 @@ class SearchService:
         deck_id = data.get("deckId")
         flag_filter_raw = str(data.get("flag", "all") or "all").strip()
         difficulty_filter = data.get("difficulty", "all")
-        sort_by = str(data.get("sortBy", "default") or "default").strip()
+        sort_by = str(data.get("sortBy") or "newest").strip() or "newest"
         include_facets = bool(data.get("includeFacets", True))
         group_by_note = bool(data.get("groupByNote", True))
 
@@ -153,7 +154,7 @@ class SearchService:
         has_python_post_filter = (
             difficulty_filter in ("high", "medium", "low")
             or flag_filter_raw != "all"
-            or sort_by != "default"
+            or sort_by not in ("default", "newest")
         )
 
         # Compute facets cleanly with note-level deduplication when group_by_note=True
@@ -185,6 +186,11 @@ class SearchService:
             ]
         else:
             candidate_entries = [(int(cid), [int(cid)]) for cid in cids]
+
+        # Pre-sort newest-added entries by card ID before slicing so the default
+        # 'newest' view paginates without serializing the entire collection.
+        if sort_by == "newest":
+            candidate_entries.sort(key=lambda entry: -int(entry[0]))
 
         all_matched_items: List[Dict[str, Any]] = []
 
@@ -233,7 +239,7 @@ class SearchService:
                 if flag_filter_raw in ("0", "1", "2", "3", "4", "5", "6", "7") and int(item.get("flags", 0)) != int(flag_filter_raw):
                     continue
 
-                if sort_by != "default":
+                if sort_by not in ("default", "newest"):
                     all_matched_items.append(item)
                 else:
                     if matched_index >= offset:
@@ -243,7 +249,7 @@ class SearchService:
                             has_more = True
                 matched_index += 1
 
-            if sort_by != "default":
+            if sort_by not in ("default", "newest"):
                 if sort_by == "lapses_desc":
                     all_matched_items.sort(
                         key=lambda x: (-int(x.get("lapses", 0)), int(x.get("intervalDays", 0)), int(x.get("id", 0)))
@@ -272,8 +278,6 @@ class SearchService:
                     all_matched_items.sort(
                         key=lambda x: (str(x.get("front", "")).lower(), int(x.get("id", 0)))
                     )
-                elif sort_by == "newest":
-                    all_matched_items.sort(key=lambda x: -int(x.get("id", 0)))
 
                 cards_out = all_matched_items[offset : offset + limit]
                 has_more = (offset + len(cards_out)) < len(all_matched_items)
