@@ -691,6 +691,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 "customNickname": "Dr. Lee",
                 "collapsedDeckIds": ["1"],
                 "showShortcutHints": True,
+                "showIllustrations": False,
                 "continuousCardCreation": True,
                 "autoPlayFrontAudio": True,
                 "autoPlayBackAudio": False,
@@ -703,6 +704,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(prefs_res["data"]["preferences"]["customNickname"], "Dr. Lee")
         self.assertEqual(prefs_res["data"]["preferences"]["customAvatar"], {"kind": "initial"})
         self.assertTrue(prefs_res["data"]["preferences"]["showShortcutHints"])
+        self.assertFalse(prefs_res["data"]["preferences"]["showIllustrations"])
         self.assertTrue(prefs_res["data"]["preferences"]["continuousCardCreation"])
         self.assertTrue(prefs_res["data"]["preferences"]["autoPlayFrontAudio"])
         self.assertFalse(prefs_res["data"]["preferences"]["autoPlayBackAudio"])
@@ -713,6 +715,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(get_prefs["status"], "success")
         self.assertEqual(get_prefs["data"]["customAvatar"], {"kind": "initial"})
         self.assertTrue(get_prefs["data"]["showShortcutHints"])
+        self.assertFalse(get_prefs["data"]["showIllustrations"])
         self.assertTrue(get_prefs["data"]["continuousCardCreation"])
         self.assertTrue(get_prefs["data"]["autoPlayFrontAudio"])
         self.assertFalse(get_prefs["data"]["autoPlayBackAudio"])
@@ -721,6 +724,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
 
         dash_prefs = self._call("get_dashboard", {})["data"]["preferences"]
         self.assertEqual(dash_prefs["customAvatar"], {"kind": "initial"})
+        self.assertFalse(dash_prefs["showIllustrations"])
         self.assertTrue(dash_prefs["autoPlayFrontAudio"])
         self.assertFalse(dash_prefs["autoPlayBackAudio"])
         self.assertTrue(dash_prefs["continuousCardCreation"])
@@ -3927,7 +3931,13 @@ class BridgeRouterAuditTest(unittest.TestCase):
             fake_png_svg.write_text("<svg onload='alert(1)'></svg>", encoding="utf-8")
 
             huge_png = td_path / "huge.png"
-            huge_png.write_bytes(b"\x89PNG\r\n\x1a\n" + (b"X" * (8 * 1024 * 1024 + 10)))
+            huge_png.write_bytes(b"\x89PNG\r\n\x1a\n" + (b"X" * (16 * 1024 * 1024 + 10)))
+
+            large_ok_png = td_path / "large_ok.png"
+            large_ok_png.write_bytes(b"\x89PNG\r\n\x1a\n" + (b"Y" * (9 * 1024 * 1024)))
+
+            renamed_raster = td_path / "heic_or_tiff.jpg"
+            renamed_raster.write_bytes(b"MM\x00\x2aFAKE_TIFF_RASTER")
 
             bmp_file = td_path / "bitmap.bmp"
             bmp_file.write_bytes(b"BM\x3a\x00\x00\x00\x00\x00\x00\x00")
@@ -3959,18 +3969,21 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 svg_res = self._call("pick_avatar_image", {})["data"]
                 self.assertFalse(svg_res["picked"])
                 self.assertIn("error", svg_res)
+                self.assertEqual(svg_res.get("errorCode"), "invalid_type")
 
                 # Disguised SVG with .png extension rejected via magic header
                 selected_box["path"] = str(fake_png_svg)
                 disguised_res = self._call("pick_avatar_image", {})["data"]
                 self.assertFalse(disguised_res["picked"])
                 self.assertIn("error", disguised_res)
+                self.assertEqual(disguised_res.get("errorCode"), "invalid_type")
 
-                # > 8 MB rejected
+                # > 16 MB rejected
                 selected_box["path"] = str(huge_png)
                 huge_res = self._call("pick_avatar_image", {})["data"]
                 self.assertFalse(huge_res["picked"])
                 self.assertIn("error", huge_res)
+                self.assertEqual(huge_res.get("errorCode"), "too_large")
 
                 # Valid PNG without QImage falls back cleanly to original safe bytes
                 selected_box["path"] = str(valid_png)
@@ -4059,6 +4072,18 @@ class BridgeRouterAuditTest(unittest.TestCase):
                     "data:image/webp;base64," + base64.b64encode(webp_bytes).decode("ascii"),
                 )
 
+                # 9 MB photo (within 16 MB pick cap) downscales cleanly instead of failing prematurely
+                selected_box["path"] = str(large_ok_png)
+                large_ok_res = self._call("pick_avatar_image", {})["data"]
+                self.assertTrue(large_ok_res["picked"])
+                self.assertTrue(large_ok_res["dataUrl"].startswith("data:image/webp;base64,"))
+
+                # Non-SVG raster formats decodable by Qt (e.g., TIFF/HEIC renamed .jpg) transcode to WebP
+                selected_box["path"] = str(renamed_raster)
+                transcoded_res = self._call("pick_avatar_image", {})["data"]
+                self.assertTrue(transcoded_res["picked"])
+                self.assertTrue(transcoded_res["dataUrl"].startswith("data:image/webp;base64,"))
+
                 # If QImage throws on a valid PNG, still safely falls back to original bytes
                 class _BrokenQImage:
                     @classmethod
@@ -4073,6 +4098,11 @@ class BridgeRouterAuditTest(unittest.TestCase):
                     fallback_res["dataUrl"],
                     "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii"),
                 )
+                # SVG bytes still rejected even when filename has .png and Qt is broken
+                selected_box["path"] = str(fake_png_svg)
+                broken_svg_res = self._call("pick_avatar_image", {})["data"]
+                self.assertFalse(broken_svg_res["picked"])
+                self.assertEqual(broken_svg_res.get("errorCode"), "invalid_type")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ export default defineConfig({
     outDir: '../web',
     emptyOutDir: true,
     assetsDir: 'assets',
+    assetsInlineLimit: (filePath) => (filePath.includes('/illustrations/') ? false : undefined),
     rollupOptions: {
       output: {
         entryFileNames: 'assets/index.js',

@@ -355,6 +355,7 @@ export interface PickAvatarImageResult {
   canceled?: boolean;
   unsupported?: boolean;
   error?: string;
+  errorCode?: 'invalid_type' | 'too_large' | 'decode_failed' | 'read_failed';
 }
 
 export interface UserPreferences {
@@ -368,6 +369,8 @@ export interface UserPreferences {
   sandboxNoteTypeIds?: string[];
   debugMode?: boolean;
   showShortcutHints?: boolean;
+  /** 是否展示主题配套插画与首页问候水印（默认开启）。 */
+  showIllustrations?: boolean;
   /** 首页学习小贴士「今天不再显示」的日期（YYYY-MM-DD，持久化到 config）。 */
   tipsHiddenOn?: string;
   /** 匿名使用统计开关（默认开启，可关闭）。 */
@@ -685,13 +688,26 @@ export interface CardDebugInfoResponse {
   };
 }
 
+export interface CallAnkiOptions {
+  /** Override bridge IPC timeout in ms; pass `0` or `null` to disable timeout for interactive dialogs. */
+  timeoutMs?: number | null;
+}
+
+/** Actions that open modal native OS dialogs where user interaction can exceed 8s. */
+const NO_TIMEOUT_ACTIONS = new Set([
+  'pick_avatar_image',
+  'trigger_native_import',
+  'trigger_native_export',
+]);
+
 export function isAnkiNativeEnv(): boolean {
   return typeof window !== 'undefined' && typeof (window as any).pycmd === 'function';
 }
 
 export async function callAnki<T = any>(
   action: string,
-  data: Record<string, any> = {}
+  data: Record<string, any> = {},
+  options: CallAnkiOptions = {}
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify({ action, data });
@@ -699,20 +715,27 @@ export async function callAnki<T = any>(
 
     if (typeof window !== 'undefined' && typeof (window as any).pycmd === 'function') {
       let isSettled = false;
-      const timeoutMs = 8000;
-      const timer = setTimeout(() => {
-        if (!isSettled) {
-          isSettled = true;
-          // Resolving with {} made every caller treat a dead bridge as a valid
-          // response; reject instead so catch blocks and success checks work.
-          reject(new Error(`Anki bridge '${action}' timed out after ${timeoutMs}ms`));
-        }
-      }, timeoutMs);
+      const disableTimeout =
+        options.timeoutMs === 0 ||
+        options.timeoutMs === null ||
+        (options.timeoutMs === undefined && NO_TIMEOUT_ACTIONS.has(action));
+      const timeoutMs = disableTimeout ? null : (options.timeoutMs ?? 8000);
+      const timer =
+        timeoutMs !== null
+          ? setTimeout(() => {
+              if (!isSettled) {
+                isSettled = true;
+                // Resolving with {} made every caller treat a dead bridge as a valid
+                // response; reject instead so catch blocks and success checks work.
+                reject(new Error(`Anki bridge '${action}' timed out after ${timeoutMs}ms`));
+              }
+            }, timeoutMs)
+          : null;
 
       (window as any).pycmd(command, (rawRes: string) => {
         if (isSettled) return;
         isSettled = true;
-        clearTimeout(timer);
+        if (timer !== null) clearTimeout(timer);
         try {
           if (!rawRes) {
             reject(new Error(`Anki bridge '${action}' returned an empty response`));

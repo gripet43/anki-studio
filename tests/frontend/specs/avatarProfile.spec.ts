@@ -31,6 +31,7 @@ import {
   setAppState,
 } from '../../../frontend/src/stores/useAppStore';
 import { translate } from '../../../frontend/src/i18n/translations';
+import { callAnki } from '../../../frontend/src/bridge/pycmd';
 
 const SAMPLE_PNG_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
@@ -303,5 +304,50 @@ test('Sidebar, SettingsModal, and DesignSystemView render UserAvatar and profile
       customAvatar: prev.customAvatar,
       dashboard: prev.dashboard,
     });
+  }
+});
+
+section('avatar · interactive file dialog never trips 8s bridge timeout');
+
+test('callAnki disables 8000ms timer for pick_avatar_image while keeping default timeout for normal actions', () => {
+  const origWindow = (globalThis as any).window;
+  const origSetTimeout = globalThis.setTimeout;
+  const origClearTimeout = globalThis.clearTimeout;
+  const timers: Array<{ delay: number; cleared: boolean }> = [];
+  const pendingCallbacks: Array<(raw: string) => void> = [];
+
+  try {
+    (globalThis as any).setTimeout = ((_fn: any, ms: number) => {
+      const handle = { delay: ms, cleared: false };
+      timers.push(handle);
+      return handle as any;
+    }) as any;
+    (globalThis as any).clearTimeout = ((handle: any) => {
+      if (handle && typeof handle === 'object') {
+        handle.cleared = true;
+      }
+    }) as any;
+    (globalThis as any).window = {
+      pycmd: (_cmd: string, cb: (raw: string) => void) => {
+        pendingCallbacks.push(cb);
+      },
+    };
+
+    // Interactive picker MUST NOT schedule an 8000ms timeout timer
+    void callAnki('pick_avatar_image', {});
+    equal(timers.length, 0, 'pick_avatar_image must not time out while user browses Finder/Explorer');
+    equal(pendingCallbacks.length, 1);
+    pendingCallbacks.pop()!(JSON.stringify({ status: 'success', data: { picked: false, canceled: true } }));
+
+    // Standard non-interactive action still schedules 8000ms guard timer and clears on settle
+    void callAnki('get_dashboard', {});
+    equal(timers.length, 1);
+    equal(timers[0].delay, 8000);
+    pendingCallbacks.pop()!(JSON.stringify({ status: 'success', data: {} }));
+    ok(timers[0].cleared, 'normal action clears timeout once bridge responds');
+  } finally {
+    (globalThis as any).window = origWindow;
+    globalThis.setTimeout = origSetTimeout;
+    globalThis.clearTimeout = origClearTimeout;
   }
 });

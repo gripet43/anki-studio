@@ -94,6 +94,11 @@ export interface UndoSnapshot {
   sessionTotalTimeMs: number;
   wasSessionComplete: boolean;
   dayKey?: number | null;
+  wasFlipped?: boolean;
+  nativeUndoable?: boolean;
+  previousLibraryCards?: LibraryCardItem[];
+  previousLibraryTotalCount?: number;
+  previousLibraryFilteredCount?: number;
 }
 
 export interface PendingDayRolloverInfo {
@@ -158,6 +163,8 @@ export interface AppState {
   customNickname: string;
   customAvatar: CustomAvatarConfig;
   showShortcutHints: boolean;
+  /** 是否展示主题配套插画（默认开启）。 */
+  showIllustrations: boolean;
   /** 连续制卡：添加后保留窗口并清空正文，保留牌组/卡型/标签。 */
   continuousCardCreation: boolean;
   /** 首页牌组标题旁的学习小贴士「今天不再显示」日期（YYYY-MM-DD）。 */
@@ -317,6 +324,7 @@ const initialState: AppState = {
   customNickname: '',
   customAvatar: DEFAULT_CUSTOM_AVATAR,
   showShortcutHints: false,
+  showIllustrations: true,
   continuousCardCreation: false,
   tipsHiddenOn: '',
   analyticsEnabled: true,
@@ -678,6 +686,39 @@ export function applyQueueFlagToLibraryCards(
 
 // ---- Actions ----
 
+/** 为评分、暂停、搁置与删除构建可一致回退的复习队列与统计快照。 */
+function buildReviewUndoSnapshot(
+  cur: AppState,
+  card: ReviewCardItem,
+  options?: {
+    wasFlipped?: boolean;
+    nativeUndoable?: boolean;
+    includeLibrarySnapshot?: boolean;
+  }
+): UndoSnapshot {
+  return {
+    cardIndex: cur.currentCardIndex,
+    card,
+    previousQueue: [...cur.reviewQueue],
+    previousDecks: cur.decks.map((d) => ({ ...d })),
+    previousTodayStats: { ...cur.dashboard.todayStats },
+    sessionStudied: cur.sessionStudiedCount,
+    sessionCorrect: cur.sessionCorrectCount,
+    sessionTotalTimeMs: cur.sessionTotalTimeMs,
+    wasSessionComplete: cur.isSessionComplete,
+    dayKey: cur.dayBoundary?.available ? cur.dayBoundary.schedToday : cur.reviewSessionDayKey,
+    wasFlipped: options?.wasFlipped ?? cur.isCardFlipped,
+    nativeUndoable: options?.nativeUndoable,
+    ...(options?.includeLibrarySnapshot
+      ? {
+          previousLibraryCards: [...cur.libraryCards],
+          previousLibraryTotalCount: cur.libraryTotalCount,
+          previousLibraryFilteredCount: cur.libraryFilteredCount,
+        }
+      : {}),
+  };
+}
+
 export const appActions = {
   async initFromAnki(silent = false, options?: { skipReviewQueueRefresh?: boolean }) {
     if (!isAnkiNativeEnv()) {
@@ -803,6 +844,10 @@ export const appActions = {
           ? []
           : state.sandboxNoteTypeIds,
         showShortcutHints: prefs?.showShortcutHints !== undefined ? prefs.showShortcutHints : state.showShortcutHints,
+        showIllustrations:
+          prefs?.showIllustrations !== undefined
+            ? Boolean(prefs.showIllustrations)
+            : state.showIllustrations,
         continuousCardCreation:
           prefs?.continuousCardCreation !== undefined
             ? Boolean(prefs.continuousCardCreation)
@@ -1032,6 +1077,7 @@ export const appActions = {
     customAvatar?: CustomAvatarConfig;
     collapsedDeckIds?: string[];
     showShortcutHints?: boolean;
+    showIllustrations?: boolean;
     continuousCardCreation?: boolean;
     tipsHiddenOn?: string;
     analyticsEnabled?: boolean;
@@ -1058,6 +1104,9 @@ export const appActions = {
       ...(normalizedAvatar !== undefined ? { customAvatar: normalizedAvatar } : {}),
       ...(patch.collapsedDeckIds ? { collapsedDeckIds: patch.collapsedDeckIds } : {}),
       ...(patch.showShortcutHints !== undefined ? { showShortcutHints: patch.showShortcutHints } : {}),
+      ...(patch.showIllustrations !== undefined
+        ? { showIllustrations: Boolean(patch.showIllustrations) }
+        : {}),
       ...(patch.continuousCardCreation !== undefined
         ? { continuousCardCreation: Boolean(patch.continuousCardCreation) }
         : {}),
@@ -1144,7 +1193,7 @@ export const appActions = {
       return false;
     }
     try {
-      const res = await callAnki<PickAvatarImageResult>('pick_avatar_image', {});
+      const res = await callAnki<PickAvatarImageResult>('pick_avatar_image', {}, { timeoutMs: 0 });
       if (res?.unsupported) {
         onFallbackToFilePicker?.();
         return false;
@@ -1154,8 +1203,8 @@ export const appActions = {
       }
       if (res?.error) {
         if (
-          res.error === 'invalid_type' ||
-          /svg|format|mime|type|ext|unsupported/i.test(String(res.error))
+          res.errorCode === 'invalid_type' ||
+          /svg|format|mime|type|ext|unsupported|header|raster|invalid/i.test(String(res.error))
         ) {
           showToast(tState('avatarUploadInvalidToast'));
         } else {
@@ -1173,7 +1222,7 @@ export const appActions = {
         onFallbackToFilePicker?.();
         return false;
       }
-      if (/svg|format|mime|type|ext/i.test(msg)) {
+      if (/svg|format|mime|type|ext|unsupported|header|raster|invalid/i.test(msg)) {
         showToast(tState('avatarUploadInvalidToast'));
       } else {
         showToast(tState('avatarUploadTooLargeToast'));
@@ -2273,6 +2322,7 @@ export const appActions = {
       sessionStudiedCount: 0,
       sessionCorrectCount: 0,
       sessionTotalTimeMs: 0,
+      undoStack: [],
       revealedHintsCount: 2,
       inlineEditing: false,
       inspectorOpen: false,
@@ -2475,6 +2525,7 @@ export const appActions = {
       isPreviewSession: false,
       pendingDayRollover: null,
       reviewSessionDayKey: null,
+      undoStack: [],
       inlineEditing: false,
       inspectorOpen: false,
       slashMenuOpen: false,
@@ -2631,18 +2682,9 @@ export const appActions = {
     const realElapsedMs = Math.max(500, Math.min(60000, Date.now() - state.cardShownAtMs));
     const isPreview = Boolean(state.isPreviewSession || currentCard.isPreviewOnly);
 
-    const snapshot: UndoSnapshot = {
-      cardIndex: state.currentCardIndex,
-      card: currentCard,
-      previousQueue: [...state.reviewQueue],
-      previousDecks: state.decks.map((d) => ({ ...d })),
-      previousTodayStats: { ...state.dashboard.todayStats },
-      sessionStudied: state.sessionStudiedCount,
-      sessionCorrect: state.sessionCorrectCount,
-      sessionTotalTimeMs: state.sessionTotalTimeMs,
-      wasSessionComplete: state.isSessionComplete,
-      dayKey: state.dayBoundary?.available ? state.dayBoundary.schedToday : state.reviewSessionDayKey,
-    };
+    const snapshot = buildReviewUndoSnapshot(state, currentCard, {
+      wasFlipped: true,
+    });
 
     let answerPromise: Promise<unknown> | null = null;
     if (isAnkiNativeEnv() && !isPreview && /^\d+$/.test(currentCard.id)) {
@@ -2832,7 +2874,7 @@ export const appActions = {
         state.dayBoundary?.available &&
         last.dayKey !== state.dayBoundary.schedToday
     );
-    if (isAnkiNativeEnv() && !state.isPreviewSession) {
+    if (isAnkiNativeEnv() && (!state.isPreviewSession || last.nativeUndoable)) {
       if (crossedDay) {
         try {
           await callAnki('undo');
@@ -2848,11 +2890,18 @@ export const appActions = {
       decks: crossedDay ? prev.decks : last.previousDecks,
       currentCardIndex: last.cardIndex,
       isSessionComplete: false,
-      isCardFlipped: true,
+      isCardFlipped: last.wasFlipped ?? true,
       cardShownAtMs: Date.now(),
       sessionStudiedCount: last.sessionStudied,
       sessionCorrectCount: last.sessionCorrect,
       sessionTotalTimeMs: last.sessionTotalTimeMs,
+      ...(last.previousLibraryCards !== undefined
+        ? {
+            libraryCards: last.previousLibraryCards,
+            libraryTotalCount: last.previousLibraryTotalCount ?? prev.libraryTotalCount,
+            libraryFilteredCount: last.previousLibraryFilteredCount ?? prev.libraryFilteredCount,
+          }
+        : {}),
       dashboard: crossedDay
         ? prev.dashboard
         : {
@@ -2870,6 +2919,12 @@ export const appActions = {
   async deleteCurrentReviewCard() {
     const currentCard = state.reviewQueue[state.currentCardIndex];
     if (!currentCard) return;
+
+    const snapshot = buildReviewUndoSnapshot(state, currentCard, {
+      wasFlipped: state.isCardFlipped,
+      nativeUndoable: true,
+      includeLibrarySnapshot: true,
+    });
 
     appActions.stopAudio();
     const epoch = ++reviewTransitionEpoch;
@@ -2891,6 +2946,7 @@ export const appActions = {
     const nextIdx = Math.min(state.currentCardIndex, Math.max(0, nextQueue.length - 1));
 
     setAppState((prev) => ({
+      undoStack: [...prev.undoStack, snapshot],
       reviewQueue: nextQueue,
       libraryCards: nextLib,
       libraryTotalCount: Math.max(0, prev.libraryTotalCount - 1),
@@ -2914,6 +2970,13 @@ export const appActions = {
     if (!currentCard) return;
 
     const nextSuspended = !currentCard.suspended;
+    const snapshot = nextSuspended
+      ? buildReviewUndoSnapshot(state, currentCard, {
+          wasFlipped: state.isCardFlipped,
+          nativeUndoable: true,
+          includeLibrarySnapshot: true,
+        })
+      : null;
     if (nextSuspended) {
       appActions.stopAudio();
     }
@@ -2941,14 +3004,15 @@ export const appActions = {
     if (nextSuspended) {
       const nextQueue = state.reviewQueue.filter((c) => c.id !== currentCard.id);
       const nextIdx = Math.min(state.currentCardIndex, Math.max(0, nextQueue.length - 1));
-      setAppState({
+      setAppState((prev) => ({
+        undoStack: snapshot ? [...prev.undoStack, snapshot] : prev.undoStack,
         reviewQueue: nextQueue,
         libraryCards: nextLib,
         currentCardIndex: nextIdx,
         isSessionComplete: nextQueue.length === 0,
         isCardFlipped: false,
         cardShownAtMs: Date.now(),
-      });
+      }));
       if (epoch === reviewTransitionEpoch && state.inReviewMode && !state.isSessionComplete) {
         autoPlayCardSide(state.reviewQueue[state.currentCardIndex], 'front');
       }
@@ -2963,6 +3027,12 @@ export const appActions = {
     const state = getAppState();
     const currentCard = state.reviewQueue[state.currentCardIndex];
     if (!currentCard) return;
+
+    const snapshot = buildReviewUndoSnapshot(state, currentCard, {
+      wasFlipped: state.isCardFlipped,
+      nativeUndoable: true,
+      includeLibrarySnapshot: true,
+    });
 
     appActions.stopAudio();
     const epoch = ++reviewTransitionEpoch;
@@ -2988,14 +3058,15 @@ export const appActions = {
 
     const nextQueue = state.reviewQueue.filter((c) => c.id !== currentCard.id);
     const nextIdx = Math.min(state.currentCardIndex, Math.max(0, nextQueue.length - 1));
-    setAppState({
+    setAppState((prev) => ({
+      undoStack: [...prev.undoStack, snapshot],
       reviewQueue: nextQueue,
       libraryCards: nextLib,
       currentCardIndex: nextIdx,
       isSessionComplete: nextQueue.length === 0,
       isCardFlipped: false,
       cardShownAtMs: Date.now(),
-    });
+    }));
     if (epoch === reviewTransitionEpoch && state.inReviewMode && !state.isSessionComplete) {
       autoPlayCardSide(state.reviewQueue[state.currentCardIndex], 'front');
     }

@@ -82,39 +82,20 @@ export const SyncStatusPill: React.FC = () => {
       </div>
 
       {/* Time & Snapshot Fact */}
-      <div className="py-2.5 space-y-1 text-[11px]">
-        <div className="flex items-center justify-between text-[var(--text-secondary)]">
-          <span>{t('synced')}</span>
-          {hasSynced ? (
-            <time
-              dateTime={isoTimestamp}
-              className="font-mono text-[var(--text-primary)] tabular-nums"
-            >
-              {relativeTimeStr}
-            </time>
-          ) : (
-            <span className="font-mono text-[var(--text-primary)]">
-              {t('neverSyncedShort')}
-            </span>
-          )}
-        </div>
-        {hasSynced && detailedTimeStr && (
-          <div className="text-[10px] text-[var(--text-secondary)] text-end font-mono tabular-nums">
-            <time dateTime={isoTimestamp}>{detailedTimeStr}</time>
-          </div>
+      <div className="pt-2.5 text-[11px] flex items-center justify-between gap-3 text-[var(--text-secondary)]">
+        <span>{t('synced')}</span>
+        {hasSynced && detailedTimeStr ? (
+          <time
+            dateTime={isoTimestamp}
+            className="font-mono text-[var(--text-primary)] tabular-nums"
+          >
+            {detailedTimeStr}
+          </time>
+        ) : (
+          <span className="font-mono text-[var(--text-primary)]">
+            {t('neverSyncedShort')}
+          </span>
         )}
-        {!hasSynced && (
-          <div className="text-[10px] text-[var(--text-secondary)] text-end">
-            {t('noCloudSyncRecord')}
-          </div>
-        )}
-      </div>
-
-      {/* Sync Guidance Footnote (此时间代表上次同步云端时间。如有新的修改，请点击按钮完成同步。) */}
-      <div className="pt-2.5 text-[10.5px] leading-relaxed text-[var(--text-secondary)] border-t border-[var(--border-subtle)]">
-        {hasSynced
-          ? t('syncSnapshotFootnote')
-          : t('syncNoRecordFootnote')}
       </div>
     </>
   );
@@ -172,20 +153,12 @@ export const SyncStatusPill: React.FC = () => {
               <span>{t('syncCompleted')}</span>
             </span>
           ) : hasSynced ? (
-            <div className="flex items-center gap-1.5 text-[var(--text-secondary)] whitespace-nowrap">
-              <span className="font-medium text-[12.5px] leading-[1.4] whitespace-nowrap">
-                {t('synced')}
-              </span>
-              <span aria-hidden="true" className="text-[var(--text-muted)] text-[12px] leading-[1.4] shrink-0">
-                ·
-              </span>
-              <time
-                dateTime={isoTimestamp}
-                className="text-[12.5px] font-medium tracking-tight tabular-nums leading-[1.4] whitespace-nowrap"
-              >
-                {relativeTimeStr}
-              </time>
-            </div>
+            <time
+              dateTime={isoTimestamp}
+              className="text-[12.5px] font-medium text-[var(--text-secondary)] tracking-tight tabular-nums leading-[1.4] whitespace-nowrap"
+            >
+              {relativeTimeStr}
+            </time>
           ) : (
             <span className="font-medium text-[12.5px] text-[var(--text-secondary)] leading-[1.4] whitespace-nowrap">
               {t('notSyncedShort')}

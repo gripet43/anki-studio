@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "키보드 중심 워크플로. macOS(Cmd)와 Windows/Linux(Ctrl) 보조키에 자동으로 맞춰집니다.",
   settingsShowShortcutBadgesSub: "사이드바, 평가 버튼 및 도구 모음에 키보드 단축키 배지를 표시합니다",
   settingsShowShortcutBadgesTitle: "단축키 배지 표시",
+  settingsShowIllustrationsLabel: "일러스트 표시",
   settingsShowTipsTitle: "대시보드에 학습 팁 표시",
   settingsShowTipsSub: "「내 덱」제목 옆에서 학습 원칙을 순환 표시합니다. 끄면 오늘만 숨겨지고 내일 다시 나타납니다.",
   settingsAnswerButtonsTitle: "답변 버튼",

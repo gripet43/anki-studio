@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+## [v1.6.11] - 2026-11-18
+
+- **[Antigravity] 全场景单色淡墨主题插画重制、显示插画开关、首页工具栏极简化与学习页显示/撤销交互打磨**：
+  - **7 套主题全场景单色细线淡墨光栅 Alpha 蒙版插画升级与总开关**（新增 `frontend/src/assets/illustrations/{greeting,corner,celebration,empty}/*` 140 份 `1x`/`2x` `avif`/`webp` 资源，删除原 `frontend/src/components/common/illustrations/` 内联 SVG 包，改 [`frontend/src/components/common/ThemeIllustrations.tsx`](frontend/src/components/common/ThemeIllustrations.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、16 语种词典及单测）：
+    - 将首页问候装饰（位点 A `GreetingVignette`）、学习页四角边饰（位点 C `ReviewerCornerDecor`）、完成仪式页主插画（位点 D1 `CelebrationIllustration`）及空状态引导插画（位点 D2 `EmptyStateIllustration`）全面升级为按主题 `var(--brand-text)` 动态染色的光栅 Alpha 蒙版（含亮/暗色透明度平衡、`[dir='rtl']` 水平镜像与 `forced-colors` 适配）；保留 `ThemedDeckEmblem`（21×21）与默认经典蓝零插画体验。
+    - 设置「主题色」标题右侧新增全局「显示插画」开关（`showIllustrations`），前后端偏好持久化并统一门控所有主题插画展示。
+  - **首页顶栏同步指示极简化与搜索框收窄自适应**（改 [`frontend/src/components/dashboard/SyncStatusPill.tsx`](frontend/src/components/dashboard/SyncStatusPill.tsx)、[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)）：
+    - 首页同步状态胶囊收敛为清爽无框云朵图标与状态摘要；全局搜索触发胶囊改用内容自适应宽度（`w-auto min-w-[144px] sm:min-w-[152px] max-w-[208px]`），消除右侧冗余空白并保留多语言 `truncate` 与 `:focus-visible` 焦点环。
+  - **学习页「视图与字号」弹层卡片重构与统一撤销栈收敛**（新增 [`tests/frontend/specs/reviewDisplayPopover.spec.ts`](tests/frontend/specs/reviewDisplayPopover.spec.ts)、[`tests/frontend/specs/reviewUndo.spec.ts`](tests/frontend/specs/reviewUndo.spec.ts)、[`tests/test_reviewer_undo_store.mjs`](tests/test_reviewer_undo_store.mjs)，改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/index.css`](frontend/src/index.css)）：
+    - 「视图与字号」弹层采用统一三段式字体缩放条（`.reviewer-scale-stepper`）、`<fieldset>` + 抽象比例图示的单选画幅卡片（`.reviewer-width-card`，去掉 `580/840` 等像素数字）及居中对齐的 `.anki-switch-sm` 兼容模式开关（去掉模板名副标题与底部冗余重置框/提示文案），并拦截弹层开启时的底层翻卡热键。
+    - 统一学习页评分/暂停/搁置/删除 `undoStack` 回退快照（支持 `Cmd Z` / `Backspace`），并将显式撤销按钮优雅收纳进「···」卡片详情抽屉底部操作栏。
+
 ## [v1.6.10] - 2026-11-18
 
 - **[Antigravity] 本地档案个人头像定制、侧边栏/首页/卡片库/关于页视觉与现代 Web 无障碍精修**：

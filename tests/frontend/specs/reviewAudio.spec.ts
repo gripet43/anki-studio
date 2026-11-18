@@ -2,7 +2,12 @@
 // Card Audio Auto-Play & Side Separation Pure Logic Tests
 // ============================================================================
 
-import { section, test, eq, equal } from '../harness';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+import { section, test, eq, equal, ok } from '../harness';
+import { ReviewerView } from '../../../frontend/src/components/reviewer/ReviewerView';
+import { getAppState, setAppState } from '../../../frontend/src/stores/useAppStore';
 import {
   getSandboxPlayAudioFile,
   normalizeAudioList,
@@ -150,4 +155,99 @@ test('normalizeAudioList and resolveAudioFilesToPlay deduplicate and trim', () =
   eq(resolveAudioFilesToPlay(' word.mp3 '), ['word.mp3']);
   eq(resolveAudioFilesToPlay([' 1.mp3 ', '2.mp3', '1.mp3']), ['1.mp3', '2.mp3']);
   eq(resolveAudioFilesToPlay('   '), []);
+});
+
+function extractAudioPopoverHtml(fullHtml: string): string {
+  const start = fullHtml.indexOf('popover="auto"');
+  const audioIdx = start !== -1 ? fullHtml.indexOf('--reviewer-audio-anchor', start) : -1;
+  ok(start !== -1 && audioIdx !== -1, 'expected ReviewerView to render audio popover anchor');
+  const openTagStart = fullHtml.lastIndexOf('<div', audioIdx);
+  const flagIdx = fullHtml.indexOf('--reviewer-flag-anchor', audioIdx);
+  const flagTagStart = flagIdx !== -1 ? fullHtml.lastIndexOf('<div', flagIdx) : -1;
+  ok(openTagStart !== -1 && flagTagStart !== -1, 'expected bounded audio popover slice');
+  return fullHtml.slice(openTagStart, flagTagStart);
+}
+
+test('audio popover matches Display popover surface, bordered header, .anki-switch-sm checkboxes, and card-tile action link', () => {
+  const prev = getAppState();
+  setAppState({
+    inReviewMode: true,
+    isSessionComplete: false,
+    inlineEditing: false,
+    resolvedLang: 'zh-CN',
+    theme: 'light',
+    systemDark: false,
+    autoPlayFrontAudio: true,
+    autoPlayBackAudio: true,
+    reviewQueue: [
+      {
+        id: '301',
+        noteId: 'n-301',
+        notetypeId: 'nt-basic',
+        noteTypeName: 'Basic',
+        isCloze: false,
+        cardType: 'review',
+        deckId: '1',
+        deckName: 'Default',
+        fullDeckName: 'Default',
+        front: 'Prompt',
+        reading: '',
+        meaning: 'Answer',
+        etymology: '',
+        example: '',
+        extraHint: '',
+        frontHtml: 'Prompt',
+        frontAnswerHtml: 'Prompt',
+        backHtml: 'Answer',
+        audioFiles: [],
+        fields: { Front: 'Prompt', Back: 'Answer' },
+        fieldOrder: ['Front', 'Back'],
+        tags: [],
+        reps: 1,
+        lapses: 0,
+        intervalDays: 1,
+        stability: 1,
+        difficulty: 5,
+        lastReviewText: '1d',
+        suspended: false,
+        flags: 0,
+        predictions: { again: '10m', hard: '2d', good: '4d', easy: '9d' },
+        history: [],
+      },
+    ],
+    currentCardIndex: 0,
+  });
+  try {
+    const html = renderToStaticMarkup(React.createElement(ReviewerView));
+    const pop = extractAudioPopoverHtml(html);
+
+    ok(pop.includes('w-[300px]'), 'expected uniform 300px popover width matching Display popover');
+    ok(pop.includes('bg-[var(--bg-card)]/96'), 'expected warm card surface matching Display popover');
+    ok(pop.includes('flex flex-col gap-3'), 'expected flex gap-3 container matching Display popover');
+    ok(pop.includes('h-9 pb-3 border-b'), 'expected bordered header bar matching Display popover');
+    ok(pop.includes('>音频自动播放<'), 'expected Audio Auto-Play header title');
+    ok(pop.includes('>Q + A<'), 'expected Q + A status badge when both switches enabled');
+
+    const switchInputs = Array.from(
+      pop.matchAll(/<input\b[^>]*id="([^"]+)"[^>]*class="anki-switch anki-switch-sm[^"]*"[^>]*>/g)
+    );
+    equal(switchInputs.length, 2, 'expected two .anki-switch.anki-switch-sm toggles');
+    for (const m of switchInputs) {
+      ok(pop.includes(`<label for="${m[1]}"`), `expected explicit <label for="${m[1]}"> linked to switch`);
+    }
+    ok(pop.includes('reviewer-popover-link'), 'expected light-bordered footer button matching Display tiles');
+  } finally {
+    setAppState({
+      inReviewMode: prev.inReviewMode,
+      isSessionComplete: prev.isSessionComplete,
+      inlineEditing: prev.inlineEditing,
+      resolvedLang: prev.resolvedLang,
+      theme: prev.theme,
+      systemDark: prev.systemDark,
+      autoPlayFrontAudio: prev.autoPlayFrontAudio,
+      autoPlayBackAudio: prev.autoPlayBackAudio,
+      reviewQueue: prev.reviewQueue,
+      currentCardIndex: prev.currentCardIndex,
+    });
+  }
 });

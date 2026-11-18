@@ -38,7 +38,6 @@ import {
   getAccentScale,
   resolveThemeMode,
 } from '../../utils/themeTokens';
-import { hasIllustrationPack } from '../common/ThemeIllustrations';
 import { getEffectiveDayKey } from '../../utils/localDate';
 
 const XIAOHONGSHU_PROFILE_URL =
@@ -66,6 +65,7 @@ export const SettingsModal: React.FC = () => {
     settingsInitialTab,
     envInfo,
     showShortcutHints,
+    showIllustrations,
     tipsHiddenOn,
     analyticsEnabled,
     answerButtonMode,
@@ -90,11 +90,12 @@ export const SettingsModal: React.FC = () => {
   const effectiveDayKey = getEffectiveDayKey(dayBoundary);
   const tipsHiddenToday = tipsHiddenOn === effectiveDayKey;
   const aboutHeadingId = useId();
+  const illustrationsSwitchId = useId();
   const analyticsSwitchId = useId();
   const analyticsDescId = useId();
   const supportsNativeSwitch =
     typeof HTMLInputElement !== 'undefined' && 'switch' in HTMLInputElement.prototype;
-  const studioVersion = envInfo.studioVersion || '1.6.10';
+  const studioVersion = envInfo.studioVersion || '1.6.11';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
@@ -425,17 +426,28 @@ export const SettingsModal: React.FC = () => {
                   <div className="text-[13px] font-semibold">
                     {t('settingsThemeColorTitle')}
                   </div>
-                  <span
-                    className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-md border ${
-                      hasIllustrationPack(accentColor)
-                        ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-text)]'
-                        : isDark
-                        ? 'bg-white/[0.04] border-white/[0.08] text-[#A4A6B4]'
-                        : 'bg-[#F5F6F8] border-[#E5E6EC] text-[#6E6E73]'
-                    }`}
-                  >
-                    {t(`accentAtmoName_${accentColor}` as any)}
-                  </span>
+                  <div className="inline-flex items-center gap-2 shrink-0">
+                    <label
+                      htmlFor={illustrationsSwitchId}
+                      className={`text-[12px] font-medium cursor-pointer select-none ${subText}`}
+                    >
+                      {t('settingsShowIllustrationsLabel')}
+                    </label>
+                    <input
+                      id={illustrationsSwitchId}
+                      type="checkbox"
+                      checked={showIllustrations}
+                      onChange={(e) =>
+                        appActions.updatePreferences({ showIllustrations: e.target.checked })
+                      }
+                      {...({ switch: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+                      {...(supportsNativeSwitch
+                        ? {}
+                        : { role: 'switch', 'aria-checked': showIllustrations })}
+                      data-switch-fallback={supportsNativeSwitch ? 'false' : 'true'}
+                      className="anki-switch anki-switch-sm shrink-0"
+                    />
+                  </div>
                 </div>
 
                 <div

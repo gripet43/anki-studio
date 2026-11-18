@@ -28,6 +28,7 @@ from .profile_config import (
     MAX_AVATAR_PICK_BYTES,
     cleanup_profile_avatar_files,
     detect_image_mime_from_bytes,
+    looks_like_svg_bytes,
     prepare_custom_avatar_storage,
     resolve_custom_avatar,
     resolve_profile_key,
@@ -48,9 +49,11 @@ def _avatar_picker_caption(lang: str) -> str:
 def _maybe_scale_avatar_with_qt(
     qt_mod: Any,
     raw_bytes: bytes,
-    detected_mime: str,
-) -> Tuple[str, bytes]:
-    """Safely downscales large raster images via Qt `QImage`; falls back to original bytes on error."""
+    detected_mime: Optional[str],
+) -> Tuple[Optional[str], bytes]:
+    """Safely downscales or transcodes raster images via Qt `QImage`; falls back to original bytes on error."""
+    if looks_like_svg_bytes(raw_bytes):
+        return None, raw_bytes
     qimage_cls = getattr(qt_mod, "QImage", None)
     qbytearray_cls = getattr(qt_mod, "QByteArray", None)
     qbuffer_cls = getattr(qt_mod, "QBuffer", None)
@@ -68,7 +71,8 @@ def _maybe_scale_avatar_with_qt(
         needs_scale = max(width, height) > AVATAR_PICK_MAX_DIMENSION
         needs_reencode = (
             needs_scale
-            or detected_mime == "image/bmp"
+            or not detected_mime
+            or detected_mime not in ALLOWED_AVATAR_MIME_TO_EXT
             or len(raw_bytes) > MAX_AVATAR_BYTES
         )
         if not needs_reencode:
@@ -351,6 +355,7 @@ class BridgeRouter:
             "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
             "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
             "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
+            "showIllustrations": self.deck_service._coerce_bool(cfg.get("show_illustrations"), True),
             "continuousCardCreation": bool(cfg.get("continuous_card_creation", False)),
             "tipsHiddenOn": self._tips_hidden_on(cfg),
             "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),
@@ -378,6 +383,10 @@ class BridgeRouter:
             patch["sandbox_notetype_ids"] = [str(x) for x in data["sandboxNoteTypeIds"] if str(x).strip()]
         if "showShortcutHints" in data:
             patch["show_shortcut_hints"] = bool(data["showShortcutHints"])
+        if "showIllustrations" in data:
+            patch["show_illustrations"] = self.deck_service._coerce_bool(
+                data["showIllustrations"], True
+            )
         if "continuousCardCreation" in data:
             patch["continuous_card_creation"] = self.deck_service._coerce_bool(
                 data["continuousCardCreation"], False
@@ -465,6 +474,7 @@ class BridgeRouter:
                 "collapsedDeckIds": saved.get("collapsed_deck_ids", []),
                 "sandboxNoteTypeIds": [str(x) for x in (saved.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(saved.get("show_shortcut_hints", False)),
+                "showIllustrations": self.deck_service._coerce_bool(saved.get("show_illustrations"), True),
                 "continuousCardCreation": bool(saved.get("continuous_card_creation", False)),
                 "tipsHiddenOn": str(saved.get("dashboard_tips_hidden_on") or ""),
                 "analyticsEnabled": bool(saved.get("analytics_enabled", True)),
@@ -521,32 +531,69 @@ class BridgeRouter:
         path = Path(selected)
         ext = path.suffix.lower()
         if ext in (".svg", ".svgz"):
-            return {"picked": False, "error": "SVG images are not supported"}
+            return {
+                "picked": False,
+                "error": "SVG images are not supported",
+                "errorCode": "invalid_type",
+            }
         if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"):
-            return {"picked": False, "error": "Unsupported image format"}
+            return {
+                "picked": False,
+                "error": "Unsupported image format",
+                "errorCode": "invalid_type",
+            }
 
         try:
             if not path.is_file():
-                return {"picked": False, "error": "Selected file does not exist"}
+                return {
+                    "picked": False,
+                    "error": "Selected file does not exist",
+                    "errorCode": "read_failed",
+                }
             file_size = path.stat().st_size
             if file_size <= 0:
-                return {"picked": False, "error": "Selected image file is empty"}
+                return {
+                    "picked": False,
+                    "error": "Selected image file is empty",
+                    "errorCode": "decode_failed",
+                }
             if file_size > MAX_AVATAR_PICK_BYTES:
-                return {"picked": False, "error": "Selected image exceeds 8 MB limit"}
+                return {
+                    "picked": False,
+                    "error": f"Selected image exceeds {MAX_AVATAR_PICK_BYTES // (1024 * 1024)} MB limit",
+                    "errorCode": "too_large",
+                }
             raw_bytes = path.read_bytes()
         except OSError as exc:
-            return {"picked": False, "error": str(exc)}
+            return {"picked": False, "error": str(exc), "errorCode": "read_failed"}
 
-        if not raw_bytes or len(raw_bytes) > MAX_AVATAR_PICK_BYTES:
-            return {"picked": False, "error": "Selected image exceeds 8 MB limit"}
+        if not raw_bytes:
+            return {
+                "picked": False,
+                "error": "Selected image file is empty",
+                "errorCode": "decode_failed",
+            }
+        if len(raw_bytes) > MAX_AVATAR_PICK_BYTES:
+            return {
+                "picked": False,
+                "error": f"Selected image exceeds {MAX_AVATAR_PICK_BYTES // (1024 * 1024)} MB limit",
+                "errorCode": "too_large",
+            }
+        if looks_like_svg_bytes(raw_bytes):
+            return {
+                "picked": False,
+                "error": "SVG images are not supported",
+                "errorCode": "invalid_type",
+            }
 
         detected_mime = detect_image_mime_from_bytes(raw_bytes, allow_bmp=True)
-        if detected_mime is None:
-            return {"picked": False, "error": "Invalid raster image header"}
-
         out_mime, out_bytes = _maybe_scale_avatar_with_qt(qt_mod, raw_bytes, detected_mime)
-        if out_mime not in ALLOWED_AVATAR_MIME_TO_EXT:
-            return {"picked": False, "error": "Unsupported image format"}
+        if not out_mime or out_mime not in ALLOWED_AVATAR_MIME_TO_EXT:
+            return {
+                "picked": False,
+                "error": "Invalid raster image header" if detected_mime is None else "Unsupported image format",
+                "errorCode": "invalid_type",
+            }
 
         b64 = base64.b64encode(out_bytes).decode("ascii")
         return {
@@ -661,6 +708,7 @@ class BridgeRouter:
                 "reviewStageWidth": review_stage_width,
                 "reviewContentScale": review_content_scale,
                 "sandboxNoteTypeIds": sandbox_ids,
+                "showIllustrations": self.deck_service._coerce_bool(cfg.get("show_illustrations"), True),
                 "compatEnabledForCardNoteType": bool(nt_id and nt_id in sandbox_ids),
             },
         }

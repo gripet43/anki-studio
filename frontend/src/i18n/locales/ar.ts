@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "تصميم يعتمد على لوحة المفاتيح ويتكيف تلقائياً مع أزرار macOS و Windows/Linux.",
   settingsShowShortcutBadgesSub: "إظهار شارات اختصارات لوحة المفاتيح على الشريط الجانبي وأزرار التقييم",
   settingsShowShortcutBadgesTitle: "إظهار شارات الاختصارات",
+  settingsShowIllustrationsLabel: "عرض الرسوم",
   settingsShowTipsTitle: "عرض نصائح الدراسة في اللوحة",
   settingsShowTipsSub: "يعرض مبادئ الدراسة بجانب عنوان الرزم؛ عند إيقافه يُخفى اليوم فقط.",
   settingsAnswerButtonsTitle: "أزرار الإجابة",

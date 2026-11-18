@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Управление с клавиатуры с автоадаптацией клавиш Cmd (macOS) и Ctrl (Windows / Linux).",
   settingsShowShortcutBadgesSub: "Показывать подсказки горячих клавиш в боковой панели и на кнопках оценки",
   settingsShowShortcutBadgesTitle: "Показывать значки горячих клавиш",
+  settingsShowIllustrationsLabel: "Иллюстрации",
   settingsShowTipsTitle: "Показывать советы по учёбе на главной",
   settingsShowTipsSub: "Показывает принципы учёбы рядом с заголовком колод; при выключении скрывается только на сегодня.",
   settingsAnswerButtonsTitle: "Кнопки ответа",

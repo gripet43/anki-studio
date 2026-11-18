@@ -4,84 +4,49 @@ import {
   getAccentAtmosphere,
   IllustrationPackId,
 } from '../../utils/themeTokens';
-import type { IllustrationPalette, ThemeIllustrationPack } from './illustrations/types';
-import { botanicalPack } from './illustrations/botanical';
-import { kyotoPack } from './illustrations/kyoto';
-import { cafePack } from './illustrations/cafe';
-import { nekoPack } from './illustrations/neko';
-import { celestialPack } from './illustrations/celestial';
-import { cloudscapePack } from './illustrations/cloudscape';
-import { libraryPack } from './illustrations/library';
+import { useAppStore } from '../../stores/useAppStore';
 
 interface IllustrationProps {
   accentColor: AccentColor;
   isDark?: boolean;
+  /** 可选覆盖全局 showIllustrations 开关，默认跟随用户设置。 */
+  enabled?: boolean;
 }
 
 interface DeckEmblemProps extends IllustrationProps {
   deckAccent: string;
 }
 
-const ILLUSTRATION_PACKS: Record<Exclude<IllustrationPackId, 'none'>, ThemeIllustrationPack> = {
-  botanical: botanicalPack,
-  kyoto: kyotoPack,
-  cafe: cafePack,
-  neko: nekoPack,
-  celestial: celestialPack,
-  cloudscape: cloudscapePack,
-  library: libraryPack,
-};
-
-function getPalette(isDark: boolean): IllustrationPalette {
-  return isDark
-    ? {
-        ink: '#D5D8E4',
-        soft: 'rgba(255, 255, 255, 0.10)',
-        warm: 'rgba(255, 255, 255, 0.06)',
-        paper: '#242734',
-        brand: 'var(--brand)',
-        brandSoft: 'var(--brand-soft)',
-        gold: '#F2B866',
-        rose: '#EF8BA3',
-        leaf: '#6AD29D',
-      }
-    : {
-        ink: '#353944',
-        soft: 'rgba(30, 36, 48, 0.08)',
-        warm: '#F3EEE4',
-        paper: '#FCFBF7',
-        brand: 'var(--brand)',
-        brandSoft: 'var(--brand-soft)',
-        gold: '#C57F2D',
-        rose: '#CC5875',
-        leaf: '#2F9461',
-      };
-}
-
 export function resolveIllustrationPack(accentColor: AccentColor): IllustrationPackId {
   return getAccentAtmosphere(accentColor).pack;
 }
 
-export function hasIllustrationPack(accentColor: AccentColor): boolean {
-  return resolveIllustrationPack(accentColor) !== 'none';
+export function hasIllustrationPack(
+  accentColor: AccentColor,
+  showIllustrations = true
+): boolean {
+  return showIllustrations && resolveIllustrationPack(accentColor) !== 'none';
 }
 
 /**
- * 位点 A · 首页问候右侧微景插画（完全避开 Hero 区域连胜火苗）。
- * 经典蓝默认主题返回 null，保持极简零装饰。
+ * 位点 A · 首页问候右侧建筑感水印插画（Placement A · 贴合问候语向中部留白渐变淡出，避开长昵称重叠）。
+ * 经典蓝默认主题或用户关闭「显示插画」时返回 null，保持极简零装饰。
  */
-export const GreetingVignette: React.FC<IllustrationProps> = ({ accentColor, isDark = false }) => {
+export const GreetingVignette: React.FC<IllustrationProps> = ({ accentColor, enabled }) => {
+  const { showIllustrations } = useAppStore();
   const pack = resolveIllustrationPack(accentColor);
-  if (pack === 'none') return null;
-  const p = getPalette(isDark);
+  if (pack === 'none' || !(enabled ?? showIllustrations)) return null;
 
   return (
-    <span
-      className="hidden md:inline-flex items-center justify-center shrink-0 pointer-events-none select-none w-[112px] h-[44px] opacity-95"
+    <div
+      className="hidden md:block greeting-watermark-stage"
       aria-hidden="true"
     >
-      {ILLUSTRATION_PACKS[pack].greeting(p)}
-    </span>
+      <div
+        className="greeting-watermark-glyph"
+        data-accent={accentColor}
+      />
+    </div>
   );
 };
 
@@ -93,9 +58,11 @@ export const ThemedDeckEmblem: React.FC<DeckEmblemProps> = ({
   accentColor,
   deckAccent,
   isDark = false,
+  enabled,
 }) => {
+  const { showIllustrations } = useAppStore();
   const pack = resolveIllustrationPack(accentColor);
-  if (pack === 'none') return null;
+  if (pack === 'none' || !(enabled ?? showIllustrations)) return null;
 
   const slot: 'book' | 'code' | 'heart' | 'folder' | 'sparkles' | 'layers' =
     deckAccent === 'blue'
@@ -411,16 +378,17 @@ export interface ReviewerCornerDecorProps extends IllustrationProps {
 
 /**
  * 位点 C · 学习专注页左下与右下外围轻巧边饰（仅辅助情绪氛围，不抢卡片焦点）。
+ * 与位点 A 一致采用单色细线淡墨水印 Alpha 蒙版（1x/2x AVIF + WebP），由 CSS 主题色动态染色。
  */
 export const ReviewerCornerDecor: React.FC<ReviewerCornerDecorProps> = ({
   accentColor,
   isDark = false,
   inspectorOpen = false,
+  enabled,
 }) => {
+  const { showIllustrations } = useAppStore();
   const pack = resolveIllustrationPack(accentColor);
-  if (pack === 'none') return null;
-  const p = getPalette(isDark);
-  const illustrationPack = ILLUSTRATION_PACKS[pack];
+  if (pack === 'none' || !(enabled ?? showIllustrations)) return null;
 
   return (
     <div
@@ -432,12 +400,18 @@ export const ReviewerCornerDecor: React.FC<ReviewerCornerDecorProps> = ({
       <div className="w-full h-28 relative">
         {/* Bottom-Left Corner */}
         <div className="absolute bottom-0 start-0 w-24 h-24 md:w-28 md:h-28">
-          {illustrationPack.cornerLeft(p)}
+          <div
+            className="reviewer-corner-glyph reviewer-corner-glyph--left"
+            data-accent={accentColor}
+          />
         </div>
 
         {/* Bottom-Right Corner */}
         <div className="absolute bottom-0 end-0 w-24 h-24 md:w-28 md:h-28">
-          {illustrationPack.cornerRight(p)}
+          <div
+            className="reviewer-corner-glyph reviewer-corner-glyph--right"
+            data-accent={accentColor}
+          />
         </div>
       </div>
     </div>
@@ -446,22 +420,25 @@ export const ReviewerCornerDecor: React.FC<ReviewerCornerDecorProps> = ({
 
 /**
  * 位点 D1 · 学习完成仪式页中心主插画。
- * 默认经典蓝保留原有 ✓ 对勾徽章；其他 7 个配色渲染仪式感治愈插画。
+ * 默认经典蓝保留原有 ✓ 对勾徽章；其他 7 个配色渲染单色细线淡墨 Alpha 蒙版治愈插画。
  */
 export const CelebrationIllustration: React.FC<IllustrationProps> = ({
   accentColor,
-  isDark = false,
+  enabled,
 }) => {
+  const { showIllustrations } = useAppStore();
   const pack = resolveIllustrationPack(accentColor);
-  if (pack === 'none') return null;
-  const p = getPalette(isDark);
+  if (pack === 'none' || !(enabled ?? showIllustrations)) return null;
 
   return (
     <div
-      className="w-[210px] h-[132px] max-w-full mx-auto flex items-center justify-center"
+      className="celebration-illustration-stage w-[210px] h-[132px] max-w-full mx-auto flex items-center justify-center"
       aria-hidden="true"
     >
-      {ILLUSTRATION_PACKS[pack].celebration(p)}
+      <div
+        className="celebration-illustration-glyph"
+        data-accent={accentColor}
+      />
     </div>
   );
 };
@@ -471,18 +448,21 @@ export const CelebrationIllustration: React.FC<IllustrationProps> = ({
  */
 export const EmptyStateIllustration: React.FC<IllustrationProps> = ({
   accentColor,
-  isDark = false,
+  enabled,
 }) => {
+  const { showIllustrations } = useAppStore();
   const pack = resolveIllustrationPack(accentColor);
-  if (pack === 'none') return null;
-  const p = getPalette(isDark);
+  if (pack === 'none' || !(enabled ?? showIllustrations)) return null;
 
   return (
     <div
-      className="w-[136px] h-[90px] mx-auto mb-1 flex items-center justify-center"
+      className="empty-illustration-stage w-[136px] h-[90px] mx-auto mb-1 flex items-center justify-center"
       aria-hidden="true"
     >
-      {ILLUSTRATION_PACKS[pack].empty(p)}
+      <div
+        className="empty-illustration-glyph"
+        data-accent={accentColor}
+      />
     </div>
   );
 };

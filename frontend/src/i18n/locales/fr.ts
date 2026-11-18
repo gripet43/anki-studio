@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Conçu pour le clavier. S'adapte automatiquement aux touches Cmd (macOS) et Ctrl (Windows / Linux).",
   settingsShowShortcutBadgesSub: "Afficher les badges de raccourcis clavier sur la barre latérale et les boutons de notation",
   settingsShowShortcutBadgesTitle: "Afficher les badges de raccourcis",
+  settingsShowIllustrationsLabel: "Illustrations",
   settingsShowTipsTitle: "Afficher les conseils d’étude sur le tableau de bord",
   settingsShowTipsSub: "Affiche des principes d’étude à côté du titre des paquets ; la désactivation ne les masque que pour aujourd’hui.",
   settingsAnswerButtonsTitle: "Boutons de réponse",

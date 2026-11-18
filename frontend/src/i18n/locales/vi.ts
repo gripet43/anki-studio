@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Thiết kế ưu tiên bàn phím, tự động tương thích phím Cmd (macOS) và Ctrl (Windows / Linux).",
   settingsShowShortcutBadgesSub: "Hiển thị nhãn phím tắt trên thanh bên, nút chấm điểm và thanh công cụ",
   settingsShowShortcutBadgesTitle: "Hiển thị gợi ý phím tắt",
+  settingsShowIllustrationsLabel: "Hiện minh họa",
   settingsShowTipsTitle: "Hiển thị mẹo học tập trên trang chính",
   settingsShowTipsSub: "Hiển thị nguyên tắc học tập cạnh tiêu đề bộ thẻ; tắt sẽ chỉ ẩn hôm nay.",
   settingsAnswerButtonsTitle: "Nút trả lời",

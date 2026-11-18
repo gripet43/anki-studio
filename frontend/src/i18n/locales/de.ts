@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Tastaturzentrierter Workflow. Passt Cmd (macOS) und Ctrl (Windows / Linux) automatisch an.",
   settingsShowShortcutBadgesSub: "Tastenkürzel-Abzeichen in der Seitenleiste und auf Bewertungsbuttons anzeigen",
   settingsShowShortcutBadgesTitle: "Tastenkürzel-Badges anzeigen",
+  settingsShowIllustrationsLabel: "Illustrationen",
   settingsShowTipsTitle: "Lerntipps im Dashboard anzeigen",
   settingsShowTipsSub: "Zeigt Lernprinzipien neben der Stapelüberschrift; beim Ausschalten wird es nur für heute ausgeblendet.",
   settingsAnswerButtonsTitle: "Antworttasten",

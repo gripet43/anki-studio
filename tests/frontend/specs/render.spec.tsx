@@ -14,6 +14,7 @@ import { SyncStateIcon } from '../../../frontend/src/components/common/SyncState
 import { StreakFlameBackdrop } from '../../../frontend/src/components/dashboard/StreakFlameBackdrop';
 import { SyncStatusPill } from '../../../frontend/src/components/dashboard/SyncStatusPill';
 import { CardEditorModal } from '../../../frontend/src/components/quick-add/CardEditorModal';
+import { ReviewerView } from '../../../frontend/src/components/reviewer/ReviewerView';
 import { SettingsModal } from '../../../frontend/src/components/settings/SettingsModal';
 import {
   CelebrationIllustration,
@@ -241,7 +242,8 @@ test('SyncStatusPill renders full English label without overflow-hidden or leadi
       lastSyncedTimestamp: Date.now() - 65_000,
     });
     const html = render(React.createElement(SyncStatusPill));
-    ok(html.includes('Last synced'), 'English sync prefix must render');
+    ok(!html.includes('>Last synced<'), 'Inline sync pill should omit verbose "Last synced" prefix');
+    ok(html.includes('aria-label="Last synced '), 'Accessible aria-label should retain full sync context');
     ok(html.includes('1m ago') || html.includes('1'), 'Relative sync timestamp must render');
     ok(!html.includes('overflow-hidden'), 'Snapshot sync pill label must not clip descenders via overflow-hidden');
     ok(!html.includes('leading-none'), 'Sync pill label must avoid leading-none so g/y descenders stay intact');
@@ -295,15 +297,68 @@ test('official default indigo renders zero decorative illustration markup', () =
   );
 });
 
-test('all 7 themed accent colors render valid accessible SVGs across light and dark modes', () => {
+test('all 7 themed accent colors render valid accessible masked illustrations and greeting watermarks across light and dark modes', () => {
   const nonDefault = ACCENT_COLOR_LIST.filter((a) => a.id !== 'indigo').map((a) => a.id);
   const deckSlots = ['indigo', 'blue', 'emerald', 'amber', 'rose', 'purple'] as const;
   for (const accent of nonDefault) {
     for (const isDark of [false, true]) {
+      const greetingHtml = render(React.createElement(GreetingVignette, { accentColor: accent, isDark }));
+      ok(
+        greetingHtml.includes('greeting-watermark-stage') &&
+          greetingHtml.includes('greeting-watermark-glyph') &&
+          greetingHtml.includes(`data-accent="${accent}"`) &&
+          greetingHtml.includes('aria-hidden="true"'),
+        `${accent}: expected accessible masked greeting watermark`
+      );
+
+      const cornerHtml = render(React.createElement(ReviewerCornerDecor, { accentColor: accent, isDark }));
+      ok(
+        cornerHtml.includes('reviewer-corner-decor') &&
+          cornerHtml.includes('reviewer-corner-glyph--left') &&
+          cornerHtml.includes('reviewer-corner-glyph--right') &&
+          cornerHtml.includes(`data-accent="${accent}"`) &&
+          cornerHtml.includes('aria-hidden="true"') &&
+          cornerHtml.includes(isDark ? 'opacity-45' : 'opacity-65') &&
+          !cornerHtml.includes('<svg'),
+        `${accent}/${isDark ? 'dark' : 'light'}: expected accessible masked ReviewerCornerDecor without inline SVG`
+      );
+
+      const cornerInspectorHtml = render(
+        React.createElement(ReviewerCornerDecor, { accentColor: accent, isDark, inspectorOpen: true })
+      );
+      ok(
+        cornerInspectorHtml.includes('opacity-0'),
+        `${accent}: expected ReviewerCornerDecor to hide with opacity-0 when inspectorOpen=true`
+      );
+
+      const celebrationHtml = render(React.createElement(CelebrationIllustration, { accentColor: accent, isDark }));
+      ok(
+        celebrationHtml.includes('celebration-illustration-stage') &&
+          celebrationHtml.includes('celebration-illustration-glyph') &&
+          celebrationHtml.includes(`data-accent="${accent}"`) &&
+          celebrationHtml.includes('aria-hidden="true"') &&
+          !celebrationHtml.includes('<svg'),
+        `${accent}: expected accessible masked CelebrationIllustration without inline SVG`
+      );
+
+      const emptyHtml = render(React.createElement(EmptyStateIllustration, { accentColor: accent, isDark }));
+      ok(
+        emptyHtml.includes('empty-illustration-stage') &&
+          emptyHtml.includes('empty-illustration-glyph') &&
+          emptyHtml.includes(`data-accent="${accent}"`) &&
+          emptyHtml.includes('aria-hidden="true"') &&
+          !emptyHtml.includes('<svg'),
+        `${accent}: expected accessible masked EmptyStateIllustration without inline SVG`
+      );
+
       for (const Comp of [GreetingVignette, ReviewerCornerDecor, CelebrationIllustration, EmptyStateIllustration]) {
-        const html = render(React.createElement(Comp, { accentColor: accent, isDark }));
-        ok(html.includes('<svg') && html.includes('aria-hidden="true"'), `${accent}: expected accessible SVG`);
+        equal(
+          renderToStaticMarkup(React.createElement(Comp, { accentColor: accent, isDark, enabled: false })),
+          '',
+          `${accent}: expected enabled=false override to suppress illustration`
+        );
       }
+
       for (const deckAccent of deckSlots) {
         const html = render(
           React.createElement(ThemedDeckEmblem, { accentColor: accent, deckAccent, isDark })
@@ -311,6 +366,48 @@ test('all 7 themed accent colors render valid accessible SVGs across light and d
         ok(html.includes('<svg') && html.includes('aria-hidden="true"'), `${accent}/${deckAccent}: expected emblem SVG`);
       }
     }
+  }
+});
+
+test('showIllustrations=false suppresses all theme illustrations and appearance tab renders Show Illustrations switch', () => {
+  const prevState = getAppState();
+  setAppState({
+    showIllustrations: false,
+    accentColor: 'rose',
+    resolvedLang: 'zh-CN',
+    settingsOpen: true,
+    settingsInitialTab: 'appearance',
+  });
+  try {
+    for (const Comp of [GreetingVignette, ReviewerCornerDecor, CelebrationIllustration, EmptyStateIllustration]) {
+      equal(renderToStaticMarkup(React.createElement(Comp, { accentColor: 'rose' })), '');
+    }
+    equal(
+      renderToStaticMarkup(React.createElement(ThemedDeckEmblem, { accentColor: 'rose', deckAccent: 'indigo' })),
+      ''
+    );
+
+    const modalHtml = render(React.createElement(SettingsModal));
+    ok(modalHtml.includes('显示插画'), 'expected Show Illustrations label in appearance tab');
+    ok(
+      modalHtml.includes('type="checkbox"') &&
+        modalHtml.includes('switch=""') &&
+        modalHtml.includes('anki-switch-sm'),
+      'expected accessible switch control for 显示插画 in theme color header'
+    );
+    doesNotMatch(
+      modalHtml,
+      />橘猫伴读</,
+      'theme color card header should replace atmosphere pill badge with the switch control'
+    );
+  } finally {
+    setAppState({
+      showIllustrations: prevState.showIllustrations,
+      accentColor: prevState.accentColor,
+      resolvedLang: prevState.resolvedLang,
+      settingsOpen: prevState.settingsOpen,
+      settingsInitialTab: prevState.settingsInitialTab,
+    });
   }
 });
 
@@ -368,6 +465,48 @@ test('about tab renders only version info, creator info, and accessible anonymou
       resolvedLang: prevState.resolvedLang,
       analyticsEnabled: prevState.analyticsEnabled,
       envInfo: prevState.envInfo,
+    });
+  }
+});
+
+test('ReviewerView session-complete screen renders semantic article, subgrid stats, and unified equal-height action buttons', () => {
+  const prev = getAppState();
+  setAppState({
+    inReviewMode: true,
+    isSessionComplete: true,
+    resolvedLang: 'zh-CN',
+    theme: 'light',
+    systemDark: false,
+    accentColor: 'emerald',
+    sessionStudiedCount: 12,
+    sessionCorrectCount: 11,
+    sessionTotalTimeMs: 150000,
+    reviewScopeDeckId: '1',
+    pendingDayRollover: null,
+  });
+  try {
+    const html = renderToStaticMarkup(React.createElement(ReviewerView));
+    ok(html.includes('<article class="reviewer-card-shell reviewer-complete-card'), 'expected semantic <article> card container');
+    ok(html.includes('<header class="reviewer-complete-header">'), 'expected <header> region inside completion card');
+    ok(html.includes('<h2 class="reviewer-complete-title">恭喜完成当前牌组复习！</h2>'), 'expected balanced heading');
+    ok(html.includes('<div class="reviewer-complete-stats">'), 'expected 3-col subgrid stats container');
+    ok(html.includes('reviewer-complete-stat-value--success'), 'expected single semantic success accent on accuracy only');
+    ok(html.includes('<footer class="reviewer-complete-actions">'), 'expected <footer> action group');
+    const btns = Array.from(html.matchAll(/class="reviewer-complete-btn reviewer-complete-btn--(primary|secondary)"/g));
+    equal(btns.length, 2, 'expected both session-complete actions to share .reviewer-complete-btn sizing');
+  } finally {
+    setAppState({
+      inReviewMode: prev.inReviewMode,
+      isSessionComplete: prev.isSessionComplete,
+      resolvedLang: prev.resolvedLang,
+      theme: prev.theme,
+      systemDark: prev.systemDark,
+      accentColor: prev.accentColor,
+      sessionStudiedCount: prev.sessionStudiedCount,
+      sessionCorrectCount: prev.sessionCorrectCount,
+      sessionTotalTimeMs: prev.sessionTotalTimeMs,
+      reviewScopeDeckId: prev.reviewScopeDeckId,
+      pendingDayRollover: prev.pendingDayRollover,
     });
   }
 });

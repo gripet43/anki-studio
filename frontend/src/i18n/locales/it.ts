@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Flusso pensato per la tastiera. Adatta automaticamente Cmd (macOS) e Ctrl (Windows / Linux).",
   settingsShowShortcutBadgesSub: "Mostra i badge delle scorciatoie sulla barra laterale e sui pulsanti di valutazione",
   settingsShowShortcutBadgesTitle: "Mostra badge scorciatoie",
+  settingsShowIllustrationsLabel: "Mostra illustrazioni",
   settingsShowTipsTitle: "Mostra consigli di studio nella dashboard",
   settingsShowTipsSub: "Mostra principi di studio accanto al titolo dei mazzi; disattivandolo si nasconde solo per oggi.",
   settingsAnswerButtonsTitle: "Pulsanti di risposta",

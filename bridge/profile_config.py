@@ -64,7 +64,7 @@ ALLOWED_AVATAR_MIME_TO_EXT: Dict[str, str] = {
 }
 
 MAX_AVATAR_BYTES = 512 * 1024
-MAX_AVATAR_PICK_BYTES = 8 * 1024 * 1024
+MAX_AVATAR_PICK_BYTES = 16 * 1024 * 1024
 AVATAR_PICK_MAX_DIMENSION = 512
 
 _AVATAR_DATA_URL_RE = re.compile(
@@ -543,6 +543,14 @@ def avatar_profile_prefix(profile_key: Optional[str]) -> str:
     cleaned = (profile_key or "").strip() or "_default"
     digest = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:16]
     return f"avatar_{digest}"
+
+
+def looks_like_svg_bytes(raw: bytes) -> bool:
+    """Detects raw SVG/XML+SVG payloads so vector images never reach Qt decoders."""
+    if not isinstance(raw, (bytes, bytearray)) or not raw:
+        return False
+    head = bytes(raw).lstrip(b"\xef\xbb\xbf\r\n\t ")[:512].lower()
+    return head.startswith(b"<svg") or (head.startswith(b"<?xml") and b"<svg" in head)
 
 
 def detect_image_mime_from_bytes(raw: bytes, *, allow_bmp: bool = False) -> Optional[str]:

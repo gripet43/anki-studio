@@ -34,6 +34,8 @@ import './specs/dashboardRing.spec';
 import './specs/libraryDefaultSort.spec';
 import './specs/editorClearFormat.spec';
 import './specs/avatarProfile.spec';
+import './specs/reviewUndo.spec';
+import './specs/reviewDisplayPopover.spec';
 
 import { report } from './harness';
 

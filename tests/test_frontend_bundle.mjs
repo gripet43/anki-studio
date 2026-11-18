@@ -488,7 +488,8 @@ assert(
     item28StoreSrc.includes('pendingSyncFinishResolver') &&
     item28StoreSrc.includes('silent ? state.syncJustFinished : false') &&
     syncPillSrc.includes('Math.max(nowTick, lastSyncedTimestamp || 0)') &&
-    syncPillSrc.includes('此时间代表上次同步云端时间。如有新的修改，请点击按钮完成同步。') &&
+    syncPillSrc.includes('detailedTimeStr') &&
+    !syncPillSrc.includes('syncSnapshotFootnote') &&
     syncPillSrc.includes('motion-safe:transition-[transform,rotate,color]') &&
     !syncPillSrc.includes("t('syncStatusProtected')") &&
     !syncPillSrc.includes("t('syncNowAction')"),
@@ -1481,6 +1482,8 @@ assert(
     deckSrc.includes('resolve_custom_avatar') &&
     pycmdSrc.includes('export const AVATAR_PRESET_IDS') &&
     pycmdSrc.includes('customAvatar?: CustomAvatarConfig') &&
+    pycmdSrc.includes('NO_TIMEOUT_ACTIONS') &&
+    pycmdSrc.includes("'pick_avatar_image'") &&
     avatarImageSrc.includes('export function isSafeAvatarDataUrl') &&
     avatarImageSrc.includes('export function normalizeCustomAvatarConfig') &&
     avatarImageSrc.includes('export async function cropImageToSquareAvatarDataUrl') &&
@@ -1518,6 +1521,173 @@ assert(
     cssBundle.includes('h-14') &&
     cssBundle.includes('ring-offset-1'),
   'Item #55: Local profile avatar isolation, sanitization, safe crop/render, i18n keys, unit spec wiring, and built web/ bundle artifact must remain intact (rebuild with `cd frontend && npm run build`)'
+);
+
+// Item #56: 首页标题栏 Alpha 蒙版水彩位图水印与 1x/2x AVIF/WebP 构建产物守卫
+const GREETING_THEMES = ['emerald', 'teal', 'amber', 'rose', 'violet', 'cyan', 'slate'];
+const greetingAssetSrcDir = path.resolve(ADDON_ROOT, 'frontend/src/assets/illustrations/greeting');
+const webAssetsDir = path.resolve(ADDON_ROOT, 'web/assets');
+for (const theme of GREETING_THEMES) {
+  for (const density of ['1x', '2x']) {
+    for (const ext of ['avif', 'webp']) {
+      const file = `greeting-${theme}-${density}.${ext}`;
+      assert(
+        fs.existsSync(path.join(greetingAssetSrcDir, file)),
+        `Item #56: Missing source greeting watermark asset: ${file}`
+      );
+      assert(
+        fs.existsSync(path.join(webAssetsDir, file)),
+        `Item #56: Missing built web/assets greeting watermark asset: ${file} (run \`cd frontend && npm run build\`)`
+      );
+    }
+  }
+  assert(
+    cssBundle.includes(`data-accent=${theme}`) || cssBundle.includes(`data-accent="${theme}"`),
+    `Item #56: Compiled web/assets/index.css is missing greeting watermark rule for accent "${theme}"`
+  );
+}
+assert(
+  cssBundle.includes('.greeting-watermark-stage') &&
+    cssBundle.includes('.greeting-watermark-glyph') &&
+    cssBundle.includes('opacity:.44') &&
+    cssBundle.includes('opacity:.52') &&
+    cssBundle.includes('forced-colors:active') &&
+    !cssBundle.includes('__VITE_ASSET__') &&
+    !cssBundle.includes('./assets/illustrations/greeting/'),
+  'Item #56: Compiled web/assets/index.css must include greeting watermark mask rules, 0.44/0.52 opacities, forced-colors rule, and clean resolved URLs'
+);
+
+// Item #57: 设置「显示插画」开关与前后端偏好持久化、全插画门控联查守卫
+assert(
+  routerPySrc.includes('"showIllustrations"') &&
+    routerPySrc.includes('"show_illustrations"') &&
+    deckSrc.includes('"showIllustrations"') &&
+    pycmdSrc.includes('showIllustrations?: boolean') &&
+    storeSrc.includes('showIllustrations: true') &&
+    settingsSrc.includes("t('settingsShowIllustrationsLabel')") &&
+    settingsSrc.includes('anki-switch-sm') &&
+    translationsSrc.includes('settingsShowIllustrationsLabel: "显示插画"') &&
+    jsBundle.includes('showIllustrations') &&
+    jsBundle.includes('settingsShowIllustrationsLabel') &&
+    (cssBundle.includes('.anki-switch-sm[data-switch-fallback=true]') ||
+      cssBundle.includes('.anki-switch-sm[data-switch-fallback="true"]')),
+  'Item #57: Show Illustrations toggle switch must wire through backend prefs, store, SettingsModal, i18n, and built web/ bundle (rebuild with `cd frontend && npm run build`)'
+);
+
+// Item #58: 复习模式显式撤销按钮收敛进「···」抽屉并与评分/暂停/搁置/删除统一撤销栈联动守卫
+const undoBtnIdx = reviewerSrc.indexOf("aria-label={t('undoBtnShort')}");
+assert(
+  reviewerSrc.includes('const canUndo = undoStack.length > 0') &&
+    undoBtnIdx > inspectorMarkerIdx &&
+    reviewerSrc.includes('onClick={() => appActions.undoLastReview()}') &&
+    storeSrc.includes('function buildReviewUndoSnapshot(') &&
+    storeSrc.includes('previousLibraryCards') &&
+    jsBundle.includes('undoLastReview') &&
+    jsBundle.includes('undoBtnShort'),
+  'Item #58: Reviewer active Undo button must live inside ··· inspector drawer and wire to unified rating/suspend/bury/delete undo stack (rebuild with `cd frontend && npm run build`)'
+);
+
+// Item #59: 视图与字号弹层卡片 UI 升级（语义单选画幅、一体分段缩放条、原生/降级开关、去像素与模板副标题噪音）
+const displayPopoverStart = reviewerSrc.indexOf('id={displayPopoverId}');
+const displayPopoverEnd = reviewerSrc.indexOf('<progress', displayPopoverStart);
+const displayPopoverSrc = reviewerSrc.slice(displayPopoverStart, displayPopoverEnd);
+assert(
+  displayPopoverStart > 0 &&
+    displayPopoverEnd > displayPopoverStart &&
+    reviewerSrc.includes('reviewer-scale-stepper') &&
+    reviewerSrc.includes('reviewer-scale-segment') &&
+    reviewerSrc.includes('reviewer-width-fieldset') &&
+    reviewerSrc.includes('reviewer-width-card') &&
+    reviewerSrc.includes('name="reviewer-stage-width"') &&
+    reviewerSrc.includes('compatSwitchId') &&
+    !displayPopoverSrc.includes('noteTypeName') &&
+    !displayPopoverSrc.includes("meta: '580/840'") &&
+    !displayPopoverSrc.includes("t('reviewImageZoomHint')") &&
+    cssBundle.includes('.reviewer-scale-stepper') &&
+    cssBundle.includes('.reviewer-width-card') &&
+    jsBundle.includes('reviewer-stage-width') &&
+    jsBundle.includes('reviewer-width-card'),
+  'Item #59: Reviewer display popover must ship refined unified scale stepper, semantic width radio tiles without px noise, and single-line .anki-switch-sm compat toggle (rebuild with `cd frontend && npm run build`)'
+);
+
+// Item #60: 音频自动播放弹层以视图与字号弹层（#59）为基准统一卡片视觉语言与原生/降级开关
+const audioPopoverStart = reviewerSrc.indexOf('id={audioPopoverId}');
+const audioPopoverEnd = reviewerSrc.indexOf('id={flagPopoverId}', audioPopoverStart);
+const audioPopoverSrc = reviewerSrc.slice(audioPopoverStart, audioPopoverEnd);
+assert(
+  audioPopoverStart > 0 &&
+    audioPopoverEnd > audioPopoverStart &&
+    audioPopoverSrc.includes('w-[300px]') &&
+    audioPopoverSrc.includes('bg-[var(--bg-card)]/96') &&
+    audioPopoverSrc.includes('flex flex-col gap-3') &&
+    audioPopoverSrc.includes('h-9 pb-3 border-b') &&
+    audioPopoverSrc.includes('autoFrontSwitchId') &&
+    audioPopoverSrc.includes('autoBackSwitchId') &&
+    audioPopoverSrc.includes('anki-switch anki-switch-sm') &&
+    audioPopoverSrc.includes('reviewer-popover-link') &&
+    !audioPopoverSrc.includes('reviewer-switch') &&
+    cssBundle.includes('.reviewer-popover-link') &&
+    jsBundle.includes('reviewer-popover-link'),
+  'Item #60: Reviewer audio popover must match Display popover surface tokens, bordered header, .anki-switch-sm toggles, and .reviewer-popover-link footer button (rebuild with `cd frontend && npm run build`)'
+);
+
+// Item #61: 位点 C/D1/D2 单色细线淡墨 Alpha 蒙版位图插画与 1x/2x AVIF/WebP 构建产物守卫
+const PLACEMENT_ASSETS = [
+  { subdir: 'corner', prefix: 'corner-left' },
+  { subdir: 'corner', prefix: 'corner-right' },
+  { subdir: 'celebration', prefix: 'celebration' },
+  { subdir: 'empty', prefix: 'empty' },
+];
+for (const theme of GREETING_THEMES) {
+  for (const { subdir, prefix } of PLACEMENT_ASSETS) {
+    const assetSrcDir = path.resolve(ADDON_ROOT, `frontend/src/assets/illustrations/${subdir}`);
+    for (const density of ['1x', '2x']) {
+      for (const ext of ['avif', 'webp']) {
+        const file = `${prefix}-${theme}-${density}.${ext}`;
+        assert(
+          fs.existsSync(path.join(assetSrcDir, file)),
+          `Item #61: Missing source placement asset: ${subdir}/${file}`
+        );
+        assert(
+          fs.existsSync(path.join(webAssetsDir, file)),
+          `Item #61: Missing built web/assets placement asset: ${file} (run \`cd frontend && npm run build\`)`
+        );
+      }
+    }
+  }
+}
+assert(
+  cssBundle.includes('.reviewer-corner-glyph--left') &&
+    cssBundle.includes('.reviewer-corner-glyph--right') &&
+    cssBundle.includes('.celebration-illustration-stage') &&
+    cssBundle.includes('.celebration-illustration-glyph') &&
+    cssBundle.includes('.empty-illustration-stage') &&
+    cssBundle.includes('.empty-illustration-glyph') &&
+    cssBundle.includes('[dir=rtl] .reviewer-corner-glyph') &&
+    cssBundle.includes('forced-colors:active') &&
+    cssBundle.toLowerCase().includes('canvastext') &&
+    !cssBundle.includes('__VITE_ASSET__') &&
+    !cssBundle.includes('./assets/illustrations/'),
+  'Item #61: Compiled web/assets/index.css must include C/D1/D2 mask rules, RTL mirroring, forced-colors handling, and clean resolved URLs'
+);
+
+// Item #62: 学习完成仪式页现代化重构（article 容器查询 + subgrid 三列指标对齐 + 等高均衡动作按钮 + 安全滚动 + 降动画）
+assert(
+  reviewerSrc.includes('reviewer-complete-main') &&
+    reviewerSrc.includes('reviewer-complete-card') &&
+    reviewerSrc.includes('reviewer-complete-stats') &&
+    reviewerSrc.includes('reviewer-complete-actions') &&
+    reviewerSrc.includes('reviewer-complete-btn--primary') &&
+    reviewerSrc.includes('reviewer-complete-btn--secondary') &&
+    dashboardCssSrc.includes('container: session-complete / inline-size') &&
+    dashboardCssSrc.includes('grid-template-rows: subgrid') &&
+    dashboardCssSrc.includes('align-items: safe center') &&
+    dashboardCssSrc.includes('text-wrap: balance') &&
+    dashboardCssSrc.includes('text-wrap: pretty') &&
+    cssBundle.includes('.reviewer-complete-card') &&
+    cssBundle.includes('.reviewer-complete-btn') &&
+    jsBundle.includes('reviewer-complete-btn--secondary'),
+  'Item #62: Reviewer session-complete screen must use semantic <article>, container queries, subgrid stats alignment, equal-height action buttons, and safe scroll centering (rebuild with `cd frontend && npm run build`)'
 );
 
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

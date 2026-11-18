@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Klavye odaklı iş akışı. macOS (Cmd) ve Windows/Linux (Ctrl) tuşlarına otomatik uyum sağlar.",
   settingsShowShortcutBadgesSub: "Kenar çubuğunda ve değerlendirme düğmelerinde klavye kısayol rozetlerini göster",
   settingsShowShortcutBadgesTitle: "Kısayol Rozetlerini Göster",
+  settingsShowIllustrationsLabel: "Çizimleri göster",
   settingsShowTipsTitle: "Panoda çalışma ipuçlarını göster",
   settingsShowTipsSub: "Deste başlığının yanında çalışma ilkelerini gösterir; kapatınca yalnızca bugün gizlenir.",
   settingsAnswerButtonsTitle: "Cevap düğmeleri",

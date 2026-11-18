@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "全鍵盤流設計，根據目前作業系統自動適配 Cmd (macOS) 與 Ctrl (Windows / Linux) 修飾鍵。",
   settingsShowShortcutBadgesSub: "在導覽列、複習評分按鈕和編輯器底部顯示鍵盤快捷鍵角標提示",
   settingsShowShortcutBadgesTitle: "顯示介面快捷鍵角標提示",
+  settingsShowIllustrationsLabel: "顯示插畫",
   settingsShowTipsTitle: "首頁顯示學習小提示",
   settingsShowTipsSub: "在「我的牌組」標題旁輪播學習原則；關閉後今天不再顯示，明天自動恢復。",
   settingsAnswerButtonsTitle: "答題按鈕",

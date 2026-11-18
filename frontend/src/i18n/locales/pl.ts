@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Praca oparta na skrótach klawiszowych z automatycznym dopasowaniem do macOS i Windows/Linux.",
   settingsShowShortcutBadgesSub: "Wyświetlaj oznaczenia skrótów klawiszowych na pasku bocznym i przyciskach oceny",
   settingsShowShortcutBadgesTitle: "Pokazuj plakietki skrótów",
+  settingsShowIllustrationsLabel: "Pokaż ilustracje",
   settingsShowTipsTitle: "Pokazuj wskazówki nauki na pulpicie",
   settingsShowTipsSub: "Pokazuje zasady nauki obok tytułu talii; wyłączenie ukrywa je tylko na dziś.",
   settingsAnswerButtonsTitle: "Przyciski odpowiedzi",

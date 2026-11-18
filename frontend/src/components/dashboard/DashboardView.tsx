@@ -76,6 +76,7 @@ export const DashboardView: React.FC = () => {
     accentColor,
     resolvedLang,
     showShortcutHints,
+    showIllustrations,
   } = useAppStore();
 
   const isSyncPending = isInitialSyncing || syncing;
@@ -269,6 +270,35 @@ export const DashboardView: React.FC = () => {
     };
   }, [dashboard.vacation?.startDate, dashboard.vacation?.endDate, resolvedLang]);
 
+  const renderCustomStudyIconBtn = (extraClass = '') => (
+    <Tooltip variant="compact" content={t('customStudyEntryBtn')}>
+      <button
+        type="button"
+        aria-label={t('customStudyEntryBtn')}
+        onClick={() => appActions.openCustomStudyModal('mistakes')}
+        className={`btn-secondary hero-icon-btn bg-[var(--bg-card)]/90 text-[var(--text-secondary)] hover:text-[var(--brand-text)] shadow-2xs ${extraClass}`}
+      >
+        <svg
+          className="w-4 h-4 shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.85"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <line x1="4" y1="6" x2="20" y2="6" />
+          <circle cx="9" cy="6" r="2" />
+          <line x1="4" y1="12" x2="20" y2="12" />
+          <circle cx="15" cy="12" r="2" />
+          <line x1="4" y1="18" x2="20" y2="18" />
+          <circle cx="10" cy="18" r="2" />
+        </svg>
+      </button>
+    </Tooltip>
+  );
+
   return (
     <div className="dashboard-shell flex-1 h-screen overflow-y-auto px-6 sm:px-8 lg:px-10 py-6 sm:py-8 space-y-7 sm:space-y-8">
       {/* Top Header Row — Synced Status Capsule & Cmd+K Search */}
@@ -277,8 +307,8 @@ export const DashboardView: React.FC = () => {
         onDoubleClick={handleWindowDoubleClick}
         className="dashboard-header flex flex-wrap items-center justify-between gap-4 select-none cursor-default"
       >
-        <div className="min-w-[180px] flex items-center gap-3.5">
-          <div>
+        <div className="min-w-[180px] flex-1 flex items-center gap-2">
+          <div className="shrink-0 max-w-full">
             <h1 className="text-[22px] sm:text-[24px] font-bold tracking-tight max-w-full text-balance leading-tight">
               {dashboard.greeting}
               {displayName}
@@ -314,16 +344,18 @@ export const DashboardView: React.FC = () => {
 
           {/* Cmd+K Global Search Box */}
           <button
+            type="button"
             onClick={() => setAppState({ cmdKOpen: true })}
-            className={`h-9 w-[204px] sm:w-[236px] px-3.5 rounded-xl border text-[12.5px] flex items-center gap-2 cursor-pointer transition-all hover:border-[var(--brand-border)] ${cardSurface}`}
+            className={`h-9 w-auto min-w-[144px] sm:min-w-[152px] max-w-[208px] px-3.5 pe-4 rounded-xl border text-[12.5px] flex items-center gap-2 cursor-pointer transition-all hover:border-[var(--brand-border)] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${cardSurface}`}
           >
-            <span className={`flex items-center gap-2 ${subText} truncate`}>
+            <span className={`flex items-center gap-2 ${subText} min-w-0`}>
               <svg
                 className="w-3.5 h-3.5 shrink-0"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
+                aria-hidden="true"
               >
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -785,12 +817,6 @@ export const DashboardView: React.FC = () => {
                 ) : (
                   <div className="flex flex-col justify-center min-w-[200px]">
                     <div>
-                      <span className={`text-[13px] font-medium whitespace-nowrap ${subText}`}>
-                        {t('todayProgressTitle')}
-                      </span>
-                    </div>
-
-                    <div className="mt-2.5">
                       {isSyncPending ? (
                         <div className="h-8 w-52 rounded-lg animate-skeleton-shimmer" />
                       ) : totalPending > 0 ? (
@@ -947,51 +973,28 @@ export const DashboardView: React.FC = () => {
                       </svg>
                       <span>{t('startTodayStudy')}</span>
                     </button>
-                    <Tooltip variant="compact" content={t('lowEnergySub')}>
+                    <Tooltip variant="compact" content={`${t('lowEnergyBtn')} · ${t('lowEnergySub')}`}>
                       <button
                         type="button"
+                        aria-label={t('lowEnergyBtn')}
                         onClick={() => appActions.startLowEnergySession(decks[0]?.id)}
-                        className="btn-secondary !h-10 !px-4 !rounded-xl !text-[13px] font-medium bg-[var(--bg-card)]/90 text-[var(--text-primary)] hover:text-[var(--brand-text)] flex items-center gap-1.5 whitespace-nowrap shadow-2xs"
+                        className="btn-secondary hero-icon-btn bg-[var(--bg-card)]/90 text-[var(--text-secondary)] hover:text-[var(--brand-text)] shadow-2xs"
                       >
                         <svg
-                          className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0"
+                          className="w-4 h-4 shrink-0"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
-                          strokeWidth="2"
+                          strokeWidth="1.85"
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           aria-hidden="true"
                         >
                           <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                         </svg>
-                        <span>{t('lowEnergyBtn')}</span>
                       </button>
                     </Tooltip>
-                    <button
-                      type="button"
-                      onClick={() => appActions.openCustomStudyModal('mistakes')}
-                      className="btn-secondary !h-10 !px-4 !rounded-xl !text-[13px] font-medium bg-[var(--bg-card)]/90 text-[var(--text-primary)] hover:text-[var(--brand-text)] flex items-center gap-1.5 whitespace-nowrap shadow-2xs"
-                    >
-                      <svg
-                        className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <line x1="4" y1="6" x2="20" y2="6" />
-                        <circle cx="9" cy="6" r="2" />
-                        <line x1="4" y1="12" x2="20" y2="12" />
-                        <circle cx="15" cy="12" r="2" />
-                        <line x1="4" y1="18" x2="20" y2="18" />
-                        <circle cx="10" cy="18" r="2" />
-                      </svg>
-                      <span>{t('customStudyEntryBtn')}</span>
-                    </button>
+                    {renderCustomStudyIconBtn()}
                   </>
                 ) : (
                   <>
@@ -1006,23 +1009,7 @@ export const DashboardView: React.FC = () => {
                       </svg>
                       <span>{t('studyTomorrow')}</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => appActions.openCustomStudyModal('mistakes')}
-                      className={`btn-secondary !h-10 !px-4 !rounded-xl !text-[13px] font-medium bg-[var(--bg-card)]/90 text-[var(--text-primary)] hover:text-[var(--brand-text)] flex items-center gap-1.5 whitespace-nowrap shadow-2xs ${
-                        syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
-                      }`}
-                    >
-                      <svg className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <line x1="4" y1="6" x2="20" y2="6" />
-                        <circle cx="9" cy="6" r="2" />
-                        <line x1="4" y1="12" x2="20" y2="12" />
-                        <circle cx="15" cy="12" r="2" />
-                        <line x1="4" y1="18" x2="20" y2="18" />
-                        <circle cx="10" cy="18" r="2" />
-                      </svg>
-                      <span>{t('customStudyEntryBtn')}</span>
-                    </button>
+                    {renderCustomStudyIconBtn(syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : '')}
                     <button
                       type="button"
                       onClick={() => setAppState({ activeTab: 'library' })}
@@ -1037,71 +1024,57 @@ export const DashboardView: React.FC = () => {
               </div>
             </div>
 
-            {/* Zone 4: Right Streak Details over Flame Backdrop (No vertical border line on desktop) */}
+            {/* Zone 4: Right Streak Details over Flame Backdrop (Hover/focus whole block for streak rules) */}
             <div
               className={`relative shrink-0 pt-4 lg:pt-0 lg:ps-4 border-t lg:border-t-0 dashboard-divider flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center text-start lg:text-end min-w-[116px] ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}
             >
-              <div className="relative z-10 flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center w-full gap-3 lg:gap-2.5">
-                <div className="flex items-center lg:justify-end gap-1.5 whitespace-nowrap">
-                  <span className={`text-[13px] font-medium ${subText}`}>{t('streakTitle')}</span>
-                  <HoverCard
-                    size="md"
-                    side="bottom"
-                    align="end"
-                    offset={8}
-                    openDelay={180}
-                    closeDelay={150}
-                    ariaLabel={t('streakRulesTooltipTitle')}
-                    repositionKey={`${dashboard.streak.longest}-${resolvedLang}`}
-                    content={
-                      <div className="space-y-1 text-[11px] leading-[1.6]">
-                        <div className="font-semibold text-[var(--text-primary)]">
-                          {t('streakRulesTooltipTitle')} · {t('streakSub', { longest: dashboard.streak.longest })}
-                        </div>
-                        <p className="text-[var(--text-secondary)]">
-                          {t('streakRulesTooltipBody')}
-                        </p>
-                      </div>
-                    }
-                  >
-                    <button
-                      type="button"
-                      aria-label={t('streakRulesTooltipTitle')}
-                      className="h-3.5 w-3.5 flex items-center justify-center rounded-full transition-colors cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-secondary)] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
-                    >
-                      <svg
-                        viewBox="0 0 16 16"
-                        className="h-3.5 w-3.5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        aria-hidden="true"
-                      >
-                        <circle cx="8" cy="8" r="6.5" />
-                        <path d="M8 7.3v4" strokeLinecap="round" />
-                        <circle cx="8" cy="4.9" r="0.85" fill="currentColor" stroke="none" />
-                      </svg>
-                    </button>
-                  </HoverCard>
-                  {isVacationActive && (
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
-                      ❄️
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-baseline lg:justify-end gap-1 whitespace-nowrap">
-                  {isSyncPending ? (
-                    <div className="h-8 w-16 rounded-lg animate-skeleton-shimmer lg:mt-1 self-end" />
-                  ) : (
-                    <>
-                      <span className="text-[32px] sm:text-[35px] font-extrabold leading-none tracking-tight tabular-nums text-[#EA580C] dark:text-[#FB923C]">
-                        {animatedStreakDays}
+              <HoverCard
+                size="md"
+                side="bottom"
+                align="end"
+                offset={8}
+                openDelay={180}
+                closeDelay={150}
+                ariaLabel={t('streakRulesTooltipTitle')}
+                repositionKey={`${dashboard.streak.longest}-${resolvedLang}`}
+                content={
+                  <div className="space-y-1 text-[11px] leading-[1.6]">
+                    <div className="font-semibold text-[var(--text-primary)]">
+                      {t('streakRulesTooltipTitle')} · {t('streakSub', { longest: dashboard.streak.longest })}
+                    </div>
+                    <p className="text-[var(--text-secondary)]">
+                      {t('streakRulesTooltipBody')}
+                    </p>
+                  </div>
+                }
+              >
+                <button
+                  type="button"
+                  aria-label={`${t('streakTitle')} ${animatedStreakDays} ${t('daysUnit')} · ${t('streakRulesTooltipTitle')}`}
+                  className="relative z-10 flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center w-full gap-3 lg:gap-2 p-1.5 -m-1.5 rounded-xl cursor-pointer text-start lg:text-end outline-none transition-colors hover:bg-black/[0.025] dark:hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                >
+                  <div className="flex items-center lg:justify-end gap-1.5 whitespace-nowrap">
+                    <span className={`text-[13px] font-medium ${subText}`}>{t('streakTitle')}</span>
+                    {isVacationActive && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
+                        ❄️
                       </span>
-                      <span className={`text-[13px] font-medium ${subText}`}>{t('daysUnit')}</span>
-                    </>
-                  )}
-                </div>
-              </div>
+                    )}
+                  </div>
+                  <div className="flex items-baseline lg:justify-end gap-1 whitespace-nowrap">
+                    {isSyncPending ? (
+                      <div className="h-8 w-16 rounded-lg animate-skeleton-shimmer lg:mt-1 self-end" />
+                    ) : (
+                      <>
+                        <span className="text-[32px] sm:text-[35px] font-extrabold leading-none tracking-tight tabular-nums text-[#EA580C] dark:text-[#FB923C]">
+                          {animatedStreakDays}
+                        </span>
+                        <span className={`text-[13px] font-medium ${subText}`}>{t('daysUnit')}</span>
+                      </>
+                    )}
+                  </div>
+                </button>
+              </HoverCard>
             </div>
           </section>
 
@@ -1110,12 +1083,11 @@ export const DashboardView: React.FC = () => {
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-baseline gap-2.5 flex-wrap">
                 <h2 className="text-[15.5px] font-bold whitespace-nowrap">{t('myDecksTitle')}</h2>
-                <span className={`text-[12.5px] whitespace-nowrap ${subText}`}>
-                  {/* 没有子牌组时 top 与 total 相等，再写「N 个主牌组 · 共 N 个牌组」就是同义反复 */}
-                  {topLevelDecks.length === decks.length
-                    ? t('decksTotalOnly', { n: decks.length })
-                    : t('decksSummarySub', { top: topLevelDecks.length, total: decks.length })}
-                </span>
+                {topLevelDecks.length !== decks.length && (
+                  <span className={`text-[12.5px] whitespace-nowrap ${subText}`}>
+                    {t('decksSummarySub', { top: topLevelDecks.length, total: decks.length })}
+                  </span>
+                )}
                 <DashboardTipLine />
                 {isVacationActive && (
                   <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full bg-[var(--status-success-soft)] text-[var(--status-success)]">
@@ -1166,7 +1138,7 @@ export const DashboardView: React.FC = () => {
                     <div className="w-full h-1.5 rounded-full animate-skeleton-shimmer mt-5" />
                     <div className="flex items-center justify-between mt-4.5">
                       <div className="w-28 h-3 rounded animate-skeleton-shimmer" />
-                      <div className="w-24 h-7 rounded-lg animate-skeleton-shimmer" />
+                      <div className="w-16 h-7 rounded-lg animate-skeleton-shimmer" />
                     </div>
                   </div>
                 ))}
@@ -1180,7 +1152,7 @@ export const DashboardView: React.FC = () => {
             ) : (
               <div className="dashboard-deck-grid grid gap-5">
                 {displayedDecks.map((deck, deckIndex) => {
-                  const iconNode = hasIllustrationPack(accentColor) ? (
+                  const iconNode = hasIllustrationPack(accentColor, showIllustrations) ? (
                     <ThemedDeckEmblem
                       accentColor={accentColor}
                       deckAccent={deck.accent}
@@ -1276,18 +1248,15 @@ export const DashboardView: React.FC = () => {
                         >
                           <button
                             type="button"
-                            aria-label={t('masteryHintTrigger')}
+                            aria-label={`${deck.name} · ${deck.mastery}% ${t('masteryLabel')}`}
                             onClick={(e) => {
                               e.stopPropagation();
                             }}
-                            className="group/mastery -m-1 shrink-0 cursor-pointer rounded-lg p-1 text-right outline-none focus-visible:ring-2 focus-visible:ring-[var(--deck-border)]"
+                            className="group/mastery -m-1 shrink-0 cursor-pointer rounded-lg p-1 pt-1.5 text-right outline-none focus-visible:ring-2 focus-visible:ring-[var(--deck-border)]"
                           >
                             <div className="text-[19px] font-bold leading-none tabular-nums tracking-tight transition-colors duration-[var(--dur-fast)] group-hover/mastery:text-[var(--deck-brand)]">
                               {deck.mastery}
                               <span className={`text-[12px] font-semibold ${subText}`}>%</span>
-                            </div>
-                            <div className={`mt-1.5 text-[10.5px] font-medium tracking-wide ${subText}`}>
-                              {t('masteryLabel')}
                             </div>
                           </button>
                         </HoverCard>
@@ -1309,53 +1278,70 @@ export const DashboardView: React.FC = () => {
                       {/* Due indicators + persistent actions */}
                       <div className="mt-4.5 flex items-center justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-3.5 text-[11.5px]">
-                          <span className="flex items-center gap-1.5 whitespace-nowrap font-semibold" style={{ color: deckScale.brandText }}>
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: deckScale.brand }} />
-                            {t('dueReviewPill', { n: deck.dueReview })}
-                          </span>
-                          <span className={`deck-due-new flex min-w-0 items-center gap-1.5 truncate ${subText}`}>
-                            <span
-                              className="h-1.5 w-1.5 shrink-0 rounded-full"
-                              style={{ backgroundColor: deck.dueNew > 0 ? 'var(--status-warning)' : newColor }}
-                            />
-                            <span className="truncate">
-                              {deck.dueNew > 0 ? t('dueNewPill', { n: deck.dueNew }) : t('noNewCards')}
+                          {!deckHasWork ? (
+                            <span className={`flex min-w-0 items-center gap-1.5 truncate ${subText}`}>
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--status-success)] opacity-75" />
+                              <span className="truncate">{t('noDueTodayTitle')}</span>
                             </span>
-                          </span>
+                          ) : (
+                            <>
+                              {deck.dueReview > 0 && (
+                                <span className="flex items-center gap-1.5 whitespace-nowrap font-semibold tabular-nums" style={{ color: deckScale.brandText }}>
+                                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: deckScale.brand }} />
+                                  {t('dueReviewPill', { n: deck.dueReview })}
+                                </span>
+                              )}
+                              {deck.dueNew > 0 && (
+                                <span className={`deck-due-new flex min-w-0 items-center gap-1.5 truncate tabular-nums ${subText}`}>
+                                  <span
+                                    className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                    style={{ backgroundColor: 'var(--status-warning)' }}
+                                  />
+                                  <span className="truncate">{t('dueNewPill', { n: deck.dueNew })}</span>
+                                </span>
+                              )}
+                            </>
+                          )}
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-1.5">
                           <Tooltip variant="compact" content={t('viewInLibraryBtn')}>
                             <button
                               type="button"
-                              aria-label={t('viewInLibraryBtn')}
+                              aria-label={`${deck.name} · ${t('viewInLibraryBtn')}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setAppState({ activeTab: 'library' });
                                 appActions.searchLibraryDebounced({ deckId: deck.id });
                               }}
-                              className="btn-secondary deck-view-btn !h-7 !rounded-lg !px-2.5 !text-[11px]"
+                              className="btn-secondary deck-view-btn"
                             >
-                              <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <rect x="3" y="4" width="18" height="16" rx="2" />
                                 <line x1="3" y1="9" x2="21" y2="9" />
                               </svg>
-                              <span className="deck-view-label">{t('viewDeckBtn')}</span>
                             </button>
                           </Tooltip>
                           <Tooltip variant="compact" content={deckHasWork ? t('startTodayStudy') : t('studyTomorrow')}>
                             <button
                               type="button"
-                              disabled={!deckHasWork}
+                              aria-label={`${deck.name} · ${deckHasWork ? t('startTodayStudy') : t('studyTomorrow')}`}
+                              aria-disabled={!deckHasWork || undefined}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (deckHasWork) appActions.startReview(deck.id);
                               }}
-                              className="btn-primary deck-study-btn !h-7 !rounded-lg !px-3 !text-[11px] whitespace-nowrap disabled:cursor-not-allowed disabled:!bg-black/[0.05] disabled:!text-[#8E8E93] disabled:shadow-none dark:disabled:!bg-white/[0.08] dark:disabled:!text-[#A1A1A6]"
+                              className="btn-primary deck-study-btn"
                             >
-                              <svg className="h-3 w-3 shrink-0 fill-current" viewBox="0 0 24 24" aria-hidden="true">
-                                <polygon points="6 4 20 12 6 20 6 4" />
-                              </svg>
-                              <span>{deckHasWork ? t('studyDeckBtn') : t('studyTomorrow')}</span>
+                              {deckHasWork ? (
+                                <svg className="h-3 w-3 shrink-0 fill-current ms-[1px]" viewBox="0 0 24 24" aria-hidden="true">
+                                  <polygon points="6 4 20 12 6 20 6 4" />
+                                </svg>
+                              ) : (
+                                <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <circle cx="12" cy="12" r="9" />
+                                  <path d="m8 12 2.5 2.5L16 9" />
+                                </svg>
+                              )}
                             </button>
                           </Tooltip>
                         </div>
@@ -1606,7 +1592,6 @@ export const DashboardView: React.FC = () => {
                 <div className="flex flex-col justify-between h-full gap-4">
                   <div>
                     <h3 className="text-[14.5px] font-bold">{t('weeklyRhythmTitle')}</h3>
-                    <div className="w-28 h-3 rounded animate-skeleton-shimmer mt-1.5" />
                   </div>
                   <div className="my-3 h-[145px] flex items-end justify-between gap-3 pt-6 px-2">
                     {[65, 25, 45, 18, 35, 15, 28].map((h, idx) => (
@@ -1627,7 +1612,6 @@ export const DashboardView: React.FC = () => {
                 <>
                   <div>
                     <h3 className="text-[14.5px] font-bold">{t('weeklyRhythmTitle')}</h3>
-                    <p className={`text-[11.5px] ${subText} mt-1`}>{t('weeklyRhythmSub')}</p>
                   </div>
 
                   <div

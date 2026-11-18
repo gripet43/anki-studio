@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Fluxo focado no teclado. Adapta automaticamente Cmd (macOS) e Ctrl (Windows / Linux).",
   settingsShowShortcutBadgesSub: "Exibir insígnias de atalhos de teclado na barra lateral e nos botões de avaliação",
   settingsShowShortcutBadgesTitle: "Mostrar insígnias de atalhos",
+  settingsShowIllustrationsLabel: "Mostrar ilustrações",
   settingsShowTipsTitle: "Mostrar dicas de estudo no painel",
   settingsShowTipsSub: "Mostra princípios de estudo ao lado do título dos baralhos; ao desativar, oculta apenas hoje.",
   settingsAnswerButtonsTitle: "Botões de resposta",

@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "Toetsenbordgerichte workflow met automatische aanpassing voor macOS (Cmd) en Windows/Linux (Ctrl).",
   settingsShowShortcutBadgesSub: "Toon sneltoetsbadges in de zijbalk, op beoordelingsknoppen en werkbalken",
   settingsShowShortcutBadgesTitle: "Sneltoetsbadges tonen",
+  settingsShowIllustrationsLabel: "Illustraties tonen",
   settingsShowTipsTitle: "Leertips op het dashboard tonen",
   settingsShowTipsSub: "Toont leerprincipes naast de set-titel; uitschakelen verbergt ze alleen vandaag.",
   settingsAnswerButtonsTitle: "Antwoordknoppen",

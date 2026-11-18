@@ -452,6 +452,7 @@ export const dict: TranslationTable = {
   settingsShortcutsSub: "キーボード中心の操作設計。macOS (Cmd) と Windows/Linux (Ctrl) の修飾キーに自動適応します。",
   settingsShowShortcutBadgesSub: "サイドバーや回答ボタン、ツールバーにショートカットキーのバッジを表示します",
   settingsShowShortcutBadgesTitle: "ショートカットバッジを表示",
+  settingsShowIllustrationsLabel: "イラストを表示",
   settingsShowTipsTitle: "ダッシュボードに学習のヒントを表示",
   settingsShowTipsSub: "「マイデッキ」見出しの横で学習原則を表示します。オフにすると今日だけ非表示になり、明日また表示されます。",
   settingsAnswerButtonsTitle: "回答ボタン",
