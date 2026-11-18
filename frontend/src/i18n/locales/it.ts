@@ -731,4 +731,10 @@ export const dict: TranslationTable = {
   aboutStatusEnabled: "Attivo",
   aboutStatusPaused: "Disattivo",
 
+  vacationPresetDaysLegend: "Durate rapide",
+  vacationCustomDaysLabel: "Giorni personalizzati",
+  vacationCustomDaysRange: "1–30 giorni",
+  icuTabHistory: "Cronologia",
+  icuFooterRescueHint: "Crea prima uno snapshot FSRS locale per annullare in un clic",
+  dayUnitSingular: "giorno",
 };

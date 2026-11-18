@@ -731,4 +731,10 @@ export const dict: TranslationTable = {
   aboutStatusEnabled: "已開啟",
   aboutStatusPaused: "已關閉",
 
+  vacationPresetDaysLegend: "常用天數",
+  vacationCustomDaysLabel: "自訂天數",
+  vacationCustomDaysRange: "1–30 天",
+  icuTabHistory: "減負記錄",
+  icuFooterRescueHint: "執行前自動建立 FSRS 快照，可在「減負記錄」中一鍵撤銷恢復原狀",
+  dayUnitSingular: "天",
 };

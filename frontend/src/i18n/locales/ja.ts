@@ -731,4 +731,10 @@ export const dict: TranslationTable = {
   aboutStatusEnabled: "オン",
   aboutStatusPaused: "オフ",
 
+  vacationPresetDaysLegend: "よく使う日数",
+  vacationCustomDaysLabel: "日数を指定",
+  vacationCustomDaysRange: "1〜30日",
+  icuTabHistory: "調整履歴",
+  icuFooterRescueHint: "実行前にローカルの FSRS スナップショットを作成し、履歴からいつでも元に戻せます",
+  dayUnitSingular: "日",
 };

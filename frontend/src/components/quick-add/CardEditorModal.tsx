@@ -2207,7 +2207,7 @@ export const CardEditorModal: React.FC = () => {
                       continuousCardCreation: !continuousCardCreation,
                     })
                   }
-                  className={`inline-flex items-center gap-2 shrink-0 cursor-pointer select-none rounded-lg py-1 pe-1 transition-opacity ${
+                  className={`inline-flex items-center gap-2 shrink-0 cursor-pointer select-none rounded-lg py-1 pe-1 transition-opacity focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
                     submitting ? 'opacity-50 cursor-wait' : ''
                   }`}
                 >
@@ -2222,7 +2222,9 @@ export const CardEditorModal: React.FC = () => {
                   >
                     <span
                       className={`inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
-                        continuousCardCreation ? 'translate-x-3.5' : 'translate-x-0.5'
+                        continuousCardCreation
+                          ? 'ltr:translate-x-3.5 rtl:-translate-x-3.5'
+                          : 'ltr:translate-x-0.5 rtl:-translate-x-0.5'
                       }`}
                     />
                   </span>

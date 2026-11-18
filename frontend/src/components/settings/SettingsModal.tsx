@@ -3,6 +3,7 @@ import { AnkiStudioLogo } from '../common/AnkiStudioLogo';
 import { Tooltip } from '../common/Tooltip';
 import { SyncStateIcon, SyncVisualState } from '../common/SyncStateIcon';
 import { UserAvatar } from '../common/UserAvatar';
+import { ReviewerWidthGlyph } from '../reviewer/ReviewerView';
 import { usePresence } from '../../hooks/usePresence';
 import {
   formatAbsoluteSyncTooltip,
@@ -48,6 +49,118 @@ const ANKIWEB_ADDON_URL =
 
 type SettingsTab = 'appearance' | 'answer' | 'shortcuts' | 'sync' | 'maintenance' | 'native' | 'about';
 
+const Keycap: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <kbd className="settings-keycap">{children}</kbd>
+);
+
+const AnswerModeGlyph: React.FC<{ mode: 'binary' | 'four'; active: boolean }> = ({
+  mode,
+  active,
+}) => {
+  const buttons =
+    mode === 'binary'
+      ? [
+          { x: 2, width: 10, rx: 1.5, opacity: active ? 0.58 : 0.5 },
+          { x: 14, width: 10, rx: 1.5, opacity: active ? 0.95 : 0.82 },
+        ]
+      : [
+          { x: 2, width: 4, rx: 1, opacity: active ? 0.48 : 0.42 },
+          { x: 8, width: 4, rx: 1, opacity: active ? 0.65 : 0.56 },
+          { x: 14, width: 4, rx: 1, opacity: active ? 0.84 : 0.72 },
+          { x: 20, width: 4, rx: 1, opacity: active ? 0.96 : 0.85 },
+        ];
+
+  return (
+    <svg
+      className={`w-[26px] h-[18px] shrink-0 ${
+        active ? 'text-[var(--brand-text)]' : 'text-[var(--text-secondary)]'
+      }`}
+      viewBox="0 0 26 18"
+      fill="none"
+      aria-hidden="true"
+    >
+      {/* Flashcard preview sheet */}
+      <rect
+        x="2"
+        y="1.5"
+        width="22"
+        height="9.5"
+        rx="2"
+        fill="currentColor"
+        fillOpacity={active ? 0.1 : 0.06}
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeOpacity={active ? 0.85 : 0.68}
+      />
+      <path
+        d="M7 6.25h12"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+        strokeOpacity={active ? 0.72 : 0.55}
+      />
+      {/* Bottom rating buttons dock */}
+      {buttons.map((b, idx) => (
+        <rect
+          key={idx}
+          x={b.x}
+          y="13"
+          width={b.width}
+          height="3.5"
+          rx={b.rx}
+          fill="currentColor"
+          fillOpacity={b.opacity}
+        />
+      ))}
+    </svg>
+  );
+};
+
+const ThemeModeGlyph: React.FC<{ mode: ThemeMode; active: boolean }> = ({ mode, active }) => {
+  const cls = `w-4 h-4 shrink-0 ${
+    active ? 'text-[var(--brand-text)]' : 'text-[var(--text-secondary)]'
+  }`;
+  if (mode === 'light') {
+    return (
+      <svg
+        className={cls}
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="8" cy="8" r="2.75" />
+        <path d="M8 1.5v1.25M8 13.25v1.25M3.4 3.4l.9.9M11.7 11.7l.9.9M1.5 8h1.25M13.25 8h1.25M3.4 12.6l.9-.9M11.7 4.3l.9-.9" />
+      </svg>
+    );
+  }
+  if (mode === 'dark') {
+    return (
+      <svg
+        className={cls}
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M13.25 9.8A5.75 5.75 0 0 1 6.2 2.75a5.75 5.75 0 1 0 7.05 7.05Z" />
+      </svg>
+    );
+  }
+  return (
+    <svg className={cls} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8 1.75a6.25 6.25 0 0 1 0 12.5V1.75Z" fill="currentColor" />
+    </svg>
+  );
+};
+
 export const SettingsModal: React.FC = () => {
   const {
     settingsOpen,
@@ -80,6 +193,8 @@ export const SettingsModal: React.FC = () => {
   const [nicknameDraft, setNicknameDraft] = useState(customNickname || '');
   const [avatarBusy, setAvatarBusy] = useState(false);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
+  const nicknameInputRef = useRef<HTMLInputElement>(null);
+  const tabRefs = useRef<Partial<Record<SettingsTab, HTMLButtonElement | null>>>({});
   const [runningTool, setRunningTool] = useState<string | null>(null);
   const [dbReport, setDbReport] = useState<any | null>(null);
   const [emptyReport, setEmptyReport] = useState<any | null>(null);
@@ -89,18 +204,27 @@ export const SettingsModal: React.FC = () => {
   const isDark = resolvedTheme === 'dark';
   const effectiveDayKey = getEffectiveDayKey(dayBoundary);
   const tipsHiddenToday = tipsHiddenOn === effectiveDayKey;
+
+  const modalTitleId = useId();
   const aboutHeadingId = useId();
   const illustrationsSwitchId = useId();
+  const nicknameInputId = useId();
+  const tipsSwitchId = useId();
+  const tipsDescId = useId();
+  const frontAudioSwitchId = useId();
+  const backAudioSwitchId = useId();
+  const shortcutHintsSwitchId = useId();
+  const shortcutHintsDescId = useId();
   const analyticsSwitchId = useId();
   const analyticsDescId = useId();
+
   const supportsNativeSwitch =
     typeof HTMLInputElement !== 'undefined' && 'switch' in HTMLInputElement.prototype;
-  const studioVersion = envInfo.studioVersion || '1.6.11';
+  const studioVersion = envInfo.studioVersion || '1.6.12';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
-  // 关于页的外链用系统浏览器打开：WebView 从 file:// 加载，直接导航会把整个
-  // 工作区替换成网页；非 Anki 环境（演示/测试）退化为 window.open。
+  // Open external URLs in the system browser because Qt WebView loads from file://
   const openExternal = (url: string) => {
     if (isAnkiNativeEnv()) {
       callAnki('open_external_url', { url }).catch(() => {});
@@ -149,10 +273,17 @@ export const SettingsModal: React.FC = () => {
   const subText = 'text-[#636366] dark:text-[#A6A8B6]';
   const shortcutHint = formatShortcut('Ctrl + Opt + M', envInfo.platform);
   const currentScale = getAccentScale(accentColor, resolvedTheme);
-  const systemModeLabel = systemDark ? t('themeDark') : t('themeLight');
   const userDisplay = dashboard.userName || t('defaultUser');
   const normalizedAvatar = normalizeCustomAvatarConfig(customAvatar);
   const isDefaultAvatar = isDefaultCustomAvatar(normalizedAvatar);
+  const savedNickname = customNickname || '';
+  const isNicknameDirty = nicknameDraft !== savedNickname;
+
+  const commitNicknameIfDirty = () => {
+    if (nicknameDraft === savedNickname) return;
+    void appActions.updatePreferences({ customNickname: nicknameDraft });
+    showToast(t('nicknameSavedToast'));
+  };
 
   const handleSelectInitialAvatar = () => {
     void appActions.updatePreferences({ customAvatar: { kind: 'initial' } });
@@ -196,15 +327,15 @@ export const SettingsModal: React.FC = () => {
     }
   };
 
-  const themeOptions: Array<{ id: ThemeMode; label: string; desc: string }> = [
-    { id: 'auto', label: t('themeAuto'), desc: t('themeAutoDesc', { mode: systemModeLabel }) },
-    { id: 'light', label: t('themeLight'), desc: t('themeLightDesc') },
-    { id: 'dark', label: t('themeDark'), desc: t('themeDarkDesc') },
+  const themeOptions: Array<{ id: ThemeMode; label: string }> = [
+    { id: 'auto', label: t('themeAuto') },
+    { id: 'light', label: t('themeLight') },
+    { id: 'dark', label: t('themeDark') },
   ];
 
   const currentLangMeta = getLanguageMeta(resolvedLang);
 
-  // Tiled language grid items: Auto + 16 official Anki languages (no <select> dropdown)
+  // Collapsible tiled grid of Auto + 16 official Anki languages
   const tiledLanguageOptions: Array<{
     id: LanguageOption;
     nativeName: string;
@@ -213,7 +344,7 @@ export const SettingsModal: React.FC = () => {
     {
       id: 'auto',
       nativeName: t('langAuto'),
-      subLabel: `Auto · ${currentLangMeta.nativeName}`,
+      subLabel: currentLangMeta.nativeName,
     },
     ...SUPPORTED_LANGUAGES.map((item) => ({
       id: item.id as LanguageOption,
@@ -221,6 +352,11 @@ export const SettingsModal: React.FC = () => {
       subLabel: item.englishName,
     })),
   ];
+
+  const activeLangSummary =
+    languagePref === 'auto'
+      ? `${t('langAuto')} · ${currentLangMeta.nativeName}`
+      : currentLangMeta.nativeName;
 
   const tabs: Array<{ id: SettingsTab; icon: React.ReactNode; label: string }> = [
     {
@@ -299,33 +435,46 @@ export const SettingsModal: React.FC = () => {
     },
   ];
 
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
+    let nextIdx: number | null = null;
+    if (e.key === 'ArrowDown') nextIdx = (idx + 1) % tabs.length;
+    else if (e.key === 'ArrowUp') nextIdx = (idx - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = tabs.length - 1;
+    if (nextIdx === null) return;
+    e.preventDefault();
+    const nextTab = tabs[nextIdx].id;
+    setActiveTab(nextTab);
+    tabRefs.current[nextTab]?.focus();
+  };
+
   const relativeSync = formatRelativeSyncLabel(lastSyncedTimestamp, resolvedLang);
   const absSync = formatAbsoluteSyncTooltip(lastSyncedTimestamp, resolvedLang);
 
   return (
     <div
       data-state={presence.state}
-      className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[5px] flex items-center justify-center p-6 select-none ui-modal-backdrop modal-contain-scroll"
+      className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[5px] flex items-center justify-center p-4 sm:p-6 select-none ui-modal-backdrop modal-contain-scroll"
       role="dialog"
       aria-modal="true"
-      aria-label={t('navSettings')}
+      aria-labelledby={modalTitleId}
     >
       <div
         data-state={presence.state}
         onClick={(e) => e.stopPropagation()}
-        className={`w-[800px] h-[560px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.35)] flex overflow-hidden ui-modal-panel relative ${modalSurface}`}
+        className={`w-[min(800px,calc(100vw-2rem))] h-[min(580px,calc(100dvh-2rem))] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.35)] flex overflow-hidden ui-modal-panel relative ${modalSurface}`}
       >
         {/* Top Right Close Button */}
         <Tooltip variant="compact" content={t('close')} shortcut="Esc" side="bottom">
           <button
             type="button"
             onClick={() => setAppState({ settingsOpen: false })}
-            className={`absolute top-4 end-4 z-20 w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+            className={`absolute top-4 end-4 z-20 w-8 h-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2 ${
               isDark ? 'text-[#8E8E93] hover:text-white hover:bg-white/10' : 'text-[#8E8E93] hover:text-black hover:bg-black/5'
             }`}
             aria-label={t('close')}
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -333,99 +482,108 @@ export const SettingsModal: React.FC = () => {
         </Tooltip>
 
         {/* Left Settings Sidebar */}
-        <div className={`w-[210px] shrink-0 border-e p-3.5 flex flex-col ${sidebarBg}`}>
-          <div className="space-y-4">
-            {/* Header */}
-            <div className="px-3 pt-2">
-              <h2 className="text-[16px] font-bold tracking-tight">
+        <aside className={`w-[208px] shrink-0 border-e p-3.5 flex flex-col ${sidebarBg}`}>
+          <div className="space-y-3.5">
+            <div className="px-3 pt-1.5">
+              <h2 id={modalTitleId} className="text-[16px] font-bold tracking-tight settings-heading">
                 {t('navSettings')}
               </h2>
             </div>
 
-            {/* Navigation Tabs */}
-            <nav className="space-y-1">
-              {tabs.map((tab) => {
+            <div
+              role="tablist"
+              aria-orientation="vertical"
+              aria-label={t('navSettings')}
+              className="space-y-1"
+            >
+              {tabs.map((tab, idx) => {
                 const active = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
+                    ref={(el) => {
+                      tabRefs.current[tab.id] = el;
+                    }}
+                    type="button"
+                    role="tab"
+                    id={`settings-tab-${tab.id}`}
+                    aria-selected={active}
+                    tabIndex={active ? 0 : -1}
                     onClick={() => setActiveTab(tab.id)}
-                    style={active ? { backgroundColor: currentScale.brand } : undefined}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors cursor-pointer text-start ${
+                    onKeyDown={(e) => handleTabKeyDown(e, idx)}
+                    className={`settings-tablist-btn relative w-full flex items-center gap-2.5 ps-3.5 pe-3 py-2 rounded-xl text-[13px] font-medium transition-colors cursor-pointer text-start focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-1 ${
                       active
-                        ? 'text-white shadow-xs font-semibold'
+                        ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] before:content-[""] before:absolute before:inset-y-2 before:start-1 before:border-inline-start-[3px] before:border-[var(--brand-text)] before:rounded-full'
                         : isDark
                         ? 'hover:bg-white/5 text-[#D1D1D8]'
                         : 'hover:bg-black/5 text-[#3A3A3C]'
                     }`}
                   >
                     <span className="shrink-0">{tab.icon}</span>
-                    <span>{tab.label}</span>
+                    <span className="truncate min-w-0">{tab.label}</span>
                   </button>
                 );
               })}
-            </nav>
+            </div>
           </div>
-        </div>
+        </aside>
 
         {/* Right Settings Content Panel */}
-        <div className="flex-1 p-7 overflow-y-auto space-y-5">
-          {/* TAB 1: Appearance & Display */}
+        <div
+          role="tabpanel"
+          aria-labelledby={`settings-tab-${activeTab}`}
+          className="flex-1 min-w-0 px-6 py-5 sm:px-7 sm:py-6 overflow-y-auto overscroll-contain space-y-3.5"
+        >
+          {/* TAB 1: Appearance & Language */}
           {activeTab === 'appearance' && (
-            <div className="space-y-5">
-              <div>
-                <h3 className="text-[17px] font-bold tracking-tight">
-                  {t('settingsTabAppearance')}
-                </h3>
-                <p className={`text-[12px] ${subText} mt-0.5`}>
-                  {t('settingsAppearanceSub')}
-                </p>
-              </div>
+            <div className="space-y-4">
+              <h3 className="text-[17px] font-bold tracking-tight settings-heading">
+                {t('settingsTabAppearance')}
+              </h3>
 
-              {/* Theme Mode Card */}
-              <div className={`rounded-xl border p-4 space-y-3 ${cardSurface}`}>
-                <div className="text-[13px] font-semibold">{t('settingsThemeModeTitle')}</div>
-                <div className="grid grid-cols-3 gap-2.5">
-                  {themeOptions.map((opt) => {
-                    const active = theme === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        onClick={() => {
-                          appActions.setTheme(opt.id);
-                          showToast(t('savedThemeToast', { name: opt.label }));
-                        }}
-                        style={
-                          active
-                            ? {
-                                backgroundColor: currentScale.brandSoft,
-                                borderColor: currentScale.brand,
-                                color: currentScale.brandText,
-                              }
-                            : undefined
-                        }
-                        className={`py-2.5 px-3 rounded-xl border text-start cursor-pointer transition-all ${
-                          active
-                            ? 'shadow-xs ring-1 ring-[var(--brand)]'
-                            : isDark
-                            ? 'border-[#343444] text-[#C8C8D2] hover:border-[var(--brand-border)]'
-                            : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:border-[var(--brand-border)]'
-                        }`}
-                      >
-                        <div className="text-[12px] font-semibold">{opt.label}</div>
-                        <div className="text-[10px] opacity-75 mt-0.5">{opt.desc}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Theme Color Card */}
-              <div className={`rounded-xl border p-4 space-y-3.5 ${cardSurface}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-[13px] font-semibold">
-                    {t('settingsThemeColorTitle')}
+              {/* Theme Mode Radio Cards */}
+              <article className={`rounded-xl border p-4 ${cardSurface}`}>
+                <fieldset className="reviewer-width-fieldset">
+                  <legend className="text-[13px] font-semibold p-0 mb-2.5 settings-heading">
+                    {t('settingsThemeModeTitle')}
+                  </legend>
+                  <div className="grid grid-cols-3 gap-2">
+                    {themeOptions.map((opt) => {
+                      const active = theme === opt.id;
+                      return (
+                        <label
+                          key={opt.id}
+                          data-selected={active ? 'true' : 'false'}
+                          className="reviewer-width-card settings-choice-card px-3 py-2.5 rounded-xl border text-start cursor-pointer flex items-center gap-2 select-none"
+                        >
+                          <input
+                            type="radio"
+                            name="settings-theme-mode"
+                            value={opt.id}
+                            checked={active}
+                            onChange={() => {
+                              appActions.setTheme(opt.id);
+                              showToast(t('savedThemeToast', { name: opt.label }));
+                            }}
+                            className="sr-only"
+                          />
+                          <ThemeModeGlyph mode={opt.id} active={active} />
+                          <span className="text-[12.5px] leading-tight truncate">
+                            {opt.label}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
+                </fieldset>
+              </article>
+
+              {/* Theme Color & Illustrations */}
+              <article className={`rounded-xl border p-4 space-y-3 ${cardSurface}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] font-semibold">
+                    {t('settingsThemeColorTitle')}
+                  </span>
                   <div className="inline-flex items-center gap-2 shrink-0">
                     <label
                       htmlFor={illustrationsSwitchId}
@@ -453,7 +611,7 @@ export const SettingsModal: React.FC = () => {
                 <div
                   role="radiogroup"
                   aria-label={t('settingsThemeColorTitle')}
-                  className="grid grid-cols-4 gap-2.5"
+                  className="grid grid-cols-4 gap-2"
                 >
                   {ACCENT_COLOR_LIST.map((a) => {
                     const active = accentColor === a.id;
@@ -478,12 +636,13 @@ export const SettingsModal: React.FC = () => {
                               ? {
                                   backgroundColor: modeScale.brandSoft,
                                   borderColor: modeScale.brand,
+                                  boxShadow: '0 0 0 1px rgba(var(--brand-rgb), 0.22)',
                                 }
                               : undefined
                           }
-                          className={`w-full min-w-0 overflow-hidden px-2.5 py-2 rounded-xl border flex items-center gap-2 cursor-pointer transition-all text-start relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
+                          className={`w-full min-w-0 overflow-hidden px-2.5 py-2 rounded-xl border flex items-center gap-2 cursor-pointer transition-colors text-start relative focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2 ${
                             active
-                              ? 'ring-1 ring-[var(--brand)] shadow-xs'
+                              ? 'text-[var(--brand-text)]'
                               : isDark
                               ? 'border-[#303240] hover:border-white/25 bg-black/15'
                               : 'border-[#E6E6EC] hover:border-black/20 bg-white hover:bg-[#FAFBFD]'
@@ -508,11 +667,7 @@ export const SettingsModal: React.FC = () => {
                               </svg>
                             )}
                           </span>
-                          <span
-                            className={`block min-w-0 flex-1 text-[11px] truncate leading-tight ${
-                              active ? 'font-semibold text-[var(--brand-text)]' : 'font-medium'
-                            }`}
-                          >
+                          <span className="block min-w-0 flex-1 text-[11.5px] font-medium truncate leading-tight">
                             {shortLabel}
                           </span>
                         </button>
@@ -520,523 +675,609 @@ export const SettingsModal: React.FC = () => {
                     );
                   })}
                 </div>
-              </div>
+              </article>
 
-              {/* Language & Profile Card — Flat Tiled Grid of All Languages (No Dropdown) */}
-              <div className={`rounded-xl border p-4 space-y-4 ${cardSurface}`}>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[13px] font-semibold">{t('languageLabel')}</div>
-                      <div className={`text-[11px] ${subText} mt-0.5`}>
-                        {t('languageAutoFollowSub')} · {currentLangMeta.nativeName}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Direct Tiled Grid of All Languages */}
-                  <div
-                    role="radiogroup"
-                    aria-label={t('languageLabel')}
-                    className="grid grid-cols-3 sm:grid-cols-4 gap-2"
-                  >
-                    {tiledLanguageOptions.map((langOpt) => {
-                      const active = languagePref === langOpt.id;
-                      return (
-                        <button
-                          key={langOpt.id}
-                          type="button"
-                          role="radio"
-                          aria-checked={active}
-                          onClick={() => {
-                            appActions.setLanguage(langOpt.id);
-                            const meta =
-                              langOpt.id === 'auto' ? null : getLanguageMeta(langOpt.id);
-                            showToast(
-                              meta
-                                ? `${meta.nativeName} (${meta.englishName})`
-                                : t('langAuto')
-                            );
-                          }}
-                          style={
-                            active
-                              ? {
-                                  backgroundColor: currentScale.brandSoft,
-                                  borderColor: currentScale.brand,
-                                  color: currentScale.brandText,
-                                }
-                              : undefined
-                          }
-                          className={`px-2.5 py-2 rounded-xl border text-start cursor-pointer transition-all ${
-                            active
-                              ? 'ring-1 ring-[var(--brand)] shadow-2xs font-semibold'
-                              : isDark
-                              ? 'border-[#303240] hover:border-[var(--brand-border)] bg-black/15'
-                              : 'bg-white border-[#E5E5EA] hover:border-[var(--brand-border)]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-1">
-                            <Tooltip variant="compact" content={langOpt.nativeName} onlyWhenTruncated>
-                              <span className="text-[12px] truncate leading-snug">
-                                {langOpt.nativeName}
-                              </span>
-                            </Tooltip>
-                            {active && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand)] shrink-0" />
-                            )}
-                          </div>
-                          <Tooltip variant="compact" content={langOpt.subLabel} onlyWhenTruncated>
-                            <div className="text-[10px] text-[#8E8E93] truncate mt-0.5">
-                              {langOpt.subLabel}
-                            </div>
-                          </Tooltip>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Profile: Local Avatar + Display Nickname */}
-                <div className="pt-4 border-t border-black/5 dark:border-white/5 space-y-3.5">
-                  <div className="flex items-center gap-3.5">
-                    <UserAvatar
-                      avatar={normalizedAvatar}
-                      displayName={userDisplay}
-                      size="lg"
-                      brandHex={currentScale.brand}
-                      accentColor={accentColor}
-                      isDark={isDark}
-                      className="shadow-xs"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[13px] font-semibold">{t('avatarSectionLabel')}</div>
-                      <div className={`text-[11px] ${subText} mt-0.5 leading-relaxed`}>
-                        {t('avatarSectionSub')}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Tooltip variant="compact" content={t('avatarModeInitial')}>
-                      <button
-                        type="button"
-                        aria-label={t('avatarModeInitial')}
-                        aria-pressed={normalizedAvatar.kind === 'initial'}
-                        onClick={handleSelectInitialAvatar}
-                        className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
-                          normalizedAvatar.kind === 'initial'
-                            ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand)] ring-1 ring-[var(--brand)]/40 font-semibold shadow-2xs'
-                            : isDark
-                            ? 'border-[#303240] bg-black/15 text-[#D1D1D8] hover:border-[var(--brand-border)]'
-                            : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:border-[var(--brand-border)]'
-                        }`}
+              {/* Interface Language (Collapsible <details> disclosure) */}
+              <article className={`rounded-xl border overflow-hidden ${cardSurface}`}>
+                <details className="group">
+                  <summary className="px-4 py-3 flex items-center justify-between gap-3 cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
+                    <span className="text-[13px] font-semibold">{t('languageLabel')}</span>
+                    <span className="inline-flex items-center gap-2 min-w-0">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11.5px] font-medium border border-[var(--brand-border)] bg-[var(--brand-soft)] text-[var(--brand-text)] truncate max-w-[200px]">
+                        {activeLangSummary}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 shrink-0 ${subText} group-open:rotate-180 transition-transform duration-150`}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
                       >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </span>
+                  </summary>
+
+                  <div className="px-4 pb-4 pt-3 border-t border-black/5 dark:border-white/5">
+                    <div
+                      role="radiogroup"
+                      aria-label={t('languageLabel')}
+                      className="grid grid-cols-3 sm:grid-cols-4 gap-2"
+                    >
+                      {tiledLanguageOptions.map((langOpt) => {
+                        const active = languagePref === langOpt.id;
+                        return (
+                          <button
+                            key={langOpt.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            onClick={() => {
+                              appActions.setLanguage(langOpt.id);
+                              const meta =
+                                langOpt.id === 'auto' ? null : getLanguageMeta(langOpt.id);
+                              showToast(
+                                meta
+                                  ? `${meta.nativeName} (${meta.englishName})`
+                                  : t('langAuto')
+                              );
+                            }}
+                            style={
+                              active
+                                ? {
+                                    backgroundColor: currentScale.brandSoft,
+                                    borderColor: currentScale.brand,
+                                    color: currentScale.brandText,
+                                    boxShadow: '0 0 0 1px rgba(var(--brand-rgb), 0.22)',
+                                  }
+                                : undefined
+                            }
+                            className={`px-2.5 py-2 rounded-xl border text-start cursor-pointer transition-colors font-medium focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2 ${
+                              active
+                                ? ''
+                                : isDark
+                                ? 'border-[#303240] hover:border-[var(--brand-border)] bg-black/15'
+                                : 'bg-white border-[#E5E5EA] hover:border-[var(--brand-border)]'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <Tooltip variant="compact" content={langOpt.nativeName} onlyWhenTruncated>
+                                <span className="text-[12px] truncate leading-snug">
+                                  {langOpt.nativeName}
+                                </span>
+                              </Tooltip>
+                              {active && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand)] shrink-0" aria-hidden="true" />
+                              )}
+                            </div>
+                            <Tooltip variant="compact" content={langOpt.subLabel} onlyWhenTruncated>
+                              <div className="text-[10px] text-[#8E8E93] truncate mt-0.5 font-normal">
+                                {langOpt.subLabel}
+                              </div>
+                            </Tooltip>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </details>
+              </article>
+
+              {/* Standalone Local Profile Card (Avatar + Display Nickname) */}
+              <article className={`@container rounded-xl border p-4 ${cardSurface}`}>
+                <div className={`divide-y ${isDark ? 'divide-white/[0.06]' : 'divide-[#E5E5EA]/80'}`}>
+                  <div className="pb-4 space-y-3.5">
+                    <div className="flex flex-wrap @sm:flex-nowrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3.5 min-w-0">
                         <UserAvatar
-                          avatar={{ kind: 'initial' }}
+                          avatar={normalizedAvatar}
                           displayName={userDisplay}
-                          size={20}
+                          size="lg"
                           brandHex={currentScale.brand}
                           accentColor={accentColor}
                           isDark={isDark}
+                          className={
+                            normalizedAvatar.kind === 'image'
+                              ? `ring-2 ring-[var(--brand)] ring-offset-2 ${
+                                  isDark ? 'ring-offset-[#1F212A]' : 'ring-offset-[#F9F9FB]'
+                                } shadow-xs`
+                              : 'shadow-xs'
+                          }
                         />
-                        <span>{t('avatarModeInitial')}</span>
-                      </button>
-                    </Tooltip>
+                        <div className="min-w-0">
+                          <div className="text-[13px] font-semibold settings-heading">
+                            {t('avatarSectionLabel')}
+                          </div>
+                          <p className={`text-[11.5px] ${subText} mt-0.5 leading-relaxed settings-helper-copy`}>
+                            {t('avatarSectionSub')}
+                          </p>
+                        </div>
+                      </div>
 
-                    {AVATAR_PRESET_IDS.map((presetId) => {
-                      const presetLabel = t(`avatarPreset_${presetId}` as any);
-                      const isSelected =
-                        normalizedAvatar.kind === 'preset' &&
-                        normalizedAvatar.presetId === presetId;
-                      return (
-                        <Tooltip key={presetId} variant="compact" content={presetLabel}>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {!isDefaultAvatar && (
+                          <Tooltip variant="compact" content={t('avatarResetBtn')}>
+                            <button
+                              type="button"
+                              aria-label={t('avatarResetBtn')}
+                              onClick={handleResetAvatar}
+                              className="btn-ghost !h-8 !px-2.5 !rounded-lg !text-[11.5px]"
+                            >
+                              {t('avatarResetBtn')}
+                            </button>
+                          </Tooltip>
+                        )}
+                        <Tooltip variant="compact" content={t('avatarUploadBtn')}>
                           <button
                             type="button"
-                            aria-label={t('avatarPresetAria', { name: presetLabel })}
-                            aria-pressed={isSelected}
-                            onClick={() => handleSelectPresetAvatar(presetId)}
-                            className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
-                              isSelected
-                                ? `ring-2 ring-[var(--brand)] ring-offset-1 ${
-                                    isDark ? 'ring-offset-[#1F212A]' : 'ring-offset-[#F9F9FB]'
-                                  } scale-[1.04]`
-                                : 'opacity-90 hover:opacity-100 hover:scale-[1.04]'
+                            aria-label={t('avatarUploadBtn')}
+                            aria-pressed={normalizedAvatar.kind === 'image'}
+                            disabled={avatarBusy}
+                            onClick={handlePickAvatarImage}
+                            className={`h-8 px-3 rounded-lg border text-[11.5px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2 ${
+                              normalizedAvatar.kind === 'image'
+                                ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand)]'
+                                : isDark
+                                ? 'border-white/[0.12] bg-white/[0.04] text-[#D1D1D8] hover:border-white/[0.22]'
+                                : 'bg-white border-[#DCDCE2] text-[#3A3A3C] hover:border-[var(--brand-border)]'
                             }`}
                           >
-                            <UserAvatar
-                              avatar={{ kind: 'preset', presetId }}
-                              displayName={userDisplay}
-                              size={28}
-                              brandHex={currentScale.brand}
-                              accentColor={accentColor}
-                              isDark={isDark}
-                            />
+                            <svg
+                              className="w-3.5 h-3.5 shrink-0"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="17 8 12 3 7 8" />
+                              <line x1="12" y1="3" x2="12" y2="15" />
+                            </svg>
+                            <span>{t('avatarUploadBtn')}</span>
                           </button>
                         </Tooltip>
-                      );
-                    })}
-
-                    <Tooltip variant="compact" content={t('avatarUploadBtn')}>
-                      <button
-                        type="button"
-                        aria-label={t('avatarUploadBtn')}
-                        aria-pressed={normalizedAvatar.kind === 'image'}
-                        disabled={avatarBusy}
-                        onClick={handlePickAvatarImage}
-                        className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
-                          normalizedAvatar.kind === 'image'
-                            ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand)] ring-1 ring-[var(--brand)]/40 font-semibold shadow-2xs'
-                            : isDark
-                            ? 'border-[#303240] bg-black/15 text-[#D1D1D8] hover:border-[var(--brand-border)]'
-                            : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:border-[var(--brand-border)]'
-                        }`}
-                      >
-                        <svg
-                          className="w-3.5 h-3.5 shrink-0"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="17 8 12 3 7 8" />
-                          <line x1="12" y1="3" x2="12" y2="15" />
-                        </svg>
-                        <span>{t('avatarUploadBtn')}</span>
-                      </button>
-                    </Tooltip>
-
-                    {!isDefaultAvatar && (
-                      <Tooltip variant="compact" content={t('avatarResetBtn')}>
-                        <button
-                          type="button"
-                          aria-label={t('avatarResetBtn')}
-                          onClick={handleResetAvatar}
-                          className="btn-ghost !h-8 !px-2.5 !rounded-full !text-[11px]"
-                        >
-                          {t('avatarResetBtn')}
-                        </button>
-                      </Tooltip>
-                    )}
-
-                    <input
-                      ref={avatarFileInputRef}
-                      type="file"
-                      accept={AVATAR_IMAGE_ACCEPT}
-                      onChange={handleAvatarFileChange}
-                      className="hidden"
-                      tabIndex={-1}
-                      aria-hidden="true"
-                    />
-                  </div>
-
-                  <div className="pt-2.5 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="text-[13px] font-semibold">{t('nicknameLabel')}</div>
-                      <div className={`text-[11px] ${subText} mt-0.5 truncate`}>
-                        {t('activeProfileNameSub', {
-                          name: userDisplay,
-                        })}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+
+                    {/* Built-in Avatar Identities (Single Clean Row) */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Tooltip variant="compact" content={t('avatarModeInitial')}>
+                        <button
+                          type="button"
+                          aria-label={t('avatarModeInitial')}
+                          aria-pressed={normalizedAvatar.kind === 'initial'}
+                          onClick={handleSelectInitialAvatar}
+                          className={`h-8 px-2.5 rounded-full border text-[11.5px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2 ${
+                            normalizedAvatar.kind === 'initial'
+                              ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand)] shadow-2xs'
+                              : isDark
+                              ? 'border-[#303240] bg-black/15 text-[#D1D1D8] hover:border-[var(--brand-border)]'
+                              : 'bg-white border-[#DCDCE2] text-[#3A3A3C] hover:border-[var(--brand-border)]'
+                          }`}
+                        >
+                          <UserAvatar
+                            avatar={{ kind: 'initial' }}
+                            displayName={userDisplay}
+                            size={20}
+                            brandHex={currentScale.brand}
+                            accentColor={accentColor}
+                            isDark={isDark}
+                          />
+                          <span>{t('avatarModeInitial')}</span>
+                        </button>
+                      </Tooltip>
+
+                      {AVATAR_PRESET_IDS.map((presetId) => {
+                        const presetLabel = t(`avatarPreset_${presetId}` as any);
+                        const isSelected =
+                          normalizedAvatar.kind === 'preset' &&
+                          normalizedAvatar.presetId === presetId;
+                        return (
+                          <Tooltip key={presetId} variant="compact" content={presetLabel}>
+                            <button
+                              type="button"
+                              aria-label={t('avatarPresetAria', { name: presetLabel })}
+                              aria-pressed={isSelected}
+                              onClick={() => handleSelectPresetAvatar(presetId)}
+                              className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-transform focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2 ${
+                                isSelected
+                                  ? `ring-2 ring-[var(--brand)] ring-offset-2 ${
+                                      isDark ? 'ring-offset-[#1F212A]' : 'ring-offset-[#F9F9FB]'
+                                    } scale-[1.04]`
+                                  : 'ring-1 ring-black/[0.08] dark:ring-white/[0.12] opacity-95 hover:opacity-100 hover:scale-[1.04]'
+                              }`}
+                            >
+                              <UserAvatar
+                                avatar={{ kind: 'preset', presetId }}
+                                displayName={userDisplay}
+                                size={28}
+                                brandHex={currentScale.brand}
+                                accentColor={accentColor}
+                                isDark={isDark}
+                              />
+                            </button>
+                          </Tooltip>
+                        );
+                      })}
+
                       <input
-                        type="text"
-                        value={nicknameDraft}
-                        onChange={(e) => setNicknameDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            appActions.updatePreferences({ customNickname: nicknameDraft });
-                            showToast(t('nicknameSavedToast'));
-                          }
-                        }}
-                        placeholder={t('nicknamePlaceholder')}
-                        className={`h-8 px-3 rounded-xl border text-[12px] w-36 focus:outline-none focus:border-[var(--brand)] ${
-                          isDark ? 'bg-[#14141A] border-[#343444]' : 'bg-white border-[#E5E5EA]'
-                        }`}
+                        ref={avatarFileInputRef}
+                        type="file"
+                        accept={AVATAR_IMAGE_ACCEPT}
+                        onChange={handleAvatarFileChange}
+                        className="hidden"
+                        tabIndex={-1}
+                        aria-hidden="true"
                       />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          appActions.updatePreferences({ customNickname: nicknameDraft });
-                          showToast(t('nicknameSavedToast'));
-                        }}
-                        className="btn-primary !h-8 !px-3 !text-[12px]"
-                      >
-                        {t('saveNickname')}
-                      </button>
+                    </div>
+                  </div>
+
+                  {/* Display Nickname (Auto-saves on blur or IME-safe Enter) */}
+                  <div className="pt-4 flex flex-wrap items-center justify-between gap-3">
+                    <label htmlFor={nicknameInputId} className="min-w-0 flex-1 cursor-pointer">
+                      <span className="block text-[13px] font-semibold settings-heading">
+                        {t('nicknameLabel')}
+                      </span>
+                      {(nicknameDraft.trim().length === 0 || isNicknameDirty) && (
+                        <span className={`block text-[11.5px] ${subText} mt-0.5 truncate`}>
+                          {t('activeProfileNameSub', { name: userDisplay })}
+                        </span>
+                      )}
+                    </label>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="relative flex items-center">
+                        <input
+                          ref={nicknameInputRef}
+                          id={nicknameInputId}
+                          type="text"
+                          value={nicknameDraft}
+                          onChange={(e) => setNicknameDraft(e.target.value)}
+                          onBlur={commitNicknameIfDirty}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                              e.preventDefault();
+                              e.currentTarget.blur();
+                            }
+                          }}
+                          placeholder={t('nicknamePlaceholder')}
+                          enterKeyHint="done"
+                          className={`settings-text-input ${
+                            nicknameDraft.trim().length > 0 ? 'pe-8' : ''
+                          }`}
+                        />
+                        {nicknameDraft.trim().length > 0 && (
+                          <Tooltip variant="compact" content={t('clearSearchBtn')}>
+                            <button
+                              type="button"
+                              aria-label={t('clearSearchBtn')}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                setNicknameDraft('');
+                                if (savedNickname !== '') {
+                                  void appActions.updatePreferences({ customNickname: '' });
+                                  showToast(t('nicknameSavedToast'));
+                                }
+                                nicknameInputRef.current?.focus();
+                              }}
+                              className="absolute end-1 w-6 h-6 rounded-md flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                            >
+                              <svg
+                                className="w-3.5 h-3.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                              >
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        )}
+                      </div>
+                      {isNicknameDirty && (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={commitNicknameIfDirty}
+                          className="btn-primary !h-9 !px-3 !rounded-lg !text-[12px]"
+                        >
+                          {t('saveNickname')}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
-              </div>
+              </article>
 
               {/* Dashboard Learning Tips Toggle */}
-              <div className={`rounded-xl border p-4 flex items-center justify-between gap-4 ${cardSurface}`}>
-                <div className="space-y-1">
-                  <div className="text-[13px] font-semibold">{t('settingsShowTipsTitle')}</div>
-                  <div className={`text-[11px] ${subText} leading-relaxed`}>
+              <article className={`rounded-xl border p-4 flex items-center justify-between gap-4 ${cardSurface}`}>
+                <div className="space-y-0.5 min-w-0">
+                  <label
+                    htmlFor={tipsSwitchId}
+                    className="block text-[13px] font-semibold cursor-pointer settings-heading"
+                  >
+                    {t('settingsShowTipsTitle')}
+                  </label>
+                  <p id={tipsDescId} className={`text-[11.5px] ${subText} leading-relaxed settings-helper-copy`}>
                     {t('settingsShowTipsSub')}
-                  </div>
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={!tipsHiddenToday}
-                  onClick={() => appActions.updatePreferences({ tipsHiddenOn: tipsHiddenToday ? '' : effectiveDayKey })}
-                  style={!tipsHiddenToday ? { backgroundColor: currentScale.brand } : undefined}
-                  className={`w-12 h-6.5 shrink-0 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${
-                    !tipsHiddenToday ? '' : isDark ? 'bg-[#3A3A48]' : 'bg-[#E5E5EA]'
-                  }`}
-                >
-                  <div
-                    className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
-                      !tipsHiddenToday ? 'translate-x-5.5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
+                <input
+                  id={tipsSwitchId}
+                  type="checkbox"
+                  checked={!tipsHiddenToday}
+                  onChange={(e) =>
+                    appActions.updatePreferences({ tipsHiddenOn: e.target.checked ? '' : effectiveDayKey })
+                  }
+                  aria-describedby={tipsDescId}
+                  {...({ switch: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+                  {...(supportsNativeSwitch
+                    ? {}
+                    : { role: 'switch', 'aria-checked': !tipsHiddenToday })}
+                  data-switch-fallback={supportsNativeSwitch ? 'false' : 'true'}
+                  className="anki-switch shrink-0"
+                />
+              </article>
             </div>
           )}
 
           {/* TAB 2: Answer Settings */}
           {activeTab === 'answer' && (
-            <div className="space-y-5">
-              <div>
-                <h3 className="text-[17px] font-bold tracking-tight">
-                  {t('settingsTabAnswer')}
-                </h3>
-                <p className={`text-[12px] ${subText} mt-0.5`}>
-                  {t('settingsAnswerTabSub')}
-                </p>
-              </div>
+            <div className="space-y-3.5">
+              <h3 className="text-[17px] font-bold tracking-tight settings-heading">
+                {t('settingsTabAnswer')}
+              </h3>
 
               {/* Answer Buttons Layout */}
-              <div className={`rounded-xl border p-4 space-y-3 ${cardSurface}`}>
-                <div className="space-y-1">
-                  <div className="text-[13px] font-semibold">{t('settingsAnswerButtonsTitle')}</div>
-                  <div className={`text-[11px] ${subText} leading-relaxed`}>
-                    {t('settingsAnswerButtonsSub')}
+              <article className={`rounded-xl border px-4 py-3.5 ${cardSurface}`}>
+                <fieldset className="reviewer-width-fieldset">
+                  <legend className="text-[13px] font-semibold p-0 mb-2.5 settings-heading">
+                    {t('settingsAnswerButtonsTitle')}
+                  </legend>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {(
+                      [
+                        { mode: 'binary', label: t('answerButtonsBinary') },
+                        { mode: 'four', label: t('answerButtonsFour') },
+                      ] as const
+                    ).map((opt) => {
+                      const active = answerButtonMode === opt.mode;
+                      return (
+                        <label
+                          key={opt.mode}
+                          data-selected={active ? 'true' : 'false'}
+                          className="reviewer-width-card settings-choice-card px-3.5 py-2.5 rounded-xl border text-start cursor-pointer flex items-center gap-2.5 select-none"
+                        >
+                          <input
+                            type="radio"
+                            name="settings-answer-mode"
+                            value={opt.mode}
+                            checked={active}
+                            onChange={() =>
+                              appActions.updatePreferences({ answerButtonMode: opt.mode })
+                            }
+                            className="sr-only"
+                          />
+                          <AnswerModeGlyph mode={opt.mode} active={active} />
+                          <span className="text-[12.5px] leading-tight truncate">{opt.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              </article>
+
+              {/* Unified Card Display: Content Scale + Stage Width */}
+              <article className={`rounded-xl border px-4 py-3.5 ${cardSurface}`}>
+                <div className={`divide-y ${isDark ? 'divide-white/[0.06]' : 'divide-[#E5E5EA]/80'}`}>
+                  <div className="pb-3.5">
+                    <fieldset className="reviewer-width-fieldset space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <legend className="text-[13px] font-semibold p-0 settings-heading">
+                          {t('reviewScaleTitle')}
+                        </legend>
+                        {reviewContentScale !== 100 && (
+                          <button
+                            type="button"
+                            onClick={() => appActions.updatePreferences({ reviewContentScale: 100 })}
+                            className="text-[11px] font-medium text-[var(--brand-text)] hover:underline cursor-pointer"
+                          >
+                            {t('reviewResetDefaultBtn')}
+                          </button>
+                        )}
+                      </div>
+                      <p className={`text-[11.5px] ${subText} leading-snug settings-helper-copy`}>
+                        {t('reviewScaleSub')}
+                      </p>
+                      <div className="settings-segmented-bar">
+                        {REVIEW_CONTENT_SCALES.map((scaleOpt) => {
+                          const active = reviewContentScale === scaleOpt;
+                          return (
+                            <label
+                              key={scaleOpt}
+                              data-selected={active ? 'true' : 'false'}
+                              className="settings-segmented-option font-mono"
+                            >
+                              <input
+                                type="radio"
+                                name="settings-review-scale"
+                                value={scaleOpt}
+                                checked={active}
+                                onChange={() =>
+                                  appActions.updatePreferences({ reviewContentScale: scaleOpt })
+                                }
+                                className="sr-only"
+                              />
+                              <span className="settings-segmented-value">{scaleOpt}%</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  </div>
+
+                  <div className="pt-3.5">
+                    <fieldset className="reviewer-width-fieldset space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <legend className="text-[13px] font-semibold p-0 settings-heading">
+                          {t('reviewWidthTitle')}
+                        </legend>
+                        {reviewStageWidth !== 'auto' && (
+                          <button
+                            type="button"
+                            onClick={() => appActions.updatePreferences({ reviewStageWidth: 'auto' })}
+                            className="text-[11px] font-medium text-[var(--brand-text)] hover:underline cursor-pointer"
+                          >
+                            {t('reviewResetDefaultBtn')}
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {(
+                          [
+                            { value: 'auto', labelKey: 'reviewWidthAuto' },
+                            { value: 'standard', labelKey: 'reviewWidthStandard' },
+                            { value: 'wide', labelKey: 'reviewWidthWide' },
+                            { value: 'full', labelKey: 'reviewWidthFull' },
+                          ] as Array<{ value: ReviewStageWidth; labelKey: any }>
+                        ).map((opt) => {
+                          const active = reviewStageWidth === opt.value;
+                          return (
+                            <label
+                              key={opt.value}
+                              data-selected={active ? 'true' : 'false'}
+                              className="reviewer-width-card settings-choice-card px-2.5 py-2.5 rounded-xl border text-start cursor-pointer flex items-center gap-2 select-none"
+                            >
+                              <input
+                                type="radio"
+                                name="settings-stage-width"
+                                value={opt.value}
+                                checked={active}
+                                onChange={() =>
+                                  appActions.updatePreferences({ reviewStageWidth: opt.value })
+                                }
+                                className="sr-only"
+                              />
+                              <ReviewerWidthGlyph mode={opt.value} active={active} />
+                              <span className="text-[12px] leading-tight truncate">
+                                {t(opt.labelKey)}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => appActions.updatePreferences({ answerButtonMode: 'binary' })}
-                    aria-pressed={answerButtonMode === 'binary'}
-                    className={`h-8 px-3.5 rounded-lg border text-[12px] font-medium cursor-pointer transition-colors ${
-                      answerButtonMode === 'binary'
-                        ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
-                        : isDark
-                        ? 'bg-white/[0.03] border-white/[0.08] text-[#C8C8D2] hover:bg-white/[0.07]'
-                        : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#F4F4F6]'
-                    }`}
-                  >
-                    {t('answerButtonsBinary')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => appActions.updatePreferences({ answerButtonMode: 'four' })}
-                    aria-pressed={answerButtonMode === 'four'}
-                    className={`h-8 px-3.5 rounded-lg border text-[12px] font-medium cursor-pointer transition-colors ${
-                      answerButtonMode === 'four'
-                        ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
-                        : isDark
-                        ? 'bg-white/[0.03] border-white/[0.08] text-[#C8C8D2] hover:bg-white/[0.07]'
-                        : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#F4F4F6]'
-                    }`}
-                  >
-                    {t('answerButtonsFour')}
-                  </button>
-                </div>
-              </div>
+              </article>
 
               {/* Audio Auto-Play */}
-              <div className={`rounded-xl border p-4 space-y-3.5 ${cardSurface}`}>
-                <div className="space-y-1">
-                  <div className="text-[13px] font-semibold">{t('settingsAutoPlayAudioTitle')}</div>
-                  <div className={`text-[11px] ${subText} leading-relaxed`}>
-                    {t('settingsAutoPlayAudioSub')}
+              <article className={`rounded-xl border px-4 py-3.5 space-y-2.5 ${cardSurface}`}>
+                <div className="space-y-0.5">
+                  <div className="text-[13px] font-semibold settings-heading">
+                    {t('settingsAutoPlayAudioTitle')}
                   </div>
+                  <p className={`text-[11.5px] ${subText} leading-snug settings-helper-copy`}>
+                    {t('settingsAutoPlayAudioSub')}
+                  </p>
                 </div>
 
                 <div className={`divide-y ${isDark ? 'divide-white/[0.06]' : 'divide-[#E5E5EA]/70'}`}>
-                  <div className="pb-3 flex items-center justify-between gap-4">
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="text-[12.5px] font-medium">{t('autoPlayFrontAudioTitle')}</div>
-                      <div className={`text-[11px] ${subText} leading-relaxed`}>
-                        {t('autoPlayFrontAudioSub')}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={autoPlayFrontAudio}
-                      aria-label={t('autoPlayFrontAudioTitle')}
-                      onClick={() => {
-                        const next = !autoPlayFrontAudio;
+                  <div className="py-2.5 first:pt-1 flex items-center justify-between gap-4">
+                    <label
+                      htmlFor={frontAudioSwitchId}
+                      className="text-[13px] font-medium cursor-pointer min-w-0 flex-1"
+                    >
+                      {t('autoPlayFrontAudioTitle')}
+                    </label>
+                    <input
+                      id={frontAudioSwitchId}
+                      type="checkbox"
+                      checked={autoPlayFrontAudio}
+                      onChange={(e) => {
+                        const next = e.target.checked;
                         appActions.updatePreferences({ autoPlayFrontAudio: next });
                         if (!next && !autoPlayBackAudio) {
                           appActions.stopAudio();
                         }
                       }}
-                      style={autoPlayFrontAudio ? { backgroundColor: currentScale.brand } : undefined}
-                      className={`w-12 h-6.5 shrink-0 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${
-                        autoPlayFrontAudio ? '' : isDark ? 'bg-[#3A3A48]' : 'bg-[#E5E5EA]'
-                      }`}
-                    >
-                      <div
-                        className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
-                          autoPlayFrontAudio ? 'translate-x-5.5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
+                      {...({ switch: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+                      {...(supportsNativeSwitch
+                        ? {}
+                        : { role: 'switch', 'aria-checked': autoPlayFrontAudio })}
+                      data-switch-fallback={supportsNativeSwitch ? 'false' : 'true'}
+                      className="anki-switch shrink-0"
+                    />
                   </div>
 
-                  <div className="pt-3 flex items-center justify-between gap-4">
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="text-[12.5px] font-medium">{t('autoPlayBackAudioTitle')}</div>
-                      <div className={`text-[11px] ${subText} leading-relaxed`}>
-                        {t('autoPlayBackAudioSub')}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={autoPlayBackAudio}
-                      aria-label={t('autoPlayBackAudioTitle')}
-                      onClick={() => {
-                        const next = !autoPlayBackAudio;
+                  <div className="py-2.5 last:pb-0 flex items-center justify-between gap-4">
+                    <label
+                      htmlFor={backAudioSwitchId}
+                      className="text-[13px] font-medium cursor-pointer min-w-0 flex-1"
+                    >
+                      {t('autoPlayBackAudioTitle')}
+                    </label>
+                    <input
+                      id={backAudioSwitchId}
+                      type="checkbox"
+                      checked={autoPlayBackAudio}
+                      onChange={(e) => {
+                        const next = e.target.checked;
                         appActions.updatePreferences({ autoPlayBackAudio: next });
                         if (!next && !autoPlayFrontAudio) {
                           appActions.stopAudio();
                         }
                       }}
-                      style={autoPlayBackAudio ? { backgroundColor: currentScale.brand } : undefined}
-                      className={`w-12 h-6.5 shrink-0 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${
-                        autoPlayBackAudio ? '' : isDark ? 'bg-[#3A3A48]' : 'bg-[#E5E5EA]'
-                      }`}
-                    >
-                      <div
-                        className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
-                          autoPlayBackAudio ? 'translate-x-5.5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
+                      {...({ switch: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+                      {...(supportsNativeSwitch
+                        ? {}
+                        : { role: 'switch', 'aria-checked': autoPlayBackAudio })}
+                      data-switch-fallback={supportsNativeSwitch ? 'false' : 'true'}
+                      className="anki-switch shrink-0"
+                    />
                   </div>
                 </div>
-              </div>
-
-              {/* Card Content Scale */}
-              <div className={`rounded-xl border p-4 space-y-3 ${cardSurface}`}>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[13px] font-semibold">{t('reviewScaleTitle')}</span>
-                    <span className="text-[11px] font-mono text-[var(--brand-text)]">
-                      {reviewContentScale}%
-                    </span>
-                  </div>
-                  <div className={`text-[11px] ${subText} leading-relaxed`}>
-                    {t('reviewScaleSub')}
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {REVIEW_CONTENT_SCALES.map((scaleOpt) => {
-                    const active = reviewContentScale === scaleOpt;
-                    return (
-                      <button
-                        key={scaleOpt}
-                        type="button"
-                        onClick={() => appActions.updatePreferences({ reviewContentScale: scaleOpt })}
-                        aria-pressed={active}
-                        className={`h-8 px-3.5 rounded-lg border text-[12px] font-mono font-medium cursor-pointer transition-colors ${
-                          active
-                            ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
-                            : isDark
-                            ? 'bg-white/[0.03] border-white/[0.08] text-[#C8C8D2] hover:bg-white/[0.07]'
-                            : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#F4F4F6]'
-                        }`}
-                      >
-                        {scaleOpt}%
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Card Stage Width */}
-              <div className={`rounded-xl border p-4 space-y-3 ${cardSurface}`}>
-                <div className="space-y-1">
-                  <div className="text-[13px] font-semibold">{t('reviewWidthTitle')}</div>
-                  <div className={`text-[11px] ${subText} leading-relaxed`}>
-                    {t('reviewWidthSub')}
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {(
-                    [
-                      { value: 'auto', labelKey: 'reviewWidthAuto' },
-                      { value: 'standard', labelKey: 'reviewWidthStandard' },
-                      { value: 'wide', labelKey: 'reviewWidthWide' },
-                      { value: 'full', labelKey: 'reviewWidthFull' },
-                    ] as Array<{ value: ReviewStageWidth; labelKey: any }>
-                  ).map((opt) => {
-                    const active = reviewStageWidth === opt.value;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => appActions.updatePreferences({ reviewStageWidth: opt.value })}
-                        aria-pressed={active}
-                        className={`h-8 px-3.5 rounded-lg border text-[12px] font-medium cursor-pointer transition-colors ${
-                          active
-                            ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
-                            : isDark
-                            ? 'bg-white/[0.03] border-white/[0.08] text-[#C8C8D2] hover:bg-white/[0.07]'
-                            : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#F4F4F6]'
-                        }`}
-                      >
-                        {t(opt.labelKey)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              </article>
             </div>
           )}
 
           {/* TAB 3: Keyboard Shortcuts */}
           {activeTab === 'shortcuts' && (
-            <div className="space-y-5">
-              <div>
-                <h3 className="text-[17px] font-bold tracking-tight">
-                  {t('settingsTabShortcuts')}
-                </h3>
-                <p className={`text-[12px] ${subText} mt-0.5`}>
-                  {t('settingsShortcutsSub')}
-                </p>
-              </div>
+            <div className="space-y-4">
+              <h3 className="text-[17px] font-bold tracking-tight">
+                {t('settingsTabShortcuts')}
+              </h3>
 
               {/* Toggle Switch Card: Show/Hide Shortcut Badges */}
-              <div className={`rounded-xl border p-4 flex items-center justify-between gap-4 ${cardSurface}`}>
-                <div className="space-y-1">
-                  <div className="text-[13px] font-semibold">
+              <article className={`rounded-xl border p-4 flex items-center justify-between gap-4 ${cardSurface}`}>
+                <div className="space-y-0.5 min-w-0">
+                  <label
+                    htmlFor={shortcutHintsSwitchId}
+                    className="block text-[13px] font-semibold cursor-pointer"
+                  >
                     {t('settingsShowShortcutBadgesTitle')}
-                  </div>
-                  <div className={`text-[11px] ${subText} leading-relaxed`}>
+                  </label>
+                  <p id={shortcutHintsDescId} className={`text-[11px] ${subText} leading-relaxed`}>
                     {t('settingsShowShortcutBadgesSub')}
-                  </div>
+                  </p>
                 </div>
 
-                {/* Apple-style Toggle Switch */}
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={showShortcutHints}
-                  onClick={() => {
-                    const next = !showShortcutHints;
+                <input
+                  id={shortcutHintsSwitchId}
+                  type="checkbox"
+                  checked={showShortcutHints}
+                  onChange={(e) => {
+                    const next = e.target.checked;
                     appActions.updatePreferences({ showShortcutHints: next });
                     showToast(
                       next
@@ -1044,107 +1285,153 @@ export const SettingsModal: React.FC = () => {
                         : t('shortcutHintsDisabledToast')
                     );
                   }}
-                  style={showShortcutHints ? { backgroundColor: currentScale.brand } : undefined}
-                  className={`w-12 h-6.5 shrink-0 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${
-                    showShortcutHints
-                      ? ''
-                      : isDark
-                      ? 'bg-[#3A3A48]'
-                      : 'bg-[#E5E5EA]'
-                  }`}
-                >
-                  <div
-                    className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
-                      showShortcutHints ? 'translate-x-5.5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
+                  aria-describedby={shortcutHintsDescId}
+                  {...({ switch: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+                  {...(supportsNativeSwitch
+                    ? {}
+                    : { role: 'switch', 'aria-checked': showShortcutHints })}
+                  data-switch-fallback={supportsNativeSwitch ? 'false' : 'true'}
+                  className="anki-switch shrink-0"
+                />
+              </article>
 
-              {/* Cheatsheet Grid */}
-              <div className={`rounded-xl border p-4 space-y-4 ${cardSurface}`}>
+              {/* Cheatsheet Grid with Semantic <dl> and Separated Keycaps */}
+              <article className={`rounded-xl border p-4 space-y-4 ${cardSurface}`}>
                 <div className="text-[13px] font-semibold">
                   {t('settingsCheatsheetTitle')}
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-3.5">
                   <div>
                     <div className="text-[11px] font-medium text-[var(--brand-text)] mb-1.5">
                       {t('settingsGroupGlobal')}
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-[12px]">
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('cmdPaletteAriaLabel')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">
-                          {formatShortcut('Cmd + K', envInfo.platform)}
-                        </kbd>
+                    <dl className="grid grid-cols-2 gap-2 text-[12px]">
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('cmdPaletteAriaLabel')}</dt>
+                        <dd className="shrink-0">
+                          <Keycap>{formatShortcut('Cmd + K', envInfo.platform)}</Keycap>
+                        </dd>
                       </div>
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('quickAddBtn')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">N</kbd>
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('quickAddBtn')}</dt>
+                        <dd className="shrink-0"><Keycap>N</Keycap></dd>
                       </div>
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('syncNowAction')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">Y</kbd>
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('syncNowAction')}</dt>
+                        <dd className="shrink-0"><Keycap>Y</Keycap></dd>
                       </div>
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('nativeSwitch')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">{shortcutHint}</kbd>
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('nativeSwitch')}</dt>
+                        <dd className="shrink-0"><Keycap>{shortcutHint}</Keycap></dd>
                       </div>
-                    </div>
+                    </dl>
                   </div>
 
                   <div>
                     <div className="text-[11px] font-medium text-[var(--brand-text)] mb-1.5">
                       {t('navStudy')}
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-[12px]">
-                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('showAnswerBtn')} / {t('rateGood')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold text-end">
-                          Space / Enter
-                        </kbd>
+                    <dl className="grid grid-cols-2 gap-2 text-[12px]">
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>
+                          {t('showAnswerBtn')} / {t('rateGood')}
+                        </dt>
+                        <dd className="shrink-0 flex items-center gap-1">
+                          <Keycap>Space</Keycap>
+                          <span className="opacity-50">/</span>
+                          <Keycap>Enter</Keycap>
+                        </dd>
                       </div>
-                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('answerButtonsBinary')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold text-end">
-                          1 {t('rateAgain')} · 2/3 {t('rateGood')} · 4 {t('rateEasy')}
-                        </kbd>
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('tabRevealHint')}</dt>
+                        <dd className="shrink-0"><Keycap>Tab</Keycap></dd>
                       </div>
-                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('answerButtonsFour')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold text-end">
-                          1 {t('rateAgain')} · 2 {t('rateHard')} · 3 {t('rateGood')} · 4 {t('rateEasy')}
-                        </kbd>
+
+                      <div className="col-span-2 flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={subText}>{t('answerButtonsBinary')}</dt>
+                        <dd className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px]">
+                          <span className="inline-flex items-center gap-1">
+                            <Keycap>1</Keycap>
+                            <span>{t('rateAgain')}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Keycap>2</Keycap>
+                            <span className="opacity-50">/</span>
+                            <Keycap>3</Keycap>
+                            <span>{t('rateGood')}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Keycap>4</Keycap>
+                            <span>{t('rateEasy')}</span>
+                          </span>
+                        </dd>
                       </div>
-                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('answerButtonsFour')} · {formatShortcut('Opt', envInfo.platform)}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold text-end">
-                          {formatShortcut('Opt + 1~4', envInfo.platform)}
-                        </kbd>
+
+                      <div className="col-span-2 flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={subText}>{t('answerButtonsFour')}</dt>
+                        <dd className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px]">
+                          <span className="inline-flex items-center gap-1">
+                            <Keycap>1</Keycap>
+                            <span>{t('rateAgain')}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Keycap>2</Keycap>
+                            <span>{t('rateHard')}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Keycap>3</Keycap>
+                            <span>{t('rateGood')}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Keycap>4</Keycap>
+                            <span>{t('rateEasy')}</span>
+                          </span>
+                        </dd>
                       </div>
-                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('undoBtnShort')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold text-end">
-                          Backspace / {formatShortcut('Cmd + Z', envInfo.platform)}
-                        </kbd>
+
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('undoBtnShort')}</dt>
+                        <dd className="shrink-0 flex items-center gap-1">
+                          <Keycap>Backspace</Keycap>
+                          <span className="opacity-50">/</span>
+                          <Keycap>{formatShortcut('Cmd + Z', envInfo.platform)}</Keycap>
+                        </dd>
                       </div>
-                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('pronounceBtn')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">R</kbd>
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('pronounceBtn')}</dt>
+                        <dd className="shrink-0"><Keycap>R</Keycap></dd>
                       </div>
-                      <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5">
-                        <span className={subText}>{t('editCardTitle')}</span>
-                        <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[11px] font-semibold">E</kbd>
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('editCardTitle')}</dt>
+                        <dd className="shrink-0"><Keycap>E</Keycap></dd>
                       </div>
-                    </div>
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('cardInfoTitle')}</dt>
+                        <dd className="shrink-0">
+                          <Keycap>{formatShortcut('Cmd + I', envInfo.platform)}</Keycap>
+                        </dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('flagFilterLabel')}</dt>
+                        <dd className="shrink-0">
+                          <Keycap>{formatShortcut('Cmd + 1~7', envInfo.platform)}</Keycap>
+                        </dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('reviewScaleTitle')}</dt>
+                        <dd className="shrink-0">
+                          <Keycap>{formatShortcut('Cmd + +/-', envInfo.platform)}</Keycap>
+                        </dd>
+                      </div>
+                    </dl>
                   </div>
                 </div>
-              </div>
+              </article>
             </div>
           )}
 
-          {/* TAB 3: AnkiWeb Sync */}
+          {/* TAB 4: AnkiWeb Sync */}
           {activeTab === 'sync' && (() => {
             const hasSynced = Boolean(lastSyncedTimestamp && lastSyncedTimestamp > 0);
             const syncVisualState: SyncVisualState = syncing
@@ -1157,18 +1444,13 @@ export const SettingsModal: React.FC = () => {
             const isoTimestamp = hasSynced ? new Date(lastSyncedTimestamp).toISOString() : undefined;
 
             return (
-              <div className="space-y-5">
-                <div>
-                  <h3 className="text-[17px] font-bold tracking-tight">
-                    {t('syncCloudTitle')}
-                  </h3>
-                  <p className={`text-[12px] ${subText} mt-0.5`}>
-                    {t('settingsSyncTabSub')}
-                  </p>
-                </div>
+              <div className="space-y-4">
+                <h3 className="text-[17px] font-bold tracking-tight">
+                  {t('syncCloudTitle')}
+                </h3>
 
                 {/* Sync Status Card */}
-                <div className={`rounded-xl border p-5 flex items-center justify-between gap-4 ${cardSurface}`}>
+                <article className={`rounded-xl border p-5 flex items-center justify-between gap-4 ${cardSurface}`}>
                   <div className="space-y-1.5 min-w-0">
                     <div className="flex items-center gap-2">
                       <SyncStateIcon state={syncVisualState} size="lg" />
@@ -1192,305 +1474,281 @@ export const SettingsModal: React.FC = () => {
                     <span aria-hidden="true" className={syncing ? 'motion-safe:animate-spin' : ''}>⟳</span>
                     <span>{syncing ? t('syncing') : t('syncNowAction')}</span>
                   </button>
-                </div>
+                </article>
 
-                {/* Snapshot Sync Notice */}
-                <div className={`rounded-xl border p-4 space-y-1.5 text-[12px] ${cardSurface}`}>
-                  <div className="font-semibold text-[var(--brand-text)]">
-                    {t('settingsOnDemandSyncTitle')}
-                  </div>
+                {/* Concise Sync Trigger Note */}
+                <article className={`rounded-xl border px-4 py-3 flex items-start gap-2.5 text-[12px] ${cardSurface}`}>
+                  <span className="pt-0.5 shrink-0">
+                    <Keycap>Y</Keycap>
+                  </span>
                   <p className={`${subText} leading-relaxed`}>
                     {t('settingsOnDemandSyncBody')}
                   </p>
-                </div>
+                </article>
               </div>
             );
           })()}
 
-          {/* TAB 3.5: Import / Export & System Maintenance Tools */}
+          {/* TAB 5: Import / Export & System Maintenance Tools */}
           {activeTab === 'maintenance' && (
-            <div className="space-y-5">
-              <div>
-                <h3 className="text-[17px] font-bold tracking-tight">
-                  {t('settingsMaintTitle')}
-                </h3>
-                <p className={`text-[12px] ${subText} mt-0.5`}>
-                  {t('settingsMaintSub')}
-                </p>
-              </div>
+            <div className="space-y-4">
+              <h3 className="text-[17px] font-bold tracking-tight">
+                {t('settingsMaintTitle')}
+              </h3>
 
-              {/* Section 1: Import & Export (.apkg / .colpkg / .txt) */}
-              <div className={`rounded-xl border p-4 space-y-3 ${cardSurface}`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-[13px] font-semibold">
-                      {t('settingsImportExportCardTitle')}
-                    </div>
-                    <div className={`text-[11px] ${subText} mt-0.5`}>
-                      {t('settingsImportExportCardSub')}
-                    </div>
-                  </div>
+              {/* Section 1: Import & Export */}
+              <article className={`rounded-xl border p-4 space-y-3 ${cardSurface}`}>
+                <div className="text-[13px] font-semibold">
+                  {t('settingsImportExportCardTitle')}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => appActions.triggerNativeImport()}
-                    className={`p-3.5 rounded-xl border text-start flex items-center justify-between cursor-pointer transition-all ${
+                    className={`p-3.5 rounded-xl border text-start flex items-center justify-between gap-2 cursor-pointer transition-colors ${
                       isDark
                         ? 'bg-[#161720] border-[#2E303E] hover:border-[var(--brand)]'
                         : 'bg-white border-[#E5E5EA] hover:border-[var(--brand)]'
                     }`}
                   >
-                    <div>
-                      <div className="text-[13px] font-bold text-[var(--brand-text)]">
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-semibold text-[var(--brand-text)]">
                         {t('settingsImportApkgTitle')}
                       </div>
                       <div className={`text-[11px] ${subText} mt-0.5`}>
                         {t('settingsImportApkgSub')}
                       </div>
                     </div>
-                    <span className="text-[16px] text-[var(--brand-text)]">↓</span>
+                    <span aria-hidden="true" className="text-[16px] text-[var(--brand-text)] shrink-0">↓</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => appActions.triggerNativeExport()}
-                    className={`p-3.5 rounded-xl border text-start flex items-center justify-between cursor-pointer transition-all ${
+                    className={`p-3.5 rounded-xl border text-start flex items-center justify-between gap-2 cursor-pointer transition-colors ${
                       isDark
                         ? 'bg-[#161720] border-[#2E303E] hover:border-[var(--brand)]'
                         : 'bg-white border-[#E5E5EA] hover:border-[var(--brand)]'
                     }`}
                   >
-                    <div>
-                      <div className="text-[13px] font-bold">
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-semibold">
                         {t('settingsExportApkgTitle')}
                       </div>
                       <div className={`text-[11px] ${subText} mt-0.5`}>
                         {t('settingsExportApkgSub')}
                       </div>
                     </div>
-                    <span className="text-[16px] text-[#8E8E93]">↑</span>
+                    <span aria-hidden="true" className="text-[16px] text-[#8E8E93] shrink-0">↑</span>
                   </button>
                 </div>
-              </div>
+              </article>
 
-              {/* Section 2: System Maintenance & Diagnostics */}
-              <div className={`rounded-xl border p-4 space-y-3.5 ${cardSurface}`}>
-                <div className="text-[13px] font-semibold">
+              {/* Section 2: System Maintenance & Diagnostics (Single-Level Card + divide-y) */}
+              <article className={`rounded-xl border p-4 ${cardSurface}`}>
+                <div className="text-[13px] font-semibold mb-1.5">
                   {t('settingsDiagnosticsCardTitle')}
                 </div>
 
-                {/* Tool A: Check Database */}
-                <div
-                  className={`p-3.5 rounded-xl border space-y-2.5 ${
-                    isDark ? 'bg-[#161720] border-[#2C2E3C]' : 'bg-white border-[#EAECEF]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[13px] font-semibold">
-                        1. {t('settingsCheckDbTitle')}
+                <div className={`divide-y ${isDark ? 'divide-white/[0.06]' : 'divide-[#E5E5EA]/80'}`}>
+                  {/* Check Database */}
+                  <div className="py-3 first:pt-2 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-semibold">
+                          {t('settingsCheckDbTitle')}
+                        </div>
+                        <div className={`text-[11px] ${subText} mt-0.5`}>
+                          {t('settingsCheckDbSub')}
+                        </div>
                       </div>
-                      <div className={`text-[11px] ${subText} mt-0.5`}>
-                        {t('settingsCheckDbSub')}
-                      </div>
+                      <button
+                        type="button"
+                        disabled={runningTool === 'check_db'}
+                        onClick={async () => {
+                          setRunningTool('check_db');
+                          const res = await appActions.runMaintenanceAction('check_db');
+                          setDbReport(res);
+                          setRunningTool(null);
+                        }}
+                        className="btn-secondary !h-8 !px-3.5 !text-[12px] shrink-0"
+                      >
+                        {runningTool === 'check_db' ? t('processingText') : t('settingsCheckDbBtn')}
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      disabled={runningTool === 'check_db'}
-                      onClick={async () => {
-                        setRunningTool('check_db');
-                        const res = await appActions.runMaintenanceAction('check_db');
-                        setDbReport(res);
-                        setRunningTool(null);
-                      }}
-                      className="btn-secondary !h-8 !px-3.5 !text-[12px] shrink-0"
-                    >
-                      {runningTool === 'check_db' ? t('processingText') : t('settingsCheckDbBtn')}
-                    </button>
+
+                    <div role="status" aria-live="polite" className="text-[11px]">
+                      {dbReport && (
+                        <span className="text-[var(--status-success)] font-semibold">
+                          ✓ {dbReport.message}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  {dbReport && (
-                    <div className="pt-2 border-t border-black/5 dark:border-white/5 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                      <span className="text-[var(--status-success)] font-semibold">
-                        ✓ {dbReport.message}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Tool B: Empty Cards Check & Cleanup */}
-                <div
-                  className={`p-3.5 rounded-xl border space-y-2.5 ${
-                    isDark ? 'bg-[#161720] border-[#2C2E3C]' : 'bg-white border-[#EAECEF]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[13px] font-semibold">
-                        2. {t('settingsEmptyCardsTitle')}
+                  {/* Empty Cards Check & Cleanup */}
+                  <div className="py-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-semibold">
+                          {t('settingsEmptyCardsTitle')}
+                        </div>
+                        <div className={`text-[11px] ${subText} mt-0.5`}>
+                          {t('settingsEmptyCardsSub')}
+                        </div>
                       </div>
-                      <div className={`text-[11px] ${subText} mt-0.5`}>
-                        {t('settingsEmptyCardsSub')}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {emptyReport && emptyReport.emptyCount > 0 && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        {emptyReport && emptyReport.emptyCount > 0 && (
+                          <button
+                            type="button"
+                            disabled={runningTool === 'clean_empty_cards'}
+                            onClick={async () => {
+                              setRunningTool('clean_empty_cards');
+                              const res = await appActions.runMaintenanceAction('clean_empty_cards');
+                              setEmptyReport(res);
+                              setRunningTool(null);
+                            }}
+                            className="h-8 px-3 rounded-xl bg-[var(--status-danger)] text-white text-[11px] font-semibold cursor-pointer"
+                          >
+                            {t('batchDelete')} ({emptyReport.emptyCount})
+                          </button>
+                        )}
                         <button
                           type="button"
-                          disabled={runningTool === 'clean_empty_cards'}
+                          disabled={runningTool === 'check_empty_cards'}
                           onClick={async () => {
-                            setRunningTool('clean_empty_cards');
-                            const res = await appActions.runMaintenanceAction('clean_empty_cards');
+                            setRunningTool('check_empty_cards');
+                            const res = await appActions.runMaintenanceAction('check_empty_cards');
                             setEmptyReport(res);
                             setRunningTool(null);
                           }}
-                          className="h-8 px-3 rounded-xl bg-[var(--status-danger)] text-white text-[11px] font-semibold cursor-pointer"
+                          className="btn-secondary !h-8 !px-3.5 !text-[12px]"
                         >
-                          {t('batchDelete')} ({emptyReport.emptyCount})
+                          {runningTool === 'check_empty_cards'
+                            ? t('processingText')
+                            : t('settingsScanEmptyBtn')}
                         </button>
+                      </div>
+                    </div>
+
+                    <div role="status" aria-live="polite" className="text-[11px]">
+                      {emptyReport && (
+                        <span
+                          className={
+                            emptyReport.emptyCount > 0
+                              ? 'text-[var(--status-warning)] font-semibold'
+                              : 'text-[var(--status-success)] font-semibold'
+                          }
+                        >
+                          {emptyReport.emptyCount > 0 ? '● ' : '✓ '}
+                          {emptyReport.message}
+                        </span>
                       )}
-                      <button
-                        type="button"
-                        disabled={runningTool === 'check_empty_cards'}
-                        onClick={async () => {
-                          setRunningTool('check_empty_cards');
-                          const res = await appActions.runMaintenanceAction('check_empty_cards');
-                          setEmptyReport(res);
-                          setRunningTool(null);
-                        }}
-                        className="btn-secondary !h-8 !px-3.5 !text-[12px]"
-                      >
-                        {runningTool === 'check_empty_cards'
-                          ? t('processingText')
-                          : t('settingsScanEmptyBtn')}
-                      </button>
                     </div>
                   </div>
 
-                  {emptyReport && (
-                    <div className="pt-2 border-t border-black/5 dark:border-white/5 text-[11px] flex items-center justify-between">
-                      <span
-                        className={
-                          emptyReport.emptyCount > 0
-                            ? 'text-[var(--status-warning)] font-semibold'
-                            : 'text-[var(--status-success)] font-semibold'
-                        }
-                      >
-                        {emptyReport.emptyCount > 0 ? '● ' : '✓ '}
-                        {emptyReport.message}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Tool C: Media Check & Unused Cleanup */}
-                <div
-                  className={`p-3.5 rounded-xl border space-y-2.5 ${
-                    isDark ? 'bg-[#161720] border-[#2C2E3C]' : 'bg-white border-[#EAECEF]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[13px] font-semibold">
-                        3. {t('settingsCheckMediaTitle')}
+                  {/* Media Check & Unused Cleanup */}
+                  <div className="py-3 last:pb-1 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-semibold">
+                          {t('settingsCheckMediaTitle')}
+                        </div>
+                        <div className={`text-[11px] ${subText} mt-0.5`}>
+                          {t('settingsCheckMediaSub')}
+                        </div>
                       </div>
-                      <div className={`text-[11px] ${subText} mt-0.5`}>
-                        {t('settingsCheckMediaSub')}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {mediaReport && mediaReport.unusedCount > 0 && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        {mediaReport && mediaReport.unusedCount > 0 && (
+                          <button
+                            type="button"
+                            disabled={runningTool === 'clean_unused_media'}
+                            onClick={async () => {
+                              setRunningTool('clean_unused_media');
+                              const res = await appActions.runMaintenanceAction('clean_unused_media');
+                              setMediaReport(res);
+                              setRunningTool(null);
+                            }}
+                            className="h-8 px-3 rounded-xl bg-[var(--status-danger)] text-white text-[11px] font-semibold cursor-pointer"
+                          >
+                            {t('batchDelete')} ({mediaReport.unusedCount})
+                          </button>
+                        )}
                         <button
                           type="button"
-                          disabled={runningTool === 'clean_unused_media'}
+                          disabled={runningTool === 'check_media'}
                           onClick={async () => {
-                            setRunningTool('clean_unused_media');
-                            const res = await appActions.runMaintenanceAction('clean_unused_media');
+                            setRunningTool('check_media');
+                            const res = await appActions.runMaintenanceAction('check_media');
                             setMediaReport(res);
                             setRunningTool(null);
                           }}
-                          className="h-8 px-3 rounded-xl bg-[var(--status-danger)] text-white text-[11px] font-semibold cursor-pointer"
+                          className="btn-secondary !h-8 !px-3.5 !text-[12px]"
                         >
-                          {t('batchDelete')} ({mediaReport.unusedCount})
+                          {runningTool === 'check_media'
+                            ? t('processingText')
+                            : t('settingsCheckMediaBtn')}
                         </button>
+                      </div>
+                    </div>
+
+                    <div role="status" aria-live="polite" className="text-[11px] space-y-1">
+                      {mediaReport && (
+                        <>
+                          <div
+                            className={
+                              mediaReport.unusedCount > 0 || mediaReport.missingCount > 0
+                                ? 'text-[var(--status-warning)] font-semibold'
+                                : 'text-[var(--status-success)] font-semibold'
+                            }
+                          >
+                            {mediaReport.unusedCount > 0 || mediaReport.missingCount > 0 ? '● ' : '✓ '}
+                            {mediaReport.message}
+                          </div>
+                          {Array.isArray(mediaReport.unusedFiles) && mediaReport.unusedFiles.length > 0 && (
+                            <div className={`${subText} truncate`}>
+                              {mediaReport.unusedFiles.slice(0, 5).join(', ')}
+                            </div>
+                          )}
+                        </>
                       )}
-                      <button
-                        type="button"
-                        disabled={runningTool === 'check_media'}
-                        onClick={async () => {
-                          setRunningTool('check_media');
-                          const res = await appActions.runMaintenanceAction('check_media');
-                          setMediaReport(res);
-                          setRunningTool(null);
-                        }}
-                        className="btn-secondary !h-8 !px-3.5 !text-[12px]"
-                      >
-                        {runningTool === 'check_media'
-                          ? t('processingText')
-                          : t('settingsCheckMediaBtn')}
-                      </button>
                     </div>
                   </div>
-
-                  {mediaReport && (
-                    <div className="pt-2 border-t border-black/5 dark:border-white/5 text-[11px] space-y-1">
-                      <div
-                        className={
-                          mediaReport.unusedCount > 0 || mediaReport.missingCount > 0
-                            ? 'text-[var(--status-warning)] font-semibold'
-                            : 'text-[var(--status-success)] font-semibold'
-                        }
-                      >
-                        {mediaReport.unusedCount > 0 || mediaReport.missingCount > 0 ? '● ' : '✓ '}
-                        {mediaReport.message}
-                      </div>
-                      {Array.isArray(mediaReport.unusedFiles) && mediaReport.unusedFiles.length > 0 && (
-                        <div className={`${subText} truncate`}>
-                          {mediaReport.unusedFiles.slice(0, 5).join(', ')}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
-              </div>
+              </article>
             </div>
           )}
 
-          {/* TAB 4: Native Anki */}
+          {/* TAB 6: Native Anki */}
           {activeTab === 'native' && (
-            <div className="space-y-5">
-              <div>
-                <h3 className="text-[17px] font-bold tracking-tight text-[var(--status-danger)]">
-                  {t('settingsTabNative')}
-                </h3>
-                <p className={`text-[12px] ${subText} mt-0.5`}>
-                  {t('settingsNativeSub')}
-                </p>
-              </div>
+            <div className="space-y-4">
+              <h3 className="text-[17px] font-bold tracking-tight">
+                {t('settingsTabNative')}
+              </h3>
 
-              {/* Switch Action Card */}
-              <div className={`rounded-xl border p-5 flex items-center justify-between ${cardSurface}`}>
-                <div>
+              {/* Switch Action Card (Neutral semantics: reversible & lossless) */}
+              <article className={`rounded-xl border p-5 flex items-center justify-between gap-4 ${cardSurface}`}>
+                <div className="min-w-0">
                   <div className="text-[14px] font-bold">{t('settingsSwitchNativeCardTitle')}</div>
                   <div className={`text-[12px] ${subText} mt-0.5`}>
                     {t('settingsSwitchNativeCardSub')}
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     setAppState({ settingsOpen: false });
                     appActions.triggerNativeEscape();
                   }}
-                  className="h-10 px-4 rounded-xl border border-[var(--status-danger)]/40 text-[var(--status-danger)] hover:bg-[var(--status-danger-soft)] text-[12px] font-semibold cursor-pointer transition-colors"
+                  className="btn-secondary !h-10 !px-4 !text-[12.5px] shrink-0"
                 >
                   {t('switchToNative')}
                 </button>
-              </div>
+              </article>
 
               {/* Concise Return Tip */}
-              <div className={`rounded-xl border p-4 space-y-1.5 text-[12px] ${cardSurface}`}>
+              <article className={`rounded-xl border p-4 space-y-1.5 text-[12px] ${cardSurface}`}>
                 <div className="text-[13px] font-semibold text-[var(--brand-text)] flex items-center gap-1.5">
                   <svg className="w-4 h-4 text-[var(--brand-text)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
@@ -1501,7 +1759,7 @@ export const SettingsModal: React.FC = () => {
                 <p className={`${subText} leading-relaxed`}>
                   {t('settingsHowToReturnBody', { key: shortcutHint })}
                 </p>
-              </div>
+              </article>
             </div>
           )}
 

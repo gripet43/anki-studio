@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+## [v1.6.12] - 2026-11-18
+
+- **[Antigravity] 休假与减负双弹窗同源统一、Studio 滑轨交互升级与设置中心语义精修**：
+  - **共用 Studio 滑轨组件与弹窗焦点 Hook**（新增 [`frontend/src/components/vacation/StudioDurationControl.tsx`](frontend/src/components/vacation/StudioDurationControl.tsx)、[`frontend/src/hooks/useDialogFocus.ts`](frontend/src/hooks/useDialogFocus.ts)，改 [`frontend/src/components/vacation/VacationModal.tsx`](frontend/src/components/vacation/VacationModal.tsx)、[`frontend/src/components/vacation/IcuRescueModal.tsx`](frontend/src/components/vacation/IcuRescueModal.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、16 语种词典与 [`tests/frontend/specs/render.spec.tsx`](tests/frontend/specs/render.spec.tsx)/[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+    - 休假模式以「预设 + Studio 滑轨」替换自定义天数步进器，进度减负同步迁入同一套弹窗面板、分段页签、单选卡片、手风琴明细与底栏规则；
+    - 新建 `.studio-range-slider` 实现渐变填充轨道（优先 CSS `progress()` 并以 `calc()` 回退 `--slider-progress`，适配 `:dir(rtl)`、`forced-colors` 与 `44px` 触控区），统一 `CheckGlyph` 标记并补全 `dayUnitSingular`、`icuTabHistory`、`icuZeroDueToday`、`icuFooterRescueHint` 及打开弹窗同步 `suggestedDays`；
+    - 提取 `useDialogFocus` 统一管理两套弹窗的开窗聚焦、关窗还焦、`Tab` 焦点环路（跳过未展开 `<details>`）与 `Esc` 优先取消内联确认。
+  - **设置中心、自定义学习与编辑器无障碍/样式精修**（改 [`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/study/CustomStudyModal.tsx`](frontend/src/components/study/CustomStudyModal.tsx)、[`frontend/src/components/quick-add/CardEditorModal.tsx`](frontend/src/components/quick-add/CardEditorModal.tsx)、[`frontend/src/components/decks/DecksView.tsx`](frontend/src/components/decks/DecksView.tsx)）：
+    - 设置中心升级语义 `role="tablist"`、`<fieldset>` 单选卡片（`ThemeModeGlyph` / `AnswerModeGlyph` / 复用 `ReviewerWidthGlyph`）、分段字体缩放条、可折叠 `<details>` 语言选择器及语义 `<dl>` + `<Keycap>` 快捷键速查表；
+    - 自定义学习预览保护升级为 `.anki-switch`（原生 `[switch]` + 降级），连续制卡开关补全 RTL 滑块位移与焦点环，牌组新建按钮去重 `+` 前缀。
+  - **构建资产换行属性修复**（改 [`.gitattributes`](.gitattributes)）：将 `web/` 内 `.avif`/`.webp`/`.png`/`.jpg` 等光栅与字体文件显式标为 `binary`，消除 `web/** text eol=lf` 对二进制插画资源的换行符误转损坏。
+
 ## [v1.6.11] - 2026-11-18
 
 - **[Antigravity] 全场景单色淡墨主题插画重制、显示插画开关、首页工具栏极简化与学习页显示/撤销交互打磨**：

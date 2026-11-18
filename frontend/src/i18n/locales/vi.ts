@@ -731,4 +731,10 @@ export const dict: TranslationTable = {
   aboutStatusEnabled: "Đang bật",
   aboutStatusPaused: "Đang tắt",
 
+  vacationPresetDaysLegend: "Chọn nhanh",
+  vacationCustomDaysLabel: "Tùy chỉnh số ngày",
+  vacationCustomDaysRange: "1–30 ngày",
+  icuTabHistory: "Lịch sử giảm tải",
+  icuFooterRescueHint: "Tạo ảnh chụp FSRS cục bộ trước khi chạy để hoàn tác chỉ với một chạm",
+  dayUnitSingular: "ngày",
 };

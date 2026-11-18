@@ -1690,4 +1690,39 @@ assert(
   'Item #62: Reviewer session-complete screen must use semantic <article>, container queries, subgrid stats alignment, equal-height action buttons, and safe scroll centering (rebuild with `cd frontend && npm run build`)'
 );
 
+// Item #63: 休假模式与进度减负共享「预设 + Studio 滑轨」时长选择器与统一弹窗规则（消除 d 缩写与低对比度灰字）
+const durationCtrlSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/vacation/StudioDurationControl.tsx'));
+assert(
+  vacationSrc.includes('<StudioDurationControl') &&
+    icuSrc.includes('<StudioDurationControl') &&
+    durationCtrlSrc.includes('vacation-duration-fieldset') &&
+    durationCtrlSrc.includes('studio-range-slider') &&
+    !vacationSrc.includes('{days}d') &&
+    !icuSrc.includes('({days}d)') &&
+    cssBundle.includes('.studio-range-slider') &&
+    cssBundle.includes('.vacation-choice-card') &&
+    jsBundle.includes('studio-range-slider'),
+  'Item #63: VacationModal and IcuRescueModal must share StudioDurationControl presets + range slider without raw d suffixes (rebuild with `cd frontend && npm run build`)'
+);
+
+// Item #64: 休假模式与进度减负模态窗全量 /modern-web-guidance 升级（语义 tablist/tabpanel + 焦点闭环 + 非纯色勾选 + details/details-content + Studio 分层质感）
+const dialogFocusSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/hooks/useDialogFocus.ts'));
+assert(
+  vacationSrc.includes('role="tablist"') &&
+    icuSrc.includes('role="tablist"') &&
+    vacationSrc.includes('useDialogFocus') &&
+    icuSrc.includes('useDialogFocus') &&
+    dialogFocusSrc.includes('getClosestFromTarget') &&
+    icuSrc.includes('icuTabHistory') &&
+    !vacationSrc.includes('#8E8E93') &&
+    !icuSrc.includes('#8E8E93') &&
+    cssBundle.includes('.vacation-tablist') &&
+    cssBundle.includes('.vacation-safeguards-details') &&
+    cssBundle.includes('::details-content') &&
+    jsBundle.includes('vacation-safeguards-chevron'),
+  'Item #64: VacationModal and IcuRescueModal must enforce shared Studio modal focus trap, semantic tablists, uniform AA contrast, and synchronized choice rules (rebuild with `cd frontend && npm run build`)'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

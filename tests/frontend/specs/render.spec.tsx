@@ -14,8 +14,11 @@ import { SyncStateIcon } from '../../../frontend/src/components/common/SyncState
 import { StreakFlameBackdrop } from '../../../frontend/src/components/dashboard/StreakFlameBackdrop';
 import { SyncStatusPill } from '../../../frontend/src/components/dashboard/SyncStatusPill';
 import { CardEditorModal } from '../../../frontend/src/components/quick-add/CardEditorModal';
+import { DecksView } from '../../../frontend/src/components/decks/DecksView';
 import { ReviewerView } from '../../../frontend/src/components/reviewer/ReviewerView';
 import { SettingsModal } from '../../../frontend/src/components/settings/SettingsModal';
+import { VacationModal } from '../../../frontend/src/components/vacation/VacationModal';
+import { IcuRescueModal } from '../../../frontend/src/components/vacation/IcuRescueModal';
 import {
   CelebrationIllustration,
   EmptyStateIllustration,
@@ -510,4 +513,180 @@ test('ReviewerView session-complete screen renders semantic article, subgrid sta
     });
   }
 });
+
+test('DecksView create deck CTA renders single leading plus without duplicate prefix', () => {
+  const prev = getAppState();
+  setAppState({ resolvedLang: 'zh-CN', theme: 'light', systemDark: false });
+  try {
+    const zhHtml = renderToStaticMarkup(React.createElement(DecksView));
+    ok(zhHtml.includes('<span>+ 新建牌组</span>'), 'expected single + prefix for newDeckBtn in zh-CN');
+    doesNotMatch(zhHtml, /\+\s*\+/, 'must never render double plus prefix (+ +)');
+
+    setAppState({ resolvedLang: 'en' });
+    const enHtml = renderToStaticMarkup(React.createElement(DecksView));
+    ok(enHtml.includes('<span>+ New Deck</span>'), 'expected single + prefix for newDeckBtn in en');
+    doesNotMatch(enHtml, /\+\s*\+/, 'must never render double plus prefix (+ +)');
+  } finally {
+    setAppState({
+      resolvedLang: prev.resolvedLang,
+      theme: prev.theme,
+      systemDark: prev.systemDark,
+    });
+  }
+});
+
+section('render · SettingsModal comprehensive audit refactor');
+
+test('SettingsModal enforces ARIA tablist semantics, de-noised tabs, schematics, separated keycaps, and safe native action', () => {
+  const prev = getAppState();
+  try {
+    // 1. Appearance tab + shell
+    setAppState({
+      settingsOpen: true,
+      settingsInitialTab: 'appearance',
+      resolvedLang: 'zh-CN',
+      theme: 'light',
+      systemDark: false,
+      customNickname: '张耀',
+      dashboard: { ...prev.dashboard, userName: '张耀' },
+      reviewContentScale: 110,
+      reviewStageWidth: 'wide',
+    });
+    const appHtml = render(React.createElement(SettingsModal));
+    ok(appHtml.includes('role="tablist"'), 'expected vertical tablist semantics');
+    ok(appHtml.includes('aria-orientation="vertical"'), 'expected vertical tablist orientation');
+    ok(appHtml.includes('role="tab"'), 'expected role="tab" on sidebar buttons');
+    ok(appHtml.includes('role="tabpanel"'), 'expected role="tabpanel" on content pane');
+    ok(appHtml.includes('overscroll-contain'), 'expected scroll containment on tabpanel');
+    ok(appHtml.includes('<details class="group">'), 'expected collapsible <details> disclosure for language selector');
+    ok(appHtml.includes('settings-text-input'), 'expected crisp accessible .settings-text-input field');
+    ok(appHtml.includes('aria-label="清空"'), 'expected 1-click clear button when nickname is populated');
+    ok(
+      appHtml.indexOf('aria-label="上传图片"') < appHtml.indexOf('aria-label="默认首字母"'),
+      'upload action should sit in the header row rather than wrapping below presets'
+    );
+    doesNotMatch(appHtml, /当前生效名称：张耀/, 'duplicate active-name helper should hide when input already shows it');
+    doesNotMatch(appHtml, /明亮柔和纸感/, 'appearance theme cards must omit marketing prose');
+    doesNotMatch(appHtml, /所有偏好自动持久化至本地插件配置/, 'appearance tab must omit top essay subtitle');
+    doesNotMatch(appHtml, /\btitle="/, 'SettingsModal must never emit raw HTML title= attributes');
+
+    // 2. Answer tab
+    setAppState({ settingsInitialTab: 'answer' });
+    const ansHtml = render(React.createElement(SettingsModal));
+    ok(ansHtml.includes('<fieldset class="reviewer-width-fieldset"'), 'expected semantic <fieldset> radio groups');
+    ok(ansHtml.includes('name="settings-answer-mode"'), 'expected native radio inputs for answer mode');
+    ok(ansHtml.includes('name="settings-review-scale"'), 'expected native radio inputs for scale track');
+    ok(ansHtml.includes('settings-segmented-bar'), 'expected full-width unified segmented bar for scale options');
+    ok(ansHtml.includes('name="settings-stage-width"'), 'expected native radio inputs for stage width');
+    ok(ansHtml.includes('divide-y'), 'expected clean hairline divider separating scale and width sections');
+    ok(ansHtml.includes('<svg'), 'expected AnswerModeGlyph & ReviewerWidthGlyph schematics in settings answer tab');
+    doesNotMatch(ansHtml, /max-w-md|1 · 2/, 'answer mode cards should span full width with schematics instead of 1 · 2 text');
+    ok(ansHtml.includes('恢复默认'), 'expected contextual reset link when scale or width is customized');
+    doesNotMatch(ansHtml, /揭示答案时自动播放背面音频/, 'answer audio toggles must avoid duplicate stacked subtitles');
+
+    // 3. Shortcuts tab
+    setAppState({ settingsInitialTab: 'shortcuts' });
+    const scHtml = render(React.createElement(SettingsModal));
+    ok(scHtml.includes('<dl'), 'expected semantic description list for shortcuts');
+    ok(scHtml.includes('settings-keycap'), 'expected optically trimmed .settings-keycap keycaps');
+    doesNotMatch(scHtml, /<kbd[^>]*>[^<]*遗忘/, 'rating prose must never be wrapped inside <kbd>');
+    ok(scHtml.includes('卡片信息') && scHtml.includes('旗标') && scHtml.includes('展开下一条提示'), 'expected complete reviewer shortcut entries');
+
+    // 4. Maintenance tab
+    setAppState({ settingsInitialTab: 'maintenance' });
+    const maintHtml = render(React.createElement(SettingsModal));
+    ok(maintHtml.includes('divide-y'), 'expected single-level divide-y diagnostics card without box-in-box nesting');
+    ok(maintHtml.includes('role="status"') && maintHtml.includes('aria-live="polite"'), 'expected polite live status regions');
+    doesNotMatch(maintHtml, /1\.\s*检查数据库完整性|2\.\s*清理空白卡片|3\.\s*检查冗余媒体文件/, 'independent diagnostics must omit fake step numbers');
+
+    // 5. Native tab
+    setAppState({ settingsInitialTab: 'native' });
+    const nativeHtml = render(React.createElement(SettingsModal));
+    ok(nativeHtml.includes('btn-secondary'), 'expected neutral secondary action button for safe native mode switch');
+    doesNotMatch(nativeHtml, /--status-danger/, 'safe reversible native mode tab must never use danger red');
+  } finally {
+    setAppState({
+      settingsOpen: prev.settingsOpen,
+      settingsInitialTab: prev.settingsInitialTab,
+      resolvedLang: prev.resolvedLang,
+      theme: prev.theme,
+      systemDark: prev.systemDark,
+      reviewContentScale: prev.reviewContentScale,
+      reviewStageWidth: prev.reviewStageWidth,
+      customNickname: prev.customNickname,
+      dashboard: prev.dashboard,
+    });
+  }
+});
+
+section('render · VacationModal & IcuRescueModal');
+
+test('VacationModal renders StudioDurationControl presets + slider without cryptic 3d suffix', () => {
+  const prev = getAppState();
+  setAppState({
+    vacationModalOpen: true,
+    vacationModalTab: 'status',
+    resolvedLang: 'zh-CN',
+    theme: 'light',
+    systemDark: false,
+    dashboard: {
+      ...prev.dashboard,
+      vacation: { isActive: false },
+    },
+  });
+  try {
+    const html = renderToStaticMarkup(React.createElement(VacationModal));
+    ok(html.includes('role="tablist"') && html.includes('role="tab"') && html.includes('role="tabpanel"'), 'expected semantic tablist/tab/tabpanel roles');
+    ok(html.includes('<fieldset class="vacation-duration-fieldset">'), 'expected semantic fieldset for duration presets');
+    ok(html.includes('class="studio-range-slider"') && html.includes('type="range"'), 'expected branded native range slider');
+    ok(/<label for="([^"]+)"[^>]*>休假时长<\/label>/.test(html), 'expected <label for> bound to duration range input');
+    ok(html.includes('aria-valuetext="3 天"'), 'expected localized aria-valuetext on slider');
+    ok(/aria-pressed="true"[^>]*>[\s\S]*?<span>3[\s\S]*?天<\/span><\/button>/.test(html), 'expected active preset button with check indicator');
+    ok(html.includes('vacation-safeguards-chevron') && html.includes('anki-switch anki-switch-sm'), 'expected disclosure chevron and native/fallback switches for safeguards');
+    doesNotMatch(html, />\s*3d\s*</, 'must not render cryptic English 3d abbreviation');
+  } finally {
+    setAppState({
+      vacationModalOpen: prev.vacationModalOpen,
+      vacationModalTab: prev.vacationModalTab,
+      resolvedLang: prev.resolvedLang,
+      theme: prev.theme,
+      systemDark: prev.systemDark,
+      dashboard: prev.dashboard,
+    });
+  }
+});
+
+test('IcuRescueModal shares Studio modal shell, choice cards, range slider, and semantic history tab', () => {
+  const prev = getAppState();
+  setAppState({
+    icuModalOpen: true,
+    icuModalTab: 'rescue',
+    resolvedLang: 'zh-CN',
+    theme: 'light',
+    systemDark: false,
+    dashboard: {
+      ...prev.dashboard,
+      backlog: { ...prev.dashboard.backlog, totalDue: 28, suggestedDays: 7 },
+    },
+  });
+  try {
+    const html = renderToStaticMarkup(React.createElement(IcuRescueModal));
+    ok(html.includes('vacation-modal-panel') && html.includes('role="tablist"'), 'expected unified Studio modal shell & tablist');
+    ok(html.includes('减负记录') && !html.includes('休假记录'), 'expected rescue-specific history tab label');
+    ok(html.includes('vacation-choice-card') && html.includes('aria-pressed="true"'), 'expected unified strategy choice cards');
+    ok(html.includes('class="studio-range-slider"') && html.includes('min="2"') && html.includes('max="30"'), 'expected shared range slider 2..30');
+    ok(html.includes('aria-valuetext="7 天"') && html.includes('执行平摊方案 (7 天)'), 'expected localized unit on slider & CTA');
+    doesNotMatch(html, /\(\s*7d\s*\)|>\s*2d\s*<|>\s*30d\s*</, 'must not render raw d suffixes');
+  } finally {
+    setAppState({
+      icuModalOpen: prev.icuModalOpen,
+      icuModalTab: prev.icuModalTab,
+      resolvedLang: prev.resolvedLang,
+      theme: prev.theme,
+      systemDark: prev.systemDark,
+      dashboard: prev.dashboard,
+    });
+  }
+});
+
 

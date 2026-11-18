@@ -155,11 +155,12 @@ export const DecksView: React.FC = () => {
           </button>
 
           <button
+            type="button"
             onClick={() => setShowCreateModal((prev) => !prev)}
             style={{ backgroundColor: brandHex }}
             className="btn-primary !h-10 !px-4"
           >
-            <span>+ {t('newDeckBtn')}</span>
+            <span>{t('newDeckBtn')}</span>
           </button>
         </div>
       </header>

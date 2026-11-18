@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import {
   ANKI_FLAG_PALETTE,
   callAnki,
@@ -26,6 +26,9 @@ export const CustomStudyModal: React.FC = () => {
     resolvedLang,
   } = useAppStore();
 
+  const previewSwitchId = useId();
+  const supportsNativeSwitch =
+    typeof HTMLInputElement !== 'undefined' && 'switch' in HTMLInputElement.prototype;
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
   const resolvedTheme = resolveThemeMode(theme, systemDark);
@@ -639,8 +642,8 @@ export const CustomStudyModal: React.FC = () => {
           )}
 
           {/* Tier 3B: FSRS Schedule Safeguard Switch */}
-          <div
-            onClick={() => setIsPreviewOnly((prev) => !prev)}
+          <label
+            htmlFor={previewSwitchId}
             className={`rounded-xl border px-4 py-3 flex items-center justify-between gap-3 cursor-pointer transition-colors ${cardSurface}`}
           >
             <div className="flex items-start gap-2.5 min-w-0">
@@ -652,11 +655,11 @@ export const CustomStudyModal: React.FC = () => {
                 }`}
               >
                 {isPreviewOnly ? (
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                   </svg>
                 ) : (
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 )}
@@ -673,22 +676,19 @@ export const CustomStudyModal: React.FC = () => {
               </div>
             </div>
 
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isPreviewOnly}
-              aria-label={t('customStudyCramPreviewTitle')}
-              className={`w-9 h-5 rounded-full p-0.5 transition-colors shrink-0 cursor-pointer ${
-                isPreviewOnly ? 'bg-[var(--brand)]' : isDark ? 'bg-[#2E303E]' : 'bg-[#D1D1D6]'
-              }`}
-            >
-              <div
-                className={`w-4 h-4 rounded-full bg-white shadow-xs transition-transform ${
-                  isPreviewOnly ? 'translate-x-4' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
+            <input
+              id={previewSwitchId}
+              type="checkbox"
+              checked={isPreviewOnly}
+              onChange={(e) => setIsPreviewOnly(e.target.checked)}
+              {...({ switch: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+              {...(supportsNativeSwitch
+                ? {}
+                : { role: 'switch', 'aria-checked': isPreviewOnly })}
+              data-switch-fallback={supportsNativeSwitch ? 'false' : 'true'}
+              className="anki-switch anki-switch-sm shrink-0"
+            />
+          </label>
         </div>
 
         {/* Footer — Live Match Status + Sole Level-1 Solid Primary CTA */}

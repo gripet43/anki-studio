@@ -731,4 +731,10 @@ export const dict: TranslationTable = {
   aboutStatusEnabled: "켜짐",
   aboutStatusPaused: "꺼짐",
 
+  vacationPresetDaysLegend: "자주 쓰는 일수",
+  vacationCustomDaysLabel: "직접 입력",
+  vacationCustomDaysRange: "1~30일",
+  icuTabHistory: "조정 기록",
+  icuFooterRescueHint: "실행 전 로컬 FSRS 스냅샷이 생성되어 기록에서 언제든 한 번에 되돌릴 수 있습니다",
+  dayUnitSingular: "일",
 };

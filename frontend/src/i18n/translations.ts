@@ -1082,6 +1082,12 @@ const ZH_CN_DICT = {
   aboutFeedbackTitle: "匿名反馈设置",
   aboutStatusEnabled: "已开启",
   aboutStatusPaused: "已关闭",
+  vacationPresetDaysLegend: "常用天数",
+  vacationCustomDaysLabel: "自定义天数",
+  vacationCustomDaysRange: "1–30 天",
+  icuTabHistory: "减负记录",
+  icuFooterRescueHint: "执行前自动建立 FSRS 快照，可在「减负记录」中一键撤销恢复原状",
+  dayUnitSingular: "天",
 
 } as const;
 
@@ -1819,6 +1825,12 @@ const EN_DICT: TranslationTable = {
   aboutFeedbackTitle: "Anonymous Feedback",
   aboutStatusEnabled: "Enabled",
   aboutStatusPaused: "Off",
+  vacationPresetDaysLegend: "Quick presets",
+  vacationCustomDaysLabel: "Custom days",
+  vacationCustomDaysRange: "1–30 days",
+  icuTabHistory: "Relief History",
+  icuFooterRescueHint: "Creates a local FSRS snapshot first so you can undo with one click",
+  dayUnitSingular: "day",
 
 };
 /**

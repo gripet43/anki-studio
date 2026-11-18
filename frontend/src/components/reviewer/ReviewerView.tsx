@@ -35,7 +35,7 @@ import { Tooltip } from '../common/Tooltip';
 import { LightboxTarget, ReviewerImageLightbox } from './ReviewerImageLightbox';
 import { SandboxCardFrame } from './SandboxCardFrame';
 
-const ReviewerWidthGlyph: React.FC<{ mode: ReviewStageWidth; active: boolean }> = ({
+export const ReviewerWidthGlyph: React.FC<{ mode: ReviewStageWidth; active: boolean }> = ({
   mode,
   active,
 }) => {

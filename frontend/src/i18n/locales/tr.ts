@@ -731,4 +731,10 @@ export const dict: TranslationTable = {
   aboutStatusEnabled: "Açık",
   aboutStatusPaused: "Kapalı",
 
+  vacationPresetDaysLegend: "Hızlı seçimler",
+  vacationCustomDaysLabel: "Özel gün",
+  vacationCustomDaysRange: "1–30 gün",
+  icuTabHistory: "Geçmiş",
+  icuFooterRescueHint: "Tek tıkla geri alabilmeniz için önceden yerel FSRS anlık görüntüsü oluşturur",
+  dayUnitSingular: "gün",
 };
