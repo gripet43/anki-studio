@@ -33,6 +33,7 @@ import './specs/libraryFacetSync.spec';
 import './specs/dashboardRing.spec';
 import './specs/libraryDefaultSort.spec';
 import './specs/editorClearFormat.spec';
+import './specs/avatarProfile.spec';
 
 import { report } from './harness';
 

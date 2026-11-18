@@ -23,13 +23,16 @@ import base64
 import datetime
 import json
 import re
+import shutil
 import sqlite3
 import tempfile
 import time
+import types
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 import sys
+from unittest import mock
 
 from _addon_bootstrap import ADDON_ROOT, ensure_importable  # noqa: E402
 
@@ -503,6 +506,7 @@ class MockMW:
 class BridgeRouterAuditTest(unittest.TestCase):
     def setUp(self):
         self.temp_media = tempfile.mkdtemp(prefix="anki_media_")
+        self.temp_avatars = tempfile.mkdtemp(prefix="anki_avatars_")
         self.mock_col = MockCol(self.temp_media)
         self.mock_mw = MockMW()
         self.toggled = False
@@ -527,6 +531,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
             toggle_native_callback=on_toggle,
             config_getter=lambda: self.config_store,
             config_writer=write_cfg,
+            avatars_dir=self.temp_avatars,
         )
 
     def tearDown(self):
@@ -534,6 +539,8 @@ class BridgeRouterAuditTest(unittest.TestCase):
             self.mock_col.db.conn.close()
         except Exception:
             pass
+        shutil.rmtree(self.temp_media, ignore_errors=True)
+        shutil.rmtree(self.temp_avatars, ignore_errors=True)
 
     def _call(self, action: str, data: dict = None) -> dict:
         cmd = "modern_anki:" + json.dumps({"action": action, "data": data or {}})
@@ -694,6 +701,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(prefs_res["status"], "success")
         self.assertEqual(prefs_res["data"]["preferences"]["language"], "en")
         self.assertEqual(prefs_res["data"]["preferences"]["customNickname"], "Dr. Lee")
+        self.assertEqual(prefs_res["data"]["preferences"]["customAvatar"], {"kind": "initial"})
         self.assertTrue(prefs_res["data"]["preferences"]["showShortcutHints"])
         self.assertTrue(prefs_res["data"]["preferences"]["continuousCardCreation"])
         self.assertTrue(prefs_res["data"]["preferences"]["autoPlayFrontAudio"])
@@ -703,6 +711,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
 
         get_prefs = self._call("get_preferences", {})
         self.assertEqual(get_prefs["status"], "success")
+        self.assertEqual(get_prefs["data"]["customAvatar"], {"kind": "initial"})
         self.assertTrue(get_prefs["data"]["showShortcutHints"])
         self.assertTrue(get_prefs["data"]["continuousCardCreation"])
         self.assertTrue(get_prefs["data"]["autoPlayFrontAudio"])
@@ -711,6 +720,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(get_prefs["data"]["reviewContentScale"], 130)
 
         dash_prefs = self._call("get_dashboard", {})["data"]["preferences"]
+        self.assertEqual(dash_prefs["customAvatar"], {"kind": "initial"})
         self.assertTrue(dash_prefs["autoPlayFrontAudio"])
         self.assertFalse(dash_prefs["autoPlayBackAudio"])
         self.assertTrue(dash_prefs["continuousCardCreation"])
@@ -3779,6 +3789,290 @@ class BridgeRouterAuditTest(unittest.TestCase):
 
         due_sorted = svc.search_cards({"query": "", "sortBy": "due_asc", "includeFacets": False})
         self.assertEqual([c["id"] for c in due_sorted["cards"]], ["5001", "5004", "5002", "5003"])
+
+    def test_47_custom_avatar_persistence_validation_and_cleanup(self):
+        """Verify customAvatar presets, safe local image storage outside collection.media, validation, and cleanup."""
+        existed_before = (ADDON_ROOT / "user_files").exists()
+
+        # 1. All 8 whitelist preset IDs round-trip cleanly across save_preferences, get_preferences, and get_dashboard
+        for preset_id in ("book", "owl", "leaf", "spark", "cat", "mountain", "compass", "flame"):
+            res = self._call("save_preferences", {"customAvatar": {"kind": "preset", "presetId": preset_id}})
+            self.assertEqual(res["status"], "success")
+            expected = {"kind": "preset", "presetId": preset_id}
+            self.assertEqual(res["data"]["preferences"]["customAvatar"], expected)
+            self.assertEqual(self._call("get_preferences")["data"]["customAvatar"], expected)
+            self.assertEqual(self._call("get_dashboard")["data"]["preferences"]["customAvatar"], expected)
+
+        # Invalid presetId is rejected without clobbering existing preset
+        bad_preset = self._call("save_preferences", {"customAvatar": {"kind": "preset", "presetId": "hacker"}})
+        self.assertEqual(bad_preset["status"], "error")
+        self.assertEqual(
+            self._call("get_preferences")["data"]["customAvatar"],
+            {"kind": "preset", "presetId": "flame"},
+        )
+
+        # 2. All 4 allowed raster image MIME types store safely in temp_avatars (never collection.media or meta.json)
+        samples = [
+            ("image/png", "png", b"\x89PNG\r\n\x1a\nPNGAVATARBYTES"),
+            ("image/jpeg", "jpg", b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"),
+            ("image/webp", "webp", b"RIFF\x1a\x00\x00\x00WEBPVP8 \x0e\x00\x00\x00"),
+            ("image/gif", "gif", b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"),
+        ]
+        prev_files = []
+        for mime, expected_ext, raw_bytes in samples:
+            data_url = f"data:{mime};base64," + base64.b64encode(raw_bytes).decode("ascii")
+            save_res = self._call("save_preferences", {"customAvatar": {"kind": "image", "dataUrl": data_url}})
+            self.assertEqual(save_res["status"], "success")
+            self.assertEqual(save_res["data"]["preferences"]["customAvatar"], {"kind": "image", "dataUrl": data_url})
+
+            stored_meta = self.config_store["custom_avatar"]
+            self.assertEqual(stored_meta["kind"], "image")
+            self.assertEqual(stored_meta["mime"], mime)
+            self.assertTrue(stored_meta["file"].endswith(f".{expected_ext}"))
+            self.assertNotIn("dataUrl", stored_meta)
+            self.assertNotIn("data:image", json.dumps(self.config_store))
+
+            # Stored in avatars dir, never in collection.media
+            avatar_files = list(Path(self.temp_avatars).iterdir())
+            self.assertEqual([p.name for p in avatar_files], [stored_meta["file"]])
+            self.assertEqual(list(Path(self.temp_media).iterdir()), [])
+            if prev_files:
+                self.assertFalse((Path(self.temp_avatars) / prev_files[-1]).exists())
+            prev_files.append(stored_meta["file"])
+
+            # Verify get_preferences, get_dashboard, and _empty_dashboard (col=None) all return resolved dataUrl
+            self.assertEqual(self._call("get_preferences")["data"]["customAvatar"], {"kind": "image", "dataUrl": data_url})
+            self.assertEqual(self._call("get_dashboard")["data"]["preferences"]["customAvatar"], {"kind": "image", "dataUrl": data_url})
+            null_col_router = BridgeRouter(
+                col_getter=lambda: None,
+                mw_getter=lambda: self.mock_mw,
+                config_getter=lambda: self.config_store,
+                config_writer=lambda cfg: cfg,
+                avatars_dir=self.temp_avatars,
+            )
+            self.assertEqual(
+                null_col_router.action_get_dashboard({})["preferences"]["customAvatar"],
+                {"kind": "image", "dataUrl": data_url},
+            )
+
+        # 3. Security validations: SVG XSS, spoofed headers, non-data URLs, and >512 KB payloads are rejected cleanly
+        svg_b64 = base64.b64encode(b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>").decode("ascii")
+        oversized_png = b"\x89PNG\r\n\x1a\n" + (b"A" * (512 * 1024 + 1))
+        invalid_payloads = [
+            {"kind": "image", "dataUrl": f"data:image/svg+xml;base64,{svg_b64}"},
+            {"kind": "image", "dataUrl": "data:image/svg+xml,<svg onload='alert(1)'/>"},
+            {"kind": "image", "dataUrl": "https://evil.example/avatar.png"},
+            {"kind": "image", "dataUrl": "javascript:alert(1)"},
+            {"kind": "image", "dataUrl": f"data:image/png;base64,{svg_b64}"},
+            {"kind": "image", "dataUrl": "data:image/png;base64,NOT_VALID_BASE64!!!"},
+            {"kind": "image", "dataUrl": "data:image/png;base64," + base64.b64encode(oversized_png).decode("ascii")},
+            {"kind": "unknown", "foo": "bar"},
+            "invalid-non-dict",
+        ]
+        last_valid_url = f"data:image/gif;base64," + base64.b64encode(samples[-1][2]).decode("ascii")
+        for bad_avatar in invalid_payloads:
+            err_res = self._call("save_preferences", {"customAvatar": bad_avatar})
+            self.assertEqual(err_res["status"], "error", f"Should reject {bad_avatar!r}")
+            # Existing valid avatar and disk file stay intact
+            self.assertEqual(
+                self._call("get_preferences")["data"]["customAvatar"],
+                {"kind": "image", "dataUrl": last_valid_url},
+            )
+
+        # 4. Path traversal inside config metadata safely falls back to initial without reading outside files
+        saved_meta_backup = dict(self.config_store["custom_avatar"])
+        outside_secret = Path(self.temp_media) / "outside_secret.png"
+        outside_secret.write_bytes(b"\x89PNG\r\n\x1a\nOUTSIDE")
+        self.config_store["custom_avatar"] = {
+            "kind": "image",
+            "file": f"../{Path(self.temp_media).name}/outside_secret.png",
+            "mime": "image/png",
+        }
+        self.assertEqual(self._call("get_preferences")["data"]["customAvatar"], {"kind": "initial"})
+        self.assertTrue(outside_secret.exists())
+        self.config_store["custom_avatar"] = saved_meta_backup
+
+        # 5. Resetting to preset or initial / None removes the old avatar file on disk
+        reset_res = self._call("save_preferences", {"customAvatar": {"kind": "initial"}})
+        self.assertEqual(reset_res["status"], "success")
+        self.assertEqual(reset_res["data"]["preferences"]["customAvatar"], {"kind": "initial"})
+        self.assertEqual(list(Path(self.temp_avatars).iterdir()), [])
+
+        # Passing None also normalizes cleanly to initial
+        self._call("save_preferences", {"customAvatar": {"kind": "preset", "presetId": "owl"}})
+        none_res = self._call("save_preferences", {"customAvatar": None})
+        self.assertEqual(none_res["status"], "success")
+        self.assertEqual(none_res["data"]["preferences"]["customAvatar"], {"kind": "initial"})
+
+        self.assertEqual((ADDON_ROOT / "user_files").exists(), existed_before)
+
+    def test_48_pick_avatar_image_native_and_fallbacks(self):
+        """Verify pick_avatar_image handles non-Qt fallback, cancel, SVG/size/magic rejection, and QImage scaling."""
+        # 1. Outside Qt/aqt test environment -> {picked: False, unsupported: True}
+        with mock.patch.dict(sys.modules, {"aqt": None, "aqt.qt": None}):
+            res = self._call("pick_avatar_image", {})
+            self.assertEqual(res["status"], "success")
+            self.assertEqual(res["data"], {"picked": False, "unsupported": True})
+
+        with tempfile.TemporaryDirectory(prefix="anki_pick_avatar_") as td:
+            td_path = Path(td)
+            png_bytes = b"\x89PNG\r\n\x1a\nVALID_RASTER_AVATAR"
+            valid_png = td_path / "good.png"
+            valid_png.write_bytes(png_bytes)
+
+            svg_file = td_path / "vector.svg"
+            svg_file.write_text("<svg xmlns='http://www.w3.org/2000/svg'></svg>", encoding="utf-8")
+
+            fake_png_svg = td_path / "disguised.png"
+            fake_png_svg.write_text("<svg onload='alert(1)'></svg>", encoding="utf-8")
+
+            huge_png = td_path / "huge.png"
+            huge_png.write_bytes(b"\x89PNG\r\n\x1a\n" + (b"X" * (8 * 1024 * 1024 + 10)))
+
+            bmp_file = td_path / "bitmap.bmp"
+            bmp_file.write_bytes(b"BM\x3a\x00\x00\x00\x00\x00\x00\x00")
+
+            selected_box = {"path": "", "parent": None}
+
+            class _FakeFileDialog:
+                @staticmethod
+                def getOpenFileName(parent, caption, directory, file_filter):
+                    selected_box["parent"] = parent
+                    selected_box["filter"] = file_filter
+                    return selected_box["path"], file_filter
+
+            fake_qt = types.ModuleType("aqt.qt")
+            fake_qt.QFileDialog = _FakeFileDialog
+            fake_aqt = types.ModuleType("aqt")
+            fake_aqt.qt = fake_qt
+
+            with mock.patch.dict(sys.modules, {"aqt": fake_aqt, "aqt.qt": fake_qt}):
+                # Cancel -> {picked: False, canceled: True}
+                selected_box["path"] = ""
+                cancel_res = self._call("pick_avatar_image", {})["data"]
+                self.assertEqual(cancel_res, {"picked": False, "canceled": True})
+                self.assertIs(selected_box["parent"], self.mock_mw)
+                self.assertNotIn(".svg", selected_box["filter"].lower())
+
+                # .svg rejected
+                selected_box["path"] = str(svg_file)
+                svg_res = self._call("pick_avatar_image", {})["data"]
+                self.assertFalse(svg_res["picked"])
+                self.assertIn("error", svg_res)
+
+                # Disguised SVG with .png extension rejected via magic header
+                selected_box["path"] = str(fake_png_svg)
+                disguised_res = self._call("pick_avatar_image", {})["data"]
+                self.assertFalse(disguised_res["picked"])
+                self.assertIn("error", disguised_res)
+
+                # > 8 MB rejected
+                selected_box["path"] = str(huge_png)
+                huge_res = self._call("pick_avatar_image", {})["data"]
+                self.assertFalse(huge_res["picked"])
+                self.assertIn("error", huge_res)
+
+                # Valid PNG without QImage falls back cleanly to original safe bytes
+                selected_box["path"] = str(valid_png)
+                ok_res = self._call("pick_avatar_image", {})["data"]
+                self.assertTrue(ok_res["picked"])
+                self.assertEqual(
+                    ok_res["dataUrl"],
+                    "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii"),
+                )
+
+                # Large image / BMP with Qt QImage scaling path encodes downscaled <= 512px WebP
+                scaled_calls = []
+                webp_bytes = b"RIFF\x18\x00\x00\x00WEBPVP8 \x0c\x00\x00\x00"
+
+                class _FakeQByteArray:
+                    def __init__(self):
+                        self._data = b""
+
+                    def data(self):
+                        return self._data
+
+                class _FakeQBuffer:
+                    def __init__(self, ba):
+                        self._ba = ba
+
+                    def open(self, _mode):
+                        return True
+
+                    def close(self):
+                        pass
+
+                class _FakeQIODevice:
+                    class OpenModeFlag:
+                        WriteOnly = 2
+
+                class _FakeQt:
+                    class AspectRatioMode:
+                        KeepAspectRatio = 1
+
+                    class TransformationMode:
+                        SmoothTransformation = 1
+
+                class _FakeQImage:
+                    def __init__(self, w, h):
+                        self._w = w
+                        self._h = h
+
+                    @classmethod
+                    def fromData(cls, _raw):
+                        return cls(1600, 1200)
+
+                    def isNull(self):
+                        return False
+
+                    def width(self):
+                        return self._w
+
+                    def height(self):
+                        return self._h
+
+                    def hasAlphaChannel(self):
+                        return True
+
+                    def scaled(self, w, h, aspect, trans):
+                        scaled_calls.append((w, h, aspect, trans))
+                        return _FakeQImage(512, 384)
+
+                    def save(self, buf, fmt, _quality=-1):
+                        if fmt == "WEBP":
+                            buf._ba._data = webp_bytes
+                            return True
+                        return False
+
+                fake_qt.QImage = _FakeQImage
+                fake_qt.QByteArray = _FakeQByteArray
+                fake_qt.QBuffer = _FakeQBuffer
+                fake_qt.QIODevice = _FakeQIODevice
+                fake_qt.Qt = _FakeQt
+
+                selected_box["path"] = str(bmp_file)
+                scaled_res = self._call("pick_avatar_image", {})["data"]
+                self.assertTrue(scaled_res["picked"])
+                self.assertEqual(scaled_calls, [(512, 512, 1, 1)])
+                self.assertEqual(
+                    scaled_res["dataUrl"],
+                    "data:image/webp;base64," + base64.b64encode(webp_bytes).decode("ascii"),
+                )
+
+                # If QImage throws on a valid PNG, still safely falls back to original bytes
+                class _BrokenQImage:
+                    @classmethod
+                    def fromData(cls, _raw):
+                        raise RuntimeError("Qt decoder unavailable")
+
+                fake_qt.QImage = _BrokenQImage
+                selected_box["path"] = str(valid_png)
+                fallback_res = self._call("pick_avatar_image", {})["data"]
+                self.assertTrue(fallback_res["picked"])
+                self.assertEqual(
+                    fallback_res["dataUrl"],
+                    "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii"),
+                )
 
 
 if __name__ == "__main__":

@@ -127,7 +127,7 @@ test('negative or non-finite inputs are clamped safely to zero', () => {
 
 section('dashboard · hero progress ring SSR markup & ARIA');
 
-test('normal progress renders 0-100 percentage progressbar ARIA and completed/total subtext', () => {
+test('normal progress renders 0-100 percentage progressbar ARIA without completed/total subtext', () => {
   const html = renderDashboardWithStats({
     completed: 14,
     totalTodayWorkload: 28,
@@ -142,9 +142,12 @@ test('normal progress renders 0-100 percentage progressbar ARIA and completed/to
     html.includes('aria-valuetext="50% · Completed 14 of 28 cards today"'),
     'aria-valuetext should pair percentage with localized tooltip text'
   );
-  ok(html.includes('14 / 28'), 'ring subtext should display completed / totalWorkload');
+  doesNotMatch(html, /14 \/ 28/, 'ring center should omit completed / totalWorkload subtext');
   ok(html.includes('>%<'), 'ring centerpiece must include % unit');
   ok(html.includes('tabular-nums'), 'ring metrics must use tabular-nums');
+  ok(html.includes('dashboard-progress-ring-center'), 'ring center overlay class should be present');
+  ok(html.includes('dashboard-progress-ring-value'), 'ring value class should be present for text-box trim');
+  ok(html.includes('dashboard-progress-ring-unit'), 'ring unit class should be present for text-box trim');
 });
 
 test('0% empty day and 100% done render expected progressbar bounds', () => {
@@ -155,7 +158,7 @@ test('0% empty day and 100% done render expected progressbar bounds', () => {
   });
   ok(emptyHtml.includes('aria-valuenow="0"'));
   ok(emptyHtml.includes('aria-valuemax="100"'));
-  ok(emptyHtml.includes('0 / 0'));
+  doesNotMatch(emptyHtml, /0 \/ 0/);
 
   const doneHtml = renderDashboardWithStats({
     completed: 28,
@@ -164,7 +167,8 @@ test('0% empty day and 100% done render expected progressbar bounds', () => {
   });
   ok(doneHtml.includes('aria-valuenow="100"'));
   ok(doneHtml.includes('aria-valuemax="100"'));
-  ok(doneHtml.includes('28 / 28'));
+  ok(doneHtml.includes('var(--status-success)'), '100% completion should highlight ring in status-success');
+  doesNotMatch(doneHtml, /28 \/ 28/);
 });
 
 test('sync-pending state switches progressbar to indeterminate busy mode', () => {

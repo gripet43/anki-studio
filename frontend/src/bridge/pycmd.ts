@@ -331,11 +331,39 @@ export type ReviewStageWidth = 'standard' | 'auto' | 'wide' | 'full';
 export type ReviewContentScale = 90 | 100 | 115 | 130 | 150;
 export const REVIEW_CONTENT_SCALES: readonly ReviewContentScale[] = [90, 100, 115, 130, 150] as const;
 
+export const AVATAR_PRESET_IDS = [
+  'book',
+  'owl',
+  'leaf',
+  'spark',
+  'cat',
+  'mountain',
+  'compass',
+  'flame',
+] as const;
+
+export type AvatarPresetId = (typeof AVATAR_PRESET_IDS)[number];
+
+export type CustomAvatarConfig =
+  | { kind: 'initial' }
+  | { kind: 'preset'; presetId: AvatarPresetId }
+  | { kind: 'image'; dataUrl: string };
+
+export interface PickAvatarImageResult {
+  picked: boolean;
+  dataUrl?: string;
+  canceled?: boolean;
+  unsupported?: boolean;
+  error?: string;
+}
+
 export interface UserPreferences {
   theme: 'auto' | 'light' | 'dark';
   accentColor: 'indigo' | 'emerald' | 'cyan' | 'rose' | 'amber' | 'teal' | 'violet' | 'slate';
   language: string;
   customNickname: string;
+  /** 本地个人头像配置（不随 AnkiWeb 同步）。 */
+  customAvatar?: CustomAvatarConfig;
   collapsedDeckIds: string[];
   sandboxNoteTypeIds?: string[];
   debugMode?: boolean;

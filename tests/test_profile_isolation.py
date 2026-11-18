@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import copy
+import json
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -22,8 +25,13 @@ from anki_modern_os.bridge.profile_config import (  # noqa: E402
     LEGACY_UNSCOPED_KEY,
     PROFILE_SCOPED_KEYS,
     PROFILE_STATES_KEY,
+    _extract_verifiable_ids,
+    cleanup_profile_avatar_files,
+    prepare_custom_avatar_storage,
     read_profile_scoped_config,
+    resolve_custom_avatar,
     resolve_profile_key,
+    resolve_safe_avatar_path,
     write_profile_scoped_config,
 )
 from anki_modern_os.bridge.router import BridgeRouter  # noqa: E402
@@ -116,6 +124,7 @@ class ProfileConfigUnitTests(unittest.TestCase):
             {
                 "theme": "dark",
                 "custom_nickname": "耀哥",
+                "custom_avatar": {"kind": "preset", "presetId": "owl"},
                 "collapsed_deck_ids": ["123456"],
                 "sandbox_notetype_ids": ["7890"],
                 "vacation_state": {"active": True, "days": 3, "start_date": "2026-11-15", "end_date": "2026-11-17"},
@@ -145,6 +154,7 @@ class ProfileConfigUnitTests(unittest.TestCase):
         self.assertIsNone(test_cfg.get("rescue_history"))
         self.assertIsNone(test_cfg.get("safety_ticket"))
         self.assertIsNone(test_cfg.get("custom_nickname"))
+        self.assertIsNone(test_cfg.get("custom_avatar"))
         self.assertEqual(test_cfg["collapsed_deck_ids"], [])
         self.assertIsNone(test_cfg.get("sandbox_notetype_ids"))
         self.assertIsNone(test_cfg.get("last_sync_checked_map"))
@@ -154,11 +164,13 @@ class ProfileConfigUnitTests(unittest.TestCase):
         none_cfg = read_profile_scoped_config(mgr.getConfig("anki_modern_os"), mw=mw_none, raw_writer=writer)
         self.assertEqual(none_cfg["theme"], "dark")
         self.assertIsNone(none_cfg.get("vacation_state"))
+        self.assertIsNone(none_cfg.get("custom_avatar"))
 
         # Switching back to "11" keeps all of "11"'s state intact
         cfg_11 = read_profile_scoped_config(mgr.getConfig("anki_modern_os"), mw=mw_11, raw_writer=writer)
         self.assertTrue(cfg_11["vacation_state"]["active"])
         self.assertEqual(cfg_11["custom_nickname"], "耀哥")
+        self.assertEqual(cfg_11["custom_avatar"], {"kind": "preset", "presetId": "owl"})
         self.assertEqual(cfg_11["collapsed_deck_ids"], ["123456"])
         self.assertEqual(cfg_11["sandbox_notetype_ids"], ["7890"])
         self.assertEqual(cfg_11["last_sync_checked_map"], {"11": 1700000111000})
@@ -174,6 +186,7 @@ class ProfileConfigUnitTests(unittest.TestCase):
             },
             "vacation_frozen_dates": ["2026-11-15"],
             "vacation_history": [{"id": "vac-legacy", "status": "active"}],
+            "custom_avatar": {"kind": "preset", "presetId": "spark"},
             "last_sync_checked_map": {"11": 111000, "测试账户": 222000},
         }
         mgr = _FakeAddonManager(initial=legacy_meta)
@@ -189,9 +202,11 @@ class ProfileConfigUnitTests(unittest.TestCase):
         )
         cfg_test = read_profile_scoped_config(mgr.getConfig("anki_modern_os"), mw=mw_test, raw_writer=writer)
         self.assertIsNone(cfg_test.get("vacation_state"))
+        self.assertIsNone(cfg_test.get("custom_avatar"))
         self.assertEqual(cfg_test.get("last_sync_checked_map"), {"测试账户": 222000})
         # Top-level legacy keys must be evacuated immediately
         self.assertNotIn("vacation_state", mgr.meta_cfg)
+        self.assertNotIn("custom_avatar", mgr.meta_cfg)
         self.assertIn(LEGACY_UNSCOPED_KEY, mgr.meta_cfg)
 
         # Now user switches to "11" (which DOES own card 9001)
@@ -203,6 +218,7 @@ class ProfileConfigUnitTests(unittest.TestCase):
         cfg_11 = read_profile_scoped_config(mgr.getConfig("anki_modern_os"), mw=mw_11, raw_writer=writer)
         self.assertTrue(cfg_11["vacation_state"]["active"])
         self.assertEqual(cfg_11["vacation_frozen_dates"], ["2026-11-15"])
+        self.assertEqual(cfg_11["custom_avatar"], {"kind": "preset", "presetId": "spark"})
         self.assertEqual(cfg_11["last_sync_checked_map"], {"11": 111000})
         # Quarantine cleared once owner claimed it
         self.assertNotIn(LEGACY_UNSCOPED_KEY, mgr.meta_cfg)
@@ -212,6 +228,7 @@ class ProfileConfigUnitTests(unittest.TestCase):
         legacy_meta = {
             "vacation_state": {"active": True, "days": 1, "shifted_cids": []},
             "custom_nickname": "SoloUser",
+            "custom_avatar": {"kind": "preset", "presetId": "book"},
         }
         mgr = _FakeAddonManager(initial=legacy_meta)
 
@@ -226,7 +243,67 @@ class ProfileConfigUnitTests(unittest.TestCase):
         cfg_solo = read_profile_scoped_config(mgr.getConfig("anki_modern_os"), mw=mw_solo, raw_writer=writer)
         self.assertTrue(cfg_solo["vacation_state"]["active"])
         self.assertEqual(cfg_solo["custom_nickname"], "SoloUser")
+        self.assertEqual(cfg_solo["custom_avatar"], {"kind": "preset", "presetId": "book"})
         self.assertNotIn(LEGACY_UNSCOPED_KEY, mgr.meta_cfg)
+
+    def test_custom_avatar_directory_isolation_and_no_repo_side_effects(self):
+        self.assertIn("custom_avatar", PROFILE_SCOPED_KEYS)
+        existed_before = (ADDON_ROOT / "user_files").exists()
+
+        # _extract_verifiable_ids must handle custom_avatar safely without emitting fake IDs
+        cids, dids, mids, frozen = _extract_verifiable_ids(
+            {"custom_avatar": {"kind": "image", "file": "avatar_x.png", "mime": "image/png"}}
+        )
+        self.assertEqual((cids, dids, mids, frozen), (set(), set(), set(), {}))
+
+        # Reading with missing avatars_dir must not create directories on disk
+        with tempfile.TemporaryDirectory(prefix="anki_avatar_iso_") as td:
+            missing_dir = Path(td) / "nonexistent" / "avatars"
+            resolved_missing = resolve_custom_avatar(
+                {"custom_avatar": {"kind": "image", "file": "a.png", "mime": "image/png"}},
+                avatars_dir=missing_dir,
+            )
+            self.assertEqual(resolved_missing, {"kind": "initial"})
+            self.assertFalse(missing_dir.exists())
+
+            avatars_dir = Path(td) / "avatars"
+            png_1 = b"\x89PNG\r\n\x1a\nPROFILE_ONE"
+            png_2 = b"\x89PNG\r\n\x1a\nPROFILE_TWO"
+            data_url_1 = "data:image/png;base64," + base64.b64encode(png_1).decode("ascii")
+            data_url_2 = "data:image/png;base64," + base64.b64encode(png_2).decode("ascii")
+
+            meta_1, path_1 = prepare_custom_avatar_storage(
+                {"kind": "image", "dataUrl": data_url_1},
+                profile_key="11",
+                avatars_dir=avatars_dir,
+            )
+            meta_2, path_2 = prepare_custom_avatar_storage(
+                {"kind": "image", "dataUrl": data_url_2},
+                profile_key="测试账户",
+                avatars_dir=avatars_dir,
+            )
+            self.assertIsNotNone(path_1)
+            self.assertIsNotNone(path_2)
+            self.assertNotEqual(path_1.name, path_2.name)
+            self.assertTrue(path_1.exists())
+            self.assertTrue(path_2.exists())
+
+            # Path traversal outside avatars_dir must be rejected
+            outside = Path(td) / "outside.png"
+            outside.write_bytes(png_1)
+            self.assertIsNone(resolve_safe_avatar_path(avatars_dir, "../outside.png"))
+            self.assertIsNone(resolve_safe_avatar_path(avatars_dir, "sub/file.png"))
+            self.assertIsNone(resolve_safe_avatar_path(avatars_dir, "..\\outside.png"))
+            cleanup_profile_avatar_files(
+                avatars_dir,
+                "11",
+                old_meta={"kind": "image", "file": "../outside.png", "mime": "image/png"},
+            )
+            self.assertTrue(outside.exists())
+            self.assertFalse(path_1.exists())
+            self.assertTrue(path_2.exists())
+
+        self.assertEqual((ADDON_ROOT / "user_files").exists(), existed_before)
 
 
 class HostAndBridgeProfileSwitchTests(unittest.TestCase):
@@ -261,40 +338,72 @@ class HostAndBridgeProfileSwitchTests(unittest.TestCase):
         fake_aqt.mw = fake_mw
         sys.modules["aqt"] = fake_aqt
         try:
-            host = AnkiModernHost()
-            router = BridgeRouter(
-                col_getter=lambda: fake_mw.col,
-                mw_getter=lambda: fake_mw,
-                config_getter=host.get_config,
-                config_writer=host.write_config,
-            )
+            with tempfile.TemporaryDirectory(prefix="anki_e2e_avatars_") as tmp_avatars:
+                host = AnkiModernHost()
+                router = BridgeRouter(
+                    col_getter=lambda: fake_mw.col,
+                    mw_getter=lambda: fake_mw,
+                    config_getter=host.get_config,
+                    config_writer=host.write_config,
+                    avatars_dir=tmp_avatars,
+                )
 
-            # 1. User enables vacation + sets custom nickname in profile "11"
-            vac_res = router.vacation_service.set_vacation({"days": 2, "reason": "出差"})
-            self.assertTrue(vac_res["success"])
-            router.action_save_preferences({"customNickname": "ElevenNick"})
+                # 1. User enables vacation + sets custom nickname & image avatar in profile "11"
+                vac_res = router.vacation_service.set_vacation({"days": 2, "reason": "出差"})
+                self.assertTrue(vac_res["success"])
+                img_bytes = b"\x89PNG\r\n\x1a\nELEVEN_AVATAR"
+                data_url_11 = "data:image/png;base64," + base64.b64encode(img_bytes).decode("ascii")
+                save_res_11 = router.action_save_preferences(
+                    {
+                        "customNickname": "ElevenNick",
+                        "customAvatar": {"kind": "image", "dataUrl": data_url_11},
+                    }
+                )
+                self.assertEqual(save_res_11["preferences"]["customAvatar"], {"kind": "image", "dataUrl": data_url_11})
+                # meta.json stores only lightweight file metadata, never base64/dataUrl
+                stored_11 = mgr.meta_cfg[PROFILE_STATES_KEY]["11"]["custom_avatar"]
+                self.assertEqual(stored_11["kind"], "image")
+                self.assertIn("file", stored_11)
+                self.assertNotIn("dataUrl", stored_11)
+                self.assertNotIn("data:image", json.dumps(mgr.meta_cfg))
 
-            dash_11 = router.deck_service.get_dashboard({})
-            self.assertTrue(dash_11["vacation"]["isActive"])
-            self.assertEqual(dash_11["userName"], "ElevenNick")
+                dash_11 = router.deck_service.get_dashboard({})
+                self.assertTrue(dash_11["vacation"]["isActive"])
+                self.assertEqual(dash_11["userName"], "ElevenNick")
+                self.assertEqual(dash_11["preferences"]["customAvatar"], {"kind": "image", "dataUrl": data_url_11})
 
-            # 2. Switch to "测试账户"
-            pm.name = "测试账户"
-            fake_mw.col = env_test.col
+                # 2. Switch to "测试账户"
+                pm.name = "测试账户"
+                fake_mw.col = env_test.col
 
-            dash_test = router.deck_service.get_dashboard({})
-            vac_test = router.vacation_service.get_vacation_status({})
-            self.assertFalse(dash_test["vacation"]["isActive"])
-            self.assertFalse(vac_test["vacation"]["isActive"])
-            self.assertEqual(vac_test["vacationHistory"], [])
-            self.assertEqual(dash_test["userName"], "测试账户")
+                dash_test = router.deck_service.get_dashboard({})
+                vac_test = router.vacation_service.get_vacation_status({})
+                prefs_test = router.action_get_preferences({})
+                self.assertFalse(dash_test["vacation"]["isActive"])
+                self.assertFalse(vac_test["vacation"]["isActive"])
+                self.assertEqual(vac_test["vacationHistory"], [])
+                self.assertEqual(dash_test["userName"], "测试账户")
+                self.assertEqual(dash_test["preferences"]["customAvatar"], {"kind": "initial"})
+                self.assertEqual(prefs_test["customAvatar"], {"kind": "initial"})
 
-            # 3. Switch back to "11" — vacation & nickname remain active
-            pm.name = "11"
-            fake_mw.col = env_11.col
-            dash_11_again = router.deck_service.get_dashboard({})
-            self.assertTrue(dash_11_again["vacation"]["isActive"])
-            self.assertEqual(dash_11_again["userName"], "ElevenNick")
+                # Setting preset in "测试账户" must not delete profile "11"'s image file
+                router.action_save_preferences({"customAvatar": {"kind": "preset", "presetId": "cat"}})
+                self.assertEqual(
+                    router.action_get_preferences({})["customAvatar"],
+                    {"kind": "preset", "presetId": "cat"},
+                )
+                self.assertTrue((Path(tmp_avatars) / stored_11["file"]).exists())
+
+                # 3. Switch back to "11" — vacation, nickname & image avatar remain active
+                pm.name = "11"
+                fake_mw.col = env_11.col
+                dash_11_again = router.deck_service.get_dashboard({})
+                self.assertTrue(dash_11_again["vacation"]["isActive"])
+                self.assertEqual(dash_11_again["userName"], "ElevenNick")
+                self.assertEqual(
+                    dash_11_again["preferences"]["customAvatar"],
+                    {"kind": "image", "dataUrl": data_url_11},
+                )
         finally:
             env_11.close()
             env_test.close()

@@ -1,7 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { translate } from '../../i18n/translations';
 import { appActions, NavTab, setAppState, useAppStore } from '../../stores/useAppStore';
 import { AnkiStudioLogo } from '../common/AnkiStudioLogo';
+import { UserAvatar } from '../common/UserAvatar';
 import { getDeckColorByHash } from '../../utils/mathRenderer';
 import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 import { handleWindowDoubleClick, startWindowDrag } from '../../utils/windowDrag';
@@ -17,6 +18,7 @@ export const Sidebar: React.FC = () => {
     systemDark,
     accentColor,
     resolvedLang,
+    customAvatar,
     envInfo,
     showShortcutHints,
     debugModeUnlocked,
@@ -29,6 +31,37 @@ export const Sidebar: React.FC = () => {
   // Item #7: Triple-click on version badge unlocks Developer-only Design System View
   const versionClickCountRef = useRef(0);
   const versionClickTimerRef = useRef<any>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [activeToolbarIdx, setActiveToolbarIdx] = useState(0);
+  const hasNativeFocusGroup =
+    typeof HTMLElement !== 'undefined' && 'focusGroup' in HTMLElement.prototype;
+
+  const handleToolbarKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (hasNativeFocusGroup) return;
+    const bar = toolbarRef.current;
+    if (!bar) return;
+    const buttons = Array.from(
+      bar.querySelectorAll<HTMLButtonElement>('button.sidebar-footer-tool-btn')
+    );
+    if (buttons.length === 0) return;
+    const currentIdx = Math.max(0, buttons.indexOf(document.activeElement as HTMLButtonElement));
+    const rtl = typeof window !== 'undefined' && window.getComputedStyle(bar).direction === 'rtl';
+    let nextIdx: number | null = null;
+    if (e.key === 'ArrowRight') {
+      nextIdx = (currentIdx + (rtl ? -1 : 1) + buttons.length) % buttons.length;
+    } else if (e.key === 'ArrowLeft') {
+      nextIdx = (currentIdx + (rtl ? 1 : -1) + buttons.length) % buttons.length;
+    } else if (e.key === 'Home') {
+      nextIdx = 0;
+    } else if (e.key === 'End') {
+      nextIdx = buttons.length - 1;
+    }
+    if (nextIdx !== null) {
+      e.preventDefault();
+      setActiveToolbarIdx(nextIdx);
+      buttons[nextIdx]?.focus();
+    }
+  };
 
   const handleVersionBadgeClick = () => {
     versionClickCountRef.current += 1;
@@ -147,7 +180,7 @@ export const Sidebar: React.FC = () => {
           <button
             type="button"
             onClick={() => setAppState({ quickAddOpen: true })}
-            className={`btn-secondary w-full ${
+            className={`btn-secondary w-full !h-auto min-h-9 py-1.5 ${
               showShortcutHints ? 'justify-between' : 'justify-center'
             }`}
           >
@@ -160,6 +193,7 @@ export const Sidebar: React.FC = () => {
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                aria-hidden="true"
               >
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
@@ -354,34 +388,71 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Schedule Rhythm & Backlog Relief Bar — Unified, Minimalist Studio Controls */}
-      <div className="px-3 pb-2.5">
+      {/* Unified User Profile & Studio Controls Footer */}
+      <div
+        className={`px-3 py-2.5 border-t flex items-center justify-between gap-2 ${
+          isDark ? 'border-[#252730]' : 'border-[var(--border-subtle)]'
+        }`}
+      >
+        <Tooltip variant="compact" content={t('openSettingsTooltip')} side="top">
+          <button
+            type="button"
+            onClick={() => setAppState({ settingsOpen: true })}
+            className={`min-w-0 flex-1 px-2 py-1.5 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2 ${
+              isDark
+                ? 'hover:bg-white/[0.05]'
+                : 'hover:bg-[var(--bg-subtle)]/75'
+            }`}
+          >
+            <UserAvatar
+              avatar={customAvatar}
+              displayName={userDisplay}
+              size="sm"
+              brandHex={brandHex}
+              accentColor={accentColor}
+              isDark={isDark}
+              className="shadow-xs transition-colors duration-200 shrink-0"
+            />
+            <span className="text-[13px] font-medium leading-tight truncate text-start">
+              {userDisplay}
+            </span>
+          </button>
+        </Tooltip>
+
+        {/* Schedule Rhythm, Backlog Relief & Settings Toolbar (Frameless ghost icons) */}
         <div
+          ref={toolbarRef}
           role="toolbar"
           aria-label={t('studyRhythmToolsAria')}
-          className={`p-1 rounded-xl border grid grid-cols-2 gap-1 transition-colors ${
-            isDark ? 'bg-white/[0.025] border-white/[0.07]' : 'bg-[#F5F6F8] border-[#E5E7EB]'
-          }`}
+          {...({ focusgroup: 'toolbar wrap' } as any)}
+          onKeyDown={handleToolbarKeyDown}
+          className="sidebar-footer-toolbar"
         >
           {/* 1. 休假模式 (Vacation Mode) */}
-          <Tooltip variant="compact" content={t('vacationBtnTooltip')} side="right">
+          <Tooltip
+            variant="compact"
+            content={
+              dashboard.vacation?.isActive
+                ? `${t('vacationActiveShort', { n: dashboard.vacation.remainingDays })} · ${t('vacationBtnTooltip')}`
+                : t('vacationBtnTooltip')
+            }
+            side="top"
+          >
             <button
               type="button"
+              aria-label={t('vacationBtn')}
+              aria-pressed={Boolean(dashboard.vacation?.isActive)}
+              tabIndex={hasNativeFocusGroup ? undefined : activeToolbarIdx === 0 ? 0 : -1}
+              onFocus={() => setActiveToolbarIdx(0)}
               onClick={() => appActions.openVacationModal('status')}
-              className={`py-1.5 px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
-                dashboard.vacation?.isActive
-                  ? 'bg-[var(--status-success-soft)] text-[var(--status-success)] font-semibold shadow-2xs'
-                  : isDark
-                  ? 'text-[#9A9CA6] hover:text-white hover:bg-white/[0.06] hover:shadow-2xs'
-                  : 'text-[#5C5E66] hover:text-[#111215] hover:bg-white hover:shadow-2xs'
-              }`}
+              className="sidebar-footer-tool-btn"
             >
               <svg
-                className="w-3.5 h-3.5 shrink-0 opacity-80"
+                className="w-[15px] h-[15px] shrink-0"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="1.75"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 aria-hidden="true"
@@ -393,51 +464,32 @@ export const Sidebar: React.FC = () => {
                 <line x1="10" y1="14" x2="10" y2="18" />
                 <line x1="14" y1="14" x2="14" y2="18" />
               </svg>
-              <span className="truncate">
-                {dashboard.vacation?.isActive
-                  ? t('vacationActiveShort', { n: dashboard.vacation.remainingDays })
-                  : t('vacationBtn')}
-              </span>
               {dashboard.vacation?.isActive && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] shrink-0" />
+                <span
+                  aria-hidden="true"
+                  className="absolute top-0.5 end-0.5 w-1.5 h-1.5 rounded-full bg-[var(--status-success)]"
+                />
               )}
             </button>
           </Tooltip>
 
-          {/* 2. 进度减负 (Backlog Relief)
-              注意：这里**不能**给整格铺底色。它和「休假模式」同处一个分段容器，
-              一旦某一格被实心填充，就会被读成「这一项当前是选中/开启状态」——
-              实际上 hasAvalanche 表达的是「你积压很多，建议来减负」，是系统检测到的
-              提醒，不是用户自己打开的开关。已有用户把这块琥珀实心格误认成
-              「默认状态出错」，可见这个歧义是真实存在的。
-              所以有积压时只染图标、文字与提示点，保留「警告色」语义（积压确实
-              该报警），去掉的只是那层会冒充「选中态」的底色。
-              文字色分两档实色而非直接用 --status-warning：后者不分明暗，作为
-              11px 正文压在浅色底上只有 3.0:1，低于 4.5:1 门槛。 */}
-          <Tooltip variant="compact" content={t('backlogRescueTooltip')} side="right">
+          {/* 2. 进度减负 (Backlog Relief) */}
+          <Tooltip variant="compact" content={t('backlogRescueTooltip')} side="top">
             <button
               type="button"
+              aria-label={t('backlogRescueBtn')}
+              data-alert={dashboard.backlog?.hasAvalanche ? 'true' : undefined}
+              tabIndex={hasNativeFocusGroup ? undefined : activeToolbarIdx === 1 ? 0 : -1}
+              onFocus={() => setActiveToolbarIdx(1)}
               onClick={() => appActions.openIcuModal('rescue')}
-              className={`py-1.5 px-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
-                dashboard.backlog?.hasAvalanche
-                  ? `font-semibold ${
-                      isDark
-                        ? 'text-[#D98A3C] hover:bg-white/[0.06]'
-                        : 'text-[#9A5B12] hover:bg-white'
-                    }`
-                  : `font-medium ${
-                      isDark
-                        ? 'text-[#9A9CA6] hover:text-white hover:bg-white/[0.06] hover:shadow-2xs'
-                        : 'text-[#5C5E66] hover:text-[#111215] hover:bg-white hover:shadow-2xs'
-                    }`
-              }`}
+              className="sidebar-footer-tool-btn"
             >
               <svg
-                className="w-3.5 h-3.5 shrink-0 opacity-80"
+                className="w-[15px] h-[15px] shrink-0"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="1.75"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 aria-hidden="true"
@@ -446,52 +498,44 @@ export const Sidebar: React.FC = () => {
                 <path d="M2 17l10 5 10-5" />
                 <path d="M2 12l10 5 10-5" />
               </svg>
-              <span className="truncate">{t('backlogRescueBtn')}</span>
               {dashboard.backlog?.hasAvalanche && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-warning)] shrink-0" />
+                <span
+                  aria-hidden="true"
+                  className="absolute top-0.5 end-0.5 w-1.5 h-1.5 rounded-full bg-[var(--status-warning)]"
+                />
               )}
             </button>
           </Tooltip>
-        </div>
-      </div>
 
-      {/* Unified User Profile & Settings Entrance */}
-      <div className={`p-3 border-t ${isDark ? 'border-[#252730]' : 'border-[#F0F0F5]'}`}>
-        <Tooltip variant="compact" content={t('openSettingsTooltip')} side="right">
-          <button
-            type="button"
-            onClick={() => setAppState({ settingsOpen: true })}
-            className={`w-full px-2.5 py-2 rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
-              settingsOpen
-                ? navActiveBg
-                : isDark
-                ? 'hover:bg-white/5'
-                : 'hover:bg-[#F4F4F6]'
-            }`}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0 shadow-xs transition-colors duration-200"
-                style={{ backgroundColor: brandHex }}
+          {/* 3. 设置 (Settings) */}
+          <Tooltip variant="compact" content={t('openSettingsTooltip')} side="top">
+            <button
+              type="button"
+              aria-label={t('navSettings')}
+              aria-haspopup="dialog"
+              aria-expanded={settingsOpen}
+              data-open={settingsOpen ? 'true' : undefined}
+              tabIndex={hasNativeFocusGroup ? undefined : activeToolbarIdx === 2 ? 0 : -1}
+              onFocus={() => setActiveToolbarIdx(2)}
+              onClick={() => setAppState({ settingsOpen: true })}
+              className="sidebar-footer-tool-btn"
+            >
+              <svg
+                className="w-[15px] h-[15px] shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
               >
-                {userDisplay.slice(0, 1).toUpperCase()}
-              </div>
-              <div className="min-w-0 text-start">
-                <div className="text-[13px] font-medium leading-tight truncate">
-                  {userDisplay}
-                </div>
-                <div className={`text-[11px] ${mutedText} mt-0.5`}>
-                  {t('navSettings')}
-                </div>
-              </div>
-            </div>
-
-            <svg className="w-4 h-4 text-[#8E8E93]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-            </svg>
-          </button>
-        </Tooltip>
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+              </svg>
+            </button>
+          </Tooltip>
+        </div>
       </div>
     </aside>
   );

@@ -14,6 +14,7 @@ import { SyncStateIcon } from '../../../frontend/src/components/common/SyncState
 import { StreakFlameBackdrop } from '../../../frontend/src/components/dashboard/StreakFlameBackdrop';
 import { SyncStatusPill } from '../../../frontend/src/components/dashboard/SyncStatusPill';
 import { CardEditorModal } from '../../../frontend/src/components/quick-add/CardEditorModal';
+import { SettingsModal } from '../../../frontend/src/components/settings/SettingsModal';
 import {
   CelebrationIllustration,
   EmptyStateIllustration,
@@ -310,6 +311,64 @@ test('all 7 themed accent colors render valid accessible SVGs across light and d
         ok(html.includes('<svg') && html.includes('aria-hidden="true"'), `${accent}/${deckAccent}: expected emblem SVG`);
       }
     }
+  }
+});
+
+section('render · SettingsModal (About tab)');
+
+test('about tab renders only version info, creator info, and accessible anonymous feedback switch', () => {
+  const prevState = getAppState();
+  setAppState({
+    settingsOpen: true,
+    settingsInitialTab: 'about',
+    resolvedLang: 'zh-CN',
+    analyticsEnabled: true,
+    envInfo: {
+      ...prevState.envInfo,
+      studioVersion: '1.6.9',
+      platformBadge: 'macOS · 26.9',
+    },
+  });
+
+  try {
+    const html = render(React.createElement(SettingsModal));
+    ok(html.includes('v1.6.9'), 'expected version badge');
+    const versionMatches = html.match(/v1\.6\.9/g) || [];
+    equal(versionMatches.length, 1, 'version badge should appear once without duplication');
+    ok(html.includes('macOS · 26.9'), 'expected platform badge');
+    ok(html.includes('FSRS Ready'), 'expected engine status');
+    ok(
+      html.includes('gripet') &&
+        html.includes('作者') &&
+        html.includes('兴趣驱动 AI 产品建筑师') &&
+        html.includes('src="./creator-avatar.jpg"') &&
+        html.includes('about-creator-links'),
+      'expected refined creator card with name, role badge, photo avatar, and intrinsic flex link row'
+    );
+    ok(
+      html.includes('rel="noopener noreferrer"') &&
+        html.includes('github.com/gripet43/anki-studio') &&
+        html.includes('https://ankiweb.net/shared/info/1071937836?cb=1794962974753'),
+      'expected secure external links including AnkiWeb upvote link'
+    );
+    ok(
+      html.includes('type="checkbox"') && html.includes('switch=""') && html.includes('aria-describedby='),
+      'expected accessible native switch input linked to description'
+    );
+    ok(html.includes('role="list"'), 'expected Safari-safe explicit list role');
+    doesNotMatch(
+      html,
+      /沉浸式桌面界面|设计理念：把专注还给你|已开启|匿名使用统计/,
+      'about tab should omit legacy cards, duplicate version, and duplicate feedback status labels'
+    );
+  } finally {
+    setAppState({
+      settingsOpen: prevState.settingsOpen,
+      settingsInitialTab: prevState.settingsInitialTab,
+      resolvedLang: prevState.resolvedLang,
+      analyticsEnabled: prevState.analyticsEnabled,
+      envInfo: prevState.envInfo,
+    });
   }
 });
 

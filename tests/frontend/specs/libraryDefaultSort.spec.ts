@@ -267,6 +267,10 @@ test('LibraryView renders newest label without Reset button by default and puts 
       'default newest sort must not show Reset Filters button'
     );
     ok(
+      !defaultHtml.includes(translate('zh-CN', 'customStudyEntryBtn')),
+      'LibraryView header should keep card tools focused without Custom Study button'
+    );
+    ok(
       defaultHtml.indexOf('NEWER_CARD_102') < defaultHtml.indexOf('OLDER_CARD_101'),
       'newer card must render before older card by default'
     );
@@ -280,6 +284,10 @@ test('LibraryView renders newest label without Reset button by default and puts 
     ok(
       overrideHtml.includes(translate('zh-CN', 'resetFilters')),
       'non-default sort shows Reset Filters button'
+    );
+    ok(
+      overrideHtml.includes(`class="btn-primary`),
+      'toolbar Reset Filters button uses active theme primary styling'
     );
 
     setAppState({ libraryCards: [], librarySortBy: 'lapses_desc' });

@@ -628,7 +628,7 @@ export const DashboardView: React.FC = () => {
                 >
                   <div
                     tabIndex={0}
-                    className="relative w-[104px] h-[104px] shrink-0 flex items-center justify-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                    className="dashboard-progress-ring relative w-[104px] h-[104px] shrink-0 flex items-center justify-center rounded-full outline-none"
                     role="progressbar"
                     aria-valuenow={
                       isSyncPending
@@ -662,11 +662,30 @@ export const DashboardView: React.FC = () => {
                     <circle
                       cx="56"
                       cy="56"
-                      r={radius}
-                      stroke="var(--dashboard-track)"
-                      strokeWidth="8.5"
+                      r="37.5"
+                      stroke="var(--border-subtle)"
+                      strokeOpacity={isDark ? '0.45' : '0.7'}
+                      strokeWidth="1"
                       fill="none"
                     />
+                    <circle
+                      cx="56"
+                      cy="56"
+                      r={radius}
+                      stroke="var(--dashboard-track)"
+                      strokeWidth="8"
+                      fill="none"
+                      className="dashboard-progress-ring-track"
+                    />
+                    {!isSyncPending && !isVacationActive && progressPct === 0 && totalWorkload > 0 && (
+                      <circle
+                        cx={56 + radius}
+                        cy="56"
+                        r="2.25"
+                        fill={brandHex}
+                        opacity="0.55"
+                      />
+                    )}
                     <circle
                       cx="56"
                       cy="56"
@@ -674,11 +693,11 @@ export const DashboardView: React.FC = () => {
                       stroke={
                         isSyncPending
                           ? 'var(--status-warning)'
-                          : isVacationActive
+                          : isVacationActive || progressPct >= 100
                           ? 'var(--status-success)'
                           : brandHex
                       }
-                      strokeWidth="8.5"
+                      strokeWidth="8"
                       strokeLinecap="round"
                       fill="none"
                       strokeDasharray={circumference}
@@ -689,13 +708,13 @@ export const DashboardView: React.FC = () => {
                           ? vacDashoffset
                           : strokeDashoffset
                       }
-                      style={{
-                        transition: 'stroke-dashoffset 0.85s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.3s ease',
-                      }}
-                      className={isSyncPending ? 'animate-spin origin-center' : ''}
+                      className={`dashboard-progress-ring-arc ${isSyncPending ? 'animate-spin origin-center' : ''}`}
                     />
                   </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <div
+                    aria-hidden="true"
+                    className="dashboard-progress-ring-center absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+                  >
                     {isSyncPending ? (
                       <>
                         <div className="w-4 h-4 rounded-full border-2 border-[var(--status-warning)]/20 border-t-[var(--status-warning)] animate-spin" />
@@ -705,34 +724,36 @@ export const DashboardView: React.FC = () => {
                       </>
                     ) : isVacationActive ? (
                       <>
-                        <span className="text-[25px] font-bold leading-none text-[var(--status-success)]">
-                          {vacRemaining}
-                          <span className="text-[12px] font-semibold ms-0.5">
+                        <span className="inline-flex items-baseline justify-center tabular-nums text-[var(--status-success)]">
+                          <span className="dashboard-progress-ring-value text-[25px] font-bold leading-none">
+                            {vacRemaining}
+                          </span>
+                          <span className="dashboard-progress-ring-unit text-[12px] font-semibold leading-none ms-0.5">
                             {t('daysUnit')}
                           </span>
                         </span>
-                        <span className={`text-[10px] ${subText} mt-1 font-mono`}>
+                        <span className={`text-[10px] ${subText} mt-1 font-mono tabular-nums`}>
                           / {vacDays} {t('daysUnit')}
                         </span>
                       </>
                     ) : (
-                      <>
-                        <span
-                          dir="ltr"
-                          className={`text-[24px] font-extrabold leading-none tracking-tight tabular-nums ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}
-                        >
+                      <span
+                        dir="ltr"
+                        className={`inline-flex items-baseline justify-center tabular-nums translate-x-[2px] ${
+                          progressPct >= 100 ? 'text-[var(--status-success)]' : 'text-[var(--text-primary)]'
+                        } ${syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''}`}
+                      >
+                        <span className="dashboard-progress-ring-value text-[26px] font-extrabold leading-none tracking-[-0.03em]">
                           {animatedProgressPct}
-                          <span className={`text-[12px] font-semibold ms-0.5 ${subText}`}>
-                            %
-                          </span>
                         </span>
                         <span
-                          dir="ltr"
-                          className={`text-[10.5px] ${subText} mt-1.5 font-medium tabular-nums`}
+                          className={`dashboard-progress-ring-unit text-[13px] font-bold leading-none ms-[2px] ${
+                            progressPct >= 100 ? 'text-[var(--status-success)] opacity-85' : subText
+                          }`}
                         >
-                          {completed} / {totalWorkload}
+                          %
                         </span>
-                      </>
+                      </span>
                     )}
                   </div>
                 </div>

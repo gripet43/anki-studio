@@ -9,8 +9,11 @@
 import { useSyncExternalStore } from 'react';
 import {
   AdvancedStatsData,
+  AVATAR_PRESET_IDS,
+  AvatarPresetId,
   callAnki,
   CardFlagColor,
+  CustomAvatarConfig,
   CustomStudyParams,
   DashboardData,
   DayBoundaryInfo,
@@ -22,15 +25,20 @@ import {
   LibraryCardItem,
   LibraryFacetCounts,
   LibrarySortOption,
+  PickAvatarImageResult,
   RescueReceipt,
   REVIEW_CONTENT_SCALES,
   ReviewCardItem,
   ReviewContentScale,
   ReviewStageWidth,
+  UserPreferences,
 } from '../bridge/pycmd';
 
+export { AVATAR_PRESET_IDS };
 export type {
+  AvatarPresetId,
   CardFlagColor,
+  CustomAvatarConfig,
   CustomStudyParams,
   DeckOptionsData,
   LibraryCardItem,
@@ -41,6 +49,12 @@ export type {
   ReviewContentScale,
   ReviewStageWidth,
 };
+import {
+  AvatarImageError,
+  cropImageToSquareAvatarDataUrl,
+  DEFAULT_CUSTOM_AVATAR,
+  normalizeCustomAvatarConfig,
+} from '../utils/avatarImage';
 import { EMPTY_ADVANCED_STATS, EMPTY_DASHBOARD } from '../data/mockData';
 import {
   detectBrowserLanguage,
@@ -142,6 +156,7 @@ export interface AppState {
   languagePref: LanguageOption;
   resolvedLang: ResolvedLanguage;
   customNickname: string;
+  customAvatar: CustomAvatarConfig;
   showShortcutHints: boolean;
   /** 连续制卡：添加后保留窗口并清空正文，保留牌组/卡型/标签。 */
   continuousCardCreation: boolean;
@@ -300,6 +315,7 @@ const initialState: AppState = {
   languagePref: 'auto',
   resolvedLang: initialLang,
   customNickname: '',
+  customAvatar: DEFAULT_CUSTOM_AVATAR,
   showShortcutHints: false,
   continuousCardCreation: false,
   tipsHiddenOn: '',
@@ -418,6 +434,9 @@ export function showToast(message: string) {
   toastTimer = setTimeout(() => {
     setAppState({ toastMessage: null });
   }, 2600);
+  if (toastTimer && typeof toastTimer.unref === 'function') {
+    toastTimer.unref();
+  }
 }
 
 const tState = (key: any, params?: Record<string, string | number>) =>
@@ -773,6 +792,10 @@ export const appActions = {
         languagePref: (prefs?.language as LanguageOption) || state.languagePref,
         resolvedLang: effectiveLang,
         customNickname: dashValid && prefs ? (prefs.customNickname ?? '') : state.customNickname,
+        customAvatar:
+          dashValid && prefs
+            ? normalizeCustomAvatarConfig(prefs.customAvatar)
+            : state.customAvatar,
         collapsedDeckIds: prefs?.collapsedDeckIds ?? (dashValid ? [] : state.collapsedDeckIds),
         sandboxNoteTypeIds: Array.isArray(prefs?.sandboxNoteTypeIds)
           ? prefs.sandboxNoteTypeIds.map((id) => String(id))
@@ -1006,6 +1029,7 @@ export const appActions = {
     accentColor?: AccentColor;
     language?: LanguageOption;
     customNickname?: string;
+    customAvatar?: CustomAvatarConfig;
     collapsedDeckIds?: string[];
     showShortcutHints?: boolean;
     continuousCardCreation?: boolean;
@@ -1016,16 +1040,22 @@ export const appActions = {
     autoPlayBackAudio?: boolean;
     reviewStageWidth?: ReviewStageWidth;
     reviewContentScale?: ReviewContentScale;
-  }) {
+  }): Promise<boolean> {
     const normalizedTheme = patch.theme !== undefined ? normalizeThemeMode(patch.theme) : undefined;
     const nextLangPref = patch.language !== undefined ? patch.language : state.languagePref;
     const nextResolvedLang = resolveLanguage(nextLangPref, state.dashboard.language);
+    const normalizedAvatar =
+      patch.customAvatar !== undefined
+        ? normalizeCustomAvatarConfig(patch.customAvatar)
+        : undefined;
+    const prevAvatar = state.customAvatar;
 
     setAppState({
       ...(normalizedTheme ? { theme: normalizedTheme } : {}),
       ...(patch.accentColor ? { accentColor: patch.accentColor } : {}),
       ...(patch.language ? { languagePref: patch.language, resolvedLang: nextResolvedLang } : {}),
       ...(patch.customNickname !== undefined ? { customNickname: patch.customNickname } : {}),
+      ...(normalizedAvatar !== undefined ? { customAvatar: normalizedAvatar } : {}),
       ...(patch.collapsedDeckIds ? { collapsedDeckIds: patch.collapsedDeckIds } : {}),
       ...(patch.showShortcutHints !== undefined ? { showShortcutHints: patch.showShortcutHints } : {}),
       ...(patch.continuousCardCreation !== undefined
@@ -1046,11 +1076,109 @@ export const appActions = {
 
     if (isAnkiNativeEnv()) {
       try {
-        await callAnki('save_preferences', patch);
+        const bridgePatch =
+          normalizedAvatar !== undefined
+            ? { ...patch, customAvatar: normalizedAvatar }
+            : patch;
+        const res = await callAnki<{ saved?: boolean; preferences?: UserPreferences }>(
+          'save_preferences',
+          bridgePatch
+        );
+        if (normalizedAvatar !== undefined && res?.preferences?.customAvatar !== undefined) {
+          setAppState({
+            customAvatar: normalizeCustomAvatarConfig(res.preferences.customAvatar),
+          });
+        }
         if (patch.language !== undefined || patch.customNickname !== undefined) {
           await appActions.initFromAnki(false);
         }
-      } catch {}
+        if (normalizedAvatar !== undefined) {
+          showToast(
+            tState(
+              normalizedAvatar.kind === 'initial' ? 'avatarResetToast' : 'avatarSavedToast'
+            )
+          );
+        }
+        return true;
+      } catch {
+        if (normalizedAvatar !== undefined) {
+          setAppState({ customAvatar: prevAvatar });
+          if (normalizedAvatar.kind === 'image') {
+            showToast(tState('avatarUploadTooLargeToast'));
+          }
+          return false;
+        }
+        return false;
+      }
+    }
+
+    if (normalizedAvatar !== undefined) {
+      showToast(
+        tState(
+          normalizedAvatar.kind === 'initial' ? 'avatarResetToast' : 'avatarSavedToast'
+        )
+      );
+    }
+    return true;
+  },
+
+  async saveAvatarFromImageSource(source: File | Blob | string): Promise<boolean> {
+    try {
+      const dataUrl = await cropImageToSquareAvatarDataUrl(source);
+      return await appActions.updatePreferences({
+        customAvatar: { kind: 'image', dataUrl },
+      });
+    } catch (err) {
+      if (err instanceof AvatarImageError && err.code === 'invalid_type') {
+        showToast(tState('avatarUploadInvalidToast'));
+      } else {
+        showToast(tState('avatarUploadTooLargeToast'));
+      }
+      return false;
+    }
+  },
+
+  async pickNativeAvatarImage(onFallbackToFilePicker?: () => void): Promise<boolean> {
+    if (!isAnkiNativeEnv()) {
+      onFallbackToFilePicker?.();
+      return false;
+    }
+    try {
+      const res = await callAnki<PickAvatarImageResult>('pick_avatar_image', {});
+      if (res?.unsupported) {
+        onFallbackToFilePicker?.();
+        return false;
+      }
+      if (res?.canceled || (!res?.picked && !res?.error && !res?.dataUrl)) {
+        return false;
+      }
+      if (res?.error) {
+        if (
+          res.error === 'invalid_type' ||
+          /svg|format|mime|type|ext|unsupported/i.test(String(res.error))
+        ) {
+          showToast(tState('avatarUploadInvalidToast'));
+        } else {
+          showToast(tState('avatarUploadTooLargeToast'));
+        }
+        return false;
+      }
+      if (res?.picked && res.dataUrl) {
+        return await appActions.saveAvatarFromImageSource(res.dataUrl);
+      }
+      return false;
+    } catch (err: any) {
+      const msg = String(err?.message || err || '');
+      if (/unknown action/i.test(msg)) {
+        onFallbackToFilePicker?.();
+        return false;
+      }
+      if (/svg|format|mime|type|ext/i.test(msg)) {
+        showToast(tState('avatarUploadInvalidToast'));
+      } else {
+        showToast(tState('avatarUploadTooLargeToast'));
+      }
+      return false;
     }
   },
 
@@ -3591,6 +3719,7 @@ export const appActions = {
       lastSyncedTimestamp: 0,
       lastSyncedText: translate(prev.resolvedLang, 'notSyncedShort'),
       customNickname: '',
+      customAvatar: DEFAULT_CUSTOM_AVATAR,
       dashboard: EMPTY_DASHBOARD,
       dayBoundary: null,
       pendingDayRollover: null,

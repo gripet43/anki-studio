@@ -14,10 +14,11 @@ import json
 import sys
 from pathlib import Path
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .day_rollover import read_day_timing, refresh_scheduler_if_needed
 from .media_utils import get_media_base_url, get_media_dir, get_media_http_base_url
+from .profile_config import resolve_custom_avatar
 from .vacation_service import effective_frozen_dates
 
 
@@ -174,10 +175,17 @@ def compute_backlog_alert(
 class DeckService:
     """Service interacting with mw.col.decks, mw.col.sched, and revlog statistics."""
 
-    def __init__(self, col_getter, mw_getter=None, config_getter: Optional[Callable[[], Dict[str, Any]]] = None):
+    def __init__(
+        self,
+        col_getter,
+        mw_getter=None,
+        config_getter: Optional[Callable[[], Dict[str, Any]]] = None,
+        avatars_dir: Optional[Union[str, Path]] = None,
+    ):
         self._get_col = col_getter
         self._get_mw = mw_getter or (lambda: None)
         self._get_config = config_getter or (lambda: {})
+        self._avatars_dir = avatars_dir
 
     @property
     def col(self):
@@ -368,7 +376,7 @@ class DeckService:
 
         col = self.col
         if col is None:
-            return self._empty_dashboard(lang, profile_name, env_info, cfg)
+            return self._empty_dashboard(lang, profile_name, env_info, cfg, avatars_dir=self._avatars_dir)
 
         try:
             refresh_scheduler_if_needed(col)
@@ -504,6 +512,7 @@ class DeckService:
                     "accentColor": cfg.get("accent_color", "indigo"),
                     "language": cfg.get("language", "auto"),
                     "customNickname": cfg.get("custom_nickname", ""),
+                    "customAvatar": resolve_custom_avatar(cfg, avatars_dir=self._avatars_dir),
                     "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
                     "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                     "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
@@ -568,7 +577,7 @@ class DeckService:
                 "dayBoundary": day_boundary,
             }
         except Exception as e:
-            fallback = self._empty_dashboard(lang, profile_name, env_info, cfg)
+            fallback = self._empty_dashboard(lang, profile_name, env_info, cfg, avatars_dir=self._avatars_dir)
             fallback["bridgeWarning"] = str(e)
             return fallback
 
@@ -1906,7 +1915,12 @@ class DeckService:
 
     @classmethod
     def _empty_dashboard(
-        cls, lang: str, profile_name: str, env_info: Dict[str, str], cfg: Dict[str, Any]
+        cls,
+        lang: str,
+        profile_name: str,
+        env_info: Dict[str, str],
+        cfg: Dict[str, Any],
+        avatars_dir: Optional[Union[str, Path]] = None,
     ) -> Dict[str, Any]:
         now = datetime.datetime.now()
         labels = cls._get_weekday_short_labels(lang)
@@ -1924,6 +1938,7 @@ class DeckService:
                 "accentColor": cfg.get("accent_color", "indigo"),
                 "language": cfg.get("language", "auto"),
                 "customNickname": cfg.get("custom_nickname", ""),
+                "customAvatar": resolve_custom_avatar(cfg, avatars_dir=avatars_dir),
                 "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
                 "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),

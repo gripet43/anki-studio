@@ -28,3 +28,6 @@ config.json
 # 历史上曾被提交过，已用 filter-repo 从全部历史移除（2026-11-11）
 meta.json
 scripts/analytics-worker/.wrangler/
+
+# 本地头像与用户运行时文件，绝不入库
+user_files/

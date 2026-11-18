@@ -143,6 +143,8 @@ class TestPackagingCleanClone(unittest.TestCase):
             (root / "bridge" / "__init__.py").write_text("", encoding="utf-8")
             (root / "web").mkdir()
             (root / "web" / "index.html").write_text("<html></html>", encoding="utf-8")
+            (root / "user_files" / "avatars").mkdir(parents=True)
+            (root / "user_files" / "avatars" / "private_avatar.png").write_bytes(b"\x89PNG\r\n\x1a\nPRIVATE")
 
             out_zip = root / "anki_modern_os.ankiaddon"
             orig_root, orig_out = mod.ADDON_ROOT, mod.OUTPUT_ARCHIVE
@@ -158,9 +160,12 @@ class TestPackagingCleanClone(unittest.TestCase):
                 names = set(zf.namelist())
                 self.assertIn("config.json", names)
                 self.assertIn("web/index.html", names)
+                self.assertFalse(any(n.startswith("user_files") for n in names))
                 shipped_cfg = json.loads(zf.read("config.json"))
                 self.assertIn("profile_states", mod.PRIVATE_CONFIG_KEYS)
                 self.assertIn("_legacy_unscoped_profile_state", mod.PRIVATE_CONFIG_KEYS)
+                self.assertIn("custom_avatar", mod.PRIVATE_CONFIG_KEYS)
+                self.assertIn("user_files", mod.EXCLUDED_NAMES)
                 for priv in mod.PRIVATE_CONFIG_KEYS:
                     self.assertNotIn(priv, shipped_cfg)
 

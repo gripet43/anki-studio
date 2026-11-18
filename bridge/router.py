@@ -8,20 +8,119 @@ Supports preferences persistence (`get_preferences`, `save_preferences`), image 
 
 from __future__ import annotations
 
+import base64
 import datetime
 import json
+from pathlib import Path
 import time
 import traceback
 import urllib.parse
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 from .analytics_service import AnalyticsService
 from .day_rollover import DayRolloverTracker, read_day_timing, refresh_scheduler_if_needed
 from .deck_service import DeckService
 from .edit_service import EditService
+from .profile_config import (
+    ALLOWED_AVATAR_MIME_TO_EXT,
+    AVATAR_PICK_MAX_DIMENSION,
+    MAX_AVATAR_BYTES,
+    MAX_AVATAR_PICK_BYTES,
+    cleanup_profile_avatar_files,
+    detect_image_mime_from_bytes,
+    prepare_custom_avatar_storage,
+    resolve_custom_avatar,
+    resolve_profile_key,
+)
 from .review_service import ReviewService
 from .search_service import SearchService
 from .vacation_service import VacationService
+
+
+def _avatar_picker_caption(lang: str) -> str:
+    if lang == "zh-CN":
+        return "选择头像图片"
+    if lang == "zh-TW":
+        return "選擇頭像圖片"
+    return "Choose Avatar Image"
+
+
+def _maybe_scale_avatar_with_qt(
+    qt_mod: Any,
+    raw_bytes: bytes,
+    detected_mime: str,
+) -> Tuple[str, bytes]:
+    """Safely downscales large raster images via Qt `QImage`; falls back to original bytes on error."""
+    qimage_cls = getattr(qt_mod, "QImage", None)
+    qbytearray_cls = getattr(qt_mod, "QByteArray", None)
+    qbuffer_cls = getattr(qt_mod, "QBuffer", None)
+    qiodevice_cls = getattr(qt_mod, "QIODevice", None)
+    qt_cls = getattr(qt_mod, "Qt", None)
+    if None in (qimage_cls, qbytearray_cls, qbuffer_cls, qiodevice_cls, qt_cls):
+        return detected_mime, raw_bytes
+
+    try:
+        img = qimage_cls.fromData(raw_bytes)
+        if img is None or img.isNull():
+            return detected_mime, raw_bytes
+        width = int(img.width())
+        height = int(img.height())
+        needs_scale = max(width, height) > AVATAR_PICK_MAX_DIMENSION
+        needs_reencode = (
+            needs_scale
+            or detected_mime == "image/bmp"
+            or len(raw_bytes) > MAX_AVATAR_BYTES
+        )
+        if not needs_reencode:
+            return detected_mime, raw_bytes
+
+        if needs_scale:
+            aspect_scope = getattr(qt_cls, "AspectRatioMode", qt_cls)
+            trans_scope = getattr(qt_cls, "TransformationMode", qt_cls)
+            img = img.scaled(
+                AVATAR_PICK_MAX_DIMENSION,
+                AVATAR_PICK_MAX_DIMENSION,
+                getattr(aspect_scope, "KeepAspectRatio"),
+                getattr(trans_scope, "SmoothTransformation"),
+            )
+            if img is None or img.isNull():
+                return detected_mime, raw_bytes
+
+        has_alpha = bool(img.hasAlphaChannel()) if hasattr(img, "hasAlphaChannel") else False
+        candidates = [("WEBP", "image/webp", 86)]
+        if has_alpha:
+            candidates.append(("PNG", "image/png", -1))
+            candidates.append(("JPEG", "image/jpeg", 88))
+        else:
+            candidates.append(("JPEG", "image/jpeg", 88))
+            candidates.append(("PNG", "image/png", -1))
+
+        write_only = getattr(getattr(qiodevice_cls, "OpenModeFlag", qiodevice_cls), "WriteOnly")
+        best_result: Optional[Tuple[str, bytes]] = None
+        for fmt, fmt_mime, quality in candidates:
+            ba = qbytearray_cls()
+            buf = qbuffer_cls(ba)
+            if not buf.open(write_only):
+                continue
+            ok = img.save(buf, fmt, quality) if quality >= 0 else img.save(buf, fmt)
+            buf.close()
+            if not ok:
+                continue
+            encoded = bytes(ba.data())
+            if not encoded:
+                continue
+            if detect_image_mime_from_bytes(encoded, allow_bmp=False) != fmt_mime:
+                continue
+            if len(encoded) <= MAX_AVATAR_BYTES:
+                return fmt_mime, encoded
+            if best_result is None or len(encoded) < len(best_result[1]):
+                best_result = (fmt_mime, encoded)
+
+        if best_result is not None:
+            return best_result
+    except Exception:
+        pass
+    return detected_mime, raw_bytes
 
 
 class BridgeRouter:
@@ -37,6 +136,7 @@ class BridgeRouter:
         config_getter: Optional[Callable[[], Dict[str, Any]]] = None,
         config_writer: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
         health_getter: Optional[Callable[[], Dict[str, Any]]] = None,
+        avatars_dir: Optional[Union[str, Path]] = None,
     ):
         if col_getter is None:
             def default_col_getter():
@@ -64,8 +164,14 @@ class BridgeRouter:
         # Runtime compatibility report (Anki version + monkey-patch/hook status),
         # produced by `bridge/compat.py` and refreshed once at startup.
         self._get_health = health_getter or (lambda: {})
+        self._avatars_dir = avatars_dir
 
-        self.deck_service = DeckService(self._get_col, self._get_mw, self._get_config)
+        self.deck_service = DeckService(
+            self._get_col,
+            self._get_mw,
+            self._get_config,
+            avatars_dir=self._avatars_dir,
+        )
         self.review_service = ReviewService(
             self._get_col, self._get_mw, lambda: self.deck_service._resolve_language()
         )
@@ -228,6 +334,9 @@ class BridgeRouter:
 
     # ---- User Preferences Persistence Actions (Part 3 #4) ----
 
+    def _resolve_custom_avatar(self, cfg: Dict[str, Any]) -> Dict[str, Any]:
+        return resolve_custom_avatar(cfg, avatars_dir=self._avatars_dir)
+
     def action_get_preferences(self, data: Dict[str, Any]) -> Dict[str, Any]:
         cfg = self._get_config()
         review_stage_width, review_content_scale = self.deck_service._normalize_review_display_prefs(cfg)
@@ -238,6 +347,7 @@ class BridgeRouter:
             "language": cfg.get("language", "auto"),
             "resolvedLanguage": self.deck_service._resolve_language(cfg.get("language")),
             "customNickname": cfg.get("custom_nickname", ""),
+            "customAvatar": self._resolve_custom_avatar(cfg),
             "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
             "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
             "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
@@ -252,6 +362,7 @@ class BridgeRouter:
         }
 
     def action_save_preferences(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        data = data or {}
         patch: Dict[str, Any] = {}
         if "theme" in data:
             patch["theme"] = self.deck_service._normalize_theme_mode(data["theme"])
@@ -306,7 +417,40 @@ class BridgeRouter:
                     hidden_on = ""
             patch["dashboard_tips_hidden_on"] = hidden_on
 
-        saved = self._write_config(patch)
+        has_avatar_update = "customAvatar" in data
+        prev_avatar: Any = None
+        profile_key: Optional[str] = None
+        newly_written_path: Optional[Path] = None
+        if has_avatar_update:
+            prev_cfg = self._get_config() or {}
+            prev_avatar = prev_cfg.get("custom_avatar")
+            profile_key = resolve_profile_key(self._get_mw())
+            next_avatar_meta, newly_written_path = prepare_custom_avatar_storage(
+                data["customAvatar"],
+                profile_key=profile_key,
+                avatars_dir=self._avatars_dir,
+            )
+            patch["custom_avatar"] = next_avatar_meta
+
+        try:
+            saved = self._write_config(patch)
+        except Exception:
+            if newly_written_path is not None:
+                try:
+                    if newly_written_path.exists():
+                        newly_written_path.unlink()
+                except OSError:
+                    pass
+            raise
+
+        if has_avatar_update:
+            cleanup_profile_avatar_files(
+                self._avatars_dir,
+                profile_key,
+                old_meta=prev_avatar,
+                keep_filename=newly_written_path.name if newly_written_path else None,
+            )
+
         review_stage_width, review_content_scale = self.deck_service._normalize_review_display_prefs(saved)
         auto_play_front_audio, auto_play_back_audio = self.deck_service._normalize_review_audio_prefs(saved)
         return {
@@ -317,6 +461,7 @@ class BridgeRouter:
                 "language": saved.get("language", "auto"),
                 "resolvedLanguage": self.deck_service._resolve_language(saved.get("language")),
                 "customNickname": saved.get("custom_nickname", ""),
+                "customAvatar": self._resolve_custom_avatar(saved),
                 "collapsedDeckIds": saved.get("collapsed_deck_ids", []),
                 "sandboxNoteTypeIds": [str(x) for x in (saved.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(saved.get("show_shortcut_hints", False)),
@@ -329,6 +474,84 @@ class BridgeRouter:
                 "reviewStageWidth": review_stage_width,
                 "reviewContentScale": review_content_scale,
             },
+        }
+
+    def action_pick_avatar_image(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Opens a native Qt file picker for raster avatar images (never SVG)."""
+        data = data or {}
+        lang = self.deck_service._resolve_language(data.get("language"))
+        try:
+            import aqt.qt as qt_mod
+        except Exception:
+            return {"picked": False, "unsupported": True}
+
+        qfile_dialog = getattr(qt_mod, "QFileDialog", None)
+        if qfile_dialog is None or not callable(getattr(qfile_dialog, "getOpenFileName", None)):
+            return {"picked": False, "unsupported": True}
+
+        qapp_cls = getattr(qt_mod, "QApplication", None)
+        if qapp_cls is not None and callable(getattr(qapp_cls, "instance", None)):
+            try:
+                if qapp_cls.instance() is None:
+                    return {"picked": False, "unsupported": True}
+            except Exception:
+                return {"picked": False, "unsupported": True}
+
+        parent = None
+        try:
+            parent = self._get_mw()
+        except Exception:
+            parent = None
+
+        caption = _avatar_picker_caption(lang)
+        file_filter = "Images (*.png *.jpg *.jpeg *.webp *.gif *.bmp)"
+        try:
+            dialog_res = qfile_dialog.getOpenFileName(parent, caption, "", file_filter)
+        except Exception as exc:
+            return {"picked": False, "error": str(exc)}
+
+        if isinstance(dialog_res, (tuple, list)):
+            selected = str(dialog_res[0] or "").strip() if dialog_res else ""
+        else:
+            selected = str(dialog_res or "").strip()
+
+        if not selected:
+            return {"picked": False, "canceled": True}
+
+        path = Path(selected)
+        ext = path.suffix.lower()
+        if ext in (".svg", ".svgz"):
+            return {"picked": False, "error": "SVG images are not supported"}
+        if ext not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"):
+            return {"picked": False, "error": "Unsupported image format"}
+
+        try:
+            if not path.is_file():
+                return {"picked": False, "error": "Selected file does not exist"}
+            file_size = path.stat().st_size
+            if file_size <= 0:
+                return {"picked": False, "error": "Selected image file is empty"}
+            if file_size > MAX_AVATAR_PICK_BYTES:
+                return {"picked": False, "error": "Selected image exceeds 8 MB limit"}
+            raw_bytes = path.read_bytes()
+        except OSError as exc:
+            return {"picked": False, "error": str(exc)}
+
+        if not raw_bytes or len(raw_bytes) > MAX_AVATAR_PICK_BYTES:
+            return {"picked": False, "error": "Selected image exceeds 8 MB limit"}
+
+        detected_mime = detect_image_mime_from_bytes(raw_bytes, allow_bmp=True)
+        if detected_mime is None:
+            return {"picked": False, "error": "Invalid raster image header"}
+
+        out_mime, out_bytes = _maybe_scale_avatar_with_qt(qt_mod, raw_bytes, detected_mime)
+        if out_mime not in ALLOWED_AVATAR_MIME_TO_EXT:
+            return {"picked": False, "error": "Unsupported image format"}
+
+        b64 = base64.b64encode(out_bytes).decode("ascii")
+        return {
+            "picked": True,
+            "dataUrl": f"data:{out_mime};base64,{b64}",
         }
 
     @staticmethod

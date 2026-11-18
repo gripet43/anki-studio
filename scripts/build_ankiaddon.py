@@ -47,6 +47,7 @@ PRIVATE_CONFIG_KEYS = {
     "vacation_history",
     "vacation_frozen_dates",
     "custom_nickname",
+    "custom_avatar",
     "safety_ticket",
     "last_sync_checked_map",
     "sandbox_notetype_ids",
@@ -63,6 +64,7 @@ EXCLUDED_NAMES = {
     "tests",
     "scripts",
     "meta.json",
+    "user_files",
 }
 
 

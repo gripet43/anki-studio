@@ -1453,4 +1453,71 @@ assert(
   'Item #54c: TowerWysiwygEditor must expose Clear Formatting with i18n parity, built bundle artifact, and unit spec coverage (rebuild with `cd frontend && npm run build`)'
 );
 
+// Item #55: 本地个人头像自定义与多档案隔离、安全存储及构建闭环守卫
+const avatarImagePath = path.resolve(ADDON_ROOT, 'frontend/src/utils/avatarImage.ts');
+const userAvatarPath = path.resolve(ADDON_ROOT, 'frontend/src/components/common/UserAvatar.tsx');
+const avatarSpecPath = path.resolve(ADDON_ROOT, 'tests/frontend/specs/avatarProfile.spec.ts');
+assert(
+  fs.existsSync(avatarImagePath) &&
+    fs.existsSync(userAvatarPath) &&
+    fs.existsSync(avatarSpecPath),
+  'Item #55: Missing avatarImage.ts, UserAvatar.tsx, or tests/frontend/specs/avatarProfile.spec.ts'
+);
+const avatarImageSrc = readText(avatarImagePath);
+const userAvatarSrc = readText(userAvatarPath);
+
+assert(
+  profileConfigPy.includes('"custom_avatar"') &&
+    profileConfigPy.includes('PROFILE_SCOPED_KEYS') &&
+    profileConfigPy.includes('AVATAR_PRESET_IDS') &&
+    profileConfigPy.includes('parse_and_validate_avatar_data_url') &&
+    profileConfigPy.includes('prepare_custom_avatar_storage') &&
+    profileConfigPy.includes('resolve_custom_avatar') &&
+    profileConfigPy.includes('resolve_safe_avatar_path') &&
+    buildSrc.includes('"custom_avatar"') &&
+    buildSrc.includes('"user_files"') &&
+    routerPySrc.includes('def action_pick_avatar_image') &&
+    routerPySrc.includes('"customAvatar": self._resolve_custom_avatar(') &&
+    deckSrc.includes('resolve_custom_avatar') &&
+    pycmdSrc.includes('export const AVATAR_PRESET_IDS') &&
+    pycmdSrc.includes('customAvatar?: CustomAvatarConfig') &&
+    avatarImageSrc.includes('export function isSafeAvatarDataUrl') &&
+    avatarImageSrc.includes('export function normalizeCustomAvatarConfig') &&
+    avatarImageSrc.includes('export async function cropImageToSquareAvatarDataUrl') &&
+    avatarImageSrc.includes('export function computeSquareCoverCropRect') &&
+    avatarImageSrc.includes('image/svg+xml') &&
+    userAvatarSrc.includes('export const UserAvatar') &&
+    userAvatarSrc.includes('AVATAR_PRESET_IDS') &&
+    userAvatarSrc.includes('data-avatar-kind') &&
+    userAvatarSrc.includes('data-avatar-preset') &&
+    userAvatarSrc.includes('setImgFailed(true)') &&
+    storeSrc.includes('customAvatar: DEFAULT_CUSTOM_AVATAR') &&
+    storeSrc.includes('cropImageToSquareAvatarDataUrl') &&
+    storeSrc.includes("callAnki<PickAvatarImageResult>('pick_avatar_image'") &&
+    storeSrc.includes('normalizeCustomAvatarConfig') &&
+    sidebarSrc.includes('<UserAvatar') &&
+    sidebarSrc.includes('avatar={customAvatar}') &&
+    settingsSrc.includes('<UserAvatar') &&
+    settingsSrc.includes('AVATAR_PRESET_IDS') &&
+    settingsSrc.includes("t('avatarSectionLabel')") &&
+    settingsSrc.includes("t('avatarPresetAria'") &&
+    designSystemSrc.includes('<UserAvatar') &&
+    designSystemSrc.includes('AVATAR_PRESET_IDS') &&
+    designSystemSrc.includes("t('avatarSectionLabel')") &&
+    translationsSrc.includes('avatarSectionLabel:') &&
+    translationsSrc.includes('avatarPresetAria:') &&
+    suiteTsSrc.includes("import './specs/avatarProfile.spec'") &&
+    jsBundle.includes('pick_avatar_image') &&
+    jsBundle.includes('customAvatar') &&
+    jsBundle.includes('avatarSectionLabel') &&
+    jsBundle.includes('avatarPresetAria') &&
+    jsBundle.includes('data-avatar-kind') &&
+    jsBundle.includes('data-avatar-preset') &&
+    cssBundle.includes('object-cover') &&
+    cssBundle.includes('w-14') &&
+    cssBundle.includes('h-14') &&
+    cssBundle.includes('ring-offset-1'),
+  'Item #55: Local profile avatar isolation, sanitization, safe crop/render, i18n keys, unit spec wiring, and built web/ bundle artifact must remain intact (rebuild with `cd frontend && npm run build`)'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

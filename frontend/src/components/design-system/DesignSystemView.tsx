@@ -6,19 +6,35 @@ import {
   SUPPORTED_LANGUAGES,
   translate,
 } from '../../i18n/translations';
-import { appActions, showToast, ThemeMode, useAppStore } from '../../stores/useAppStore';
+import {
+  appActions,
+  AVATAR_PRESET_IDS,
+  showToast,
+  ThemeMode,
+  useAppStore,
+} from '../../stores/useAppStore';
 import {
   ACCENT_COLOR_LIST,
   ACCENT_THEMES,
   getAccentScale,
   resolveThemeMode,
 } from '../../utils/themeTokens';
+import { normalizeCustomAvatarConfig } from '../../utils/avatarImage';
 import { ChartTooltipContent, Tooltip } from '../common/Tooltip';
 import { HoverCard } from '../common/HoverCard';
+import { UserAvatar } from '../common/UserAvatar';
 
 export const DesignSystemView: React.FC = () => {
-  const { theme, systemDark, accentColor, languagePref, resolvedLang, customNickname, dashboard } =
-    useAppStore();
+  const {
+    theme,
+    systemDark,
+    accentColor,
+    languagePref,
+    resolvedLang,
+    customNickname,
+    customAvatar,
+    dashboard,
+  } = useAppStore();
   const resolvedTheme = resolveThemeMode(theme, systemDark);
   const isDark = resolvedTheme === 'dark';
   const t = (key: any, params?: Record<string, string | number>) =>
@@ -32,6 +48,8 @@ export const DesignSystemView: React.FC = () => {
 
   const currentScale = getAccentScale(accentColor, resolvedTheme);
   const currentMeta = ACCENT_THEMES[accentColor] || ACCENT_THEMES.indigo;
+  const userDisplay = dashboard.userName || t('defaultUser');
+  const normalizedAvatar = normalizeCustomAvatarConfig(customAvatar);
 
   const cardSurface = isDark
     ? 'bg-[#1A1B21] border-[#2A2C36] text-white'
@@ -362,34 +380,117 @@ export const DesignSystemView: React.FC = () => {
           </div>
         </div>
 
-        <div className="col-span-5 space-y-3">
-          <div className="text-[14px] font-bold">{t('nicknameLabel')}</div>
-          <p className={`text-[12px] ${subText}`}>
-            {t('activeProfileNameSub', { name: dashboard.userName || t('defaultUser') })}
-          </p>
-          <div className="flex items-center gap-2.5 pt-1">
-            <input
-              type="text"
-              value={nicknameDraft}
-              onChange={(e) => setNicknameDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+        <div className="col-span-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <UserAvatar
+              avatar={normalizedAvatar}
+              displayName={userDisplay}
+              size="lg"
+              brandHex={currentScale.brand}
+              accentColor={accentColor}
+              isDark={isDark}
+              className="shadow-xs"
+            />
+            <div className="min-w-0">
+              <div className="text-[14px] font-bold">{t('avatarSectionLabel')}</div>
+              <p className={`text-[11px] ${subText} mt-0.5`}>{t('avatarSectionSub')}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Tooltip variant="compact" content={t('avatarModeInitial')}>
+              <button
+                type="button"
+                aria-label={t('avatarModeInitial')}
+                aria-pressed={normalizedAvatar.kind === 'initial'}
+                onClick={() => {
+                  void appActions.updatePreferences({ customAvatar: { kind: 'initial' } });
+                }}
+                className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-all ${
+                  normalizedAvatar.kind === 'initial'
+                    ? `ring-2 ring-[var(--brand)] ring-offset-1 ${
+                        isDark ? 'ring-offset-[#1A1B21]' : 'ring-offset-white'
+                      }`
+                    : 'opacity-85 hover:opacity-100'
+                }`}
+              >
+                <UserAvatar
+                  avatar={{ kind: 'initial' }}
+                  displayName={userDisplay}
+                  size={28}
+                  brandHex={currentScale.brand}
+                  accentColor={accentColor}
+                  isDark={isDark}
+                />
+              </button>
+            </Tooltip>
+            {AVATAR_PRESET_IDS.map((presetId) => {
+              const presetLabel = t(`avatarPreset_${presetId}` as any);
+              const isSelected =
+                normalizedAvatar.kind === 'preset' && normalizedAvatar.presetId === presetId;
+              return (
+                <Tooltip key={presetId} variant="compact" content={presetLabel}>
+                  <button
+                    type="button"
+                    aria-label={t('avatarPresetAria', { name: presetLabel })}
+                    aria-pressed={isSelected}
+                    onClick={() => {
+                      void appActions.updatePreferences({
+                        customAvatar: { kind: 'preset', presetId },
+                      });
+                    }}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-all ${
+                      isSelected
+                        ? `ring-2 ring-[var(--brand)] ring-offset-1 ${
+                            isDark ? 'ring-offset-[#1A1B21]' : 'ring-offset-white'
+                          }`
+                        : 'opacity-85 hover:opacity-100'
+                    }`}
+                  >
+                    <UserAvatar
+                      avatar={{ kind: 'preset', presetId }}
+                      displayName={userDisplay}
+                      size={28}
+                      brandHex={currentScale.brand}
+                      accentColor={accentColor}
+                      isDark={isDark}
+                    />
+                  </button>
+                </Tooltip>
+              );
+            })}
+          </div>
+
+          <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2.5">
+            <div className="text-[14px] font-bold">{t('nicknameLabel')}</div>
+            <p className={`text-[12px] ${subText}`}>
+              {t('activeProfileNameSub', { name: userDisplay })}
+            </p>
+            <div className="flex items-center gap-2.5 pt-1">
+              <input
+                type="text"
+                value={nicknameDraft}
+                onChange={(e) => setNicknameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    appActions.updatePreferences({ customNickname: nicknameDraft });
+                    showToast(t('nicknameSavedToast'));
+                  }
+                }}
+                placeholder={t('nicknamePlaceholder')}
+                className="h-9 px-3.5 rounded-xl border border-[#E5E5EA] dark:border-[#2C2C35] text-[12px] flex-1 bg-transparent focus:outline-none focus:border-[var(--brand)]"
+              />
+              <button
+                type="button"
+                onClick={() => {
                   appActions.updatePreferences({ customNickname: nicknameDraft });
                   showToast(t('nicknameSavedToast'));
-                }
-              }}
-              placeholder={t('nicknamePlaceholder')}
-              className="h-9 px-3.5 rounded-xl border border-[#E5E5EA] dark:border-[#2C2C35] text-[12px] flex-1 bg-transparent focus:outline-none focus:border-[var(--brand)]"
-            />
-            <button
-              onClick={() => {
-                appActions.updatePreferences({ customNickname: nicknameDraft });
-                showToast(t('nicknameSavedToast'));
-              }}
-              className="btn-primary !h-9 !px-4"
-            >
-              {t('saveNickname')}
-            </button>
+                }}
+                className="btn-primary !h-9 !px-4"
+              >
+                {t('saveNickname')}
+              </button>
+            </div>
           </div>
         </div>
       </section>

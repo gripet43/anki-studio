@@ -542,33 +542,17 @@ export const LibraryView: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() =>
-                appActions.openCustomStudyModal(
-                  filterFlag !== 'all' || filterTag !== 'all' ? 'flagged' : 'mistakes',
-                  filterDeckId !== 'all' ? filterDeckId : undefined
-                )
-              }
-              className={`h-9 px-3.5 rounded-xl border text-[12px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors hover:border-[var(--brand-border)] ${cardSurface}`}
-            >
-              <svg className="w-3.5 h-3.5 text-[var(--brand-text)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <circle cx="12" cy="12" r="10" />
-                <circle cx="12" cy="12" r="4" />
-              </svg>
-              <span>{t('customStudyEntryBtn')}</span>
-            </button>
-
+          <div className="flex items-center flex-wrap gap-2.5">
             <div
-              className={`h-9 w-[240px] px-3.5 rounded-xl border flex items-center gap-2 text-[12px] focus-within:border-[var(--brand)] ${cardSurface}`}
+              className={`min-h-9 w-[240px] px-3.5 rounded-xl border flex items-center gap-2 text-[12px] focus-within:border-[var(--brand)] ${cardSurface}`}
             >
               <svg
-                className="w-3.5 h-3.5 text-[#8E8E93]"
+                className="w-3.5 h-3.5 text-[#8E8E93] shrink-0"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
+                aria-hidden="true"
               >
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -578,7 +562,8 @@ export const LibraryView: React.FC = () => {
                 value={librarySearchQuery}
                 onChange={(e) => appActions.searchLibraryDebounced({ query: e.target.value })}
                 placeholder={t('searchLibraryPlaceholder')}
-                className="w-full bg-transparent focus:outline-none"
+                aria-label={t('searchLibraryPlaceholder')}
+                className="w-full min-w-0 bg-transparent focus:outline-none"
               />
             </div>
 
@@ -586,14 +571,14 @@ export const LibraryView: React.FC = () => {
               type="button"
               onClick={() => appActions.setLibrarySelectionMode(!librarySelectionMode)}
               aria-pressed={librarySelectionMode}
-              className={`h-9 px-3.5 rounded-xl border text-[12px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
+              className={`min-h-9 py-1.5 px-3.5 rounded-xl border text-[12px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2 ${
                 librarySelectionMode
                   ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand-border)]'
                   : `hover:border-[var(--brand-border)] ${cardSurface}`
               }`}
             >
               <svg
-                className="w-3.5 h-3.5"
+                className="w-3.5 h-3.5 shrink-0"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -609,6 +594,8 @@ export const LibraryView: React.FC = () => {
             </button>
 
             <div
+              role="group"
+              aria-label={t('navLibrary')}
               className={`h-9 p-1 rounded-xl border flex items-center gap-1 ${
                 isDark ? 'bg-[#15161C] border-[#2A2C36]' : 'bg-[#F4F4F6] border-[#E5E5EA]'
               }`}
@@ -617,7 +604,7 @@ export const LibraryView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setAppState({ libraryViewMode: 'gallery' })}
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-1 ${
                     libraryViewMode === 'gallery'
                       ? isDark
                         ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] shadow-xs'
@@ -627,7 +614,7 @@ export const LibraryView: React.FC = () => {
                   aria-label={t('galleryViewBtn')}
                   aria-pressed={libraryViewMode === 'gallery'}
                 >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
                     <rect x="3" y="3" width="7" height="7" rx="1" />
                     <rect x="14" y="3" width="7" height="7" rx="1" />
                     <rect x="14" y="14" width="7" height="7" rx="1" />
@@ -639,7 +626,7 @@ export const LibraryView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setAppState({ libraryViewMode: 'table' })}
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-1 ${
                     libraryViewMode === 'table'
                       ? isDark
                         ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] shadow-xs'
@@ -649,7 +636,7 @@ export const LibraryView: React.FC = () => {
                   aria-label={t('tableViewBtn')}
                   aria-pressed={libraryViewMode === 'table'}
                 >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
                     <line x1="4" y1="6" x2="20" y2="6" />
                     <line x1="4" y1="12" x2="20" y2="12" />
                     <line x1="4" y1="18" x2="20" y2="18" />
@@ -1237,15 +1224,27 @@ export const LibraryView: React.FC = () => {
 
             {hasActiveFilters && (
               <button
+                type="button"
                 onClick={() => {
                   appActions.resetLibraryFilters();
                   showToast(t('resetFilters'));
                 }}
-                className={`h-8 px-3.5 rounded-full text-[12px] font-medium cursor-pointer transition-all active:scale-95 ${
-                  isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-[#1D1D1F] hover:bg-black/10'
-                }`}
+                className="btn-primary !h-auto min-h-8 !py-1 !px-3.5 !rounded-full !text-[12px] focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2"
               >
-                {t('resetFilters')}
+                <svg
+                  className="w-3 h-3 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                  <path d="M3 3v5h5" />
+                </svg>
+                <span>{t('resetFilters')}</span>
               </button>
             )}
           </div>

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { AnkiStudioLogo } from '../common/AnkiStudioLogo';
 import { Tooltip } from '../common/Tooltip';
 import { SyncStateIcon, SyncVisualState } from '../common/SyncStateIcon';
+import { UserAvatar } from '../common/UserAvatar';
 import { usePresence } from '../../hooks/usePresence';
 import {
   formatAbsoluteSyncTooltip,
@@ -20,11 +21,18 @@ import {
   useAppStore,
 } from '../../stores/useAppStore';
 import {
+  AVATAR_PRESET_IDS,
+  AvatarPresetId,
   callAnki,
   isAnkiNativeEnv,
   REVIEW_CONTENT_SCALES,
   ReviewStageWidth,
 } from '../../bridge/pycmd';
+import {
+  AVATAR_IMAGE_ACCEPT,
+  isDefaultCustomAvatar,
+  normalizeCustomAvatarConfig,
+} from '../../utils/avatarImage';
 import {
   ACCENT_COLOR_LIST,
   getAccentScale,
@@ -36,6 +44,8 @@ import { getEffectiveDayKey } from '../../utils/localDate';
 const XIAOHONGSHU_PROFILE_URL =
   'https://www.xiaohongshu.com/user/profile/6496d6f8000000001001ff0f';
 const GITHUB_REPO_URL = 'https://github.com/gripet43/anki-studio';
+const ANKIWEB_ADDON_URL =
+  'https://ankiweb.net/shared/info/1071937836?cb=1794962974753';
 
 type SettingsTab = 'appearance' | 'answer' | 'shortcuts' | 'sync' | 'maintenance' | 'native' | 'about';
 
@@ -48,6 +58,7 @@ export const SettingsModal: React.FC = () => {
     languagePref,
     resolvedLang,
     customNickname,
+    customAvatar,
     dashboard,
     syncing,
     syncJustFinished,
@@ -67,6 +78,8 @@ export const SettingsModal: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(settingsInitialTab || 'appearance');
   const [nicknameDraft, setNicknameDraft] = useState(customNickname || '');
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
   const [dbReport, setDbReport] = useState<any | null>(null);
   const [emptyReport, setEmptyReport] = useState<any | null>(null);
@@ -76,6 +89,12 @@ export const SettingsModal: React.FC = () => {
   const isDark = resolvedTheme === 'dark';
   const effectiveDayKey = getEffectiveDayKey(dayBoundary);
   const tipsHiddenToday = tipsHiddenOn === effectiveDayKey;
+  const aboutHeadingId = useId();
+  const analyticsSwitchId = useId();
+  const analyticsDescId = useId();
+  const supportsNativeSwitch =
+    typeof HTMLInputElement !== 'undefined' && 'switch' in HTMLInputElement.prototype;
+  const studioVersion = envInfo.studioVersion || '1.6.10';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
@@ -130,6 +149,51 @@ export const SettingsModal: React.FC = () => {
   const shortcutHint = formatShortcut('Ctrl + Opt + M', envInfo.platform);
   const currentScale = getAccentScale(accentColor, resolvedTheme);
   const systemModeLabel = systemDark ? t('themeDark') : t('themeLight');
+  const userDisplay = dashboard.userName || t('defaultUser');
+  const normalizedAvatar = normalizeCustomAvatarConfig(customAvatar);
+  const isDefaultAvatar = isDefaultCustomAvatar(normalizedAvatar);
+
+  const handleSelectInitialAvatar = () => {
+    void appActions.updatePreferences({ customAvatar: { kind: 'initial' } });
+  };
+
+  const handleSelectPresetAvatar = (presetId: AvatarPresetId) => {
+    void appActions.updatePreferences({
+      customAvatar: { kind: 'preset', presetId },
+    });
+  };
+
+  const handleResetAvatar = () => {
+    void appActions.updatePreferences({ customAvatar: { kind: 'initial' } });
+  };
+
+  const handlePickAvatarImage = async () => {
+    if (avatarBusy) return;
+    if (!isAnkiNativeEnv()) {
+      avatarFileInputRef.current?.click();
+      return;
+    }
+    setAvatarBusy(true);
+    try {
+      await appActions.pickNativeAvatarImage(() => {
+        avatarFileInputRef.current?.click();
+      });
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setAvatarBusy(true);
+    try {
+      await appActions.saveAvatarFromImageSource(file);
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
 
   const themeOptions: Array<{ id: ThemeMode; label: string; desc: string }> = [
     { id: 'auto', label: t('themeAuto'), desc: t('themeAutoDesc', { mode: systemModeLabel }) },
@@ -520,40 +584,179 @@ export const SettingsModal: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-[13px] font-semibold">{t('nicknameLabel')}</div>
-                    <div className={`text-[11px] ${subText} mt-0.5`}>
-                      {t('activeProfileNameSub', {
-                        name: dashboard.userName || t('defaultUser'),
-                      })}
+                {/* Profile: Local Avatar + Display Nickname */}
+                <div className="pt-4 border-t border-black/5 dark:border-white/5 space-y-3.5">
+                  <div className="flex items-center gap-3.5">
+                    <UserAvatar
+                      avatar={normalizedAvatar}
+                      displayName={userDisplay}
+                      size="lg"
+                      brandHex={currentScale.brand}
+                      accentColor={accentColor}
+                      isDark={isDark}
+                      className="shadow-xs"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-semibold">{t('avatarSectionLabel')}</div>
+                      <div className={`text-[11px] ${subText} mt-0.5 leading-relaxed`}>
+                        {t('avatarSectionSub')}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Tooltip variant="compact" content={t('avatarModeInitial')}>
+                      <button
+                        type="button"
+                        aria-label={t('avatarModeInitial')}
+                        aria-pressed={normalizedAvatar.kind === 'initial'}
+                        onClick={handleSelectInitialAvatar}
+                        className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
+                          normalizedAvatar.kind === 'initial'
+                            ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand)] ring-1 ring-[var(--brand)]/40 font-semibold shadow-2xs'
+                            : isDark
+                            ? 'border-[#303240] bg-black/15 text-[#D1D1D8] hover:border-[var(--brand-border)]'
+                            : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:border-[var(--brand-border)]'
+                        }`}
+                      >
+                        <UserAvatar
+                          avatar={{ kind: 'initial' }}
+                          displayName={userDisplay}
+                          size={20}
+                          brandHex={currentScale.brand}
+                          accentColor={accentColor}
+                          isDark={isDark}
+                        />
+                        <span>{t('avatarModeInitial')}</span>
+                      </button>
+                    </Tooltip>
+
+                    {AVATAR_PRESET_IDS.map((presetId) => {
+                      const presetLabel = t(`avatarPreset_${presetId}` as any);
+                      const isSelected =
+                        normalizedAvatar.kind === 'preset' &&
+                        normalizedAvatar.presetId === presetId;
+                      return (
+                        <Tooltip key={presetId} variant="compact" content={presetLabel}>
+                          <button
+                            type="button"
+                            aria-label={t('avatarPresetAria', { name: presetLabel })}
+                            aria-pressed={isSelected}
+                            onClick={() => handleSelectPresetAvatar(presetId)}
+                            className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
+                              isSelected
+                                ? `ring-2 ring-[var(--brand)] ring-offset-1 ${
+                                    isDark ? 'ring-offset-[#1F212A]' : 'ring-offset-[#F9F9FB]'
+                                  } scale-[1.04]`
+                                : 'opacity-90 hover:opacity-100 hover:scale-[1.04]'
+                            }`}
+                          >
+                            <UserAvatar
+                              avatar={{ kind: 'preset', presetId }}
+                              displayName={userDisplay}
+                              size={28}
+                              brandHex={currentScale.brand}
+                              accentColor={accentColor}
+                              isDark={isDark}
+                            />
+                          </button>
+                        </Tooltip>
+                      );
+                    })}
+
+                    <Tooltip variant="compact" content={t('avatarUploadBtn')}>
+                      <button
+                        type="button"
+                        aria-label={t('avatarUploadBtn')}
+                        aria-pressed={normalizedAvatar.kind === 'image'}
+                        disabled={avatarBusy}
+                        onClick={handlePickAvatarImage}
+                        className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] ${
+                          normalizedAvatar.kind === 'image'
+                            ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand)] ring-1 ring-[var(--brand)]/40 font-semibold shadow-2xs'
+                            : isDark
+                            ? 'border-[#303240] bg-black/15 text-[#D1D1D8] hover:border-[var(--brand-border)]'
+                            : 'bg-white border-[#E5E5EA] text-[#3A3A3C] hover:border-[var(--brand-border)]'
+                        }`}
+                      >
+                        <svg
+                          className="w-3.5 h-3.5 shrink-0"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="17 8 12 3 7 8" />
+                          <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                        <span>{t('avatarUploadBtn')}</span>
+                      </button>
+                    </Tooltip>
+
+                    {!isDefaultAvatar && (
+                      <Tooltip variant="compact" content={t('avatarResetBtn')}>
+                        <button
+                          type="button"
+                          aria-label={t('avatarResetBtn')}
+                          onClick={handleResetAvatar}
+                          className="btn-ghost !h-8 !px-2.5 !rounded-full !text-[11px]"
+                        >
+                          {t('avatarResetBtn')}
+                        </button>
+                      </Tooltip>
+                    )}
+
                     <input
-                      type="text"
-                      value={nicknameDraft}
-                      onChange={(e) => setNicknameDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
+                      ref={avatarFileInputRef}
+                      type="file"
+                      accept={AVATAR_IMAGE_ACCEPT}
+                      onChange={handleAvatarFileChange}
+                      className="hidden"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                    />
+                  </div>
+
+                  <div className="pt-2.5 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-semibold">{t('nicknameLabel')}</div>
+                      <div className={`text-[11px] ${subText} mt-0.5 truncate`}>
+                        {t('activeProfileNameSub', {
+                          name: userDisplay,
+                        })}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <input
+                        type="text"
+                        value={nicknameDraft}
+                        onChange={(e) => setNicknameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            appActions.updatePreferences({ customNickname: nicknameDraft });
+                            showToast(t('nicknameSavedToast'));
+                          }
+                        }}
+                        placeholder={t('nicknamePlaceholder')}
+                        className={`h-8 px-3 rounded-xl border text-[12px] w-36 focus:outline-none focus:border-[var(--brand)] ${
+                          isDark ? 'bg-[#14141A] border-[#343444]' : 'bg-white border-[#E5E5EA]'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
                           appActions.updatePreferences({ customNickname: nicknameDraft });
                           showToast(t('nicknameSavedToast'));
-                        }
-                      }}
-                      placeholder={t('nicknamePlaceholder')}
-                      className={`h-8 px-3 rounded-xl border text-[12px] w-36 focus:outline-none focus:border-[var(--brand)] ${
-                        isDark ? 'bg-[#14141A] border-[#343444]' : 'bg-white border-[#E5E5EA]'
-                      }`}
-                    />
-                    <button
-                      onClick={() => {
-                        appActions.updatePreferences({ customNickname: nicknameDraft });
-                        showToast(t('nicknameSavedToast'));
-                      }}
-                      className="btn-primary !h-8 !px-3 !text-[12px]"
-                    >
-                      {t('saveNickname')}
-                    </button>
+                        }}
+                        className="btn-primary !h-8 !px-3 !text-[12px]"
+                      >
+                        {t('saveNickname')}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1290,103 +1493,208 @@ export const SettingsModal: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 5: About Anki Studio */}
+          {/* TAB 7: About Anki Studio */}
           {activeTab === 'about' && (
-            <div className="space-y-5">
-              <div>
-                <h3 className="text-[17px] font-bold tracking-tight">
-                  {t('settingsTabAbout')} · Anki Studio
-                </h3>
-                <p className={`text-[12px] ${subText} mt-0.5`}>
-                  {t('settingsAboutSub')}
-                </p>
-              </div>
+            <section aria-labelledby={aboutHeadingId} className="space-y-4">
+              <h3 id={aboutHeadingId} className="text-[17px] font-bold tracking-tight text-balance">
+                {t('settingsTabAbout')} · Anki Studio
+              </h3>
 
-              {/* Version Card */}
-              <div className={`rounded-xl border p-5 flex items-center gap-4 ${cardSurface}`}>
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-xs border border-black/5 dark:border-white/10 bg-black/[0.025] dark:bg-white/[0.05]">
-                  <AnkiStudioLogo size={30} />
-                </div>
-                <div>
-                  <div className="text-[16px] font-bold">Anki Studio</div>
-                  <div className={`text-[12px] ${subText} mt-0.5`}>
-                    Version {envInfo.studioVersion || '1.4'} · {envInfo.platformBadge} · FSRS Ready
+              {/* Version & Runtime Info Card */}
+              <article className={`@container rounded-xl border p-5 space-y-4 ${cardSurface}`}>
+                <header className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div
+                      aria-hidden="true"
+                      className="w-11 h-11 rounded-2xl shrink-0 flex items-center justify-center shadow-xs border border-black/5 dark:border-white/10 bg-black/[0.025] dark:bg-white/[0.05]"
+                    >
+                      <AnkiStudioLogo size={26} />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-[15px] font-bold tracking-tight text-balance">Anki Studio</h4>
+                      <p className={`text-[12px] ${subText} mt-0.5 text-pretty`}>
+                        {t('aboutVersionTitle')}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </div>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-mono font-semibold tabular-nums border border-[var(--brand-border)] bg-[var(--brand-soft)] text-[var(--brand-text)]">
+                    v{studioVersion}
+                  </span>
+                </header>
 
-              {/* Highlights Card */}
-              <div className={`rounded-xl border p-4 ${cardSurface}`}>
-                <p className={`text-[12px] ${subText} leading-relaxed`}>
-                  {t('aboutHighlights')}
-                </p>
-              </div>
-
-              {/* Follow & Feedback */}
-              <div className={`rounded-xl border p-4 space-y-2 ${cardSurface}`}>
-                <div className="font-semibold text-[12px] text-[var(--brand-text)]">
-                  {t('aboutLinksTitle')}
-                </div>
-                {[
-                  { key: 'aboutXiaohongshu', url: XIAOHONGSHU_PROFILE_URL, primary: true },
-                  { key: 'aboutGithub', url: GITHUB_REPO_URL, primary: false },
-                ].map((link) => (
-                  <button
-                    key={link.key}
-                    type="button"
-                    onClick={() => openExternal(link.url)}
-                    className={`w-full h-9 px-3 rounded-lg border text-[12px] font-medium flex items-center justify-between gap-2 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
-                      link.primary
-                        ? 'border-[var(--brand-border)] bg-[var(--brand-soft)] text-[var(--brand-text)] hover:opacity-90'
-                        : isDark
-                        ? 'border-white/[0.08] bg-white/[0.03] text-[#E8E8F0] hover:bg-white/[0.07]'
-                        : 'border-[#E5E5EA] bg-[#FAFAFC] text-[#3A3A3C] hover:bg-[#F1F1F5]'
-                    }`}
-                  >
-                    <span>{t(link.key)}</span>
-                    <span className="text-[10px] opacity-60" aria-hidden="true">
-                      ↗
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Privacy & Analytics Card */}
-              <div className={`rounded-xl border p-4 flex items-center justify-between gap-4 ${cardSurface}`}>
-                <div className="space-y-1">
-                  <div className="text-[13px] font-semibold">{t('settingsAnalyticsTitle')}</div>
-                  <div className={`text-[11px] ${subText} leading-relaxed`}>
-                    {t('settingsAnalyticsSub')}
+                <dl className="grid grid-cols-1 @sm:grid-cols-2 gap-3 pt-3.5 border-t border-black/[0.05] dark:border-white/[0.06]">
+                  <div className="min-w-0">
+                    <dt className={`text-[11px] ${subText}`}>{t('aboutRuntimeEnvLabel')}</dt>
+                    <dd className="text-[13px] font-semibold mt-0.5 break-words">
+                      {envInfo.platformBadge}
+                    </dd>
                   </div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={analyticsEnabled}
-                  onClick={() => appActions.updatePreferences({ analyticsEnabled: !analyticsEnabled })}
-                  style={analyticsEnabled ? { backgroundColor: currentScale.brand } : undefined}
-                  className={`w-12 h-6.5 shrink-0 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${
-                    analyticsEnabled ? '' : isDark ? 'bg-[#3A3A48]' : 'bg-[#E5E5EA]'
-                  }`}
-                >
-                  <div
-                    className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
-                      analyticsEnabled ? 'translate-x-5.5' : 'translate-x-0'
-                    }`}
+                  <div className="min-w-0">
+                    <dt className={`text-[11px] ${subText}`}>{t('aboutEngineLabel')}</dt>
+                    <dd className="text-[13px] font-semibold mt-0.5 break-words">FSRS Ready</dd>
+                  </div>
+                </dl>
+              </article>
+
+              {/* Author / Creator Info Card */}
+              <article className={`@container rounded-xl border p-5 space-y-4 ${cardSurface}`}>
+                <header className="flex items-center gap-3.5">
+                  <img
+                    src="./creator-avatar.jpg"
+                    width={44}
+                    height={44}
+                    alt=""
+                    decoding="async"
+                    className="w-11 h-11 aspect-square rounded-full shrink-0 object-cover ring-1 ring-black/10 dark:ring-white/15 shadow-xs"
                   />
-                </button>
-              </div>
+                  <div className="min-w-0">
+                    <h4 className="flex flex-wrap items-center gap-2 text-[15px] font-bold tracking-tight text-balance">
+                      <span>gripet</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border border-black/[0.08] dark:border-white/[0.12] bg-black/[0.03] dark:bg-white/[0.06] text-[#636366] dark:text-[#A6A8B6]">
+                        {t('aboutCreatorTitle')}
+                      </span>
+                    </h4>
+                    <p className={`text-[12px] ${subText} mt-0.5 text-pretty`}>
+                      {t('aboutCreatorRole')}
+                    </p>
+                  </div>
+                </header>
 
-              {/* Philosophy Card */}
-              <div className={`rounded-xl border p-4 space-y-2 text-[12px] ${cardSurface}`}>
-                <div className="font-semibold text-[var(--brand-text)]">
-                  {t('settingsPhilosophyTitle')}
+                <ul role="list" className="about-creator-links">
+                  {[
+                    {
+                      key: 'aboutXiaohongshu' as const,
+                      url: XIAOHONGSHU_PROFILE_URL,
+                      variant: 'primary' as const,
+                      icon: (
+                        <svg
+                          className="w-3.5 h-3.5 shrink-0 opacity-85"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                          <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      key: 'aboutGithub' as const,
+                      url: GITHUB_REPO_URL,
+                      variant: 'neutral' as const,
+                      icon: (
+                        <svg
+                          className="w-3.5 h-3.5 shrink-0 opacity-80"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          aria-hidden="true"
+                        >
+                          <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2Z" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      key: 'aboutAnkiwebLike' as const,
+                      url: ANKIWEB_ADDON_URL,
+                      variant: 'like' as const,
+                      icon: (
+                        <svg
+                          className="w-3.5 h-3.5 shrink-0 text-[var(--status-danger-text)] transition-transform duration-150 group-hover:scale-110 motion-reduce:transition-none motion-reduce:transform-none"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+                        </svg>
+                      ),
+                    },
+                  ].map((link) => (
+                    <li key={link.key}>
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          openExternal(link.url);
+                        }}
+                        className={`group about-creator-link rounded-xl border text-[12px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2 ${
+                          link.variant === 'primary'
+                            ? 'border-[var(--brand-border)] bg-[var(--brand-soft)] text-[var(--brand-text)] hover:bg-[var(--brand-soft-strong)]'
+                            : isDark
+                            ? 'border-white/[0.12] bg-white/[0.04] text-[#ECECF2] hover:bg-white/[0.08] hover:border-white/[0.2]'
+                            : 'border-[#DCDCE2] bg-white text-[#1D1D1F] hover:border-[var(--brand-border)] hover:bg-[var(--brand-surface)] shadow-2xs'
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-2 min-w-0">
+                          {link.icon}
+                          <span>{t(link.key)}</span>
+                        </span>
+                        <svg
+                          className="w-3.5 h-3.5 shrink-0 opacity-50 transition-transform duration-150 group-hover:opacity-90 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none motion-reduce:transform-none"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M7 17 17 7" />
+                          <path d="M7 7h10v10" />
+                        </svg>
+                        <span className="sr-only">, {t('aboutOpensInBrowser')}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </article>
+
+              {/* Anonymous Feedback Settings Card */}
+              <article className={`@container rounded-xl border p-5 ${cardSurface}`}>
+                <div className="flex flex-wrap @sm:flex-nowrap items-start @sm:items-center justify-between gap-4">
+                  <div className="space-y-1 min-w-0">
+                    <label
+                      htmlFor={analyticsSwitchId}
+                      className="block text-[14px] font-bold tracking-tight cursor-pointer text-balance"
+                    >
+                      {t('aboutFeedbackTitle')}
+                    </label>
+                    <p
+                      id={analyticsDescId}
+                      className={`text-[12px] ${subText} leading-relaxed text-pretty`}
+                    >
+                      {t('settingsAnalyticsSub')}
+                    </p>
+                  </div>
+                  <div className="shrink-0 pt-0.5 @sm:pt-0">
+                    <input
+                      id={analyticsSwitchId}
+                      type="checkbox"
+                      checked={analyticsEnabled}
+                      onChange={(e) =>
+                        appActions.updatePreferences({ analyticsEnabled: e.target.checked })
+                      }
+                      aria-describedby={analyticsDescId}
+                      {...({ switch: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+                      {...(supportsNativeSwitch
+                        ? {}
+                        : { role: 'switch', 'aria-checked': analyticsEnabled })}
+                      data-switch-fallback={supportsNativeSwitch ? 'false' : 'true'}
+                      className="anki-switch shrink-0"
+                    />
+                  </div>
                 </div>
-                <p className={`${subText} leading-relaxed`}>
-                  {t('settingsPhilosophyBody')}
-                </p>
-              </div>
-            </div>
+              </article>
+            </section>
           )}
         </div>
       </div>

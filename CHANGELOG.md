@@ -8,6 +8,20 @@
 
 ## [Unreleased]
 
+## [v1.6.10] - 2026-11-18
+
+- **[Antigravity] 本地档案个人头像定制、侧边栏/首页/卡片库/关于页视觉与现代 Web 无障碍精修**：
+  - **本地个人头像定制与多档案隔离存储**（新增 [`frontend/src/utils/avatarImage.ts`](frontend/src/utils/avatarImage.ts)、[`frontend/src/components/common/UserAvatar.tsx`](frontend/src/components/common/UserAvatar.tsx)、[`tests/frontend/specs/avatarProfile.spec.ts`](tests/frontend/specs/avatarProfile.spec.ts)，改 [`bridge/profile_config.py`](bridge/profile_config.py)、[`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/components/design-system/DesignSystemView.tsx`](frontend/src/components/design-system/DesignSystemView.tsx)、[`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)、[`scripts/build_ankiaddon.py`](scripts/build_ankiaddon.py)、16 语种词典及后端测试）：
+    - 支持首字母徽章、预设动物插画与本地图片上传（仅限光栅图像、自动方形裁切压缩、Qt 文件选择器支持），头像元信息按 Anki 档案（Profile）隔离存储于 `user_files/avatars/`，绝不写入 `collection.media` 或泄漏进 `.ankiaddon` 发行包。
+  - **设置「关于」页精简重构与作者卡片焕新**（新增 [`frontend/public/creator-avatar.jpg`](frontend/public/creator-avatar.jpg) → [`web/creator-avatar.jpg`](web/creator-avatar.jpg)，改 [`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、[`frontend/src/i18n/translations.ts`](frontend/src/i18n/translations.ts)、14 份语言包与 [`tests/frontend/specs/render.spec.tsx`](tests/frontend/specs/render.spec.tsx)）：
+    - 移除顶部与底部的重复版本号、重复反馈状态行、更新检测与技术栈矩阵，收敛为「版本标识 · 作者名片（gripet / 兴趣驱动 AI 产品建筑师） · 匿名统计原生开关（`.anki-switch`）」；作者外链栏支持「小红书主页」「GitHub 源码与反馈」「给本项目点赞（AnkiWeb）」固有弹性换行排版。
+  - **卡片库工具栏「重置筛选」主题色强化与侧边栏导航去重**（改 [`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)、[`tests/frontend/specs/libraryDefaultSort.spec.ts`](tests/frontend/specs/libraryDefaultSort.spec.ts)）：
+    - 在卡片库存在激活筛选条件时将「重置筛选」升级为高辨识度 `.btn-primary` 主题色按钮；精简侧边栏与卡片库顶栏的「自定义学习」入口，统一收敛至首页今日学习主面板。
+  - **首页今日进度圆环表盘精修**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、[`tests/frontend/specs/dashboardRing.spec.ts`](tests/frontend/specs/dashboardRing.spec.ts)）：
+    - 移除圆环内部 `completed / totalWorkload` 次级数字行，放大主百分比并利用 `text-box: trim-both cap alphabetic` 消除行框虚位与百分号偏心偏移；补齐内圈细刻度线、0% 任务起点锚点、`100%` 完成态成功绿配色、`prefers-reduced-motion` 与 `forced-colors` 适配。
+  - **侧边栏左下角个人与节奏工具栏无框极简化**（改 [`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、[`tests/frontend/specs/avatarProfile.spec.ts`](tests/frontend/specs/avatarProfile.spec.ts)）：
+    - 移除「休假模式 / 进度减负」的冷灰伪分段开关外框与左下角冗余「设置」副行，将「休假」「减负」「设置」整合进底栏右侧单一 `role="toolbar" focusgroup="toolbar wrap"` 键盘漫游区，统一采用 `28×28` 透明无框细线幽灵图标（悬停或激活/预警状态时浮现柔和浅底与 6px 提示圆点；打开设置时仅轻量点亮齿轮图标）。
+
 ## [v1.6.9] - 2026-11-18
 
 - **[Antigravity] 卡片库默认排序改为「最新添加」、首页进度圆环改为百分数展示、编辑器新增「清除格式」**：
