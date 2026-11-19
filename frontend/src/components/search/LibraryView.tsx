@@ -7,6 +7,7 @@ import {
   LibrarySortOption,
 } from '../../bridge/pycmd';
 import { translate } from '../../i18n/translations';
+import { CheckIcon, CloseIcon } from '../common/Icons';
 import {
   appActions,
   AppState,
@@ -21,6 +22,7 @@ import {
   getDeckColorByHash,
   hasSubstantiveMediaPreview,
 } from '../../utils/mathRenderer';
+import { StudioSelect } from '../common/StudioSelect';
 import { Tooltip } from '../common/Tooltip';
 import { getClosestFromTarget } from '../../utils/domTarget';
 import { resolveThemeMode } from '../../utils/themeTokens';
@@ -552,6 +554,8 @@ export const LibraryView: React.FC = () => {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 aria-hidden="true"
               >
                 <circle cx="11" cy="11" r="8" />
@@ -636,7 +640,7 @@ export const LibraryView: React.FC = () => {
                   aria-label={t('tableViewBtn')}
                   aria-pressed={libraryViewMode === 'table'}
                 >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <line x1="4" y1="6" x2="20" y2="6" />
                     <line x1="4" y1="12" x2="20" y2="12" />
                     <line x1="4" y1="18" x2="20" y2="18" />
@@ -661,7 +665,7 @@ export const LibraryView: React.FC = () => {
                   setTagDropdownOpen(false);
                   setDeckDropdownOpen(false);
                 }}
-                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
+                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                   filterStatus !== 'all'
                     ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)]'
                     : `border hover:border-[var(--brand-border)] ${cardSurface}`
@@ -692,7 +696,7 @@ export const LibraryView: React.FC = () => {
 
               {statusDropdownOpen && (
                 <div
-                  className={`absolute start-0 top-10 z-40 w-[232px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
+                  className={`animate-flyout-enter flyout-origin-start absolute start-0 top-10 z-40 w-[232px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
                 >
                   {hasNonStatusFilter && (
                     <div className="px-2.5 py-1.5 mb-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.05] flex items-center justify-between gap-2 text-[10.5px]">
@@ -753,7 +757,7 @@ export const LibraryView: React.FC = () => {
                           <span className="px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/5 text-[10px] text-[#8E8E93]">
                             {cnt}
                           </span>
-                          {isSelected && <span className="text-[var(--brand-text)]">✓</span>}
+                          {isSelected && <CheckIcon className="w-3.5 h-3.5 text-[var(--brand-text)]" strokeWidth={2.4} />}
                         </div>
                       </button>
                     );
@@ -773,7 +777,7 @@ export const LibraryView: React.FC = () => {
                   setTagDropdownOpen(false);
                   setDeckDropdownOpen(false);
                 }}
-                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
+                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                   filterDifficulty !== 'all'
                     ? 'bg-[var(--status-warning-soft)] text-[var(--status-warning)] border border-[var(--status-warning)]/35'
                     : `border hover:border-[var(--brand-border)] ${cardSurface}`
@@ -800,7 +804,7 @@ export const LibraryView: React.FC = () => {
 
               {diffDropdownOpen && (
                 <div
-                  className={`absolute start-0 top-10 z-40 w-[190px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
+                  className={`animate-flyout-enter flyout-origin-start absolute start-0 top-10 z-40 w-[190px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
                 >
                   {(
                     [
@@ -836,7 +840,7 @@ export const LibraryView: React.FC = () => {
                           <span className="px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/5 text-[10px] text-[#8E8E93]">
                             {cnt}
                           </span>
-                          {isSelected && <span className="text-[var(--status-warning)]">✓</span>}
+                          {isSelected && <CheckIcon className="w-3.5 h-3.5 text-[var(--status-warning)]" strokeWidth={2.4} />}
                         </div>
                       </button>
                     );
@@ -865,7 +869,7 @@ export const LibraryView: React.FC = () => {
                       }
                     : undefined
                 }
-                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
+                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                   activeFlagSpec
                     ? 'border'
                     : filterFlag === 'flagged'
@@ -879,7 +883,7 @@ export const LibraryView: React.FC = () => {
                     style={{ backgroundColor: activeFlagSpec.hex }}
                   />
                 ) : (
-                  <svg className="w-3.5 h-3.5 opacity-70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg className="w-3.5 h-3.5 opacity-70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
                     <line x1="4" y1="22" x2="4" y2="15" />
                   </svg>
@@ -894,14 +898,14 @@ export const LibraryView: React.FC = () => {
                     ? t(`flagShort_${filterFlag}` as any)
                     : statusLabels.all}
                 </span>
-                <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="m6 9 6 6 6-6" />
                 </svg>
               </button>
 
               {flagDropdownOpen && (
                 <div
-                  className={`absolute start-0 top-10 z-40 w-[225px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
+                  className={`animate-flyout-enter flyout-origin-start absolute start-0 top-10 z-40 w-[225px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
                 >
                   <button
                     type="button"
@@ -994,7 +998,7 @@ export const LibraryView: React.FC = () => {
                   setFlagDropdownOpen(false);
                   setDeckDropdownOpen(false);
                 }}
-                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
+                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                   filterTag !== 'all'
                     ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)]'
                     : `border hover:border-[var(--brand-border)] ${cardSurface}`
@@ -1015,7 +1019,7 @@ export const LibraryView: React.FC = () => {
 
               {tagDropdownOpen && (
                 <div
-                  className={`absolute start-0 top-10 z-40 w-[260px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2.5 space-y-2 ${popoverSurface}`}
+                  className={`animate-flyout-enter flyout-origin-start absolute start-0 top-10 z-40 w-[260px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2.5 space-y-2 ${popoverSurface}`}
                 >
                   {/* Search filter input inside dropdown */}
                   <div
@@ -1031,6 +1035,9 @@ export const LibraryView: React.FC = () => {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
                     >
                       <circle cx="11" cy="11" r="8" />
                       <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -1066,7 +1073,7 @@ export const LibraryView: React.FC = () => {
                         <span className="text-[11px] text-[#8E8E93]">
                           {tagAllCount}
                         </span>
-                        {filterTag === 'all' && <span className="text-[var(--brand-text)]">✓</span>}
+                        {filterTag === 'all' && <CheckIcon className="w-3.5 h-3.5 text-[var(--brand-text)]" strokeWidth={2.4} />}
                       </div>
                     </button>
 
@@ -1095,7 +1102,7 @@ export const LibraryView: React.FC = () => {
                               <span className="px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/5 text-[10px] text-[#8E8E93]">
                                 {cnt}
                               </span>
-                              {isSelected && <span className="text-[var(--brand-text)]">✓</span>}
+                              {isSelected && <CheckIcon className="w-3.5 h-3.5 text-[var(--brand-text)]" strokeWidth={2.4} />}
                             </div>
                           </button>
                         );
@@ -1121,7 +1128,7 @@ export const LibraryView: React.FC = () => {
                   setFlagDropdownOpen(false);
                   setTagDropdownOpen(false);
                 }}
-                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-all ${
+                className={`h-8 px-3.5 rounded-full text-[12px] font-medium flex items-center gap-2 cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                   filterDeckId !== 'all'
                     ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)]'
                     : `border hover:border-[var(--brand-border)] ${cardSurface}`
@@ -1143,7 +1150,7 @@ export const LibraryView: React.FC = () => {
 
               {deckDropdownOpen && (
                 <div
-                  className={`absolute start-0 top-10 z-40 w-[260px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2.5 space-y-2 ${popoverSurface}`}
+                  className={`animate-flyout-enter flyout-origin-start absolute start-0 top-10 z-40 w-[260px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2.5 space-y-2 ${popoverSurface}`}
                 >
                   <div
                     className={`h-8 px-2.5 rounded-xl border flex items-center gap-2 text-[12px] ${
@@ -1158,6 +1165,9 @@ export const LibraryView: React.FC = () => {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
                     >
                       <circle cx="11" cy="11" r="8" />
                       <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -1188,7 +1198,7 @@ export const LibraryView: React.FC = () => {
                       }`}
                     >
                       <span>{t('allDecksOption')}</span>
-                      {filterDeckId === 'all' && <span className="text-[var(--brand-text)]">✓</span>}
+                      {filterDeckId === 'all' && <CheckIcon className="w-3.5 h-3.5 text-[var(--brand-text)]" strokeWidth={2.4} />}
                     </button>
 
                     {filteredDropdownDecks.map((d) => {
@@ -1212,7 +1222,7 @@ export const LibraryView: React.FC = () => {
                           <span className="truncate">{d.fullName || d.name}</span>
                           <div className="flex items-center gap-2 shrink-0">
                             <span className="text-[10px] text-[#8E8E93]">{d.totalCards}</span>
-                            {isSelected && <span className="text-[var(--brand-text)]">✓</span>}
+                            {isSelected && <CheckIcon className="w-3.5 h-3.5 text-[var(--brand-text)]" strokeWidth={2.4} />}
                           </div>
                         </button>
                       );
@@ -1342,7 +1352,7 @@ export const LibraryView: React.FC = () => {
 
               {sortDropdownOpen && (
                 <div
-                  className={`absolute end-0 top-10 z-40 w-[230px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
+                  className={`animate-flyout-enter flyout-origin-end absolute end-0 top-10 z-40 w-[230px] rounded-2xl border shadow-[0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl p-2 space-y-0.5 ${popoverSurface}`}
                 >
                   {LIBRARY_SORT_OPTIONS.map((optKey) => {
                     const isSelected = librarySortBy === optKey;
@@ -1363,7 +1373,7 @@ export const LibraryView: React.FC = () => {
                         }`}
                       >
                         <span>{sortLabels[optKey]}</span>
-                        {isSelected && <span className="text-[var(--brand-text)]">✓</span>}
+                        {isSelected && <CheckIcon className="w-3.5 h-3.5 text-[var(--brand-text)]" strokeWidth={2.4} />}
                       </button>
                     );
                   })}
@@ -1411,6 +1421,9 @@ export const LibraryView: React.FC = () => {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
               >
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -2352,9 +2365,9 @@ export const LibraryView: React.FC = () => {
                   type="button"
                   aria-label={t('close')}
                   onClick={() => setActiveBatchModal('none')}
-                  className="text-xs text-[#8E8E93] cursor-pointer px-1 rounded focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                  className="w-6 h-6 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                 >
-                  ✕
+                  <CloseIcon className="w-3.5 h-3.5" />
                 </button>
               </Tooltip>
             </div>
@@ -2393,9 +2406,9 @@ export const LibraryView: React.FC = () => {
                     type="button"
                     aria-label={t('close')}
                     onClick={() => setActiveBatchModal('none')}
-                    className="text-xs text-[#8E8E93] cursor-pointer px-1 rounded focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                    className="w-6 h-6 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                   >
-                    ✕
+                    <CloseIcon className="w-3.5 h-3.5" />
                   </button>
                 </Tooltip>
               </div>
@@ -2406,9 +2419,10 @@ export const LibraryView: React.FC = () => {
                       key={tg}
                       type="button"
                       onClick={() => handleConfirmBatchRemoveTag(tg)}
-                      className="px-2 py-0.5 rounded-md text-[11px] bg-[var(--status-danger-soft)] text-[var(--status-danger)] hover:opacity-85 cursor-pointer"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] bg-[var(--status-danger-soft)] text-[var(--status-danger)] hover:opacity-85 cursor-pointer"
                     >
-                      #{tg} ✕
+                      <span>#{tg}</span>
+                      <CloseIcon className="w-2.5 h-2.5" strokeWidth={2.5} />
                     </button>
                   ))}
                 </div>
@@ -2431,9 +2445,9 @@ export const LibraryView: React.FC = () => {
                     type="button"
                     aria-label={t('close')}
                     onClick={() => setActiveBatchModal('none')}
-                    className="text-xs text-[#8E8E93] cursor-pointer px-1 rounded focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                    className="w-6 h-6 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                   >
-                    ✕
+                    <CloseIcon className="w-3.5 h-3.5" />
                   </button>
                 </Tooltip>
               </div>
@@ -2513,22 +2527,27 @@ export const LibraryView: React.FC = () => {
                 isDark ? 'bg-[#1E1F28] border-[#323442] text-white' : 'bg-white border-[#E5E5EA] text-[#1D1D1F]'
               }`}
             >
-              <span className="text-[12px] text-[#8E8E93]">
-                {t('batchMoveDeck')}:
-              </span>
-              <select
-                value={batchTargetDeckId}
-                onChange={(e) => setBatchTargetDeckId(e.target.value)}
-                className={`h-8 px-3 rounded-xl border text-[12px] ${
-                  isDark ? 'bg-[#14151B] border-[#323442] text-white' : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#1D1D1F]'
-                }`}
+              <label
+                id="library-batch-deck-label"
+                htmlFor="library-batch-deck-select"
+                className="text-[12px] text-[#8E8E93] shrink-0"
               >
-                {decks.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.fullName || d.name}
-                  </option>
-                ))}
-              </select>
+                {t('batchMoveDeck')}:
+              </label>
+              <StudioSelect
+                id="library-batch-deck-select"
+                ariaLabelledBy="library-batch-deck-label"
+                size="sm"
+                side="top"
+                value={batchTargetDeckId}
+                options={decks.map((d) => ({
+                  value: d.id,
+                  label: d.fullName || d.name,
+                }))}
+                onChange={setBatchTargetDeckId}
+                searchable="auto"
+                className="min-w-[150px] max-w-[240px]"
+              />
               <button
                 onClick={handleConfirmBatchMoveDeck}
                 className="btn-primary !h-8 !px-3.5 !text-[12px]"
@@ -2540,9 +2559,9 @@ export const LibraryView: React.FC = () => {
                   type="button"
                   aria-label={t('close')}
                   onClick={() => setActiveBatchModal('none')}
-                  className="text-xs text-[#8E8E93] cursor-pointer px-1 rounded focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                  className="w-6 h-6 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                 >
-                  ✕
+                  <CloseIcon className="w-3.5 h-3.5" />
                 </button>
               </Tooltip>
             </div>

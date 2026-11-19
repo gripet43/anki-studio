@@ -366,11 +366,15 @@ export interface UserPreferences {
   /** 本地个人头像配置（不随 AnkiWeb 同步）。 */
   customAvatar?: CustomAvatarConfig;
   collapsedDeckIds: string[];
+  /** 左侧主导航栏是否收起为紧凑图标栏（全局界面偏好）。 */
+  sidebarCollapsed?: boolean;
   sandboxNoteTypeIds?: string[];
   debugMode?: boolean;
   showShortcutHints?: boolean;
   /** 是否展示主题配套插画与首页问候水印（默认开启）。 */
   showIllustrations?: boolean;
+  /** 是否在首页显示学习小贴士（默认开启；设置中关闭后永久隐藏）。 */
+  showDashboardTips?: boolean;
   /** 首页学习小贴士「今天不再显示」的日期（YYYY-MM-DD，持久化到 config）。 */
   tipsHiddenOn?: string;
   /** 匿名使用统计开关（默认开启，可关闭）。 */

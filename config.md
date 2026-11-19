@@ -34,6 +34,8 @@
 
 - `collapsed_deck_ids`：首页牌组列表中处于折叠状态的牌组 ID 数组。由界面自动维护，
   一般不需要手动修改。
+- `sidebar_collapsed`：`true` / `false`（默认 `false`）
+  左侧主导航栏是否收起为紧凑图标栏（`72px`）。点击侧边栏顶部的缩放按钮或按 `Cmd+\`（Windows / Linux 为 `Ctrl+\`）后由界面自动保存。
 - `sandbox_notetype_ids`：启用了「原生沙盒兼容模式」的卡型 ID 数组。在复习界面按卡型
   切换后由界面自动维护，用于让个别模板在隔离 iframe 中渲染；一般不需要手动修改。
 

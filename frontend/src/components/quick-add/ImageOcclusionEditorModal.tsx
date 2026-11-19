@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePresence } from '../../hooks/usePresence';
 import { Tooltip } from '../common/Tooltip';
+import { CloseIcon } from '../common/Icons';
 import { formatShortcut, translate } from '../../i18n/translations';
 import { useAppStore } from '../../stores/useAppStore';
 import { resolveMediaSrcValue } from '../../utils/mediaUrl';
@@ -480,7 +481,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
         >
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-[var(--brand-soft)] text-[var(--brand-text)] flex items-center justify-center">
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <rect x="3" y="3" width="18" height="18" rx="3" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <path d="m21 15-5-5L5 21" />
@@ -501,9 +502,9 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
               type="button"
               onClick={onClose}
               aria-label={t('close')}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current cursor-pointer"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors"
             >
-              ✕
+              <CloseIcon className="w-4 h-4" />
             </button>
           </Tooltip>
         </header>
@@ -560,7 +561,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
               <button
                 type="button"
                 onClick={() => setMode('hide-all')}
-                className={`h-7 px-2.5 rounded-lg text-[11px] font-medium cursor-pointer transition-all ${
+                className={`h-7 px-2.5 rounded-lg text-[11px] font-medium cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                   mode === 'hide-all'
                     ? 'bg-[var(--brand)] text-white shadow-2xs'
                     : 'text-[#8E8E93] hover:text-current'
@@ -571,7 +572,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
               <button
                 type="button"
                 onClick={() => setMode('hide-one')}
-                className={`h-7 px-2.5 rounded-lg text-[11px] font-medium cursor-pointer transition-all ${
+                className={`h-7 px-2.5 rounded-lg text-[11px] font-medium cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                   mode === 'hide-one'
                     ? 'bg-[var(--brand)] text-white shadow-2xs'
                     : 'text-[#8E8E93] hover:text-current'
@@ -595,7 +596,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
               }`}
             >
               <div className="w-12 h-12 rounded-2xl bg-[var(--brand-soft)] text-[var(--brand-text)] flex items-center justify-center mb-3">
-                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg className="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="17 8 12 3 7 8" />
                   <line x1="12" y1="3" x2="12" y2="15" />

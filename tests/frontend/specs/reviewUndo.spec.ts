@@ -169,3 +169,102 @@ test('renders localized Undo button label in English inside ··· drawer and cl
     });
   }
 });
+
+test('renders unified 2x3 six-button action grid inside ··· drawer and wires forgetCurrentReviewCard to undoStack', () => {
+  const prev = getAppState();
+  const c1 = makeReviewCard('101', 'Front 1');
+  const c2 = makeReviewCard('102', 'Front 2');
+  setAppState({
+    inReviewMode: true,
+    isSessionComplete: false,
+    inlineEditing: false,
+    inspectorOpen: true,
+    resolvedLang: 'zh-CN',
+    reviewQueue: [c1, c2],
+    currentCardIndex: 0,
+    undoStack: [],
+    libraryCards: [
+      {
+        id: '101',
+        noteId: 'n-101',
+        deckId: '1',
+        deckName: 'Default',
+        fullDeckName: 'Default',
+        noteTypeName: 'Basic',
+        isCloze: false,
+        front: 'Front 1',
+        back: 'Answer Alpha',
+        frontHtml: 'Front 1',
+        backHtml: 'Answer Alpha',
+        fields: { Front: 'Front 1', Back: 'Answer Alpha' },
+        fieldOrder: ['Front', 'Back'],
+        tags: [],
+        status: 'review',
+        dueText: '5d',
+        intervalDays: 5,
+        difficulty: 5,
+        stability: 5,
+        reps: 3,
+        lapses: 0,
+        suspended: false,
+        buried: false,
+        flags: 0,
+      },
+    ],
+  });
+  try {
+    const html = renderToStaticMarkup(React.createElement(ReviewerView));
+    ok(html.includes('grid grid-cols-2 gap-1.5'), 'Inspector footer should use symmetric 2x3 action grid');
+    ok(html.includes('aria-label="撤销"'), 'Grid slot 1: Undo');
+    ok(html.includes('aria-label="重置进度"') && html.includes('>重置进度<'), 'Grid slot 2: Reset Card');
+    ok(html.includes('>搁置至明日<'), 'Grid slot 3: Bury');
+    ok(html.includes('>暂停卡片<'), 'Grid slot 4: Suspend');
+    ok(html.includes('aria-label="复制调试信息"') && html.includes('>调试信息<'), 'Grid slot 5: Copy Debug Info');
+    ok(html.includes('aria-label="删除卡片"') && html.includes('>删除卡片<'), 'Grid slot 6: Delete Card');
+    ok(html.includes('bg-[var(--bg-card)]/96'), 'Inspector drawer surface must follow active paper theme via --bg-card');
+    const resetBtnMatch = html.match(/<button\b[^>]*aria-label="重置进度"[^>]*>/);
+    ok(
+      resetBtnMatch &&
+        resetBtnMatch[0].includes('bg-[var(--bg-card)]') &&
+        resetBtnMatch[0].includes('justify-center'),
+      'Enabled boxed inspector actions must use crisp --bg-card fill and centered alignment'
+    );
+    const deleteBtnMatch = html.match(/<button\b[^>]*aria-label="删除卡片"[^>]*>/);
+    ok(
+      deleteBtnMatch &&
+        deleteBtnMatch[0].includes('bg-[var(--bg-card)]') &&
+        deleteBtnMatch[0].includes('hover:bg-[var(--status-danger-soft)]'),
+      'Delete action stays calm at rest and reveals danger fill only on hover or confirmation'
+    );
+    doesNotMatch(html, /\btitle="/, 'Inspector action grid must never emit raw HTML title= attributes');
+
+    // Offline forget advances queue, marks library card as New, and pushes reversible undo snapshot
+    void appActions.forgetCurrentReviewCard();
+    equal(getAppState().reviewQueue.length, 1);
+    equal(getAppState().reviewQueue[0].id, '102');
+    equal(getAppState().undoStack.length, 1);
+    equal(getAppState().libraryCards[0].status, 'new');
+    equal(getAppState().libraryCards[0].intervalDays, 0);
+
+    // Undo restores previous card & library snapshot cleanly
+    void appActions.undoLastReview();
+    equal(getAppState().reviewQueue.length, 2);
+    equal(getAppState().reviewQueue[0].id, '101');
+    equal(getAppState().undoStack.length, 0);
+    equal(getAppState().libraryCards[0].status, 'review');
+    equal(getAppState().libraryCards[0].intervalDays, 5);
+  } finally {
+    setAppState({
+      inReviewMode: prev.inReviewMode,
+      isSessionComplete: prev.isSessionComplete,
+      inlineEditing: prev.inlineEditing,
+      inspectorOpen: prev.inspectorOpen,
+      resolvedLang: prev.resolvedLang,
+      reviewQueue: prev.reviewQueue,
+      currentCardIndex: prev.currentCardIndex,
+      undoStack: prev.undoStack,
+      libraryCards: prev.libraryCards,
+      toastMessage: prev.toastMessage,
+    });
+  }
+});

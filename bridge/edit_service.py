@@ -1059,6 +1059,44 @@ class EditService:
 
         return {"changed": True, "cardIds": [str(c) for c in card_ids], "buried": bury}
 
+    def forget_cards(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Resets one or more cards back to New via Anki's native scheduler API."""
+        col = self.col
+        card_ids = [int(cid) for cid in data.get("cardIds", []) if str(cid).isdigit()]
+        if "cardId" in data and str(data["cardId"]).isdigit():
+            cid_single = int(data["cardId"])
+            if cid_single not in card_ids:
+                card_ids.append(cid_single)
+
+        restore_position = bool(data.get("restorePosition", True))
+        reset_counts = bool(data.get("resetCounts", False))
+
+        if col is None or not card_ids:
+            return {
+                "changed": False,
+                "cardIds": [str(c) for c in card_ids],
+                "error": "Collection unavailable or no valid card IDs",
+            }
+
+        sched = getattr(col, "sched", None)
+        if sched is not None and hasattr(sched, "schedule_cards_as_new"):
+            sched.schedule_cards_as_new(
+                card_ids,
+                restore_position=restore_position,
+                reset_counts=reset_counts,
+            )
+        elif sched is not None and hasattr(sched, "forgetCards"):
+            sched.forgetCards(card_ids)
+        else:
+            raise RuntimeError("Current Anki scheduler does not support resetting cards as new")
+
+        return {
+            "changed": True,
+            "cardIds": [str(c) for c in card_ids],
+            "restorePosition": restore_position,
+            "resetCounts": reset_counts,
+        }
+
     def set_card_flag(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Sets or clears the 7-color user flag (0..7) on one or more cards."""
         col = self.col

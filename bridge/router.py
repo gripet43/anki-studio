@@ -353,10 +353,12 @@ class BridgeRouter:
             "customNickname": cfg.get("custom_nickname", ""),
             "customAvatar": self._resolve_custom_avatar(cfg),
             "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
+            "sidebarCollapsed": self.deck_service._coerce_bool(cfg.get("sidebar_collapsed"), False),
             "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
             "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
             "showIllustrations": self.deck_service._coerce_bool(cfg.get("show_illustrations"), True),
             "continuousCardCreation": bool(cfg.get("continuous_card_creation", False)),
+            "showDashboardTips": self.deck_service._resolve_show_dashboard_tips(cfg),
             "tipsHiddenOn": self._tips_hidden_on(cfg),
             "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),
             "autoPlayFrontAudio": auto_play_front_audio,
@@ -379,6 +381,10 @@ class BridgeRouter:
             patch["custom_nickname"] = str(data["customNickname"]).strip()
         if "collapsedDeckIds" in data and isinstance(data["collapsedDeckIds"], list):
             patch["collapsed_deck_ids"] = [str(x) for x in data["collapsedDeckIds"]]
+        if "sidebarCollapsed" in data:
+            patch["sidebar_collapsed"] = self.deck_service._coerce_bool(
+                data["sidebarCollapsed"], False
+            )
         if "sandboxNoteTypeIds" in data and isinstance(data["sandboxNoteTypeIds"], list):
             patch["sandbox_notetype_ids"] = [str(x) for x in data["sandboxNoteTypeIds"] if str(x).strip()]
         if "showShortcutHints" in data:
@@ -417,6 +423,12 @@ class BridgeRouter:
             patch["review_content_scale"] = (
                 scale_val if scale_val in (90, 100, 115, 130, 150) else 100
             )
+        if "showDashboardTips" in data:
+            show_tips = self.deck_service._coerce_bool(data["showDashboardTips"], True)
+            patch["show_dashboard_tips"] = show_tips
+            patch["dashboard_tips_dismissed"] = not show_tips
+            if show_tips and "tipsHiddenOn" not in data:
+                patch["dashboard_tips_hidden_on"] = ""
         if "tipsHiddenOn" in data:
             hidden_on = str(data["tipsHiddenOn"] or "").strip()
             if hidden_on:
@@ -472,11 +484,13 @@ class BridgeRouter:
                 "customNickname": saved.get("custom_nickname", ""),
                 "customAvatar": self._resolve_custom_avatar(saved),
                 "collapsedDeckIds": saved.get("collapsed_deck_ids", []),
+                "sidebarCollapsed": self.deck_service._coerce_bool(saved.get("sidebar_collapsed"), False),
                 "sandboxNoteTypeIds": [str(x) for x in (saved.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(saved.get("show_shortcut_hints", False)),
                 "showIllustrations": self.deck_service._coerce_bool(saved.get("show_illustrations"), True),
                 "continuousCardCreation": bool(saved.get("continuous_card_creation", False)),
-                "tipsHiddenOn": str(saved.get("dashboard_tips_hidden_on") or ""),
+                "showDashboardTips": self.deck_service._resolve_show_dashboard_tips(saved),
+                "tipsHiddenOn": self._tips_hidden_on(saved),
                 "analyticsEnabled": bool(saved.get("analytics_enabled", True)),
                 "answerButtonMode": str(saved.get("answer_button_mode") or "binary"),
                 "autoPlayFrontAudio": auto_play_front_audio,
@@ -603,14 +617,8 @@ class BridgeRouter:
 
     @staticmethod
     def _tips_hidden_on(cfg: Dict[str, Any]) -> str:
-        """首页小贴士的「今天不再显示」日期（YYYY-MM-DD）。
-
-        兼容 1.4.24 的永久收起开关：若旧字段为 true 且没有新日期，视为今天已隐藏。
-        """
-        hidden_on = str(cfg.get("dashboard_tips_hidden_on") or "").strip()
-        if not hidden_on and cfg.get("dashboard_tips_dismissed"):
-            hidden_on = datetime.date.today().isoformat()
-        return hidden_on
+        """首页小贴士的「今天不再显示」日期（YYYY-MM-DD）；永久关闭由 `show_dashboard_tips` 独立控制。"""
+        return str((cfg or {}).get("dashboard_tips_hidden_on") or "").strip()
 
     def action_toggle_notetype_sandbox(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Toggles per-NoteType Track B Sandbox Compatibility Mode and persists in config."""
@@ -820,6 +828,9 @@ class BridgeRouter:
 
     def action_toggle_bury(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.edit_service.toggle_bury_card(data)
+
+    def action_forget_cards(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.edit_service.forget_cards(data)
 
     def action_set_card_flag(self, data: Dict[str, Any]) -> Dict[str, Any]:
         return self.edit_service.set_card_flag(data)

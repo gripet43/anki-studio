@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { formatShortcut, translate } from '../../i18n/translations';
 import { Tooltip } from '../common/Tooltip';
+import {
+  AlignCenterIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
+  CheckIcon,
+} from '../common/Icons';
 import { useAppStore } from '../../stores/useAppStore';
 import { resolveMediaInHtml } from '../../utils/mediaUrl';
 import {
@@ -2206,7 +2212,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     headingOpen || activeFormats.heading ? activeIconBtnClass : ''
                   }`}
                 >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <line x1="4" y1="9" x2="20" y2="9" />
                     <line x1="4" y1="15" x2="20" y2="15" />
                     <line x1="10" y1="3" x2="8" y2="21" />
@@ -2217,7 +2223,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
               {headingOpen && (
                 <div
-                  className="dashboard-tooltip absolute start-0 top-8 z-50 w-40 rounded-xl border p-1 space-y-0.5 animate-in fade-in duration-150"
+                  className="dashboard-tooltip absolute start-0 top-8 z-50 w-40 rounded-xl border p-1 space-y-0.5 animate-flyout-enter flyout-origin-start"
                 >
                   <button
                     type="button"
@@ -2229,7 +2235,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     }`}
                   >
                     <span>{t('editorHeadingParagraph')}</span>
-                    {activeFormats.heading === '' && <span>✓</span>}
+                    {activeFormats.heading === '' && <CheckIcon className="w-3.5 h-3.5" strokeWidth={2.4} />}
                   </button>
                   <button
                     type="button"
@@ -2241,7 +2247,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     }`}
                   >
                     <span>{t('editorHeading1')}</span>
-                    {activeFormats.heading === 'h1' && <span className="text-[12px]">✓</span>}
+                    {activeFormats.heading === 'h1' && <CheckIcon className="w-3.5 h-3.5" strokeWidth={2.4} />}
                   </button>
                   <button
                     type="button"
@@ -2253,7 +2259,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     }`}
                   >
                     <span>{t('editorHeading2')}</span>
-                    {activeFormats.heading === 'h2' && <span className="text-[12px]">✓</span>}
+                    {activeFormats.heading === 'h2' && <CheckIcon className="w-3.5 h-3.5" strokeWidth={2.4} />}
                   </button>
                   <button
                     type="button"
@@ -2265,7 +2271,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     }`}
                   >
                     <span>{t('editorHeading3')}</span>
-                    {activeFormats.heading === 'h3' && <span className="text-[12px]">✓</span>}
+                    {activeFormats.heading === 'h3' && <CheckIcon className="w-3.5 h-3.5" strokeWidth={2.4} />}
                   </button>
                 </div>
               )}
@@ -2283,7 +2289,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                   aria-expanded={emojiOpen}
                   className={`${iconBtnClass} ${emojiOpen ? activeIconBtnClass : ''}`}
                 >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="10" />
                     <path d="M8 14s1.5 2 4 2 4-2 4-2" />
                     <line x1="9" y1="9" x2="9.01" y2="9" />
@@ -2296,7 +2302,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 <div
                   role="menu"
                   aria-label={t('editorToolEmoji')}
-                  className="dashboard-tooltip absolute start-0 top-8 z-50 p-2 rounded-xl border grid grid-cols-5 gap-1 w-52 animate-in fade-in duration-150"
+                  className="dashboard-tooltip absolute start-0 top-8 z-50 p-2 rounded-xl border grid grid-cols-5 gap-1 w-52 animate-flyout-enter flyout-origin-start"
                 >
                   {STUDY_EMOJIS.map((em) => (
                     <button
@@ -2359,7 +2365,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 aria-pressed={activeFormats.orderedList}
                 className={`${iconBtnClass} ${activeFormats.orderedList ? activeIconBtnClass : ''}`}
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <line x1="10" y1="6" x2="21" y2="6" />
                   <line x1="10" y1="12" x2="21" y2="12" />
                   <line x1="10" y1="18" x2="21" y2="18" />
@@ -2381,7 +2387,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 aria-pressed={activeFormats.unorderedList}
                 className={`${iconBtnClass} ${activeFormats.unorderedList ? activeIconBtnClass : ''}`}
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <line x1="9" y1="6" x2="20" y2="6" />
                   <line x1="9" y1="12" x2="20" y2="12" />
                   <line x1="9" y1="18" x2="20" y2="18" />
@@ -2403,7 +2409,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 aria-pressed={activeFormats.blockquote}
                 className={`${iconBtnClass} ${activeFormats.blockquote ? activeIconBtnClass : ''}`}
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
                   <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
                 </svg>
@@ -2420,7 +2426,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 aria-label={t('ioUploadImageBtn')}
                 className={iconBtnClass}
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
                   <circle cx="9" cy="9" r="2" />
                   <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
@@ -2439,7 +2445,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 aria-pressed={activeFormats.code}
                 className={`${iconBtnClass} ${activeFormats.code ? activeIconBtnClass : ''}`}
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polyline points="16 18 22 12 16 6" />
                   <polyline points="8 6 2 12 8 18" />
                 </svg>
@@ -2458,7 +2464,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                   aria-expanded={tableOpen}
                   className={`${iconBtnClass} ${tableOpen ? activeIconBtnClass : ''}`}
                 >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <rect width="18" height="18" x="3" y="3" rx="2" />
                     <path d="M3 9h18" />
                     <path d="M3 15h18" />
@@ -2470,7 +2476,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
               {tableOpen && (
                 <div
-                  className="dashboard-tooltip absolute start-0 top-8 z-50 p-1.5 rounded-xl border w-32 animate-in fade-in duration-150"
+                  className="dashboard-tooltip absolute start-0 top-8 z-50 p-1.5 rounded-xl border w-32 animate-flyout-enter flyout-origin-start"
                 >
                   <button
                     type="button"
@@ -2513,7 +2519,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 aria-label={t('editorToolDivider')}
                 className={iconBtnClass}
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <line x1="3" y1="12" x2="21" y2="12" />
                 </svg>
               </button>
@@ -2531,7 +2537,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                   aria-expanded={alignOpen}
                   className={`${iconBtnClass} ${alignOpen ? activeIconBtnClass : ''}`}
                 >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <line x1="3" y1="6" x2="21" y2="6" />
                     <line x1="3" y1="12" x2="15" y2="12" />
                     <line x1="3" y1="18" x2="18" y2="18" />
@@ -2541,7 +2547,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
               {alignOpen && (
                 <div
-                  className="dashboard-tooltip absolute start-0 top-8 z-50 p-1 rounded-xl border w-32 space-y-0.5 animate-in fade-in duration-150"
+                  className="dashboard-tooltip absolute start-0 top-8 z-50 p-1 rounded-xl border w-32 space-y-0.5 animate-flyout-enter flyout-origin-start"
                 >
                   <button
                     type="button"
@@ -2553,7 +2559,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     }}
                     className="w-full text-start px-2.5 py-1.5 text-[12px] rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer flex items-center gap-2"
                   >
-                    <span className="font-mono text-[11px] opacity-70">⇤</span>
+                    <AlignLeftIcon className="w-3.5 h-3.5 opacity-75" />
                     <span>{t('editorAlignLeft')}</span>
                   </button>
                   <button
@@ -2566,7 +2572,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     }}
                     className="w-full text-start px-2.5 py-1.5 text-[12px] rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer flex items-center gap-2"
                   >
-                    <span className="font-mono text-[11px] opacity-70">⇔</span>
+                    <AlignCenterIcon className="w-3.5 h-3.5 opacity-75" />
                     <span>{t('editorAlignCenter')}</span>
                   </button>
                   <button
@@ -2579,7 +2585,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                     }}
                     className="w-full text-start px-2.5 py-1.5 text-[12px] rounded-lg hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] cursor-pointer flex items-center gap-2"
                   >
-                    <span className="font-mono text-[11px] opacity-70">⇥</span>
+                    <AlignRightIcon className="w-3.5 h-3.5 opacity-75" />
                     <span>{t('editorAlignRight')}</span>
                   </button>
                 </div>
@@ -2596,7 +2602,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 aria-label={t('editorToolOutdent')}
                 className={iconBtnClass}
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polyline points="7 8 3 12 7 16" />
                   <line x1="21" y1="12" x2="11" y2="12" />
                   <line x1="21" y1="6" x2="11" y2="6" />
@@ -2613,7 +2619,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                 aria-label={t('editorToolIndent')}
                 className={iconBtnClass}
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polyline points="17 8 21 12 17 16" />
                   <line x1="3" y1="12" x2="13" y2="12" />
                   <line x1="3" y1="6" x2="13" y2="6" />
@@ -2683,7 +2689,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
                       : 'bg-black/5 hover:bg-black/10 text-[#3A3A3C]'
                   }`}
                 >
-                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <rect x="3" y="3" width="18" height="18" rx="3" />
                     <circle cx="8.5" cy="8.5" r="1.5" />
                     <path d="m21 15-5-5L5 21" />
@@ -2748,7 +2754,7 @@ export const TowerWysiwygEditor: React.FC<TowerWysiwygEditorProps> = ({
 
             {helpOpen && (
               <div
-                className="dashboard-tooltip absolute end-0 top-7 z-50 p-3 rounded-xl border w-64 text-[11px] space-y-1.5 animate-in fade-in duration-150"
+                className="dashboard-tooltip absolute end-0 top-7 z-50 p-3 rounded-xl border w-64 text-[11px] space-y-1.5 animate-flyout-enter flyout-origin-end"
               >
                 <div className="font-bold text-[12px] pb-1 border-b border-black/10 dark:border-white/10 text-[var(--brand-text)]">
                   {t('editorHelpTitle')}

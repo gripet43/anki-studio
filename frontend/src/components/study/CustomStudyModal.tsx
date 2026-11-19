@@ -7,7 +7,9 @@ import {
   isAnkiNativeEnv,
 } from '../../bridge/pycmd';
 import { usePresence } from '../../hooks/usePresence';
+import { StudioSelect } from '../common/StudioSelect';
 import { Tooltip } from '../common/Tooltip';
+import { ChevronDownIcon, CloseIcon } from '../common/Icons';
 import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
@@ -193,7 +195,7 @@ export const CustomStudyModal: React.FC = () => {
       titleKey: 'customStudyPresetMistakesTitle',
       descKey: 'customStudyPresetMistakesDesc',
       icon: (
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
           <line x1="12" y1="8" x2="12" y2="12" />
           <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -205,7 +207,7 @@ export const CustomStudyModal: React.FC = () => {
       titleKey: 'customStudyPresetFlaggedTitle',
       descKey: 'customStudyPresetFlaggedDesc',
       icon: (
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
           <line x1="4" y1="22" x2="4" y2="15" />
         </svg>
@@ -216,7 +218,7 @@ export const CustomStudyModal: React.FC = () => {
       titleKey: 'customStudyPresetAheadTitle',
       descKey: 'customStudyPresetAheadDesc',
       icon: (
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
         </svg>
       ),
@@ -226,7 +228,7 @@ export const CustomStudyModal: React.FC = () => {
       titleKey: 'customStudyPresetExtraNewTitle',
       descKey: 'customStudyPresetExtraNewDesc',
       icon: (
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
@@ -297,7 +299,7 @@ export const CustomStudyModal: React.FC = () => {
         <button
           type="button"
           onClick={() => setFlag('all')}
-          className={`h-7 px-2.5 rounded-lg border text-[11px] font-medium cursor-pointer transition-all ${
+          className={`h-7 px-2.5 rounded-lg border text-[11px] font-medium cursor-pointer transition-[background-color,border-color,color,opacity] ${
             flag === 'all'
               ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand)] font-semibold'
               : `${controlBg} opacity-80 hover:opacity-100 hover:border-[var(--brand-border)]`
@@ -309,7 +311,7 @@ export const CustomStudyModal: React.FC = () => {
         <button
           type="button"
           onClick={() => setFlag('flagged')}
-          className={`h-7 px-2.5 rounded-lg border text-[11px] font-medium cursor-pointer transition-all ${
+          className={`h-7 px-2.5 rounded-lg border text-[11px] font-medium cursor-pointer transition-[background-color,border-color,color,opacity] ${
             flag === 'flagged'
               ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand)] font-semibold'
               : `${controlBg} opacity-80 hover:opacity-100 hover:border-[var(--brand-border)]`
@@ -326,7 +328,7 @@ export const CustomStudyModal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setFlag(isSel ? 'all' : String(fNum))}
-              className={`h-7 px-2 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-all ${
+              className={`h-7 px-2 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 cursor-pointer transition-[background-color,border-color,color,box-shadow,opacity] ${
                 isSel
                   ? 'font-semibold shadow-2xs'
                   : `${controlBg} opacity-85 hover:opacity-100`
@@ -356,21 +358,26 @@ export const CustomStudyModal: React.FC = () => {
 
   const renderTagSelector = () => (
     <div>
-      <label className={`block text-[11.5px] font-medium ${subText} mb-1.5`}>
+      <label
+        id="custom-study-tag-label"
+        htmlFor="custom-study-tag-select"
+        className={`block text-[11.5px] font-medium ${subText} mb-1.5`}
+      >
         {t('customStudyFilterByTagLabel')}
       </label>
-      <select
+      <StudioSelect
+        id="custom-study-tag-select"
+        ariaLabelledBy="custom-study-tag-label"
+        size="sm"
         value={tag}
-        onChange={(e) => setTag(e.target.value)}
-        className={`w-full h-8 px-2.5 rounded-xl border text-[12px] focus:outline-none focus:border-[var(--brand)] transition-colors cursor-pointer ${controlBg}`}
-      >
-        <option value="all">{t('anyTagOption')}</option>
-        {availableTags.map((tg) => (
-          <option key={tg} value={tg}>
-            #{tg}
-          </option>
-        ))}
-      </select>
+        options={[
+          { value: 'all', label: t('anyTagOption') },
+          ...availableTags.map((tg) => ({ value: tg, label: `#${tg}` })),
+        ]}
+        onChange={setTag}
+        searchable="auto"
+        className="w-full"
+      />
     </div>
   );
 
@@ -390,7 +397,7 @@ export const CustomStudyModal: React.FC = () => {
         <header className="px-5 py-3.5 border-b border-black/5 dark:border-white/8 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-xl bg-[var(--brand-soft)] text-[var(--brand-text)] flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1">
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="9.5" />
                 <circle cx="12" cy="12" r="5.5" />
                 <circle cx="12" cy="12" r="1.8" fill="currentColor" />
@@ -410,20 +417,24 @@ export const CustomStudyModal: React.FC = () => {
               >
                 {t('customStudyTargetDeckLabel')}
               </label>
-              <select
+              <StudioSelect
                 id="custom-study-deck-select"
+                size="sm"
+                align="end"
                 value={deckId}
-                onChange={(e) => setDeckId(e.target.value)}
-                aria-label={t('customStudyTargetDeckLabel')}
-                className={`h-8 max-w-[180px] px-2.5 rounded-lg border text-[12px] font-medium focus:outline-none focus:border-[var(--brand)] cursor-pointer transition-colors ${controlBg}`}
-              >
-                <option value="all">{t('allDecksOption')}</option>
-                {decks.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.fullName || d.name}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: 'all', label: t('allDecksOption') },
+                  ...decks.map((d) => ({
+                    value: d.id,
+                    label: d.fullName || d.name,
+                  })),
+                ]}
+                onChange={setDeckId}
+                ariaLabel={t('customStudyTargetDeckLabel')}
+                searchable="auto"
+                className="w-[164px] max-w-[180px] !rounded-lg font-medium"
+                menuClassName="min-w-[200px]"
+              />
             </div>
 
             <Tooltip variant="compact" content={t('close')} shortcut="Esc" side="bottom">
@@ -433,7 +444,7 @@ export const CustomStudyModal: React.FC = () => {
                 aria-label={t('close')}
                 className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors"
               >
-                ✕
+                <CloseIcon className="w-4 h-4" />
               </button>
             </Tooltip>
           </div>
@@ -456,7 +467,7 @@ export const CustomStudyModal: React.FC = () => {
                   role="radio"
                   aria-checked={active}
                   onClick={() => handleSelectPreset(item.id)}
-                  className={`relative p-3.5 rounded-xl border text-start transition-all cursor-pointer flex items-start gap-3 ${
+                  className={`relative p-3.5 rounded-xl border text-start transition-[background-color,border-color,box-shadow] cursor-pointer flex items-start gap-3 ${
                     active
                       ? 'bg-[var(--brand-soft)]/65 border-[var(--brand)] ring-1 ring-[var(--brand)]/35 shadow-2xs'
                       : `${cardSurface} hover:border-[var(--brand-border)]`
@@ -517,7 +528,7 @@ export const CustomStudyModal: React.FC = () => {
                         key={dVal}
                         type="button"
                         onClick={() => setDays(dVal)}
-                        className={`h-8 rounded-lg border text-[12px] font-medium cursor-pointer transition-all ${
+                        className={`h-8 rounded-lg border text-[12px] font-medium cursor-pointer transition-[background-color,border-color,color] ${
                           active
                             ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold'
                             : `${controlBg} hover:border-[var(--brand-border)]`
@@ -555,7 +566,7 @@ export const CustomStudyModal: React.FC = () => {
                         key={cnt}
                         type="button"
                         onClick={() => setLimit(cnt)}
-                        className={`rounded-lg text-[12px] font-mono transition-all cursor-pointer ${
+                        className={`rounded-lg text-[12px] font-mono transition-[background-color,color,box-shadow] cursor-pointer ${
                           active
                             ? 'bg-white dark:bg-[#2A2C38] text-[var(--brand-text)] font-semibold shadow-2xs'
                             : `${subText} hover:text-current`
@@ -570,31 +581,40 @@ export const CustomStudyModal: React.FC = () => {
 
               {/* Card Sort Order */}
               <div>
-                <label className={`block text-[11.5px] font-medium ${subText} mb-1.5`}>
+                <label
+                  id="custom-study-sort-label"
+                  htmlFor="custom-study-sort-select"
+                  className={`block text-[11.5px] font-medium ${subText} mb-1.5`}
+                >
                   {t('customStudyCardOrderLabel')}
                 </label>
-                <select
+                <StudioSelect
+                  id="custom-study-sort-select"
+                  ariaLabelledBy="custom-study-sort-label"
+                  size="sm"
                   value={
                     preset === 'extra_new' &&
                     sortOrder !== 'due_asc' &&
                     sortOrder !== 'random'
                       ? 'due_asc'
-                      : sortOrder
+                      : sortOrder ?? 'due_asc'
                   }
-                  onChange={(e) =>
-                    setSortOrder(e.target.value as CustomStudyParams['sortOrder'])
+                  options={[
+                    ...(preset !== 'extra_new'
+                      ? [
+                          { value: 'lapses_desc', label: t('sortLapsesDesc') },
+                          { value: 'ivl_asc', label: t('sortIvlAsc') },
+                        ]
+                      : []),
+                    { value: 'due_asc', label: t('sortDueAsc') },
+                    { value: 'random', label: t('sortRandom') },
+                  ]}
+                  onChange={(val) =>
+                    setSortOrder(val as CustomStudyParams['sortOrder'])
                   }
-                  className={`w-full h-8 px-2.5 rounded-xl border text-[12px] focus:outline-none focus:border-[var(--brand)] transition-colors cursor-pointer ${controlBg}`}
-                >
-                  {preset !== 'extra_new' && (
-                    <>
-                      <option value="lapses_desc">{t('sortLapsesDesc')}</option>
-                      <option value="ivl_asc">{t('sortIvlAsc')}</option>
-                    </>
-                  )}
-                  <option value="due_asc">{t('sortDueAsc')}</option>
-                  <option value="random">{t('sortRandom')}</option>
-                </select>
+                  searchable={false}
+                  className="w-full"
+                />
               </div>
             </div>
           </div>
@@ -603,7 +623,7 @@ export const CustomStudyModal: React.FC = () => {
           {preset !== 'flagged' && (
             <details
               open={hasSecondaryFilters || undefined}
-              className={`rounded-xl border px-4 py-2.5 text-[12px] group ${cardSurface}`}
+              className={`studio-details rounded-xl border px-4 py-2.5 text-[12px] group ${cardSurface}`}
             >
               <summary className="flex items-center justify-between cursor-pointer list-none select-none">
                 <div className="flex items-center gap-2 min-w-0">
@@ -615,6 +635,7 @@ export const CustomStudyModal: React.FC = () => {
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
+                    aria-hidden="true"
                   >
                     <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
                   </svg>
@@ -629,8 +650,9 @@ export const CustomStudyModal: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <span className="text-[11px] text-[var(--brand-text)] font-medium shrink-0 ms-2">
-                  {t('customizeLabel')} ▾
+                <span className="text-[11px] text-[var(--brand-text)] font-medium shrink-0 ms-2 inline-flex items-center gap-1">
+                  <span>{t('customizeLabel')}</span>
+                  <ChevronDownIcon className="w-3.5 h-3.5 studio-details-chevron" />
                 </span>
               </summary>
 
@@ -696,7 +718,7 @@ export const CustomStudyModal: React.FC = () => {
           <div className="text-[12px] min-w-0 truncate">
             {previewLoading ? (
               <span className={`inline-flex items-center gap-1.5 ${subText}`}>
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand)] animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand)] motion-safe:animate-pulse" />
                 <span>{t('searchingShort')}</span>
               </span>
             ) : matchedCount !== null ? (

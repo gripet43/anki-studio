@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useReducer, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useReducer, useRef } from 'react';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { DecksView } from './components/decks/DecksView';
 import { DesignSystemView } from './components/design-system/DesignSystemView';
@@ -15,7 +15,12 @@ import { IcuRescueModal } from './components/vacation/IcuRescueModal';
 import { usePresence } from './hooks/usePresence';
 import { ensureLanguageLoaded, isLanguageLoaded, isRtlLanguage, translate } from './i18n/translations';
 import { appActions, getAppState, setAppState, showToast, useAppStore } from './stores/useAppStore';
+import { isTypingTarget } from './utils/domTarget';
 import { buildThemeCssVars, resolveThemeMode } from './utils/themeTokens';
+import { isThemeViewTransitionActive } from './utils/viewTransition';
+
+const useIsomorphicLayoutEffect =
+  typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 export const App: React.FC = () => {
   const {
@@ -24,7 +29,12 @@ export const App: React.FC = () => {
     inReviewMode,
     cmdKOpen,
     quickAddOpen,
+    editingCardData,
     settingsOpen,
+    vacationModalOpen,
+    icuModalOpen,
+    customStudyModalOpen,
+    inlineEditing,
     theme,
     systemDark,
     accentColor,
@@ -62,13 +72,16 @@ export const App: React.FC = () => {
     };
   }, [resolvedLang]);
 
-  // Smooth 260ms color/surface cross-fade when user switches theme or accentColor (F)
-  // Skips initial mount and does NOT trigger on language/RTL changes.
+  // Smooth 260ms color/surface cross-fade fallback when View Transitions are unavailable.
+  // Skips initial mount, ViewTransition-handled switches, and language/RTL changes.
   const themeMountedRef = useRef<boolean>(false);
   const themeSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!themeMountedRef.current) {
       themeMountedRef.current = true;
+      return;
+    }
+    if (isThemeViewTransitionActive()) {
       return;
     }
     const rootEl = document.documentElement;
@@ -89,8 +102,8 @@ export const App: React.FC = () => {
   }, [theme, resolvedTheme, accentColor]);
 
   // Synchronize CSS variables, color-scheme meta, theme class, and language/RTL direction onto document.documentElement
-  // so portals and root-level styles always reflect the active theme, accent, and text direction.
-  useEffect(() => {
+  // synchronously in layout phase so flushSync View Transitions capture updated tokens cleanly.
+  useIsomorphicLayoutEffect(() => {
     const rootEl = document.documentElement;
     rootEl.classList.toggle('dark', resolvedTheme === 'dark');
     rootEl.classList.remove('oled');
@@ -144,7 +157,7 @@ export const App: React.FC = () => {
     };
 
     const onOpenSettings = () => {
-      setAppState({ settingsOpen: true });
+      setAppState({ settingsOpen: true, settingsInitialTab: 'appearance' });
     };
 
     const onDayChanged = (e: Event) => {
@@ -253,6 +266,7 @@ export const App: React.FC = () => {
 
   // Global keyboard shortcuts:
   // - Cmd+K / Ctrl+K: Search Palette
+  // - Cmd+\ / Ctrl+\: Collapse / Expand Left Navigation Sidebar
   // - Ctrl+P / Cmd+, / Ctrl+,: Preferences & Settings Modal (aligned with Anki Tools -> Preferences)
   // - N: Quick Add Drawer
   // - Ctrl+Opt+M / Ctrl+Alt+M: Fail-safe Native UI Toggle
@@ -264,6 +278,8 @@ export const App: React.FC = () => {
         appActions.triggerNativeEscape();
         return;
       }
+
+      const typing = isTypingTarget(e.target);
 
       if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
         e.preventDefault();
@@ -277,6 +293,31 @@ export const App: React.FC = () => {
         return;
       }
 
+      // Cmd/Ctrl + \: Toggle collapsible left navigation sidebar
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        (e.key === '\\' || e.code === 'Backslash')
+      ) {
+        if (
+          !typing &&
+          !inReviewMode &&
+          !inlineEditing &&
+          !cmdKOpen &&
+          !quickAddOpen &&
+          !editingCardData &&
+          !settingsOpen &&
+          !vacationModalOpen &&
+          !icuModalOpen &&
+          !customStudyModalOpen
+        ) {
+          e.preventDefault();
+          appActions.toggleSidebar();
+        }
+        return;
+      }
+
       if (
         (e.metaKey || e.ctrlKey) &&
         !e.altKey &&
@@ -284,16 +325,17 @@ export const App: React.FC = () => {
         (e.key.toLowerCase() === 'p' || e.key === ',')
       ) {
         e.preventDefault();
-        setAppState((prev) => ({ settingsOpen: !prev.settingsOpen }));
+        setAppState((prev) =>
+          prev.settingsOpen
+            ? { settingsOpen: false }
+            : { settingsOpen: true, settingsInitialTab: 'appearance' }
+        );
         return;
       }
 
-      const targetTag = (e.target as HTMLElement)?.tagName;
-      const isTyping = targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'SELECT';
-
       // N: Quick Add Drawer
       if (
-        !isTyping &&
+        !typing &&
         !inReviewMode &&
         !cmdKOpen &&
         !quickAddOpen &&
@@ -307,7 +349,7 @@ export const App: React.FC = () => {
 
       // Y: Anki Standard Manual Cloud Sync
       if (
-        !isTyping &&
+        !typing &&
         !inReviewMode &&
         !cmdKOpen &&
         !quickAddOpen &&
@@ -325,7 +367,17 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [inReviewMode, cmdKOpen, quickAddOpen, settingsOpen]);
+  }, [
+    inReviewMode,
+    inlineEditing,
+    cmdKOpen,
+    quickAddOpen,
+    editingCardData,
+    settingsOpen,
+    vacationModalOpen,
+    icuModalOpen,
+    customStudyModalOpen,
+  ]);
 
   const rootBg =
     resolvedTheme === 'dark'
@@ -355,7 +407,7 @@ export const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Fullscreen Zen Reviewer & Inline WYSIWYG Editor */}
+      {/* Fullscreen Reviewer & Inline WYSIWYG Editor */}
       {inReviewMode && <ReviewerView />}
 
       {/* Raycast-Style Global Search Modal (Cmd + K) */}

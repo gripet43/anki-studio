@@ -21,6 +21,7 @@ import {
 import { usePresence } from '../../hooks/usePresence';
 import { formatShortcut } from '../../i18n/translations';
 import { useAppStore } from '../../stores/useAppStore';
+import { getClosestFromTarget } from '../../utils/domTarget';
 
 export type TooltipVariant = 'compact' | 'chart';
 export type TooltipAriaLabelMode = 'auto' | 'describe' | 'decorative';
@@ -105,8 +106,10 @@ export function ChartTooltipContent({
         <div className="flex flex-col gap-0.5 tabular-nums">
           {rows.map((row, idx) => (
             <div key={idx} className="flex items-center justify-between gap-3">
-              <span className="text-[var(--text-secondary)]">{row.label}</span>
-              <span className={`font-semibold ${ROW_TONE_CLASSES[row.tone ?? 'default']}`}>
+              <span className="text-[var(--text-secondary)] whitespace-nowrap">{row.label}</span>
+              <span
+                className={`font-semibold whitespace-nowrap ${ROW_TONE_CLASSES[row.tone ?? 'default']}`}
+              >
                 {row.value}
               </span>
             </div>
@@ -536,6 +539,10 @@ export function Tooltip({
   });
 
   const displayContent = isOpen ? content : cachedContentRef.current;
+  const hostDialog =
+    typeof document !== 'undefined' && triggerEl
+      ? getClosestFromTarget(triggerEl, 'dialog[open]')
+      : null;
 
   return (
     <>
@@ -566,7 +573,7 @@ export function Tooltip({
                 displayContent
               )}
             </div>,
-            document.body,
+            hostDialog ?? document.body,
           )
         : null}
     </>

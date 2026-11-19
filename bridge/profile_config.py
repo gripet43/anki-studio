@@ -65,7 +65,7 @@ ALLOWED_AVATAR_MIME_TO_EXT: Dict[str, str] = {
 
 MAX_AVATAR_BYTES = 512 * 1024
 MAX_AVATAR_PICK_BYTES = 16 * 1024 * 1024
-AVATAR_PICK_MAX_DIMENSION = 512
+AVATAR_PICK_MAX_DIMENSION = 1024
 
 _AVATAR_DATA_URL_RE = re.compile(
     r"^data:([a-zA-Z0-9.+_-]+/[a-zA-Z0-9.+_-]+);base64,([A-Za-z0-9+/=\s]+)$",

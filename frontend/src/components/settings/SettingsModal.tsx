@@ -2,9 +2,12 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { AnkiStudioLogo } from '../common/AnkiStudioLogo';
 import { Tooltip } from '../common/Tooltip';
 import { SyncStateIcon, SyncVisualState } from '../common/SyncStateIcon';
+import { CheckIcon, DownloadIcon, SyncArrowsIcon, UploadIcon } from '../common/Icons';
 import { UserAvatar } from '../common/UserAvatar';
+import { AvatarCropModal } from './AvatarCropModal';
 import { ReviewerWidthGlyph } from '../reviewer/ReviewerView';
 import { usePresence } from '../../hooks/usePresence';
+import { runThemeViewTransition } from '../../utils/viewTransition';
 import {
   formatAbsoluteSyncTooltip,
   formatRelativeSyncLabel,
@@ -31,15 +34,17 @@ import {
 } from '../../bridge/pycmd';
 import {
   AVATAR_IMAGE_ACCEPT,
+  type AvatarCropTransform,
+  AvatarImageError,
   isDefaultCustomAvatar,
   normalizeCustomAvatarConfig,
+  validateAvatarSourceFile,
 } from '../../utils/avatarImage';
 import {
   ACCENT_COLOR_LIST,
   getAccentScale,
   resolveThemeMode,
 } from '../../utils/themeTokens';
-import { getEffectiveDayKey } from '../../utils/localDate';
 
 const XIAOHONGSHU_PROFILE_URL =
   'https://www.xiaohongshu.com/user/profile/6496d6f8000000001001ff0f';
@@ -179,19 +184,26 @@ export const SettingsModal: React.FC = () => {
     envInfo,
     showShortcutHints,
     showIllustrations,
-    tipsHiddenOn,
+    showDashboardTips,
     analyticsEnabled,
     answerButtonMode,
     autoPlayFrontAudio,
     autoPlayBackAudio,
     reviewStageWidth,
     reviewContentScale,
-    dayBoundary,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(settingsInitialTab || 'appearance');
   const [nicknameDraft, setNicknameDraft] = useState(customNickname || '');
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarCropSaving, setAvatarCropSaving] = useState(false);
+  const [pendingAvatarCrop, setPendingAvatarCrop] = useState<{
+    source: File | Blob | string;
+    previewUrl: string;
+    revokeOnClose: boolean;
+  } | null>(null);
+  const pendingAvatarCropRef = useRef(pendingAvatarCrop);
+  pendingAvatarCropRef.current = pendingAvatarCrop;
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
   const nicknameInputRef = useRef<HTMLInputElement>(null);
   const tabRefs = useRef<Partial<Record<SettingsTab, HTMLButtonElement | null>>>({});
@@ -202,8 +214,6 @@ export const SettingsModal: React.FC = () => {
 
   const resolvedTheme = resolveThemeMode(theme, systemDark);
   const isDark = resolvedTheme === 'dark';
-  const effectiveDayKey = getEffectiveDayKey(dayBoundary);
-  const tipsHiddenToday = tipsHiddenOn === effectiveDayKey;
 
   const modalTitleId = useId();
   const aboutHeadingId = useId();
@@ -220,7 +230,7 @@ export const SettingsModal: React.FC = () => {
 
   const supportsNativeSwitch =
     typeof HTMLInputElement !== 'undefined' && 'switch' in HTMLInputElement.prototype;
-  const studioVersion = envInfo.studioVersion || '1.6.12';
+  const studioVersion = envInfo.studioVersion || '1.6.13';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
@@ -244,7 +254,28 @@ export const SettingsModal: React.FC = () => {
   }, [customNickname, settingsOpen]);
 
   useEffect(() => {
-    if (!settingsOpen) return;
+    if (!settingsOpen) {
+      setPendingAvatarCrop((prev) => {
+        if (prev?.revokeOnClose && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+          URL.revokeObjectURL(prev.previewUrl);
+        }
+        return null;
+      });
+      setAvatarCropSaving(false);
+    }
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    return () => {
+      const current = pendingAvatarCropRef.current;
+      if (current?.revokeOnClose && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(current.previewUrl);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!settingsOpen || pendingAvatarCrop) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -253,7 +284,7 @@ export const SettingsModal: React.FC = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [settingsOpen]);
+  }, [settingsOpen, pendingAvatarCrop]);
 
   const presence = usePresence(settingsOpen, 120);
   if (!presence.mounted) return null;
@@ -299,17 +330,39 @@ export const SettingsModal: React.FC = () => {
     void appActions.updatePreferences({ customAvatar: { kind: 'initial' } });
   };
 
+  const openAvatarCrop = (source: File | Blob | string, previewUrl: string, revokeOnClose: boolean) => {
+    setPendingAvatarCrop((prev) => {
+      if (prev?.revokeOnClose && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(prev.previewUrl);
+      }
+      return { source, previewUrl, revokeOnClose };
+    });
+  };
+
+  const closeAvatarCrop = () => {
+    setPendingAvatarCrop((prev) => {
+      if (prev?.revokeOnClose && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(prev.previewUrl);
+      }
+      return null;
+    });
+    setAvatarCropSaving(false);
+  };
+
   const handlePickAvatarImage = async () => {
-    if (avatarBusy) return;
+    if (avatarBusy || avatarCropSaving) return;
     if (!isAnkiNativeEnv()) {
       avatarFileInputRef.current?.click();
       return;
     }
     setAvatarBusy(true);
     try {
-      await appActions.pickNativeAvatarImage(() => {
+      const dataUrl = await appActions.pickNativeAvatarDataUrl(() => {
         avatarFileInputRef.current?.click();
       });
+      if (dataUrl) {
+        openAvatarCrop(dataUrl, dataUrl, false);
+      }
     } finally {
       setAvatarBusy(false);
     }
@@ -319,11 +372,55 @@ export const SettingsModal: React.FC = () => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
+    try {
+      validateAvatarSourceFile(file);
+    } catch (err) {
+      if (err instanceof AvatarImageError && err.code === 'invalid_type') {
+        showToast(t('avatarUploadInvalidToast'));
+      } else {
+        showToast(t('avatarUploadTooLargeToast'));
+      }
+      return;
+    }
+    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      const objectUrl = URL.createObjectURL(file);
+      openAvatarCrop(file, objectUrl, true);
+      return;
+    }
+    if (typeof FileReader !== 'undefined') {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string' && reader.result) {
+          openAvatarCrop(file, reader.result, false);
+        } else {
+          showToast(t('avatarUploadTooLargeToast'));
+        }
+      };
+      reader.onerror = () => showToast(t('avatarUploadTooLargeToast'));
+      reader.readAsDataURL(file);
+      return;
+    }
     setAvatarBusy(true);
     try {
       await appActions.saveAvatarFromImageSource(file);
     } finally {
       setAvatarBusy(false);
+    }
+  };
+
+  const handleConfirmAvatarCrop = async (crop: AvatarCropTransform, viewportSize: number) => {
+    if (!pendingAvatarCrop || avatarCropSaving) return;
+    setAvatarCropSaving(true);
+    try {
+      const saved = await appActions.saveAvatarFromImageSource(pendingAvatarCrop.source, {
+        crop,
+        viewportSize,
+      });
+      if (saved) {
+        closeAvatarCrop();
+      }
+    } finally {
+      setAvatarCropSaving(false);
     }
   };
 
@@ -452,6 +549,7 @@ export const SettingsModal: React.FC = () => {
   const absSync = formatAbsoluteSyncTooltip(lastSyncedTimestamp, resolvedLang);
 
   return (
+    <>
     <div
       data-state={presence.state}
       className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[5px] flex items-center justify-center p-4 sm:p-6 select-none ui-modal-backdrop modal-contain-scroll"
@@ -534,6 +632,7 @@ export const SettingsModal: React.FC = () => {
           aria-labelledby={`settings-tab-${activeTab}`}
           className="flex-1 min-w-0 px-6 py-5 sm:px-7 sm:py-6 overflow-y-auto overscroll-contain space-y-3.5"
         >
+          <div key={activeTab} className="ui-tab-enter">
           {/* TAB 1: Appearance & Language */}
           {activeTab === 'appearance' && (
             <div className="space-y-4">
@@ -562,7 +661,9 @@ export const SettingsModal: React.FC = () => {
                             value={opt.id}
                             checked={active}
                             onChange={() => {
-                              appActions.setTheme(opt.id);
+                              runThemeViewTransition(() => {
+                                appActions.setTheme(opt.id);
+                              });
                               showToast(t('savedThemeToast', { name: opt.label }));
                             }}
                             className="sr-only"
@@ -628,7 +729,9 @@ export const SettingsModal: React.FC = () => {
                           aria-checked={active}
                           aria-label={tooltipText}
                           onClick={() => {
-                            appActions.setAccentColor(a.id);
+                            runThemeViewTransition(() => {
+                              appActions.setAccentColor(a.id);
+                            });
                             showToast(t('savedAccentToast', { name: shortLabel }));
                           }}
                           style={
@@ -679,7 +782,7 @@ export const SettingsModal: React.FC = () => {
 
               {/* Interface Language (Collapsible <details> disclosure) */}
               <article className={`rounded-xl border overflow-hidden ${cardSurface}`}>
-                <details className="group">
+                <details className="group studio-details">
                   <summary className="px-4 py-3 flex items-center justify-between gap-3 cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
                     <span className="text-[13px] font-semibold">{t('languageLabel')}</span>
                     <span className="inline-flex items-center gap-2 min-w-0">
@@ -687,7 +790,7 @@ export const SettingsModal: React.FC = () => {
                         {activeLangSummary}
                       </span>
                       <svg
-                        className={`w-4 h-4 shrink-0 ${subText} group-open:rotate-180 transition-transform duration-150`}
+                        className={`w-4 h-4 shrink-0 ${subText} studio-details-chevron`}
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
@@ -1015,15 +1118,18 @@ export const SettingsModal: React.FC = () => {
                 <input
                   id={tipsSwitchId}
                   type="checkbox"
-                  checked={!tipsHiddenToday}
+                  checked={showDashboardTips}
                   onChange={(e) =>
-                    appActions.updatePreferences({ tipsHiddenOn: e.target.checked ? '' : effectiveDayKey })
+                    appActions.updatePreferences({
+                      showDashboardTips: e.target.checked,
+                      ...(e.target.checked ? { tipsHiddenOn: '' } : {}),
+                    })
                   }
                   aria-describedby={tipsDescId}
                   {...({ switch: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
                   {...(supportsNativeSwitch
                     ? {}
-                    : { role: 'switch', 'aria-checked': !tipsHiddenToday })}
+                    : { role: 'switch', 'aria-checked': showDashboardTips })}
                   data-switch-fallback={supportsNativeSwitch ? 'false' : 'true'}
                   className="anki-switch shrink-0"
                 />
@@ -1325,6 +1431,12 @@ export const SettingsModal: React.FC = () => {
                         <dt className={`${subText} truncate`}>{t('nativeSwitch')}</dt>
                         <dd className="shrink-0"><Keycap>{shortcutHint}</Keycap></dd>
                       </div>
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('sidebarToggleLabel')}</dt>
+                        <dd className="shrink-0">
+                          <Keycap>{formatShortcut('Cmd + \\', envInfo.platform)}</Keycap>
+                        </dd>
+                      </div>
                     </dl>
                   </div>
 
@@ -1471,7 +1583,10 @@ export const SettingsModal: React.FC = () => {
                     disabled={syncing}
                     className="btn-primary !h-10 !px-5 !text-[13px] shrink-0"
                   >
-                    <span aria-hidden="true" className={syncing ? 'motion-safe:animate-spin' : ''}>⟳</span>
+                    <SyncArrowsIcon
+                      className={`w-3.5 h-3.5 ${syncing ? 'motion-safe:animate-spin' : ''}`}
+                      strokeWidth={2.2}
+                    />
                     <span>{syncing ? t('syncing') : t('syncNowAction')}</span>
                   </button>
                 </article>
@@ -1520,7 +1635,7 @@ export const SettingsModal: React.FC = () => {
                         {t('settingsImportApkgSub')}
                       </div>
                     </div>
-                    <span aria-hidden="true" className="text-[16px] text-[var(--brand-text)] shrink-0">↓</span>
+                    <DownloadIcon className="w-4 h-4 text-[var(--brand-text)]" />
                   </button>
 
                   <button
@@ -1540,7 +1655,7 @@ export const SettingsModal: React.FC = () => {
                         {t('settingsExportApkgSub')}
                       </div>
                     </div>
-                    <span aria-hidden="true" className="text-[16px] text-[#8E8E93] shrink-0">↑</span>
+                    <UploadIcon className="w-4 h-4 text-[var(--text-secondary)]" />
                   </button>
                 </div>
               </article>
@@ -1580,8 +1695,9 @@ export const SettingsModal: React.FC = () => {
 
                     <div role="status" aria-live="polite" className="text-[11px]">
                       {dbReport && (
-                        <span className="text-[var(--status-success)] font-semibold">
-                          ✓ {dbReport.message}
+                        <span className="inline-flex items-center gap-1.5 text-[var(--status-success)] font-semibold">
+                          <CheckIcon className="w-3.5 h-3.5" strokeWidth={2.5} />
+                          <span>{dbReport.message}</span>
                         </span>
                       )}
                     </div>
@@ -1635,14 +1751,18 @@ export const SettingsModal: React.FC = () => {
                     <div role="status" aria-live="polite" className="text-[11px]">
                       {emptyReport && (
                         <span
-                          className={
+                          className={`inline-flex items-center gap-1.5 font-semibold ${
                             emptyReport.emptyCount > 0
-                              ? 'text-[var(--status-warning)] font-semibold'
-                              : 'text-[var(--status-success)] font-semibold'
-                          }
+                              ? 'text-[var(--status-warning)]'
+                              : 'text-[var(--status-success)]'
+                          }`}
                         >
-                          {emptyReport.emptyCount > 0 ? '● ' : '✓ '}
-                          {emptyReport.message}
+                          {emptyReport.emptyCount > 0 ? (
+                            <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" aria-hidden="true" />
+                          ) : (
+                            <CheckIcon className="w-3.5 h-3.5" strokeWidth={2.5} />
+                          )}
+                          <span>{emptyReport.message}</span>
                         </span>
                       )}
                     </div>
@@ -1697,14 +1817,18 @@ export const SettingsModal: React.FC = () => {
                       {mediaReport && (
                         <>
                           <div
-                            className={
+                            className={`inline-flex items-center gap-1.5 font-semibold ${
                               mediaReport.unusedCount > 0 || mediaReport.missingCount > 0
-                                ? 'text-[var(--status-warning)] font-semibold'
-                                : 'text-[var(--status-success)] font-semibold'
-                            }
+                                ? 'text-[var(--status-warning)]'
+                                : 'text-[var(--status-success)]'
+                            }`}
                           >
-                            {mediaReport.unusedCount > 0 || mediaReport.missingCount > 0 ? '● ' : '✓ '}
-                            {mediaReport.message}
+                            {mediaReport.unusedCount > 0 || mediaReport.missingCount > 0 ? (
+                              <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" aria-hidden="true" />
+                            ) : (
+                              <CheckIcon className="w-3.5 h-3.5" strokeWidth={2.5} />
+                            )}
+                            <span>{mediaReport.message}</span>
                           </div>
                           {Array.isArray(mediaReport.unusedFiles) && mediaReport.unusedFiles.length > 0 && (
                             <div className={`${subText} truncate`}>
@@ -1966,8 +2090,27 @@ export const SettingsModal: React.FC = () => {
               </article>
             </section>
           )}
+          </div>
         </div>
       </div>
     </div>
+    {pendingAvatarCrop && (
+      <AvatarCropModal
+        imageSrc={pendingAvatarCrop.previewUrl}
+        resolvedLang={resolvedLang}
+        isDark={isDark}
+        saving={avatarCropSaving}
+        onClose={closeAvatarCrop}
+        onChangePhoto={() => {
+          void handlePickAvatarImage();
+        }}
+        onImageError={() => {
+          showToast(t('avatarUploadTooLargeToast'));
+          closeAvatarCrop();
+        }}
+        onConfirm={handleConfirmAvatarCrop}
+      />
+    )}
+    </>
   );
 };

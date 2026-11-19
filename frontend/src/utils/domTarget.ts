@@ -19,13 +19,15 @@ export function getClosestFromTarget(
   return element.closest(selector);
 }
 
-/** 事件是否发生在可输入区域（input / textarea / select / contentEditable）。 */
+/** 事件是否发生在可输入区域（input / textarea / select / combobox / listbox / contentEditable）。 */
 export function isTypingTarget(target: EventTarget | null | undefined): boolean {
   if (!target) return false;
   const element = target as HTMLElement;
   if (typeof element.closest !== 'function') return false;
   return Boolean(
     element.isContentEditable ||
-      element.closest('input, textarea, select, [contenteditable="true"]')
+      element.closest(
+        'input, textarea, select, [role="combobox"], [role="listbox"], [contenteditable="true"]'
+      )
   );
 }

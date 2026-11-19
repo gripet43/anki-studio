@@ -7,6 +7,7 @@ import {
   ReviewStageWidth,
 } from '../../bridge/pycmd';
 import { formatShortcut, translate } from '../../i18n/translations';
+import { usePresence } from '../../hooks/usePresence';
 import {
   appActions,
   getAppState,
@@ -26,12 +27,14 @@ import {
 } from '../../utils/reviewAudio';
 import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 import { CopyDebugInfoButton } from '../common/CopyDebugInfoButton';
+import { StudioSelect } from '../common/StudioSelect';
 import {
   CelebrationIllustration,
   hasIllustrationPack,
   ReviewerCornerDecor,
 } from '../common/ThemeIllustrations';
 import { Tooltip } from '../common/Tooltip';
+import { CheckIcon, ChevronLeftIcon, CloseIcon } from '../common/Icons';
 import { LightboxTarget, ReviewerImageLightbox } from './ReviewerImageLightbox';
 import { SandboxCardFrame } from './SandboxCardFrame';
 
@@ -163,10 +166,17 @@ export const ReviewerView: React.FC = () => {
   const [addingTag, setAddingTag] = useState(false);
   const [selectedSlashIdx, setSelectedSlashIdx] = useState(0);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingForget, setConfirmingForget] = useState(false);
   const [flagPopoverOpen, setFlagPopoverOpen] = useState(false);
   const [displayPopoverOpen, setDisplayPopoverOpen] = useState(false);
   const [audioPopoverOpen, setAudioPopoverOpen] = useState(false);
   const [lightboxTarget, setLightboxTarget] = useState<LightboxTarget | null>(null);
+  const inspectorPresence = usePresence(inspectorOpen, 180);
+  const lastLightboxTargetRef = useRef<LightboxTarget | null>(null);
+  if (lightboxTarget) {
+    lastLightboxTargetRef.current = lightboxTarget;
+  }
+  const lightboxPresence = usePresence(Boolean(lightboxTarget), 140);
 
   const audioPopoverId = useId();
   const autoFrontSwitchId = useId();
@@ -254,6 +264,7 @@ export const ReviewerView: React.FC = () => {
 
   useEffect(() => {
     setConfirmingDelete(false);
+    setConfirmingForget(false);
     closePopoverEl(audioPopoverRef.current);
     closePopoverEl(flagPopoverRef.current);
     closePopoverEl(displayPopoverRef.current);
@@ -561,6 +572,9 @@ export const ReviewerView: React.FC = () => {
         } else if (flagPopoverOpen || flagNativeOpen) {
           closePopoverEl(flagPopoverRef.current);
           setFlagPopoverOpen(false);
+        } else if (confirmingForget || confirmingDelete) {
+          setConfirmingForget(false);
+          setConfirmingDelete(false);
         } else {
           appActions.exitReview();
         }
@@ -593,7 +607,7 @@ export const ReviewerView: React.FC = () => {
         return;
       }
 
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         appActions.undoLastReview();
         return;
@@ -692,11 +706,20 @@ export const ReviewerView: React.FC = () => {
     audioPopoverOpen,
     displayPopoverOpen,
     flagPopoverOpen,
+    confirmingForget,
+    confirmingDelete,
     closePopoverEl,
     manualAudioFiles,
     reviewContentScale,
     reviewStageWidth,
   ]);
+
+  useEffect(() => {
+    if (!inspectorOpen) {
+      setConfirmingDelete(false);
+      setConfirmingForget(false);
+    }
+  }, [inspectorOpen]);
 
   // 会话按 100 张一批从调度器取；续批时 currentCardIndex 会归零，直接用它算进度
   // 会跳回 1/100。这里用「已学张数」跨批累计：batchStartStudied 是当前批之前已学的数量。
@@ -724,8 +747,20 @@ export const ReviewerView: React.FC = () => {
     : 'bg-[var(--bg-card)] border-[var(--border-subtle)] shadow-[0_20px_50px_rgba(0,0,0,0.07)] text-[#1D1D1F]';
 
   const inspectorSurface = isDark
-    ? 'bg-[#121318]/95 border-white/[0.07] text-white'
-    : 'bg-white/95 border-[#E5E5EA] text-[#1D1D1F] shadow-[-12px_0_36px_rgba(0,0,0,0.06)]';
+    ? 'bg-[#121318]/96 border-white/[0.07] text-[var(--text-primary)]'
+    : 'bg-[var(--bg-card)]/96 border-[var(--border-subtle)] text-[var(--text-primary)] shadow-[-12px_0_36px_rgba(0,0,0,0.06)]';
+
+  const inspectorActionIdle = isDark
+    ? 'bg-white/[0.03] border-white/[0.09] text-[var(--text-primary)] hover:bg-white/[0.08] hover:border-white/[0.16] cursor-pointer'
+    : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-primary)] shadow-[0_1px_1.5px_rgba(20,24,32,0.03)] hover:bg-[var(--bg-subtle)] hover:border-[var(--brand-border)]/70 cursor-pointer';
+
+  const inspectorActionDisabled = isDark
+    ? 'bg-transparent border-white/[0.05] text-[var(--text-muted)] opacity-45 cursor-not-allowed'
+    : 'bg-transparent border-[var(--border-subtle)]/55 text-[var(--text-muted)] opacity-45 cursor-not-allowed';
+
+  const inspectorDangerIdle = isDark
+    ? 'bg-white/[0.03] border-white/[0.09] text-[var(--status-danger-text)] hover:bg-[var(--status-danger-soft)] hover:border-[var(--status-danger)]/40 cursor-pointer'
+    : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--status-danger-text)] shadow-[0_1px_1.5px_rgba(20,24,32,0.03)] hover:bg-[var(--status-danger-soft)] hover:border-[var(--status-danger)]/35 cursor-pointer';
 
   // 组件卸载（返回首页 / 切页签 / 完成复习）时兜底停掉原生音频：
   // 音频由 Anki 的 AVPlayer 播放，不随 React 组件销毁而停止。
@@ -769,7 +804,7 @@ export const ReviewerView: React.FC = () => {
               aria-label={t('backBtn')}
               className={`reviewer-toolbar-btn w-8 h-8 rounded-xl border flex items-center justify-center cursor-pointer ${headerBtnSurface}`}
             >
-              ‹
+              <ChevronLeftIcon className="w-4 h-4 rtl:rotate-180" strokeWidth={2.1} />
             </button>
             <div className="min-w-0">
               <div className="text-[14px] font-semibold truncate">
@@ -809,9 +844,9 @@ export const ReviewerView: React.FC = () => {
             ) : (
               <div
                 aria-hidden="true"
-                className="w-16 h-16 rounded-2xl bg-[var(--status-success-soft)] border border-[var(--status-success)]/30 text-[var(--status-success)] text-[1.75rem] flex items-center justify-center"
+                className="w-16 h-16 rounded-2xl bg-[var(--status-success-soft)] border border-[var(--status-success)]/30 text-[var(--status-success)] flex items-center justify-center"
               >
-                ✓
+                <CheckIcon className="w-7 h-7" strokeWidth={2.5} />
               </div>
             )}
 
@@ -1065,7 +1100,7 @@ export const ReviewerView: React.FC = () => {
               aria-label={t('backBtn')}
               className={`reviewer-toolbar-btn w-8 h-8 rounded-xl border flex items-center justify-center cursor-pointer transition-colors shrink-0 ${headerBtnSurface}`}
             >
-              ‹
+              <ChevronLeftIcon className="w-4 h-4 rtl:rotate-180" strokeWidth={2.1} />
             </button>
           </Tooltip>
           <div className="min-w-0">
@@ -1121,9 +1156,9 @@ export const ReviewerView: React.FC = () => {
                   appActions.exitInlineEdit();
                 }}
                 style={{ backgroundColor: brandHex }}
-                className={`reviewer-toolbar-btn reviewer-cta-btn--solid h-8 px-4 rounded-xl text-[12px] font-semibold text-white shadow-xs transition-all cursor-pointer ${
+                className={`reviewer-toolbar-btn reviewer-cta-btn--solid h-8 px-4 rounded-xl text-[12px] font-semibold text-white shadow-xs transition-[background-color,border-color,color,box-shadow,transform,opacity] cursor-pointer ${
                   hasDraftChanges
-                    ? 'hover:opacity-95 active:scale-[0.98]'
+                    ? 'hover:opacity-95 motion-safe:active:scale-[0.975]'
                     : 'opacity-70 hover:opacity-100'
                 }`}
               >
@@ -1327,6 +1362,8 @@ export const ReviewerView: React.FC = () => {
                         fill={activeFlagSpec ? 'currentColor' : 'none'}
                         stroke="currentColor"
                         strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                         aria-hidden="true"
                       >
                         <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
@@ -1392,7 +1429,7 @@ export const ReviewerView: React.FC = () => {
                       aria-label={t('editCardTitle')}
                       className={`reviewer-toolbar-btn w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer transition-colors ${headerBtnSurface}`}
                     >
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <path d="M12 20h9" />
                         <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                       </svg>
@@ -1412,10 +1449,10 @@ export const ReviewerView: React.FC = () => {
                           : headerBtnSurface
                       }`}
                     >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                        <circle cx="12" cy="12" r="1" />
-                        <circle cx="19" cy="12" r="1" />
-                        <circle cx="5" cy="12" r="1" />
+                      <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <circle cx="5" cy="12" r="1.6" />
+                        <circle cx="12" cy="12" r="1.6" />
+                        <circle cx="19" cy="12" r="1.6" />
                       </svg>
                     </button>
                   </Tooltip>
@@ -1438,12 +1475,13 @@ export const ReviewerView: React.FC = () => {
                   }
                 }}
                 style={{ ['positionAnchor' as string]: '--reviewer-audio-anchor' }}
-                className={`reviewer-popover z-50 w-[300px] rounded-2xl border p-3.5 flex flex-col gap-3 backdrop-blur-xl ${
+                className={`reviewer-popover z-50 w-[300px] rounded-2xl border p-3.5 backdrop-blur-xl ${
                   isDark
                     ? 'bg-[#181922]/96 border-[#2E303E] text-[#F2F3F7] shadow-2xl'
                     : 'bg-[var(--bg-card)]/96 border-[var(--border-subtle)] text-[var(--text-primary)] shadow-[0_18px_42px_-10px_rgba(20,24,32,0.16),0_4px_12px_-2px_rgba(20,24,32,0.06)]'
                 }`}
               >
+                <div className="flex flex-col gap-3">
                 <div
                   className={`flex items-center justify-between gap-2 h-9 pb-3 border-b ${
                     isDark ? 'border-white/[0.08]' : 'border-[var(--border-subtle)]'
@@ -1569,6 +1607,7 @@ export const ReviewerView: React.FC = () => {
                     </svg>
                   </button>
                 </div>
+                </div>
               </div>
 
               <div
@@ -1621,8 +1660,8 @@ export const ReviewerView: React.FC = () => {
                         />
                         <span>{t(`flagLabel_${fNum}` as any)}</span>
                       </div>
-                      <span className="text-[10px] font-mono text-[var(--text-secondary)]">
-                        {isSel ? '✓' : fNum}
+                      <span className="text-[10px] font-mono text-[var(--text-secondary)] inline-flex items-center">
+                        {isSel ? <CheckIcon className="w-3 h-3 text-[var(--brand-text)]" strokeWidth={2.6} /> : fNum}
                       </span>
                     </button>
                   );
@@ -1658,12 +1697,13 @@ export const ReviewerView: React.FC = () => {
                   }
                 }}
                 style={{ ['positionAnchor' as string]: '--reviewer-display-anchor' }}
-                className={`reviewer-popover z-50 w-[300px] rounded-2xl border p-3.5 flex flex-col gap-3 backdrop-blur-xl ${
+                className={`reviewer-popover z-50 w-[300px] rounded-2xl border p-3.5 backdrop-blur-xl ${
                   isDark
                     ? 'bg-[#181922]/96 border-[#2E303E] text-[#F2F3F7] shadow-2xl'
                     : 'bg-[var(--bg-card)]/96 border-[var(--border-subtle)] text-[var(--text-primary)] shadow-[0_18px_42px_-10px_rgba(20,24,32,0.16),0_4px_12px_-2px_rgba(20,24,32,0.06)]'
                 }`}
               >
+                <div className="flex flex-col gap-3">
                 {(() => {
                   const isCustomDisplay =
                     reviewContentScale !== 100 || reviewStageWidth !== 'auto';
@@ -1867,6 +1907,7 @@ export const ReviewerView: React.FC = () => {
                     </>
                   );
                 })()}
+                </div>
               </div>
             </>
           )}
@@ -2595,7 +2636,7 @@ export const ReviewerView: React.FC = () => {
                     : 'bg-[var(--bg-subtle)]/80 border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[#1D1D1F] hover:border-black/15'
                 }`}
               >
-                <svg className="w-3 h-3 shrink-0 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <svg className="w-3 h-3 shrink-0 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="16" x2="12" y2="12" />
                   <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -2617,8 +2658,11 @@ export const ReviewerView: React.FC = () => {
       )}
 
         {/* RIGHT INSPECTOR DRAWER (Light & Dark Adapted) */}
-        {inspectorOpen && (
-          <aside className={`reviewer-inspector absolute end-0 top-0 bottom-0 w-[300px] backdrop-blur-xl border-s p-6 flex flex-col justify-between z-40 ${inspectorSurface}`}>
+        {inspectorPresence.mounted && (
+          <aside
+            data-state={inspectorPresence.state}
+            className={`reviewer-inspector absolute end-0 top-0 bottom-0 w-[300px] backdrop-blur-xl border-s p-6 flex flex-col justify-between z-40 ${inspectorSurface}`}
+          >
             <div className="space-y-5 overflow-y-auto pe-0.5">
               <div className="flex items-center justify-between">
                 <h3 className="text-[14px] font-semibold">{t('cardInfoTitle')}</h3>
@@ -2627,9 +2671,9 @@ export const ReviewerView: React.FC = () => {
                     type="button"
                     aria-label={t('close')}
                     onClick={() => setAppState({ inspectorOpen: false })}
-                    className="text-[var(--text-secondary)] hover:text-[var(--brand-text)] text-sm cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 rounded"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--brand-text)] hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
                   >
-                    ✕
+                    <CloseIcon className="w-3.5 h-3.5" />
                   </button>
                 </Tooltip>
               </div>
@@ -2659,7 +2703,7 @@ export const ReviewerView: React.FC = () => {
                           type="button"
                           onClick={() => appActions.setCurrentReviewCardFlag(fNum, true)}
                           aria-label={t(`flagLabel_${fNum}` as any)}
-                          className={`w-7 h-7 rounded-xl border flex items-center justify-center cursor-pointer transition-all focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
+                          className={`w-7 h-7 rounded-xl border flex items-center justify-center cursor-pointer transition-[background-color,border-color,color,transform,opacity] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
                             isSel
                               ? 'scale-110 ring-2 ring-offset-1 dark:ring-offset-[#121318]'
                               : 'opacity-75 hover:opacity-100'
@@ -2688,7 +2732,7 @@ export const ReviewerView: React.FC = () => {
                           : 'text-[var(--text-secondary)] hover:text-[var(--status-danger-text)] border-black/10 dark:border-white/10'
                       }`}
                     >
-                      ✕
+                      <CloseIcon className="w-3 h-3" strokeWidth={2.2} />
                     </button>
                   </Tooltip>
                 </div>
@@ -2696,28 +2740,32 @@ export const ReviewerView: React.FC = () => {
 
               {/* Deck Selector */}
               <div>
-                <div className="text-[11px] text-[var(--text-secondary)] mb-2">{t('deckLabel')}</div>
-                <select
+                <label
+                  id="reviewer-inspector-deck-label"
+                  htmlFor="reviewer-inspector-deck-select"
+                  className="block text-[11px] text-[var(--text-secondary)] mb-2"
+                >
+                  {t('deckLabel')}
+                </label>
+                <StudioSelect
+                  id="reviewer-inspector-deck-select"
+                  ariaLabelledBy="reviewer-inspector-deck-label"
+                  size="md"
                   value={currentCard.deckId}
-                  onChange={(e) => {
-                    const found = decks.find((d) => d.id === e.target.value);
+                  options={decks.map((d) => ({
+                    value: d.id,
+                    label: d.fullName || d.name,
+                  }))}
+                  onChange={(nextDeckId) => {
+                    const found = decks.find((d) => d.id === nextDeckId);
                     appActions.saveInlineCardUpdate({
-                      deckId: e.target.value,
+                      deckId: nextDeckId,
                       deckName: found ? found.name : currentCard.deckName,
                     });
                   }}
-                  className={`w-full h-9 px-3 rounded-xl border text-[12px] focus:outline-none focus:border-[var(--brand)] ${
-                    isDark
-                      ? 'bg-[#1A1B22] border-white/[0.08] text-white'
-                      : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#1D1D1F]'
-                  }`}
-                >
-                  {decks.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.fullName || d.name}
-                    </option>
-                  ))}
-                </select>
+                  searchable="auto"
+                  className="w-full"
+                />
               </div>
 
               {/* Tags Manager */}
@@ -2791,75 +2839,213 @@ export const ReviewerView: React.FC = () => {
             </div>
 
             <div
-              className={`pt-3.5 border-t space-y-2.5 ${
-                isDark ? 'border-white/[0.06]' : 'border-[#ECECF2]'
+              className={`pt-3.5 border-t ${
+                isDark ? 'border-white/[0.07]' : 'border-[var(--border-subtle)]'
               }`}
             >
-              <button
-                type="button"
-                disabled={!canUndo}
-                onClick={() => appActions.undoLastReview()}
-                aria-label={t('undoBtnShort')}
-                className={`w-full h-8 px-3 rounded-xl border text-[11px] font-medium flex items-center justify-between transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
-                  canUndo
-                    ? isDark
-                      ? 'bg-[#1A1B22] border-white/[0.08] text-[#E5E5EA] hover:bg-white/10 cursor-pointer'
-                      : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#1D1D1F] hover:bg-[#EFEFF4] cursor-pointer'
-                    : isDark
-                    ? 'bg-[#1A1B22]/50 border-white/[0.05] text-[#6E6E78] opacity-50 cursor-not-allowed'
-                    : 'bg-[#F8F8FA]/60 border-[#ECECF2] text-[#8E8E93] opacity-55 cursor-not-allowed'
-                }`}
-              >
-                <span className="flex items-center gap-1.5">
-                  <svg
-                    className="w-3.5 h-3.5 shrink-0"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M9 14 4 9l5-5" />
-                    <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
-                  </svg>
-                  <span>{t('undoBtnShort')}</span>
-                </span>
-                {showShortcutHints && (
-                  <span className="font-mono text-[10px] opacity-70">
-                    {formatShortcut('Cmd Z', platform)}
-                  </span>
-                )}
-              </button>
-
-              <div className="grid grid-cols-3 gap-2">
-                <Tooltip variant="compact" content={t('buryCardBtn')}>
+              <div className="grid grid-cols-2 gap-1.5">
+                {/* 1. Undo */}
+                <Tooltip
+                  variant="compact"
+                  content={t('undoBtnShort')}
+                  shortcut="Cmd Z"
+                  triggerClassName="w-full"
+                >
                   <button
                     type="button"
-                    onClick={() => appActions.buryCurrentReviewCard()}
-                    className={`h-8 rounded-xl border text-[11px] font-medium cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
-                      isDark
-                        ? 'bg-[#1A1B22] border-white/[0.08] text-[#C8C8D2] hover:bg-white/10'
-                        : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#EFEFF4]'
+                    disabled={!canUndo}
+                    onClick={() => {
+                      setConfirmingForget(false);
+                      setConfirmingDelete(false);
+                      appActions.undoLastReview();
+                    }}
+                    aria-label={t('undoBtnShort')}
+                    className={`w-full h-8 px-2.5 rounded-lg border text-[11.5px] font-medium inline-flex items-center justify-center gap-1.5 min-w-0 transition-[background-color,border-color,color,opacity] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
+                      canUndo ? inspectorActionIdle : inspectorActionDisabled
                     }`}
                   >
-                    {t('batchBury')}
+                    <svg
+                      className={`w-3.5 h-3.5 shrink-0 ${
+                        canUndo ? 'text-[var(--text-secondary)]' : 'opacity-80'
+                      }`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M9 14 4 9l5-5" />
+                      <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+                    </svg>
+                    <span className="truncate">{t('undoBtnShort')}</span>
+                    {showShortcutHints && (
+                      <span className="font-mono text-[9.5px] opacity-60 shrink-0">
+                        {formatShortcut('Cmd Z', platform)}
+                      </span>
+                    )}
                   </button>
                 </Tooltip>
 
-                <button
-                  type="button"
-                  onClick={() => appActions.toggleSuspendCurrentReviewCard()}
-                  className={`h-8 rounded-xl border text-[11px] font-medium cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
-                    isDark
-                      ? 'bg-[#1A1B22] border-white/[0.08] text-[#C8C8D2] hover:bg-white/10'
-                      : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#3A3A3C] hover:bg-[#EFEFF4]'
-                  }`}
-                >
-                  {currentCard.suspended ? t('unsuspendCardBtn') : t('suspendCardBtn')}
-                </button>
+                {/* 2. Reset Progress (Forget Card) */}
+                {confirmingForget ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmingForget(false);
+                      appActions.forgetCurrentReviewCard();
+                    }}
+                    aria-label={t('forgetCardBtn')}
+                    className="w-full h-8 px-2.5 rounded-lg border border-[var(--status-warning)] bg-[var(--status-warning)] text-white text-[11.5px] font-semibold inline-flex items-center justify-center gap-1.5 min-w-0 cursor-pointer transition-[background-color,border-color,opacity] hover:opacity-92 focus-visible:outline-2 focus-visible:outline-[var(--status-warning)] focus-visible:outline-offset-2"
+                  >
+                    <span className="truncate">{t('confirm')}</span>
+                  </button>
+                ) : (
+                  <Tooltip
+                    variant="compact"
+                    content={t('forgetCardTooltip')}
+                    triggerClassName="w-full"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmingDelete(false);
+                        setConfirmingForget(true);
+                      }}
+                      aria-label={t('forgetCardBtn')}
+                      className={`w-full h-8 px-2.5 rounded-lg border text-[11.5px] font-medium inline-flex items-center justify-center gap-1.5 min-w-0 transition-[background-color,border-color,color,opacity] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${inspectorActionIdle}`}
+                    >
+                      <svg
+                        className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.9"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                        <path d="M3 3v5h5" />
+                      </svg>
+                      <span className="truncate">{t('forgetCardBtn')}</span>
+                    </button>
+                  </Tooltip>
+                )}
 
+                {/* 3. Bury Card */}
+                <Tooltip
+                  variant="compact"
+                  content={t('buryCardBtn')}
+                  triggerClassName="w-full"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmingForget(false);
+                      setConfirmingDelete(false);
+                      appActions.buryCurrentReviewCard();
+                    }}
+                    className={`w-full h-8 px-2.5 rounded-lg border text-[11.5px] font-medium inline-flex items-center justify-center gap-1.5 min-w-0 transition-[background-color,border-color,color,opacity] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${inspectorActionIdle}`}
+                  >
+                    <svg
+                      className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+                    </svg>
+                    <span className="truncate">{t('batchBury')}</span>
+                  </button>
+                </Tooltip>
+
+                {/* 4. Suspend / Unsuspend Card */}
+                <Tooltip
+                  variant="compact"
+                  content={currentCard.suspended ? t('unsuspendCardBtn') : t('suspendCardBtn')}
+                  triggerClassName="w-full"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmingForget(false);
+                      setConfirmingDelete(false);
+                      appActions.toggleSuspendCurrentReviewCard();
+                    }}
+                    className={`w-full h-8 px-2.5 rounded-lg border text-[11.5px] font-medium inline-flex items-center justify-center gap-1.5 min-w-0 cursor-pointer transition-[background-color,border-color,color,opacity] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
+                      currentCard.suspended
+                        ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-text)]'
+                        : inspectorActionIdle
+                    }`}
+                  >
+                    <svg
+                      className={`w-3.5 h-3.5 shrink-0 ${
+                        currentCard.suspended ? '' : 'text-[var(--text-secondary)]'
+                      }`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      {currentCard.suspended ? (
+                        <polygon points="6 4 20 12 6 20 6 4" />
+                      ) : (
+                        <>
+                          <rect x="6" y="4" width="4" height="16" rx="1" />
+                          <rect x="14" y="4" width="4" height="16" rx="1" />
+                        </>
+                      )}
+                    </svg>
+                    <span className="truncate">
+                      {currentCard.suspended ? t('unsuspendCardBtn') : t('suspendCardBtn')}
+                    </span>
+                  </button>
+                </Tooltip>
+
+                {/* 5. Copy Debug Info */}
+                <CopyDebugInfoButton
+                  key={currentCard.id}
+                  label={t('copyDebugInfoShort')}
+                  copiedLabel={t('copiedBadge')}
+                  tooltipText={t('copyDebugInfoTooltip')}
+                  ariaLabel={t('copyDebugInfoBtn')}
+                  copiedToast={t('debugInfoCopiedToast')}
+                  failedToast={t('copyFailedToast')}
+                  triggerClassName="w-full"
+                  className="w-full h-8 px-2.5 rounded-lg border text-[11.5px] font-medium inline-flex items-center justify-center gap-1.5 min-w-0 transition-[background-color,border-color,color,opacity] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                  idleClassName={inspectorActionIdle}
+                  onCopyDebugInfo={() =>
+                    collectAndCopyCardDebugInfo({
+                      client: {
+                        sourceView: 'reviewer',
+                        envInfo,
+                        theme,
+                        accentColor,
+                        resolvedLang,
+                        sandboxNoteTypeIds,
+                        autoPlayFrontAudio,
+                        autoPlayBackAudio,
+                        reviewStageWidth,
+                        reviewContentScale,
+                        isPreviewSession,
+                        isCardFlipped,
+                        isSandboxCard,
+                      },
+                      card: cardDebugSnapshotFromReviewCard(currentCard),
+                    })
+                  }
+                />
+
+                {/* 6. Delete Card */}
                 {confirmingDelete ? (
                   <button
                     type="button"
@@ -2867,64 +3053,54 @@ export const ReviewerView: React.FC = () => {
                       setConfirmingDelete(false);
                       appActions.deleteCurrentReviewCard();
                     }}
-                    className="h-8 rounded-xl bg-[var(--status-danger)] text-white text-[11px] font-semibold cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--status-danger)] focus-visible:outline-offset-2"
+                    className="w-full h-8 px-2.5 rounded-lg border border-[var(--status-danger)] bg-[var(--status-danger)] text-white text-[11.5px] font-semibold inline-flex items-center justify-center gap-1.5 min-w-0 cursor-pointer transition-[background-color,border-color,opacity] hover:opacity-92 focus-visible:outline-2 focus-visible:outline-[var(--status-danger)] focus-visible:outline-offset-2"
                     aria-label={t('deleteCardBtn')}
                   >
-                    {t('confirm')}
+                    <span className="truncate">{t('confirm')}</span>
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingDelete(true)}
-                    className="h-8 rounded-xl border text-[11px] font-medium cursor-pointer bg-[var(--status-danger-soft)] border-[var(--status-danger)]/30 text-[var(--status-danger)] hover:opacity-90 focus-visible:outline-2 focus-visible:outline-[var(--status-danger)] focus-visible:outline-offset-2"
+                  <Tooltip
+                    variant="compact"
+                    content={t('deleteCardBtn')}
+                    triggerClassName="w-full"
                   >
-                    {t('deleteCardBtn')}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmingForget(false);
+                        setConfirmingDelete(true);
+                      }}
+                      aria-label={t('deleteCardBtn')}
+                      className={`w-full h-8 px-2.5 rounded-lg border text-[11.5px] font-medium inline-flex items-center justify-center gap-1.5 min-w-0 transition-[background-color,border-color,color,opacity] focus-visible:outline-2 focus-visible:outline-[var(--status-danger)] focus-visible:outline-offset-2 ${inspectorDangerIdle}`}
+                    >
+                      <svg
+                        className="w-3.5 h-3.5 shrink-0 opacity-85"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.9"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M3 6h18" />
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                      </svg>
+                      <span className="truncate">{t('deleteCardBtn')}</span>
+                    </button>
+                  </Tooltip>
                 )}
               </div>
-
-              <CopyDebugInfoButton
-                key={currentCard.id}
-                label={t('copyDebugInfoBtn')}
-                copiedLabel={t('copiedBadge')}
-                tooltipText={t('copyDebugInfoTooltip')}
-                ariaLabel={t('copyDebugInfoBtn')}
-                copiedToast={t('debugInfoCopiedToast')}
-                failedToast={t('copyFailedToast')}
-                idleClassName={
-                  isDark
-                    ? 'bg-[#1A1B22] border-white/[0.08] text-[#9A9AA6] hover:text-white hover:bg-white/10'
-                    : 'bg-[#F8F8FA] border-[#E5E5EA] text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#EFEFF4]'
-                }
-                onCopyDebugInfo={() =>
-                  collectAndCopyCardDebugInfo({
-                    client: {
-                      sourceView: 'reviewer',
-                      envInfo,
-                      theme,
-                      accentColor,
-                      resolvedLang,
-                      sandboxNoteTypeIds,
-                      autoPlayFrontAudio,
-                      autoPlayBackAudio,
-                      reviewStageWidth,
-                      reviewContentScale,
-                      isPreviewSession,
-                      isCardFlipped,
-                      isSandboxCard,
-                    },
-                    card: cardDebugSnapshotFromReviewCard(currentCard),
-                  })
-                }
-              />
             </div>
           </aside>
         )}
       </div>
 
-      {lightboxTarget && (
+      {lightboxPresence.mounted && (lightboxTarget ?? lastLightboxTargetRef.current) && (
         <ReviewerImageLightbox
-          target={lightboxTarget}
+          target={(lightboxTarget ?? lastLightboxTargetRef.current)!}
+          presenceState={lightboxPresence.state}
           onClose={() => setLightboxTarget(null)}
         />
       )}

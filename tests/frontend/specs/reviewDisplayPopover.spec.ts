@@ -83,6 +83,12 @@ test('renders semantic width fieldset radio cards, keycap scale stepper, anki-sw
     ok(pop.includes('>视图与字号<'), 'expected header title 视图与字号');
     const resetBtn = pop.match(/<button\b[^>]*aria-label="恢复默认"[^>]*>[\s\S]*?<\/button>/);
     ok(!resetBtn, 'reset button should stay hidden when already at default 100% + auto');
+    const outerPopoverOpenTag = pop.match(/^<div\b[^>]*>/)?.[0] || '';
+    doesNotMatch(
+      outerPopoverOpenTag,
+      /\b(?:flex|inline-flex|grid|inline-grid|block|inline-block)\b/,
+      'outer [popover] root must never set unconditional display utility classes (would override UA display:none and create invisible clickable ghost overlays)',
+    );
     ok(pop.includes('flex flex-col gap-3'), 'expected flex gap-3 container layout instead of fragile space-y');
 
     // Scale stepper uses unified segmented control & neutral calm 100% readout

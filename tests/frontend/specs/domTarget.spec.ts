@@ -57,3 +57,18 @@ test('Element 无匹配祖先时返回 null / false', () => {
   equal(getClosestFromTarget(element as unknown as EventTarget, 'button'), null);
   equal(isTypingTarget(element as unknown as EventTarget), false);
 });
+
+test('combobox / listbox 角色控件也被识别为输入交互区域，避免复习快捷键误触', () => {
+  const combobox = {
+    isContentEditable: false,
+    closest: (selector: string) =>
+      selector.includes('[role="combobox"]') ? { role: 'combobox' } : null,
+  };
+  const listbox = {
+    isContentEditable: false,
+    closest: (selector: string) =>
+      selector.includes('[role="listbox"]') ? { role: 'listbox' } : null,
+  };
+  equal(isTypingTarget(combobox as unknown as EventTarget), true);
+  equal(isTypingTarget(listbox as unknown as EventTarget), true);
+});

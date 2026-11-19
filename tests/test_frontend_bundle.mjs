@@ -800,8 +800,8 @@ assert(
 );
 for (const cls of usedAnimateClasses) {
   assert(
-    cssBundle.includes(`.${cls}`),
-    `Item #35: TSX references class "${cls}" but ".${cls}" is missing from compiled web/assets/index.css`
+    cssBundle.includes(`.${cls}`) || cssBundle.includes(`.motion-safe\\:${cls}`),
+    `Item #35: TSX references class "${cls}" but ".${cls}" (or ".motion-safe:${cls}") is missing from compiled web/assets/index.css`
   );
 }
 
@@ -1197,7 +1197,7 @@ const debugBtnSrc = readText(
   path.resolve(ADDON_ROOT, 'frontend/src/components/common/CopyDebugInfoButton.tsx'));
 const routerPySrc = readText(
   path.resolve(ADDON_ROOT, 'bridge/router.py'));
-const inspectorMarkerIdx = reviewerSrc.indexOf('{inspectorOpen && (');
+const inspectorMarkerIdx = reviewerSrc.indexOf('{inspectorPresence.mounted && (');
 const debugBtnMountIdx = reviewerSrc.indexOf('<CopyDebugInfoButton');
 assert(
   routerPySrc.includes('def action_get_card_debug_info') &&
@@ -1488,6 +1488,8 @@ assert(
     avatarImageSrc.includes('export function normalizeCustomAvatarConfig') &&
     avatarImageSrc.includes('export async function cropImageToSquareAvatarDataUrl') &&
     avatarImageSrc.includes('export function computeSquareCoverCropRect') &&
+    avatarImageSrc.includes('export function computeInteractiveAvatarCropRect') &&
+    avatarImageSrc.includes('export function rotateAvatarCropTransform') &&
     avatarImageSrc.includes('image/svg+xml') &&
     userAvatarSrc.includes('export const UserAvatar') &&
     userAvatarSrc.includes('AVATAR_PRESET_IDS') &&
@@ -1574,17 +1576,23 @@ assert(
   'Item #57: Show Illustrations toggle switch must wire through backend prefs, store, SettingsModal, i18n, and built web/ bundle (rebuild with `cd frontend && npm run build`)'
 );
 
-// Item #58: 复习模式显式撤销按钮收敛进「···」抽屉并与评分/暂停/搁置/删除统一撤销栈联动守卫
+// Item #58: 复习模式显式撤销按钮与重置进度收敛进「···」抽屉 2×3 网格并与统一撤销栈联动守卫
 const undoBtnIdx = reviewerSrc.indexOf("aria-label={t('undoBtnShort')}");
 assert(
   reviewerSrc.includes('const canUndo = undoStack.length > 0') &&
     undoBtnIdx > inspectorMarkerIdx &&
-    reviewerSrc.includes('onClick={() => appActions.undoLastReview()}') &&
+    reviewerSrc.includes('onClick={() => {') &&
+    reviewerSrc.includes('appActions.undoLastReview()') &&
+    reviewerSrc.includes('appActions.forgetCurrentReviewCard()') &&
+    routerPySrc.includes('def action_forget_cards') &&
+    editPySrc.includes('schedule_cards_as_new') &&
     storeSrc.includes('function buildReviewUndoSnapshot(') &&
     storeSrc.includes('previousLibraryCards') &&
     jsBundle.includes('undoLastReview') &&
-    jsBundle.includes('undoBtnShort'),
-  'Item #58: Reviewer active Undo button must live inside ··· inspector drawer and wire to unified rating/suspend/bury/delete undo stack (rebuild with `cd frontend && npm run build`)'
+    jsBundle.includes('forgetCurrentReviewCard') &&
+    jsBundle.includes('undoBtnShort') &&
+    jsBundle.includes('forgetCardBtn'),
+  'Item #58: Reviewer active Undo & Reset Card buttons must live inside ··· inspector drawer 2x3 grid and wire to unified rating/forget/suspend/bury/delete undo stack (rebuild with `cd frontend && npm run build`)'
 );
 
 // Item #59: 视图与字号弹层卡片 UI 升级（语义单选画幅、一体分段缩放条、原生/降级开关、去像素与模板副标题噪音）
@@ -1724,5 +1732,136 @@ assert(
     jsBundle.includes('vacation-safeguards-chevron'),
   'Item #64: VacationModal and IcuRescueModal must enforce shared Studio modal focus trap, semantic tablists, uniform AA contrast, and synchronized choice rules (rebuild with `cd frontend && npm run build`)'
 );
+
+// Item #65: 全界面交互与动效工程契约（禁 transition-all / 禁简写 allow-discrete / 无限循环需 motion-safe / 禁用 .theme-switching * 通配符）
+const indexCssSrc = readText(path.resolve(ADDON_ROOT, 'frontend/src/index.css'));
+for (const file of tsxFiles) {
+  const rel = path.relative(ADDON_ROOT, file);
+  const src = readText(file);
+  assert(
+    !/\btransition-all\b/.test(src),
+    `Item #65: ${rel} must not use transition-all; specify explicit animated properties`
+  );
+  assert(
+    !/active:scale-95\b/.test(src),
+    `Item #65: ${rel} must use unified press scale tiers instead of active:scale-95`
+  );
+  const lines = src.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+    assert(
+      !/(?<!motion-safe:)\banimate-(?:ping|pulse|spin)\b/.test(line),
+      `Item #65: ${rel}:${i + 1} must guard infinite animation with motion-safe:animate-*`
+    );
+  }
+}
+assert(
+  !/transition\s*:[^;]*\ballow-discrete\b/.test(indexCssSrc) &&
+    /transition-behavior\s*:\s*allow-discrete/.test(indexCssSrc) &&
+    !indexCssSrc.includes('.theme-switching *'),
+  'Item #65: index.css must declare transition-behavior: allow-discrete outside transition shorthand and avoid .theme-switching * wildcard'
+);
+for (const requiredMotionRule of [
+  '.avatar-crop-dialog',
+  '.studio-details',
+  '.animate-flyout-enter',
+  '.reviewer-inspector',
+  '.reviewer-lightbox',
+  '.ui-tab-enter',
+  '::view-transition-old(root)',
+]) {
+  assert(
+    cssBundle.includes(requiredMotionRule),
+    `Item #65: Compiled web/assets/index.css is missing unified motion rule: ${requiredMotionRule}`
+  );
+}
+
+// Item #66: 图标系统统一门禁（严禁 Unicode/Emoji 符号假冒 UI 图标、严禁装饰性 SVG 漏标 aria-hidden）
+const componentTsxFiles = collectTsxFiles(path.resolve(ADDON_ROOT, 'frontend/src/components'));
+const iconsModuleSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/common/Icons.tsx'));
+assert(
+  iconsModuleSrc.includes('export const SyncArrowsIcon') &&
+    iconsModuleSrc.includes('export const CloseIcon') &&
+    settingsSrc.includes('<SyncArrowsIcon') &&
+    !settingsSrc.includes('>⟳<'),
+  'Item #66: Shared SVG Icons module must power Settings sync and common controls without Unicode glyph hacks'
+);
+for (const file of componentTsxFiles) {
+  const rel = path.relative(ADDON_ROOT, file);
+  const src = readText(file);
+  const lines = src.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('{/*')) continue;
+    assert(
+      !/>\s*[↻⟳↺⟲✕✖✓✔▾▴▸◂▼▲▶◀⇤⇥⇔‹›]+\s*</.test(line) &&
+        !/^\s*[↻⟳↺⟲✕✖✓✔▾▴▸◂▼▲▶◀⇤⇥⇔‹›]\s*$/.test(line),
+      `Item #66: ${rel}:${i + 1} must use crisp SVG icons from common/Icons.tsx instead of Unicode glyph "${trimmed}"`
+    );
+  }
+  const svgOpenTags = src.match(/<svg\b[^>]*>/gs) || [];
+  for (const tag of svgOpenTags) {
+    assert(
+      tag.includes('aria-hidden') ||
+        tag.includes('aria-label') ||
+        tag.includes('role=') ||
+        tag.includes('...baseProps'),
+      `Item #66: ${rel} has an <svg> missing aria-hidden="true" or accessible label: ${tag.slice(0, 100)}`
+    );
+  }
+}
+
+// Item #67: 统一自定义下拉选择框门禁（StudioSelect 取代原生 <select>，规避 QtWebEngine 原生 OS 弹窗割裂）
+const studioSelectSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/common/StudioSelect.tsx'));
+assert(
+  studioSelectSrc.includes('role="combobox"') &&
+    studioSelectSrc.includes('role="listbox"') &&
+    studioSelectSrc.includes('role="option"') &&
+    studioSelectSrc.includes('useFloatingPosition') &&
+    studioSelectSrc.includes('getClosestFromTarget') &&
+    studioSelectSrc.includes("typeof document !== 'undefined'") &&
+    cssBundle.includes('.ui-select-trigger') &&
+    cssBundle.includes('.ui-select-menu'),
+  'Item #67: StudioSelect must expose ARIA combobox/listbox semantics, SSR guards, useFloatingPosition, and compiled CSS'
+);
+for (const file of componentTsxFiles) {
+  const rel = path.relative(ADDON_ROOT, file);
+  const src = readText(file).replace(/\/\/.*$/gm, '');
+  assert(
+    !/<select\b/.test(src),
+    `Item #67: ${rel} must use <StudioSelect> instead of native <select> so QtWebEngine renders the branded menu`
+  );
+}
+
+// Item #68: 原生 [popover] 严禁在根节点直接挂 Tailwind display 类（防覆盖 UA display:none 产生透明幽灵拦截层）
+const closedPopoverCssMatch = cssBundle.match(
+  /\.reviewer-popover\[popover\]:not\(:popover-open\)\{([^}]+)\}/
+);
+assert(
+  Boolean(closedPopoverCssMatch) &&
+    closedPopoverCssMatch[1].includes('display:none') &&
+    closedPopoverCssMatch[1].includes('pointer-events:none'),
+  'Item #68: Compiled web/assets/index.css must enforce display:none + pointer-events:none on closed .reviewer-popover[popover]'
+);
+for (const file of componentTsxFiles) {
+  const rel = path.relative(ADDON_ROOT, file);
+  const src = readText(file);
+  const popoverTags = src.match(/<[a-zA-Z]+\b[^>]*\bpopover\s*=\s*["'][^"']+["'][^>]*>/gs) || [];
+  for (const tag of popoverTags) {
+    const classBlock = tag.match(/className\s*=\s*(?:\{[\s\S]*?\}|"[^"]*"|'[^']*')/)?.[0] || '';
+    assert(
+      !/(?:['"`\s])(?:flex|inline-flex|grid|inline-grid|block|inline-block)(?:['"`\s])/.test(
+        classBlock
+      ),
+      `Item #68: ${rel} must NOT put unconditional display utilities (flex/grid/block) directly on a [popover] root — wrap children inside an inner container instead`
+    );
+  }
+}
+
 
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

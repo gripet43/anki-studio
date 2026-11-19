@@ -14,10 +14,10 @@ const ROTATE_MS = 10000;
  * （换一条 / 今天不再显示）。「今天不再显示」只隐藏当天，明天自动恢复。
  */
 export const DashboardTipLine: React.FC = () => {
-  const { resolvedLang, tipsHiddenOn, dayBoundary } = useAppStore();
+  const { resolvedLang, showDashboardTips, tipsHiddenOn, dayBoundary } = useAppStore();
   const locale = resolveTipLocale(resolvedLang);
   const today = getEffectiveDayKey(dayBoundary);
-  const hiddenToday = tipsHiddenOn === today;
+  const hidden = !showDashboardTips || tipsHiddenOn === today;
 
   const [index, setIndex] = useState(() => Math.floor(Math.random() * LEARNING_TIPS.length));
   const [textVisible, setTextVisible] = useState(true);
@@ -32,15 +32,15 @@ export const DashboardTipLine: React.FC = () => {
   };
 
   useEffect(() => {
-    if (paused || hiddenToday) return;
+    if (paused || hidden) return;
     const timer = window.setTimeout(() => switchTip(1), ROTATE_MS);
     return () => window.clearTimeout(timer);
     // switchTip 只依赖函数式 setState，无需进依赖数组；index 变化时重新计时，
     // 保证手动「换一条」后自动轮播仍按完整周期继续。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused, hiddenToday, index]);
+  }, [paused, hidden, index]);
 
-  if (hiddenToday) return null;
+  if (hidden) return null;
 
   const tip = LEARNING_TIPS[index] ?? LEARNING_TIPS[0];
 

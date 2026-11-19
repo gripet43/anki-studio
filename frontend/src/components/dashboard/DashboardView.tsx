@@ -9,6 +9,8 @@ import {
 import { useCountUp } from '../../hooks/useCountUp';
 import {
   formatFullDateWithWeekday,
+  formatMonthDayWithWeekday,
+  formatStudyMinutes,
   translate,
 } from '../../i18n/translations';
 import { appActions, setAppState, useAppStore } from '../../stores/useAppStore';
@@ -166,35 +168,35 @@ export const DashboardView: React.FC = () => {
   // 注意：`accent` 现在**只**决定图标形状，不再决定颜色 —— 卡片配色一律由主题色派生。
   const deckIconByAccent: Record<string, React.ReactNode> = {
     indigo: (
-      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
       </svg>
     ),
     blue: (
-      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <polyline points="16 18 22 12 16 6" />
         <polyline points="8 6 2 12 8 18" />
       </svg>
     ),
     emerald: (
-      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
       </svg>
     ),
     amber: (
-      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
       </svg>
     ),
     rose: (
-      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
         <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" />
       </svg>
     ),
     purple: (
-      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <polygon points="12 2 2 7 12 12 22 7 12 2" />
         <polyline points="2 17 12 22 22 17" />
         <polyline points="2 12 12 17 22 12" />
@@ -206,22 +208,42 @@ export const DashboardView: React.FC = () => {
   // 第 1 张即主题色本身，第 6 张开始回绕（详见 utils/deckPalette.ts）
   const deckScales = useMemo(() => buildDeckScales(accentScale), [accentScale]);
 
-  const heatmapLevelStyle = (level: number): React.CSSProperties => {
-    switch (level) {
-      case 1:
-        return { backgroundColor: accentScale.heatmap[0] };
-      case 2:
-        return { backgroundColor: accentScale.heatmap[1] };
-      case 3:
-        return { backgroundColor: accentScale.heatmap[2] };
-      case 4:
-        return { backgroundColor: accentScale.heatmap[3] };
-      default:
-        return { backgroundColor: 'var(--heatmap-0)' };
+  const maxWeeklyCount = Math.max(1, ...dashboard.weeklyRhythm.days.map((d) => d.count));
+  const todayRhythmIdx = dashboard.weeklyRhythm.days.findIndex((d) => d.isToday);
+  const todayRhythmDay = todayRhythmIdx >= 0 ? dashboard.weeklyRhythm.days[todayRhythmIdx] : null;
+  const elapsedRhythmDays =
+    todayRhythmIdx >= 0
+      ? dashboard.weeklyRhythm.days.slice(0, todayRhythmIdx + 1)
+      : dashboard.weeklyRhythm.days;
+  const elapsedRhythmTotal = elapsedRhythmDays.reduce((sum, d) => sum + d.count, 0);
+  const weeklyRhythmAvg =
+    elapsedRhythmDays.length > 0 ? elapsedRhythmTotal / elapsedRhythmDays.length : 0;
+  const weeklyAvgLinePct =
+    weeklyRhythmAvg > 0 && maxWeeklyCount > 0
+      ? Math.min(92, Math.max(10, (weeklyRhythmAvg / maxWeeklyCount) * 100))
+      : 0;
+
+  const formatSecondsUnit = (sec: number): string => {
+    const safe = Number.isFinite(sec) ? Math.max(0, sec) : 0;
+    try {
+      return new Intl.NumberFormat(resolvedLang, {
+        style: 'unit',
+        unit: 'second',
+        unitDisplay: 'short',
+        maximumFractionDigits: 1,
+      }).format(safe);
+    } catch {
+      return `${safe}s`;
     }
   };
 
-  const maxWeeklyCount = Math.max(1, ...dashboard.weeklyRhythm.days.map((d) => d.count));
+  const wowChangeStr = String(dashboard.heatmap.wowChange || '');
+  const wowToneClass =
+    wowChangeStr.includes('+') && !/\+0(?:\.0+)?%/.test(wowChangeStr)
+      ? 'bg-[var(--status-success-soft)] text-[var(--status-success-text)]'
+      : wowChangeStr.includes('-')
+      ? 'bg-[var(--bg-subtle)] text-[var(--text-secondary)]'
+      : 'bg-[var(--brand-soft)] text-[var(--brand-text)]';
   const displayName = dashboard.userName
     ? /[\u4e00-\u9fff]/.test(dashboard.greeting)
       ? `，${dashboard.userName}`
@@ -315,14 +337,14 @@ export const DashboardView: React.FC = () => {
             </h1>
             {isSyncPending ? (
               <div className="flex items-center gap-2 mt-1.5">
-                <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-ping shrink-0" />
+                <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] motion-safe:animate-ping shrink-0" />
                 <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight">
                   {syncing ? t('syncingAnkiWebAria') : t('loadingLocalCollection')}
                 </span>
               </div>
             ) : syncJustFinished ? (
               <div className="flex items-center gap-1.5 mt-1.5 animate-sync-reveal">
-                <svg className="w-3.5 h-3.5 text-[var(--status-success)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="w-3.5 h-3.5 text-[var(--status-success)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polyline points="20 6 9 17 4 12" className="animate-draw-check" />
                 </svg>
                 <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight">
@@ -346,7 +368,7 @@ export const DashboardView: React.FC = () => {
           <button
             type="button"
             onClick={() => setAppState({ cmdKOpen: true })}
-            className={`h-9 w-auto min-w-[144px] sm:min-w-[152px] max-w-[208px] px-3.5 pe-4 rounded-xl border text-[12.5px] flex items-center gap-2 cursor-pointer transition-all hover:border-[var(--brand-border)] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${cardSurface}`}
+            className={`h-9 w-auto min-w-[144px] sm:min-w-[152px] max-w-[208px] px-3.5 pe-4 rounded-xl border text-[12.5px] flex items-center gap-2 cursor-pointer transition-[background-color,border-color,color,box-shadow] hover:border-[var(--brand-border)] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${cardSurface}`}
           >
             <span className={`flex items-center gap-2 ${subText} min-w-0`}>
               <svg
@@ -355,6 +377,8 @@ export const DashboardView: React.FC = () => {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 aria-hidden="true"
               >
                 <circle cx="11" cy="11" r="8" />
@@ -369,7 +393,7 @@ export const DashboardView: React.FC = () => {
       {/* Active Vacation Sanctuary Full-Canvas View (享受你的假期 ^_^) */}
       {isVacationActive && !peekNormalDashboard && !isSyncPending ? (
         <article
-          className={`relative rounded-3xl border px-10 py-12 min-h-[540px] flex flex-col items-center justify-center text-center overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.025)] transition-all duration-500 ${cardSurface}`}
+          className={`relative rounded-3xl border px-10 py-12 min-h-[540px] flex flex-col items-center justify-center text-center overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.025)] transition-[background-color,border-color,box-shadow] duration-500 ${cardSurface}`}
           aria-label={t('vacationModalTitle')}
         >
           {/* Ambient Soft Studio Glows */}
@@ -586,7 +610,7 @@ export const DashboardView: React.FC = () => {
               className={`rounded-2xl border px-4 py-2.5 flex items-center justify-between gap-3 ${cardSurface} border-[var(--status-success)]/30 bg-[var(--status-success-soft)]/40`}
             >
               <div className="flex items-center gap-2 text-[12px]">
-                <span className="w-2 h-2 rounded-full bg-[var(--status-success)] animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-[var(--status-success)] motion-safe:animate-pulse" />
                 <span className="font-semibold text-[var(--status-success)]">
                   {t('vacationActiveBadge')} · {t('vacationRemainingDays', { n: vacRemaining })}
                 </span>
@@ -612,7 +636,7 @@ export const DashboardView: React.FC = () => {
 
           {/* Dynamic Today's Study Progress Board / Active Vacation Protection Hero */}
           <section
-            className={`dashboard-hero relative rounded-[24px] border px-7 sm:px-9 py-6 sm:py-7 flex flex-col lg:flex-row lg:items-center justify-between gap-6 lg:gap-8 transition-all duration-500 ${cardSurface} ${
+            className={`dashboard-hero relative rounded-[24px] border px-7 sm:px-9 py-6 sm:py-7 flex flex-col lg:flex-row lg:items-center justify-between gap-6 lg:gap-8 transition-[background-color,border-color,box-shadow] duration-500 ${cardSurface} ${
               isSyncPending
                 ? 'border-[var(--brand-border)] shadow-md ring-1 ring-[var(--brand)]/20'
                 : isVacationActive
@@ -634,28 +658,25 @@ export const DashboardView: React.FC = () => {
               {/* Left + Center-Left: Ring & 3-Line Progress Stack */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 sm:gap-7 min-w-0">
                 {/* Zone 1: Left Circular Ring */}
-                <HoverCard
-                  size="sm"
+                <Tooltip
+                  variant="compact"
                   side="bottom"
-                  align="start"
+                  align="center"
                   offset={8}
                   openDelay={180}
-                  closeDelay={150}
-                  ariaLabel={isVacationActive ? t('vacationModalTitle') : t('todayProgressTitle')}
+                  className="w-max tabular-nums"
                   repositionKey={`${isSyncPending}-${isVacationActive}-${completed}-${totalWorkload}-${vacRemaining}`}
                   content={
-                    <div className="leading-[1.6] text-[var(--text-primary)]">
-                      {isSyncPending
-                        ? syncing
-                          ? t('syncingAnkiWebAria')
-                          : t('loadingLocalCollection')
-                        : isVacationActive
-                        ? `${t('vacationActiveBadge')} · ${vacRemaining}/${vacDays} ${t('daysUnit')}`
-                        : t('todayProgressTooltip', {
-                            done: completed,
-                            total: totalWorkload,
-                          })}
-                    </div>
+                    isSyncPending
+                      ? syncing
+                        ? t('syncingAnkiWebAria')
+                        : t('loadingLocalCollection')
+                      : isVacationActive
+                      ? `${t('vacationActiveBadge')} · ${vacRemaining}/${vacDays} ${t('daysUnit')}`
+                      : t('todayProgressTooltip', {
+                          done: completed,
+                          total: totalWorkload,
+                        })
                   }
                 >
                   <div
@@ -740,7 +761,7 @@ export const DashboardView: React.FC = () => {
                           ? vacDashoffset
                           : strokeDashoffset
                       }
-                      className={`dashboard-progress-ring-arc ${isSyncPending ? 'animate-spin origin-center' : ''}`}
+                      className={`dashboard-progress-ring-arc ${isSyncPending ? 'motion-safe:animate-spin origin-center' : ''}`}
                     />
                   </svg>
                   <div
@@ -749,7 +770,7 @@ export const DashboardView: React.FC = () => {
                   >
                     {isSyncPending ? (
                       <>
-                        <div className="w-4 h-4 rounded-full border-2 border-[var(--status-warning)]/20 border-t-[var(--status-warning)] animate-spin" />
+                        <div className="w-4 h-4 rounded-full border-2 border-[var(--status-warning)]/20 border-t-[var(--status-warning)] motion-safe:animate-spin" />
                         <span className="text-[10px] text-[var(--status-warning)] font-semibold mt-1">
                           {t('syncing')}
                         </span>
@@ -789,14 +810,14 @@ export const DashboardView: React.FC = () => {
                     )}
                   </div>
                 </div>
-                </HoverCard>
+                </Tooltip>
 
                 {/* Zone 2: 3-Line Progress Stack */}
                 {isVacationActive && !isSyncPending ? (
                   <div className="space-y-2.5 min-w-[200px]">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--status-success-soft)] text-[var(--status-success)]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] animate-pulse" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--status-success)] motion-safe:animate-pulse" />
                         <span>{t('vacationActiveBadge')}</span>
                       </span>
                       {dashboard.vacation?.reason && (
@@ -915,7 +936,7 @@ export const DashboardView: React.FC = () => {
                               onClick={() => appActions.openIcuModal('rescue')}
                               className="dashboard-stat-pill px-2 py-0.5 rounded-full text-[11.5px] font-medium inline-flex items-center gap-1 whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)] border border-[var(--brand-border)] hover:opacity-90 cursor-pointer"
                             >
-                              <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <path d="M3 17l6-6 4 4 8-8" />
                                 <path d="M17 7h4v4" />
                               </svg>
@@ -937,7 +958,7 @@ export const DashboardView: React.FC = () => {
                     disabled
                     className="h-10 px-5 rounded-xl border font-medium text-[13px] flex items-center gap-2 cursor-wait whitespace-nowrap bg-[var(--bg-subtle)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
                   >
-                    <span className="w-3.5 h-3.5 rounded-full border-2 border-[var(--status-warning)]/30 border-t-[var(--status-warning)] animate-spin" />
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-[var(--status-warning)]/30 border-t-[var(--status-warning)] motion-safe:animate-spin" />
                     <span>{t('syncing')}</span>
                   </button>
                 ) : isVacationActive ? (
@@ -1269,10 +1290,10 @@ export const DashboardView: React.FC = () => {
                         role="img"
                         aria-label={`${deck.name} ${t('masteryLabel')} ${deck.mastery}%`}
                       >
-                        <span className="h-full transition-all duration-500 ease-[var(--ease-out)]" style={{ width: `${breakdown.mature * 100}%`, backgroundColor: deckScale.brand }} />
-                        <span className="h-full transition-all duration-500 ease-[var(--ease-out)]" style={{ width: `${breakdown.review * 100}%`, backgroundColor: deckScale.heatmap[2] }} />
-                        <span className="h-full transition-all duration-500 ease-[var(--ease-out)]" style={{ width: `${breakdown.learning * 100}%`, backgroundColor: deckScale.heatmap[1] }} />
-                        <span className="h-full transition-all duration-500 ease-[var(--ease-out)]" style={{ width: `${breakdown.new * 100}%`, backgroundColor: newColor }} />
+                        <span className="h-full transition-[width] duration-500 ease-[var(--ease-out)]" style={{ width: `${breakdown.mature * 100}%`, backgroundColor: deckScale.brand }} />
+                        <span className="h-full transition-[width] duration-500 ease-[var(--ease-out)]" style={{ width: `${breakdown.review * 100}%`, backgroundColor: deckScale.heatmap[2] }} />
+                        <span className="h-full transition-[width] duration-500 ease-[var(--ease-out)]" style={{ width: `${breakdown.learning * 100}%`, backgroundColor: deckScale.heatmap[1] }} />
+                        <span className="h-full transition-[width] duration-500 ease-[var(--ease-out)]" style={{ width: `${breakdown.new * 100}%`, backgroundColor: newColor }} />
                       </div>
 
                       {/* Due indicators + persistent actions */}
@@ -1376,13 +1397,13 @@ export const DashboardView: React.FC = () => {
                   </div>
                   <div className="dashboard-heatmap-viewport my-3">
                     <div className="dashboard-heatmap-content">
-                      <div className="grid grid-cols-26 gap-1.5">
+                      <div dir="ltr" className="flex items-center justify-between gap-1.5">
                         {Array.from({ length: 26 }).map((_, colIdx) => (
-                          <div key={colIdx} className="flex flex-col gap-1.5">
+                          <div key={colIdx} className="flex flex-col gap-[7px]">
                             {Array.from({ length: 7 }).map((__, rowIdx) => (
                               <div
                                 key={rowIdx}
-                                className="w-2.5 h-2.5 rounded-[3px] animate-skeleton-shimmer opacity-40"
+                                className="dashboard-heatmap-cell w-[11px] h-[11px] sm:w-[12px] sm:h-[12px] animate-skeleton-shimmer opacity-40"
                               />
                             ))}
                           </div>
@@ -1401,20 +1422,20 @@ export const DashboardView: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-start justify-between gap-2 flex-wrap">
-                    <div>
-                      <h3 className="text-[14.5px] font-bold">{t('heatmapTitle')}</h3>
-                      <p className={`text-[11.5px] ${subText} mt-1`}>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-baseline gap-2.5 flex-wrap min-w-0">
+                      <h3 className="text-[14.5px] font-semibold tracking-tight">{t('heatmapTitle')}</h3>
+                      <span className="text-[11.5px] text-[var(--text-muted)] tabular-nums">
                         {t('heatmapSub', { n: dashboard.heatmap.totalYearReviews.toLocaleString() })}
-                      </p>
+                      </span>
                     </div>
                     <div className={`flex items-center gap-1 text-[11px] shrink-0 ${subText}`}>
                       <span>{t('less')}</span>
                       {[0, 1, 2, 3, 4].map((lv) => (
                         <span
                           key={lv}
-                          style={heatmapLevelStyle(lv)}
-                          className="w-2.5 h-2.5 rounded-[3px] transition-colors duration-200"
+                          data-level={lv}
+                          className="dashboard-heatmap-cell w-2.5 h-2.5"
                         />
                       ))}
                       <span>{t('more')}</span>
@@ -1422,7 +1443,7 @@ export const DashboardView: React.FC = () => {
                   </div>
 
                   <div
-                    className="my-5 relative"
+                    className="my-4 relative"
                     onMouseLeave={() => {
                       setHoveredHeatmapCell(null);
                       setHeatmapAnchorEl(null);
@@ -1451,7 +1472,7 @@ export const DashboardView: React.FC = () => {
                                   <span aria-hidden="true">❄️</span>
                                   <span>{t('freezeStreakLabel')}</span>
                                 </span>
-                              ) : (
+                              ) : hoveredHeatmapCell.count > 0 ? (
                                 <>
                                   <span className="text-[var(--brand-text)]">
                                     {hoveredHeatmapCell.count.toLocaleString()} {t('cardsUnit')}
@@ -1463,6 +1484,10 @@ export const DashboardView: React.FC = () => {
                                     {hoveredHeatmapCell.accuracy}%
                                   </span>
                                 </>
+                              ) : (
+                                <span className="font-normal text-[var(--text-muted)]">
+                                  {t('weeklyRhythmEmptyDay')}
+                                </span>
                               )}
                             </div>
                           </ChartTooltipContent>
@@ -1470,19 +1495,24 @@ export const DashboardView: React.FC = () => {
                       }
                     />
 
-                    <div className="dashboard-heatmap-viewport">
+                    <div className="dashboard-heatmap-viewport p-1 -m-1">
                       <div className="dashboard-heatmap-content">
-                        <div className="grid grid-cols-26 gap-1.5">
+                        <div dir="ltr" className="flex items-center justify-between gap-1.5 py-1">
                           {Array.from({ length: 26 }).map((_, colIdx) => (
-                            <div key={colIdx} className="flex flex-col gap-1.5">
+                            <div key={colIdx} className="flex flex-col gap-[7px]">
                               {Array.from({ length: 7 }).map((__, rowIdx) => {
-                                const cell = recent182Cells[colIdx * 7 + rowIdx] || {
+                                const flatIdx = colIdx * 7 + rowIdx;
+                                const cell = recent182Cells[flatIdx] || {
                                   date: '',
                                   count: 0,
                                   accuracy: 0,
                                   level: 0,
                                 };
                                 const isFrozen = Boolean(cell.isStreakFrozen);
+                                const isTodayCell =
+                                  recent182Cells.length > 0 &&
+                                  flatIdx === recent182Cells.length - 1 &&
+                                  Boolean(cell.date);
                                 const isHovered =
                                   hoveredHeatmapCell?.colIdx === colIdx &&
                                   hoveredHeatmapCell?.rowIdx === rowIdx;
@@ -1502,7 +1532,9 @@ export const DashboardView: React.FC = () => {
                                 const cellAriaLabel = `${formattedCellDate ? `${formattedCellDate}: ` : ''}${
                                   isFrozen
                                     ? t('freezeStreakLabel')
-                                    : `${cell.count.toLocaleString()} ${t('cardsUnit')} · ${cellAccuracy}%`
+                                    : cell.count > 0
+                                    ? `${cell.count.toLocaleString()} ${t('cardsUnit')} · ${cellAccuracy}%`
+                                    : t('weeklyRhythmEmptyDay')
                                 }`;
                                 return (
                                   <div
@@ -1510,6 +1542,7 @@ export const DashboardView: React.FC = () => {
                                     tabIndex={0}
                                     role="img"
                                     aria-label={cellAriaLabel}
+                                    data-level={isFrozen ? undefined : Math.max(0, Math.min(4, cell.level || 0))}
                                     onMouseEnter={(e) => {
                                       setHoveredHeatmapCell(cellPayload);
                                       setHeatmapAnchorEl(e.currentTarget);
@@ -1522,9 +1555,12 @@ export const DashboardView: React.FC = () => {
                                       setHoveredHeatmapCell(null);
                                       setHeatmapAnchorEl(null);
                                     }}
-                                    style={isFrozen ? undefined : heatmapLevelStyle(cell.level)}
-                                    className={`w-2.5 h-2.5 rounded-[3px] transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:scale-125 ${
-                                      isHovered ? 'scale-125 ring-2 ring-[var(--brand)]' : ''
+                                    className={`dashboard-heatmap-cell w-[11px] h-[11px] sm:w-[12px] sm:h-[12px] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:scale-125 ${
+                                      isHovered
+                                        ? 'scale-125 ring-2 ring-[var(--brand)] relative z-10'
+                                        : isTodayCell
+                                        ? 'ring-1 ring-[var(--brand)]/80 ring-offset-1 ring-offset-[var(--bg-card)]'
+                                        : ''
                                     } ${
                                       isFrozen
                                         ? 'bg-cyan-400/40 ring-1 ring-cyan-400'
@@ -1537,7 +1573,7 @@ export const DashboardView: React.FC = () => {
                           ))}
                         </div>
 
-                        <div className={`mt-3 flex items-center justify-between text-[10.5px] ${subText} px-0.5`}>
+                        <div dir="ltr" className={`mt-3 flex items-center justify-between text-[10.5px] tabular-nums ${subText} px-0.5`}>
                           {dynamicMonthLabels.map((m, idx) => (
                             <span
                               key={`${m}-${idx}`}
@@ -1557,23 +1593,23 @@ export const DashboardView: React.FC = () => {
                     className="dashboard-divider pt-4 border-t flex items-center gap-7 sm:gap-9 flex-wrap"
                   >
                     <div>
-                      <div className="text-[15.5px] font-bold whitespace-nowrap">
-                        {dashboard.heatmap.weekTotalCards} {t('cardsUnit')}
+                      <div className="text-[15.5px] font-bold tabular-nums whitespace-nowrap">
+                        {dashboard.heatmap.weekTotalCards.toLocaleString()} {t('cardsUnit')}
                       </div>
                       <div className={`text-[11px] mt-0.5 whitespace-nowrap ${subText}`}>{t('weekStudied')}</div>
                     </div>
                     <div>
-                      <div className="text-[15.5px] font-bold whitespace-nowrap">
-                        {dashboard.heatmap.dailyAverage} {t('cardsUnit')}
+                      <div className="text-[15.5px] font-bold tabular-nums whitespace-nowrap">
+                        {dashboard.heatmap.dailyAverage.toLocaleString()} {t('cardsUnit')}
                       </div>
                       <div className={`text-[11px] mt-0.5 whitespace-nowrap ${subText}`}>{t('dailyAvg')}</div>
                     </div>
                     <div>
-                      <div className="text-[15.5px] font-bold whitespace-nowrap">{dashboard.heatmap.retentionRate}%</div>
+                      <div className="text-[15.5px] font-bold tabular-nums whitespace-nowrap">{dashboard.heatmap.retentionRate}%</div>
                       <div className={`text-[11px] mt-0.5 whitespace-nowrap ${subText}`}>{t('retentionRate')}</div>
                     </div>
                     <div className="ms-auto">
-                      <span className="px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap bg-[var(--brand-soft)] text-[var(--brand-text)]">
+                      <span className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold tabular-nums whitespace-nowrap ${wowToneClass}`}>
                         {dashboard.heatmap.wowChange}
                       </span>
                     </div>
@@ -1590,32 +1626,39 @@ export const DashboardView: React.FC = () => {
             >
               {isSyncPending ? (
                 <div className="flex flex-col justify-between h-full gap-4">
-                  <div>
-                    <h3 className="text-[14.5px] font-bold">{t('weeklyRhythmTitle')}</h3>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-[14.5px] font-semibold tracking-tight">{t('weeklyRhythmTitle')}</h3>
+                    <div className="w-16 h-5 rounded-md animate-skeleton-shimmer" />
                   </div>
-                  <div className="my-3 h-[145px] flex items-end justify-between gap-3 pt-6 px-2">
+                  <div className="my-3 h-[144px] flex items-end justify-between gap-3 pt-4 px-1">
                     {[65, 25, 45, 18, 35, 15, 28].map((h, idx) => (
                       <div
                         key={idx}
                         style={{ height: `${h}%` }}
-                        className="flex-1 max-w-[34px] rounded-lg animate-skeleton-shimmer opacity-50"
+                        className="flex-1 max-w-[30px] rounded-t-lg animate-skeleton-shimmer opacity-50"
                       />
                     ))}
                   </div>
                   <div
-                    className="dashboard-divider pt-4 border-t"
+                    className="dashboard-divider pt-4 border-t flex items-center gap-8"
                   >
-                    <div className="w-48 h-3 rounded animate-skeleton-shimmer" />
+                    <div className="w-20 h-7 rounded animate-skeleton-shimmer" />
+                    <div className="w-20 h-7 rounded animate-skeleton-shimmer" />
                   </div>
                 </div>
               ) : (
                 <>
-                  <div>
-                    <h3 className="text-[14.5px] font-bold">{t('weeklyRhythmTitle')}</h3>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-[14.5px] font-semibold tracking-tight">{t('weeklyRhythmTitle')}</h3>
+                    {todayRhythmDay && (
+                      <span className="px-2 py-0.5 rounded-md bg-[var(--brand-soft)] text-[var(--brand-text)] text-[11px] font-semibold tabular-nums shrink-0">
+                        {t('todayLabel')} {todayRhythmDay.count.toLocaleString()} {t('cardsUnit')}
+                      </span>
+                    )}
                   </div>
 
                   <div
-                    className="my-5 h-[145px] flex items-end justify-between gap-3 pt-6 px-2 relative"
+                    className="my-4 relative"
                     onMouseLeave={() => {
                       setHoveredRhythmIdx(null);
                       setRhythmAnchorEl(null);
@@ -1638,7 +1681,7 @@ export const DashboardView: React.FC = () => {
                           hoveredRhythmIdx !== null
                             ? dashboard.weeklyRhythm.days[hoveredRhythmIdx]
                             : undefined;
-                        if (!day) return null;
+                        if (!day || hoveredRhythmIdx === null) return null;
                         const mins =
                           day.minutes !== undefined
                             ? day.minutes
@@ -1650,84 +1693,188 @@ export const DashboardView: React.FC = () => {
                                 )
                               )
                             : 0;
+                        const dayHeader =
+                          formatMonthDayWithWeekday(day.date, resolvedLang, hoveredRhythmIdx) ||
+                          day.label;
                         return (
-                          <ChartTooltipContent eyebrow={day.label}>
-                            <div className="flex items-center gap-1.5 text-[11.5px] font-semibold tabular-nums whitespace-nowrap">
-                              <span className="text-[var(--brand-text)]">
-                                {day.count.toLocaleString()} {t('cardsUnit')}
-                              </span>
-                              <span aria-hidden="true" className="text-[var(--text-muted)]">
-                                ·
-                              </span>
-                              <span className="text-[var(--text-secondary)]">
-                                {mins}m
-                              </span>
-                            </div>
+                          <ChartTooltipContent
+                            className="min-w-[144px] gap-1.5"
+                            eyebrow={
+                              <div className="flex items-center justify-between gap-2.5 pb-1 border-b border-[var(--border-subtle)]/80">
+                                <span className="text-[11px] font-semibold text-[var(--text-primary)] whitespace-nowrap">
+                                  {dayHeader}
+                                </span>
+                                {day.isToday && (
+                                  <span className="px-1.5 py-0.5 rounded-md text-[9.5px] font-semibold leading-none bg-[var(--brand-soft)] text-[var(--brand-text)] shrink-0">
+                                    {t('todayLabel')}
+                                  </span>
+                                )}
+                              </div>
+                            }
+                            rows={
+                              day.count > 0
+                                ? [
+                                    {
+                                      label: t('weeklyRhythmCardsLabel'),
+                                      value: `${day.count.toLocaleString()} ${t('cardsUnit')}`,
+                                      tone: 'brand',
+                                    },
+                                    {
+                                      label: t('weeklyRhythmDurationLabel'),
+                                      value: formatStudyMinutes(mins, resolvedLang),
+                                      tone: 'default',
+                                    },
+                                  ]
+                                : undefined
+                            }
+                          >
+                            {day.count === 0 && (
+                              <div className="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
+                                {t('weeklyRhythmEmptyDay')}
+                              </div>
+                            )}
                           </ChartTooltipContent>
                         );
                       })()}
                     />
 
-                    {dashboard.weeklyRhythm.days.map((day, idx) => {
-                      const heightPct =
-                        day.count > 0 ? Math.max(18, Math.round((day.count / maxWeeklyCount) * 100)) : 8;
-                      const isHovered = hoveredRhythmIdx === idx;
-                      const mins =
-                        day.minutes !== undefined
-                          ? day.minutes
-                          : day.count > 0
-                          ? Math.max(1, Math.round((day.count * (dashboard.weeklyRhythm.avgSecondsPerCard || 6)) / 60))
-                          : 0;
+                    {/* Plot area with subtle horizontal gridlines, weekly avg dashed line, and flush baseline */}
+                    <div
+                      dir="ltr"
+                      className="h-[144px] flex items-end justify-between gap-2.5 sm:gap-3 px-1 relative border-b border-[var(--border-subtle)]/75"
+                    >
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0 flex flex-col justify-between"
+                      >
+                        <div className="border-t border-black/[0.04] dark:border-white/[0.05]" />
+                        <div className="border-t border-black/[0.04] dark:border-white/[0.05]" />
+                        <div className="border-t border-black/[0.04] dark:border-white/[0.05]" />
+                        <div />
+                      </div>
 
-                      return (
+                      {weeklyAvgLinePct > 0 && (
                         <div
-                          key={day.label}
-                          tabIndex={0}
-                          role="img"
-                          aria-label={`${day.label}: ${day.count.toLocaleString()} ${t('cardsUnit')} (${mins}m)`}
-                          onMouseEnter={(e) => {
-                            setHoveredRhythmIdx(idx);
-                            setRhythmAnchorEl(e.currentTarget);
-                          }}
-                          onFocus={(e) => {
-                            setHoveredRhythmIdx(idx);
-                            setRhythmAnchorEl(e.currentTarget);
-                          }}
-                          onBlur={() => {
-                            setHoveredRhythmIdx(null);
-                            setRhythmAnchorEl(null);
-                          }}
-                          className="flex-1 flex flex-col items-center gap-2.5 h-full justify-end relative cursor-pointer rounded-lg focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
-                        >
+                          aria-hidden="true"
+                          style={{ bottom: `${weeklyAvgLinePct}%` }}
+                          className="pointer-events-none absolute inset-x-0 border-t border-dashed border-[var(--brand)]/35 z-10"
+                        />
+                      )}
+
+                      {dashboard.weeklyRhythm.days.map((day, idx) => {
+                        const isFutureDay =
+                          todayRhythmIdx >= 0 && idx > todayRhythmIdx && day.count === 0;
+                        const heightPct =
+                          day.count > 0
+                            ? Math.max(12, Math.round((day.count / maxWeeklyCount) * 100))
+                            : 0;
+                        const isHovered = hoveredRhythmIdx === idx;
+                        const mins =
+                          day.minutes !== undefined
+                            ? day.minutes
+                            : day.count > 0
+                            ? Math.max(
+                                1,
+                                Math.round(
+                                  (day.count * (dashboard.weeklyRhythm.avgSecondsPerCard || 6)) / 60
+                                )
+                              )
+                            : 0;
+                        const dayAriaHeading =
+                          formatMonthDayWithWeekday(day.date, resolvedLang, idx) || day.label;
+                        const dayAriaDetail =
+                          day.count > 0
+                            ? `${day.count.toLocaleString()} ${t('cardsUnit')} · ${formatStudyMinutes(mins, resolvedLang)}`
+                            : t('weeklyRhythmEmptyDay');
+
+                        return (
                           <div
-                            style={{
-                              height: `${heightPct}%`,
-                              backgroundColor:
-                                day.isToday || isHovered
-                                  ? brandHex
-                                  : accentScale.brandMutedBar,
+                            key={day.date || `${day.label}-${idx}`}
+                            tabIndex={0}
+                            role="img"
+                            aria-label={`${dayAriaHeading}: ${dayAriaDetail}`}
+                            onMouseEnter={(e) => {
+                              setHoveredRhythmIdx(idx);
+                              setRhythmAnchorEl(e.currentTarget);
                             }}
-                            className={`w-full max-w-[34px] rounded-lg transition-all duration-300 ${
-                              isHovered ? 'scale-x-105 shadow-md' : ''
-                            }`}
-                          />
+                            onFocus={(e) => {
+                              setHoveredRhythmIdx(idx);
+                              setRhythmAnchorEl(e.currentTarget);
+                            }}
+                            onBlur={() => {
+                              setHoveredRhythmIdx(null);
+                              setRhythmAnchorEl(null);
+                            }}
+                            className="relative z-10 flex-1 h-full flex flex-col items-center justify-end cursor-pointer rounded-t-lg focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2"
+                          >
+                            {day.count > 0 ? (
+                              <div
+                                style={{
+                                  height: `${heightPct}%`,
+                                  backgroundColor:
+                                    day.isToday || isHovered
+                                      ? brandHex
+                                      : accentScale.brandMutedBar,
+                                }}
+                                className={`w-full max-w-[30px] rounded-t-[8px] transition-[height,background-color,opacity,transform,filter] duration-200 ${
+                                  isHovered ? 'scale-x-105 brightness-105' : ''
+                                }`}
+                              />
+                            ) : isFutureDay ? (
+                              <div className="w-full max-w-[20px] h-[2px] rounded-full bg-[var(--dashboard-track)] opacity-60" />
+                            ) : (
+                              <div className="w-full max-w-[26px] h-[4px] rounded-t-sm bg-[var(--dashboard-track-new)]/80" />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Weekday ticks directly below baseline */}
+                    <div
+                      dir="ltr"
+                      className="pt-2.5 px-1 flex items-center justify-between gap-2.5 sm:gap-3"
+                    >
+                      {dashboard.weeklyRhythm.days.map((day, idx) => {
+                        const isFutureDay =
+                          todayRhythmIdx >= 0 && idx > todayRhythmIdx && day.count === 0;
+                        const isHovered = hoveredRhythmIdx === idx;
+                        return (
                           <span
-                            className={`text-[11px] ${
-                              day.isToday || isHovered ? 'font-bold text-[var(--brand-text)]' : subText
+                            key={day.date || `lbl-${day.label}-${idx}`}
+                            className={`flex-1 text-center text-[11px] transition-colors ${
+                              day.isToday || isHovered
+                                ? 'font-semibold text-[var(--brand-text)]'
+                                : isFutureDay
+                                ? 'text-[var(--text-muted)] opacity-45'
+                                : subText
                             }`}
                           >
                             {day.label}
                           </span>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <div className={`dashboard-divider pt-4 border-t text-[11px] ${subText}`}>
-                    {t('weeklyRhythmFooter', {
-                      sec: dashboard.weeklyRhythm.avgSecondsPerCard,
-                      min: dashboard.weeklyRhythm.longestSessionMinutes,
-                    })}
+                  {/* Balanced 2-row metric footer matching Left Heatmap card height */}
+                  <div className="dashboard-divider pt-4 border-t flex items-center gap-7 sm:gap-9 flex-wrap">
+                    <div>
+                      <div className="text-[15.5px] font-bold tabular-nums whitespace-nowrap">
+                        {formatSecondsUnit(dashboard.weeklyRhythm.avgSecondsPerCard)}
+                      </div>
+                      <div className={`text-[11px] mt-0.5 whitespace-nowrap ${subText}`}>
+                        {t('weeklyRhythmAvgPaceLabel')}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[15.5px] font-bold tabular-nums whitespace-nowrap">
+                        {formatStudyMinutes(dashboard.weeklyRhythm.longestSessionMinutes, resolvedLang)}
+                      </div>
+                      <div className={`text-[11px] mt-0.5 whitespace-nowrap ${subText}`}>
+                        {t('weeklyRhythmLongestLabel')}
+                      </div>
+                    </div>
                   </div>
                 </>
               )}

@@ -8,10 +8,17 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { section, test, eq, equal, ok, doesNotMatch, throws } from '../harness';
 import {
+  AVATAR_CROP_MAX_ZOOM,
+  AVATAR_CROP_MIN_ZOOM,
+  AVATAR_CROP_VIEWPORT_PX,
   AVATAR_IMAGE_ACCEPT,
   AVATAR_PRESET_IDS,
   AvatarImageError,
+  clampAvatarCropTransform,
+  computeAvatarCropLayout,
+  computeInteractiveAvatarCropRect,
   computeSquareCoverCropRect,
+  DEFAULT_AVATAR_CROP,
   DEFAULT_CUSTOM_AVATAR,
   estimateDataUrlDecodedBytes,
   getAvatarInitial,
@@ -19,9 +26,13 @@ import {
   isSafeAvatarDataUrl,
   isSupportedSourceImageFile,
   MAX_AVATAR_OUTPUT_BYTES,
+  normalizeAvatarCropRotation,
   normalizeCustomAvatarConfig,
+  rotateAvatarCropTransform,
+  scaleAvatarCropTransformZoom,
 } from '../../../frontend/src/utils/avatarImage';
 import { UserAvatar } from '../../../frontend/src/components/common/UserAvatar';
+import { AvatarCropModal } from '../../../frontend/src/components/settings/AvatarCropModal';
 import { Sidebar } from '../../../frontend/src/components/layout/Sidebar';
 import { SettingsModal } from '../../../frontend/src/components/settings/SettingsModal';
 import { DesignSystemView } from '../../../frontend/src/components/design-system/DesignSystemView';
@@ -264,8 +275,12 @@ test('Sidebar, SettingsModal, and DesignSystemView render UserAvatar and profile
     ok(sidebarHtml.includes('sidebar-footer-toolbar'), 'Sidebar footer should render unified toolbar');
     ok(sidebarHtml.includes('sidebar-footer-tool-btn'), 'Sidebar footer should render icon-only tool buttons');
     ok(sidebarHtml.includes('aria-pressed="false"'), 'Vacation mode button should expose aria-pressed');
-    ok(sidebarHtml.includes('data-open="true"'), 'Settings icon button should reflect settingsOpen state via data-open');
-    ok(sidebarHtml.includes('aria-expanded="true"'), 'Settings icon button should expose aria-expanded');
+    ok(sidebarHtml.includes('data-open="true"'), 'Profile trigger should reflect settingsOpen state via data-open');
+    ok(sidebarHtml.includes('aria-expanded="true"'), 'Profile trigger should expose aria-expanded');
+    ok(
+      !sidebarHtml.includes(`aria-label="${translate('zh-CN', 'navSettings')}"`),
+      'Sidebar footer should omit duplicate settings gear icon button'
+    );
     doesNotMatch(sidebarHtml, /\btitle="/, 'Sidebar must not contain raw HTML title= attributes');
 
     const settingsHtml = renderSafe(React.createElement(SettingsModal));
@@ -303,6 +318,111 @@ test('Sidebar, SettingsModal, and DesignSystemView render UserAvatar and profile
       customNickname: prev.customNickname,
       customAvatar: prev.customAvatar,
       dashboard: prev.dashboard,
+    });
+  }
+});
+
+test('Sidebar toggles cleanly between expanded (240px) and collapsed icon rail (72px)', () => {
+  const prev = getAppState();
+  try {
+    setAppState({
+      resolvedLang: 'zh-CN',
+      activeTab: 'dashboard',
+      sidebarCollapsed: false,
+      settingsOpen: false,
+      customAvatar: { kind: 'preset', presetId: 'owl' },
+      dashboard: {
+        ...prev.dashboard,
+        userName: '张耀',
+      },
+      decks: [
+        {
+          id: '1',
+          name: 'Default',
+          fullName: 'Default',
+          depth: 0,
+          isChild: false,
+          childrenCount: 0,
+          dueReview: 12,
+          dueNew: 0,
+          totalCards: 100,
+          masteredPercent: 50,
+          retentionPercent: 90,
+          accentColor: '#3B82F6',
+        } as any,
+      ],
+    });
+
+    const expandedHtml = renderSafe(React.createElement(Sidebar));
+    ok(expandedHtml.includes('data-collapsed="false"'), 'expanded sidebar marks data-collapsed=false');
+    ok(expandedHtml.includes('w-[240px]'), 'expanded sidebar uses 240px width');
+    ok(
+      expandedHtml.includes(`aria-label="${translate('zh-CN', 'sidebarToggleLabel')}"`) &&
+        expandedHtml.includes('aria-controls="studio-sidebar-nav"'),
+      'collapse button exposes state-neutral aria-label and aria-controls'
+    );
+    ok(expandedHtml.includes('aria-orientation="horizontal"'), 'expanded footer toolbar is horizontal');
+    ok(expandedHtml.includes('focusgroup="toolbar wrap"'), 'expanded footer toolbar uses horizontal focusgroup');
+    ok(expandedHtml.includes('>Anki Studio<'), 'expanded sidebar shows brand title');
+    ok(
+      expandedHtml.includes(`aria-label="${translate('zh-CN', 'settingsTabAbout')} · Anki Studio"`),
+      'brand trigger opens Settings About tab'
+    );
+    ok(expandedHtml.includes('Default'), 'expanded sidebar shows deck tree');
+
+    // Verify openSettings('about') switches cleanly and openSettings('appearance') resets back
+    appActions.openSettings('about');
+    equal(getAppState().settingsOpen, true, 'openSettings(about) opens SettingsModal');
+    equal(getAppState().settingsInitialTab, 'about', 'openSettings(about) targets about tab');
+    appActions.openSettings('appearance');
+    equal(getAppState().settingsInitialTab, 'appearance', 'openSettings(appearance) resets tab');
+    setAppState({ settingsOpen: false });
+
+    // Toggle to collapsed icon rail via store action
+    appActions.toggleSidebar();
+    equal(getAppState().sidebarCollapsed, true, 'toggleSidebar flips sidebarCollapsed to true');
+
+    const collapsedHtml = renderSafe(React.createElement(Sidebar));
+    ok(collapsedHtml.includes('data-collapsed="true"'), 'collapsed sidebar marks data-collapsed=true');
+    ok(collapsedHtml.includes('w-[72px]'), 'collapsed sidebar shrinks to 72px icon rail');
+    ok(collapsedHtml.includes('aria-expanded="false"'), 'toggle button reflects collapsed aria-expanded=false');
+    ok(collapsedHtml.includes('aria-orientation="vertical"'), 'collapsed footer toolbar becomes vertical');
+    ok(collapsedHtml.includes('focusgroup="toolbar wrap block"'), 'vertical toolbar enables block-axis focusgroup');
+    ok(!collapsedHtml.includes('>Anki Studio<'), 'collapsed rail hides brand wordmark');
+    ok(!collapsedHtml.includes('>Default<'), 'collapsed rail hides expanded deck tree');
+    ok(
+      collapsedHtml.includes(`aria-label="${translate('zh-CN', 'sidebarDecks')}"`),
+      'collapsed rail exposes compact Decks icon button'
+    );
+    ok(
+      collapsedHtml.includes(`aria-label="${translate('zh-CN', 'quickAddBtn')}"`) &&
+        collapsedHtml.includes(`aria-label="${translate('zh-CN', 'openSettingsTooltip')}"`),
+      'collapsed icon-only controls expose explicit aria-labels'
+    );
+    ok(collapsedHtml.includes('aria-current="page"'), 'active nav tab exposes aria-current=page');
+    doesNotMatch(collapsedHtml, /\btitle="/, 'collapsed Sidebar must not contain raw HTML title= attributes');
+
+    // Toggle back to expanded
+    appActions.toggleSidebar(false);
+    equal(getAppState().sidebarCollapsed, false, 'toggleSidebar(false) restores expanded state');
+
+    // SettingsModal Shortcuts tab displays Cmd + \ entry
+    setAppState({ settingsOpen: true, settingsInitialTab: 'shortcuts' });
+    const shortcutsHtml = renderSafe(React.createElement(SettingsModal));
+    ok(
+      shortcutsHtml.includes(translate('zh-CN', 'sidebarToggleLabel')),
+      'SettingsModal shortcuts tab includes sidebar toggle shortcut label'
+    );
+  } finally {
+    setAppState({
+      resolvedLang: prev.resolvedLang,
+      activeTab: prev.activeTab,
+      sidebarCollapsed: prev.sidebarCollapsed,
+      settingsOpen: prev.settingsOpen,
+      settingsInitialTab: prev.settingsInitialTab,
+      customAvatar: prev.customAvatar,
+      dashboard: prev.dashboard,
+      decks: prev.decks,
     });
   }
 });
@@ -350,4 +470,139 @@ test('callAnki disables 8000ms timer for pick_avatar_image while keeping default
     globalThis.setTimeout = origSetTimeout;
     globalThis.clearTimeout = origClearTimeout;
   }
+});
+
+section('avatar · interactive crop geometry & AvatarCropModal SSR');
+
+test('interactive crop math clamps pan bounds, preserves zoom center, rotates 90deg increments, and matches source pixels 1:1', () => {
+  // 400x200 landscape in a 200px viewport at 1x -> display 400x200, maxOffsetX = 100, maxOffsetY = 0
+  const baseLayout = computeAvatarCropLayout(400, 200, DEFAULT_AVATAR_CROP, 200);
+  equal(baseLayout.zoom, 1);
+  equal(baseLayout.rotation, 0);
+  equal(baseLayout.imgWidth, 400);
+  equal(baseLayout.imgHeight, 200);
+  equal(baseLayout.displayWidth, 400);
+  equal(baseLayout.displayHeight, 200);
+  equal(baseLayout.maxOffsetX, 100);
+  equal(baseLayout.maxOffsetY, 0);
+
+  // Overshooting pan clamps tightly so no empty edges ever appear
+  eq(clampAvatarCropTransform(400, 200, { zoom: 1, offsetX: 999, offsetY: -50 }, 200), {
+    zoom: 1,
+    offsetX: 100,
+    offsetY: 0,
+    rotation: 0,
+  });
+
+  // Left-most edge (offsetX = +100) crops [0..200], right-most edge (offsetX = -100) crops [200..400]
+  eq(computeInteractiveAvatarCropRect(400, 200, { zoom: 1, offsetX: 100, offsetY: 0 }, 200), {
+    sx: 0,
+    sy: 0,
+    sw: 200,
+    sh: 200,
+  });
+  eq(computeInteractiveAvatarCropRect(400, 200, { zoom: 1, offsetX: -100, offsetY: 0 }, 200), {
+    sx: 200,
+    sy: 0,
+    sw: 200,
+    sh: 200,
+  });
+
+  // Zooming 1x -> 2x scales offsets proportionally so the center pixel stays locked
+  const zoomed = scaleAvatarCropTransformZoom(
+    400,
+    200,
+    { zoom: 1, offsetX: 50, offsetY: 0, rotation: 0 },
+    2,
+    200
+  );
+  equal(zoomed.zoom, 2);
+  equal(zoomed.offsetX, 100);
+  equal(zoomed.offsetY, 0);
+  equal(zoomed.rotation, 0);
+  const zoomedRect = computeInteractiveAvatarCropRect(400, 200, zoomed, 200);
+  equal(zoomedRect.sw, 100);
+  equal(zoomedRect.sh, 100);
+  // Center before zoom was x = 200 - 50 = 150; after zoom center must still be 150 -> sx = 100
+  equal(zoomedRect.sx, 100);
+  equal(zoomedRect.sy, 50);
+
+  // Rotation normalization snaps & wraps angles cleanly into {0, 90, 180, 270}
+  equal(normalizeAvatarCropRotation(-90), 270);
+  equal(normalizeAvatarCropRotation(0), 0);
+  equal(normalizeAvatarCropRotation(360), 0);
+  equal(normalizeAvatarCropRotation(450), 90);
+
+  // Rotating 400x200 by +90deg swaps effective bounding dimensions and pan bounds
+  const rotated90Layout = computeAvatarCropLayout(
+    400,
+    200,
+    { zoom: 1, offsetX: 0, offsetY: 0, rotation: 90 },
+    200
+  );
+  equal(rotated90Layout.imgWidth, 400);
+  equal(rotated90Layout.imgHeight, 200);
+  equal(rotated90Layout.displayWidth, 200);
+  equal(rotated90Layout.displayHeight, 400);
+  equal(rotated90Layout.maxOffsetX, 0);
+  equal(rotated90Layout.maxOffsetY, 100);
+
+  // Rotating by +/-90deg rotates the pan offset vector so the centered source point stays locked
+  const startTransform = { zoom: 1, offsetX: 50, offsetY: 0, rotation: 0 as const };
+  const startRect = computeInteractiveAvatarCropRect(400, 200, startTransform, 200);
+  eq(startRect, { sx: 50, sy: 0, sw: 200, sh: 200 });
+
+  const cw90 = rotateAvatarCropTransform(400, 200, startTransform, 90, 200);
+  eq(cw90, { zoom: 1, offsetX: 0, offsetY: 50, rotation: 90 });
+  eq(computeInteractiveAvatarCropRect(400, 200, cw90, 200), startRect);
+
+  const cw180 = rotateAvatarCropTransform(400, 200, cw90, 90, 200);
+  eq(cw180, { zoom: 1, offsetX: -50, offsetY: 0, rotation: 180 });
+  eq(computeInteractiveAvatarCropRect(400, 200, cw180, 200), startRect);
+
+  const cw270 = rotateAvatarCropTransform(400, 200, cw180, 90, 200);
+  eq(cw270, { zoom: 1, offsetX: 0, offsetY: -50, rotation: 270 });
+  eq(computeInteractiveAvatarCropRect(400, 200, cw270, 200), startRect);
+
+  const backTo0 = rotateAvatarCropTransform(400, 200, cw90, -90, 200);
+  eq(backTo0, startTransform);
+  eq(computeInteractiveAvatarCropRect(400, 200, backTo0, 200), startRect);
+
+  // Zoom clamps cleanly to [MIN_ZOOM, MAX_ZOOM]
+  equal(
+    clampAvatarCropTransform(200, 200, { zoom: 0.2, offsetX: 0, offsetY: 0 }, AVATAR_CROP_VIEWPORT_PX).zoom,
+    AVATAR_CROP_MIN_ZOOM
+  );
+  equal(
+    clampAvatarCropTransform(200, 200, { zoom: 99, offsetX: 0, offsetY: 0 }, AVATAR_CROP_VIEWPORT_PX).zoom,
+    AVATAR_CROP_MAX_ZOOM
+  );
+});
+
+test('AvatarCropModal renders accessible native dialog, zoom slider, rotate buttons, and no raw title=', () => {
+  equal(translate('zh-CN', 'avatarUploadBtn'), '上传头像');
+  const html = renderSafe(
+    React.createElement(AvatarCropModal, {
+      imageSrc: SAMPLE_PNG_DATA_URL,
+      resolvedLang: 'zh-CN',
+      isDark: false,
+      onClose: () => {},
+      onChangePhoto: () => {},
+      onConfirm: () => {},
+    })
+  );
+  ok(html.includes('<dialog'), 'AvatarCropModal must use native <dialog>');
+  ok(!html.includes('role="dialog"'), 'native <dialog> must not add redundant role="dialog"');
+  ok(!html.includes('aria-modal='), 'native <dialog> must not add redundant aria-modal');
+  ok(html.includes('type="range"'), 'AvatarCropModal must use native range slider for zoom');
+  ok(html.includes('avatar-crop-stage'), 'AvatarCropModal must render draggable crop stage');
+  ok(html.includes('aria-live="polite"'), 'AvatarCropModal must include live region for keyboard feedback');
+  ok(html.includes(translate('zh-CN', 'avatarCropTitle')));
+  ok(html.includes(translate('zh-CN', 'avatarCropApplyBtn')));
+  ok(html.includes(translate('zh-CN', 'avatarCropChangePhoto')));
+  ok(html.includes(translate('zh-CN', 'avatarCropRotateLeft')));
+  ok(html.includes(translate('zh-CN', 'avatarCropRotateRight')));
+  ok(html.includes('-90°'));
+  ok(html.includes('+90°'));
+  doesNotMatch(html, /\btitle="/, 'AvatarCropModal must not contain raw HTML title= attributes');
 });

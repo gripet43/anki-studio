@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { usePresence } from '../../hooks/usePresence';
 import { Tooltip } from '../common/Tooltip';
+import { CloseIcon } from '../common/Icons';
 import { formatShortcut, translate } from '../../i18n/translations';
 import {
   appActions,
@@ -314,14 +315,14 @@ export const CommandPaletteModal: React.FC = () => {
       >
         {isCopied ? (
           <>
-            <svg className="w-3 h-3 text-[var(--status-success)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+            <svg className="w-3 h-3 text-[var(--status-success)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <polyline points="20 6 9 17 4 12" />
             </svg>
             <span>{t('copiedBadge')}</span>
           </>
         ) : (
           <>
-            <svg className="w-3 h-3 opacity-75" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <svg className="w-3 h-3 opacity-75 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
@@ -361,6 +362,7 @@ export const CommandPaletteModal: React.FC = () => {
               strokeWidth="2.2"
               strokeLinecap="round"
               strokeLinejoin="round"
+              aria-hidden="true"
             >
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -397,7 +399,7 @@ export const CommandPaletteModal: React.FC = () => {
           <div className="flex items-center gap-2 shrink-0">
             {hasQuery && renderSearching && (
               <span className="text-[11px] text-[var(--brand-text)] font-medium flex items-center gap-1 me-1">
-                <span className="w-2 h-2 rounded-full bg-[var(--brand)] animate-ping" />
+                <span className="w-2 h-2 rounded-full bg-[var(--brand)] motion-safe:animate-ping" />
                 <span>{t('searchingShort')}</span>
               </span>
             )}
@@ -408,7 +410,7 @@ export const CommandPaletteModal: React.FC = () => {
                 className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                 aria-label={t('close')}
               >
-                ✕
+                <CloseIcon className="w-4 h-4" />
               </button>
             </Tooltip>
           </div>
@@ -470,7 +472,7 @@ export const CommandPaletteModal: React.FC = () => {
                   key={pill.label}
                   type="button"
                   onClick={() => appActions.searchCmdKDebounced(pill.query)}
-                  className={`h-7 px-3 rounded-full border text-[11px] font-medium flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 hover:scale-[1.03] ${
+                  className={`h-7 px-3 rounded-full border text-[11px] font-medium flex items-center gap-1.5 transition-[background-color,border-color,color,transform] cursor-pointer motion-safe:active:scale-[0.975] motion-safe:hover:scale-[1.03] ${
                     isDark
                       ? 'border-white/[0.08] bg-white/[0.04] text-[#D1D1D6] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] hover:border-[var(--brand-border)]'
                       : 'border-black/[0.06] bg-black/[0.03] text-[#48484A] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-text)] hover:border-[var(--brand-border)] shadow-2xs'
@@ -496,6 +498,9 @@ export const CommandPaletteModal: React.FC = () => {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
               >
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -553,7 +558,7 @@ export const CommandPaletteModal: React.FC = () => {
                         setAppState({ cmdKOpen: false });
                         appActions.openCardEditor(item);
                       }}
-                      className={`px-3 py-2 rounded-xl flex items-center gap-2.5 cursor-pointer transition-all ${
+                      className={`px-3 py-2 rounded-xl flex items-center gap-2.5 cursor-pointer transition-[background-color,color] ${
                         isSelected
                           ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] shadow-2xs'
                           : isDark

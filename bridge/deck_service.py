@@ -290,6 +290,17 @@ class DeckService:
         return default
 
     @classmethod
+    def _resolve_show_dashboard_tips(cls, cfg: Dict[str, Any]) -> bool:
+        """Resolves permanent dashboard learning tips toggle, honoring legacy `dashboard_tips_dismissed`."""
+        if not isinstance(cfg, dict):
+            return True
+        if "show_dashboard_tips" in cfg:
+            return cls._coerce_bool(cfg.get("show_dashboard_tips"), True)
+        if cls._coerce_bool(cfg.get("dashboard_tips_dismissed"), False):
+            return False
+        return True
+
+    @classmethod
     def _normalize_review_audio_prefs(cls, cfg: Dict[str, Any]) -> Tuple[bool, bool]:
         """Normalizes front and back audio auto-play preferences with safe defaults."""
         if not isinstance(cfg, dict):
@@ -514,11 +525,13 @@ class DeckService:
                     "customNickname": cfg.get("custom_nickname", ""),
                     "customAvatar": resolve_custom_avatar(cfg, avatars_dir=self._avatars_dir),
                     "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
+                    "sidebarCollapsed": self._coerce_bool(cfg.get("sidebar_collapsed"), False),
                     "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                     "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
                     "showIllustrations": self._coerce_bool(cfg.get("show_illustrations"), True),
                     "continuousCardCreation": bool(cfg.get("continuous_card_creation", False)),
-                    "tipsHiddenOn": str(cfg.get("dashboard_tips_hidden_on") or ""),
+                    "showDashboardTips": self._resolve_show_dashboard_tips(cfg),
+                    "tipsHiddenOn": str(cfg.get("dashboard_tips_hidden_on") or "").strip(),
                     "analyticsEnabled": bool(cfg.get("analytics_enabled", True)),
                     "answerButtonMode": str(cfg.get("answer_button_mode") or "binary"),
                     "autoPlayFrontAudio": auto_play_front_audio,
@@ -1941,10 +1954,12 @@ class DeckService:
                 "customNickname": cfg.get("custom_nickname", ""),
                 "customAvatar": resolve_custom_avatar(cfg, avatars_dir=avatars_dir),
                 "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
+                "sidebarCollapsed": cls._coerce_bool(cfg.get("sidebar_collapsed"), False),
                 "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
                 "showIllustrations": cls._coerce_bool(cfg.get("show_illustrations"), True),
-                "tipsHiddenOn": str(cfg.get("dashboard_tips_hidden_on") or ""),
+                "showDashboardTips": cls._resolve_show_dashboard_tips(cfg),
+                "tipsHiddenOn": str(cfg.get("dashboard_tips_hidden_on") or "").strip(),
                 "autoPlayFrontAudio": cls._normalize_review_audio_prefs(cfg)[0],
                 "autoPlayBackAudio": cls._normalize_review_audio_prefs(cfg)[1],
                 "debugMode": bool(cfg.get("debug_mode", False)),

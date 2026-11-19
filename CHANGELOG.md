@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+## [v1.6.13] - 2026-11-19
+
+- **[Antigravity] 侧边栏点击缩放、统计与首页图表焕新、头像交互式裁剪与旋转、复习抽屉 2×3 动作网格及三册规范沉淀**：
+  - **左侧主导航栏支持点击与 `Cmd/Ctrl+\` 缩放及品牌直达关于页**（改 [`frontend/src/components/layout/Sidebar.tsx`](frontend/src/components/layout/Sidebar.tsx)、[`frontend/src/App.tsx`](frontend/src/App.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`config.default.json`](config.default.json)、[`config.md`](config.md)、16 语种词典及单测）：
+    - 支持在展开态（`240px`）与紧凑图标栏（`72px`，兼容 macOS 交通灯拖拽区）之间以 `400ms` 临界阻尼弹簧动效（CSS `linear()` + 回退）平滑切换，并将 `sidebar_collapsed` 持久化为全局布局偏好；收起态下工具栏自动转为纵向并由右侧 Tooltip 承接；
+    - 点击左上角 Logo 与「Anki Studio」直接打开「设置 → 关于」页，同步将底部头像与 `Cmd+,` 显式定位至「外观」页。
+  - **统计页（`StatsView`）与首页图表视觉重制**（改 [`frontend/src/components/stats/StatsView.tsx`](frontend/src/components/stats/StatsView.tsx)、[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、16 语种词典及单测）：
+    - 精简统计页 6 张卡片表头并将口径说明收纳进 `(i)` 解释浮层，统一 6 阶段生命周期色阶、升级平滑折线面积图与 90% 留存目标基线、修复黄金时段 `20:00:00` 格式及 16 语种横轴单位本地化；
+    - 首页「学习热力图」改为 12px 柔角色块与轻盈淡彩 `oklab` 色阶，消除赫曼网格残影并突出「开始今日学习」主视觉；「本周复习节奏」补齐周均虚线基线、区分未来日与 0 卡过往日，并与热力图底栏对齐为两行指标。
+  - **头像交互式圆形裁剪与 ±90° 旋转**（新增 [`frontend/src/components/settings/AvatarCropModal.tsx`](frontend/src/components/settings/AvatarCropModal.tsx)，改 [`frontend/src/utils/avatarImage.ts`](frontend/src/utils/avatarImage.ts)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/components/common/Tooltip.tsx`](frontend/src/components/common/Tooltip.tsx)、[`bridge/profile_config.py`](bridge/profile_config.py)、[`bridge/router.py`](bridge/router.py)、16 语种词典及单测）：
+    - 基于原生 `<dialog>` 打造零外部依赖圆形裁切弹窗，支持拖拽平移、滚轮/滑块 1×–3× 缩放、±90° 顺逆时针旋转（锁定裁切中心并自动交换边界）、键盘方向键/缩放/旋转/重置与 Canvas 1:1 旋转导出（256×256 WebP/PNG）；
+    - `<Tooltip>` 支持自动 Portal 至打开的 `dialog[open]` 顶层；将设置页上传按钮文案由「上传图片」统一升级为「上传头像」（16 语种同步）。
+  - **复习抽屉底部重构为对称 `2 × 3` 六宫格、「重置进度」与 Popover 幽灵点击修复**（改 [`bridge/edit_service.py`](bridge/edit_service.py)、[`bridge/router.py`](bridge/router.py)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/common/CopyDebugInfoButton.tsx`](frontend/src/components/common/CopyDebugInfoButton.tsx)、[`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)、16 语种词典及单测）：
+    - 新增 `forget_cards` 桥接动作，调用 Anki 官方 `col.sched.schedule_cards_as_new` API 将卡片重置为新卡并接入会话撤销栈与 Anki 原生撤销栈；
+    - 抽屉背景与 6 颗动作按钮全面对齐语义 Token（适配 7 套纸感主题、`bg-[var(--bg-card)]` 净底细框、带框居中对齐、危险按钮静息克制与互斥内联二次确认）；
+    - 修复 `ReviewerView` 顶部「视图与字号」及音频 `<div popover="auto">` 关闭态因根节点 `flex` 覆盖 `display: none` 导致的隐形遮挡拦截问题，并新增架构守卫 Item #68。
+  - **学习小贴士永久关闭开关与今日隐藏分治**（改 [`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/components/dashboard/DashboardTipLine.tsx`](frontend/src/components/dashboard/DashboardTipLine.tsx)）：
+    - 设置页「首页显示学习小贴士」改为永久开关（`showDashboardTips`），首页隐藏图标保持「今日不再显示」（`tipsHiddenOn`）。
+  - **全站下拉选择器统一与设计/交互/开发三册手册沉淀**（新增 [`frontend/src/components/common/StudioSelect.tsx`](frontend/src/components/common/StudioSelect.tsx)、[`frontend/src/components/common/Icons.tsx`](frontend/src/components/common/Icons.tsx)、[`frontend/src/utils/viewTransition.ts`](frontend/src/utils/viewTransition.ts)、[`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md)、[`docs/INTERACTION.md`](docs/INTERACTION.md)、[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) 与 [`AGENTS.md`](AGENTS.md)）。
+
 ## [v1.6.12] - 2026-11-18
 
 - **[Antigravity] 休假与减负双弹窗同源统一、Studio 滑轨交互升级与设置中心语义精修**：

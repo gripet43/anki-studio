@@ -14,6 +14,7 @@ export interface CopyDebugInfoButtonProps {
   copiedLabel?: string;
   idleClassName: string;
   className?: string;
+  triggerClassName?: string;
 }
 
 /**
@@ -30,6 +31,7 @@ export const CopyDebugInfoButton: React.FC<CopyDebugInfoButtonProps> = ({
   copiedLabel,
   idleClassName,
   className,
+  triggerClassName,
 }) => {
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -67,7 +69,12 @@ export const CopyDebugInfoButton: React.FC<CopyDebugInfoButtonProps> = ({
     'w-full h-8 rounded-xl border text-[11px] font-medium flex items-center justify-center gap-1.5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2';
 
   return (
-    <Tooltip variant="compact" content={tooltipText} disabled={!tooltipText}>
+    <Tooltip
+      variant="compact"
+      content={tooltipText}
+      disabled={!tooltipText}
+      triggerClassName={triggerClassName}
+    >
       <button
         type="button"
         disabled={copying}
@@ -75,7 +82,7 @@ export const CopyDebugInfoButton: React.FC<CopyDebugInfoButtonProps> = ({
         aria-label={ariaLabel}
         className={`${baseCls} ${
           copied
-            ? 'bg-[var(--status-success-soft)] border-[var(--status-success)] text-[var(--status-success)]'
+            ? 'bg-[var(--status-success-soft)] border-[var(--status-success)]/45 text-[var(--status-success-text)]'
             : idleClassName
         }`}
       >
@@ -94,11 +101,11 @@ export const CopyDebugInfoButton: React.FC<CopyDebugInfoButtonProps> = ({
           </svg>
         ) : (
           <svg
-            className="w-3.5 h-3.5 shrink-0"
+            className="w-3.5 h-3.5 shrink-0 text-[var(--text-secondary)]"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.9"
             strokeLinecap="round"
             strokeLinejoin="round"
             aria-hidden="true"
@@ -116,7 +123,7 @@ export const CopyDebugInfoButton: React.FC<CopyDebugInfoButtonProps> = ({
             <path d="M17.2 17c2.1.1 3.8 1.9 3.8 4" />
           </svg>
         )}
-        {label && <span>{copied ? copiedLabel || label : label}</span>}
+        {label && <span className="truncate">{copied ? copiedLabel || label : label}</span>}
       </button>
     </Tooltip>
   );

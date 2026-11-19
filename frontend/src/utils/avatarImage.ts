@@ -14,10 +14,47 @@ export type { AvatarPresetId, CustomAvatarConfig };
 
 export const AVATAR_IMAGE_ACCEPT =
   'image/png,image/jpeg,image/webp,image/gif,image/bmp';
-export const AVATAR_TARGET_SIZE = 128;
+export const AVATAR_TARGET_SIZE = 256;
 export const AVATAR_WEBP_QUALITY = 0.86;
 export const MAX_AVATAR_OUTPUT_BYTES = 512 * 1024;
 export const MAX_AVATAR_SOURCE_BYTES = 16 * 1024 * 1024;
+export const AVATAR_CROP_MIN_ZOOM = 1;
+export const AVATAR_CROP_MAX_ZOOM = 3;
+export const AVATAR_CROP_VIEWPORT_PX = 256;
+
+export type AvatarCropRotation = 0 | 90 | 180 | 270;
+
+export interface AvatarCropTransform {
+  /** Zoom multiplier >= 1 (1 = minimum cover scale filling the square viewport). */
+  zoom: number;
+  /** Horizontal pan offset in CSS pixels relative to centered cover image. */
+  offsetX: number;
+  /** Vertical pan offset in CSS pixels relative to centered cover image. */
+  offsetY: number;
+  /** Clockwise rotation angle in 90-degree increments. */
+  rotation: AvatarCropRotation;
+}
+
+export interface AvatarCropLayout extends AvatarCropTransform {
+  displayScale: number;
+  /** Unrotated `<img>` element width in CSS pixels before CSS `rotate()`. */
+  imgWidth: number;
+  /** Unrotated `<img>` element height in CSS pixels before CSS `rotate()`. */
+  imgHeight: number;
+  /** Effective axis-aligned bounding width in CSS pixels after rotation. */
+  displayWidth: number;
+  /** Effective axis-aligned bounding height in CSS pixels after rotation. */
+  displayHeight: number;
+  maxOffsetX: number;
+  maxOffsetY: number;
+}
+
+export const DEFAULT_AVATAR_CROP: AvatarCropTransform = {
+  zoom: 1,
+  offsetX: 0,
+  offsetY: 0,
+  rotation: 0,
+};
 
 export const DEFAULT_CUSTOM_AVATAR: CustomAvatarConfig = { kind: 'initial' };
 
@@ -148,6 +185,24 @@ export function isSupportedSourceImageFile(file: {
   return false;
 }
 
+export function validateAvatarSourceFile(file: {
+  type?: string;
+  name?: string;
+  size?: number;
+}): void {
+  if (!isSupportedSourceImageFile(file)) {
+    throw new AvatarImageError('invalid_type', 'Unsupported image file type');
+  }
+  if (typeof file.size === 'number') {
+    if (file.size <= 0) {
+      throw new AvatarImageError('decode_failed', 'Image file is empty');
+    }
+    if (file.size > MAX_AVATAR_SOURCE_BYTES) {
+      throw new AvatarImageError('too_large', 'Image file exceeds size limit');
+    }
+  }
+}
+
 /**
  * Compute centered 1:1 `cover` source crop rectangle for `<canvas>.drawImage`.
  */
@@ -167,6 +222,184 @@ export function computeSquareCoverCropRect(
   const sx = Math.floor((srcWidth - side) / 2);
   const sy = Math.floor((srcHeight - side) / 2);
   return { sx, sy, sw: side, sh: side };
+}
+
+function clampNumber(val: number, min: number, max: number): number {
+  if (!Number.isFinite(val)) return min === 0 ? 0 : min;
+  const clamped = Math.min(max, Math.max(min, val));
+  return clamped === 0 ? 0 : clamped;
+}
+
+export function normalizeAvatarCropRotation(deg: number | undefined): AvatarCropRotation {
+  if (typeof deg !== 'number' || !Number.isFinite(deg)) return 0;
+  const snapped = (((Math.round(deg / 90) * 90) % 360) + 360) % 360;
+  return (snapped === 90 || snapped === 180 || snapped === 270 ? snapped : 0) as AvatarCropRotation;
+}
+
+/**
+ * Computes the cover-fit display size, pan bounds, and clamped `(zoom, offsetX, offsetY, rotation)`
+ * for an interactive square/circular avatar crop viewport so no empty edges ever appear.
+ */
+export function computeAvatarCropLayout(
+  srcWidth: number,
+  srcHeight: number,
+  transform: Partial<AvatarCropTransform> = DEFAULT_AVATAR_CROP,
+  viewportSize: number = AVATAR_CROP_VIEWPORT_PX
+): AvatarCropLayout {
+  if (
+    !Number.isFinite(srcWidth) ||
+    !Number.isFinite(srcHeight) ||
+    srcWidth <= 0 ||
+    srcHeight <= 0
+  ) {
+    throw new AvatarImageError('decode_failed', 'Invalid image dimensions');
+  }
+  const safeViewport = Number.isFinite(viewportSize) && viewportSize > 0
+    ? viewportSize
+    : AVATAR_CROP_VIEWPORT_PX;
+  const rotation = normalizeAvatarCropRotation(transform.rotation);
+  const swapped = rotation === 90 || rotation === 270;
+  const effWidth = swapped ? srcHeight : srcWidth;
+  const effHeight = swapped ? srcWidth : srcHeight;
+
+  const zoom = clampNumber(
+    transform.zoom ?? AVATAR_CROP_MIN_ZOOM,
+    AVATAR_CROP_MIN_ZOOM,
+    AVATAR_CROP_MAX_ZOOM
+  );
+  const baseScale = safeViewport / Math.min(effWidth, effHeight);
+  const displayScale = baseScale * zoom;
+  const imgWidth = srcWidth * displayScale;
+  const imgHeight = srcHeight * displayScale;
+  const displayWidth = effWidth * displayScale;
+  const displayHeight = effHeight * displayScale;
+  const maxOffsetX = Math.max(0, (displayWidth - safeViewport) / 2);
+  const maxOffsetY = Math.max(0, (displayHeight - safeViewport) / 2);
+  const offsetX = clampNumber(transform.offsetX ?? 0, -maxOffsetX, maxOffsetX);
+  const offsetY = clampNumber(transform.offsetY ?? 0, -maxOffsetY, maxOffsetY);
+
+  return {
+    zoom,
+    rotation,
+    displayScale,
+    imgWidth,
+    imgHeight,
+    displayWidth,
+    displayHeight,
+    maxOffsetX,
+    maxOffsetY,
+    offsetX,
+    offsetY,
+  };
+}
+
+export function clampAvatarCropTransform(
+  srcWidth: number,
+  srcHeight: number,
+  transform: Partial<AvatarCropTransform>,
+  viewportSize: number = AVATAR_CROP_VIEWPORT_PX
+): AvatarCropTransform {
+  const layout = computeAvatarCropLayout(srcWidth, srcHeight, transform, viewportSize);
+  return {
+    zoom: layout.zoom,
+    offsetX: layout.offsetX,
+    offsetY: layout.offsetY,
+    rotation: layout.rotation,
+  };
+}
+
+/**
+ * Scales zoom while keeping the image point currently centered in the crop frame stationary.
+ */
+export function scaleAvatarCropTransformZoom(
+  srcWidth: number,
+  srcHeight: number,
+  current: AvatarCropTransform,
+  nextZoom: number,
+  viewportSize: number = AVATAR_CROP_VIEWPORT_PX
+): AvatarCropTransform {
+  const currLayout = computeAvatarCropLayout(srcWidth, srcHeight, current, viewportSize);
+  const clampedNextZoom = clampNumber(nextZoom, AVATAR_CROP_MIN_ZOOM, AVATAR_CROP_MAX_ZOOM);
+  const ratio = clampedNextZoom / currLayout.zoom;
+  return clampAvatarCropTransform(
+    srcWidth,
+    srcHeight,
+    {
+      zoom: clampedNextZoom,
+      offsetX: currLayout.offsetX * ratio,
+      offsetY: currLayout.offsetY * ratio,
+      rotation: currLayout.rotation,
+    },
+    viewportSize
+  );
+}
+
+/**
+ * Rotates the crop transform by +/-90deg while rotating the pan offset so the
+ * focal subject currently centered in the circle stays centered.
+ */
+export function rotateAvatarCropTransform(
+  srcWidth: number,
+  srcHeight: number,
+  current: AvatarCropTransform,
+  deltaDeg: -90 | 90,
+  viewportSize: number = AVATAR_CROP_VIEWPORT_PX
+): AvatarCropTransform {
+  const currLayout = computeAvatarCropLayout(srcWidth, srcHeight, current, viewportSize);
+  const nextRotation = normalizeAvatarCropRotation(currLayout.rotation + deltaDeg);
+  const nextOffsetX = deltaDeg === 90 ? -currLayout.offsetY : currLayout.offsetY;
+  const nextOffsetY = deltaDeg === 90 ? currLayout.offsetX : -currLayout.offsetX;
+  return clampAvatarCropTransform(
+    srcWidth,
+    srcHeight,
+    {
+      zoom: currLayout.zoom,
+      offsetX: nextOffsetX,
+      offsetY: nextOffsetY,
+      rotation: nextRotation,
+    },
+    viewportSize
+  );
+}
+
+/**
+ * Maps an interactive crop viewport transform `(zoom, offsetX, offsetY, rotation)` to the
+ * source-image bounding rectangle `(sx, sy, sw, sh)` visible inside the crop frame.
+ */
+export function computeInteractiveAvatarCropRect(
+  srcWidth: number,
+  srcHeight: number,
+  transform: Partial<AvatarCropTransform> = DEFAULT_AVATAR_CROP,
+  viewportSize: number = AVATAR_CROP_VIEWPORT_PX
+): { sx: number; sy: number; sw: number; sh: number } {
+  const safeViewport = Number.isFinite(viewportSize) && viewportSize > 0
+    ? viewportSize
+    : AVATAR_CROP_VIEWPORT_PX;
+  const layout = computeAvatarCropLayout(srcWidth, srcHeight, transform, safeViewport);
+  const sw = Math.min(srcWidth, safeViewport / layout.displayScale);
+  const sh = Math.min(srcHeight, safeViewport / layout.displayScale);
+  const ox = layout.offsetX / layout.displayScale;
+  const oy = layout.offsetY / layout.displayScale;
+
+  // Map viewport offset back into unrotated source coordinates via inverse rotation (-rotation).
+  let srcDx = -ox;
+  let srcDy = -oy;
+  if (layout.rotation === 90) {
+    srcDx = -oy;
+    srcDy = ox;
+  } else if (layout.rotation === 180) {
+    srcDx = ox;
+    srcDy = oy;
+  } else if (layout.rotation === 270) {
+    srcDx = oy;
+    srcDy = -ox;
+  }
+
+  const rawSx = (srcWidth - sw) / 2 + srcDx;
+  const rawSy = (srcHeight - sh) / 2 + srcDy;
+  const sx = clampNumber(rawSx, 0, Math.max(0, srcWidth - sw));
+  const sy = clampNumber(rawSy, 0, Math.max(0, srcHeight - sh));
+  return { sx, sy, sw, sh };
 }
 
 function readBlobAsDataUrl(blob: Blob): Promise<string> {
@@ -231,6 +464,8 @@ export interface CropAvatarOptions {
   size?: number;
   quality?: number;
   maxBytes?: number;
+  crop?: AvatarCropTransform;
+  viewportSize?: number;
 }
 
 /**
@@ -267,17 +502,7 @@ export async function cropImageToSquareAvatarDataUrl(
     loadSrc = trimmed;
   } else if (source && typeof source === 'object') {
     const fileLike = source as File;
-    if (!isSupportedSourceImageFile(fileLike)) {
-      throw new AvatarImageError('invalid_type', 'Unsupported image file type');
-    }
-    if (typeof fileLike.size === 'number') {
-      if (fileLike.size <= 0) {
-        throw new AvatarImageError('decode_failed', 'Image file is empty');
-      }
-      if (fileLike.size > MAX_AVATAR_SOURCE_BYTES) {
-        throw new AvatarImageError('too_large', 'Image file exceeds size limit');
-      }
-    }
+    validateAvatarSourceFile(fileLike);
     if (
       typeof URL !== 'undefined' &&
       typeof URL.createObjectURL === 'function'
@@ -311,12 +536,35 @@ export async function cropImageToSquareAvatarDataUrl(
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
-    const { sx, sy, sw, sh } = computeSquareCoverCropRect(
-      img.naturalWidth,
-      img.naturalHeight
-    );
     ctx.clearRect(0, 0, targetSize, targetSize);
-    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetSize, targetSize);
+    if (options.crop) {
+      const safeViewport =
+        Number.isFinite(options.viewportSize) && (options.viewportSize ?? 0) > 0
+          ? (options.viewportSize as number)
+          : AVATAR_CROP_VIEWPORT_PX;
+      const layout = computeAvatarCropLayout(
+        img.naturalWidth,
+        img.naturalHeight,
+        options.crop,
+        safeViewport
+      );
+      const outScale = targetSize / safeViewport;
+      ctx.save();
+      ctx.translate(
+        targetSize / 2 + layout.offsetX * outScale,
+        targetSize / 2 + layout.offsetY * outScale
+      );
+      if (layout.rotation !== 0) {
+        ctx.rotate((layout.rotation * Math.PI) / 180);
+      }
+      const drawW = layout.imgWidth * outScale;
+      const drawH = layout.imgHeight * outScale;
+      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.restore();
+    } else {
+      const { sx, sy, sw, sh } = computeSquareCoverCropRect(img.naturalWidth, img.naturalHeight);
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetSize, targetSize);
+    }
 
     let output = '';
     try {

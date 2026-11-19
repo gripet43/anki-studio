@@ -352,6 +352,87 @@ export function formatFullDateWithWeekday(dateIso: string, lang: ResolvedLanguag
   return dateIso;
 }
 
+/**
+ * Compact localized "Month Day · Weekday" label for 7-day charts (e.g. Weekly Rhythm),
+ * avoiding bare single-character CJK weekday numerals ("一") that resemble an em-dash.
+ */
+export function formatMonthDayWithWeekday(
+  dateIso: string,
+  lang: ResolvedLanguage,
+  fallbackMondayIndex?: number
+): string {
+  const parts = dateIso ? dateIso.split('-').map((x) => parseInt(x, 10)) : [];
+  const hasValidDate = parts.length >= 3 && !parts.some(isNaN);
+
+  if (hasValidDate) {
+    const dt = new Date(parts[0], parts[1] - 1, parts[2]);
+    if (lang === 'zh-CN') {
+      const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+      return `${parts[1]}月${parts[2]}日 ${weekdays[dt.getDay()]}`;
+    }
+    if (lang === 'zh-TW') {
+      const weekdays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+      return `${parts[1]}月${parts[2]}日 ${weekdays[dt.getDay()]}`;
+    }
+    if (lang === 'en') {
+      const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${weekdays[dt.getDay()]}, ${months[dt.getMonth()]} ${dt.getDate()}`;
+    }
+    if (typeof Intl !== 'undefined' && typeof Intl.DateTimeFormat === 'function') {
+      try {
+        return new Intl.DateTimeFormat(lang, {
+          month: 'short',
+          day: 'numeric',
+          weekday: 'short',
+        }).format(dt);
+      } catch {}
+    }
+    return dateIso;
+  }
+
+  if (
+    typeof fallbackMondayIndex === 'number' &&
+    fallbackMondayIndex >= 0 &&
+    fallbackMondayIndex < 7
+  ) {
+    if (lang === 'zh-CN') {
+      return ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][fallbackMondayIndex];
+    }
+    if (lang === 'zh-TW') {
+      return ['週一', '週二', '週三', '週四', '週五', '週六', '週日'][fallbackMondayIndex];
+    }
+    if (lang === 'en') {
+      return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][fallbackMondayIndex];
+    }
+    if (typeof Intl !== 'undefined' && typeof Intl.DateTimeFormat === 'function') {
+      try {
+        // 2024-01-01 is a Monday
+        const ref = new Date(2024, 0, 1 + fallbackMondayIndex);
+        return new Intl.DateTimeFormat(lang, { weekday: 'short' }).format(ref);
+      } catch {}
+    }
+  }
+
+  return dateIso || '';
+}
+
+/**
+ * Formats review duration in minutes using localized units (avoiding mixed-language "33m").
+ */
+export function formatStudyMinutes(minutes: number, lang: ResolvedLanguage): string {
+  const safe = Number.isFinite(minutes) ? Math.max(0, Math.round(minutes)) : 0;
+  if (safe < 60) {
+    return translate(lang, 'durationMinutesShort', { m: safe });
+  }
+  const h = Math.floor(safe / 60);
+  const m = safe % 60;
+  if (m === 0) {
+    return translate(lang, 'durationHoursShort', { h });
+  }
+  return translate(lang, 'durationHoursMinutesShort', { h, m });
+}
+
 const ZH_CN_DICT = {
   ioEditUnsupportedTitle: "当前不支持图片挖空卡片编辑",
   ioEditUnsupportedSub: "这张卡片仍可正常预览与复习；如需修改遮罩、分组或模式，请在 Anki 原生的图片遮挡编辑器中打开。",
@@ -806,7 +887,7 @@ const ZH_CN_DICT = {
   settingsShowShortcutBadgesTitle: "显示界面快捷键角标提示",
   settingsShowIllustrationsLabel: "显示插画",
   settingsShowTipsTitle: "首页显示学习小贴士",
-  settingsShowTipsSub: "在「我的牌组」标题旁轮播学习原则；关闭后今天不再显示，明天自动恢复。",
+  settingsShowTipsSub: "在「我的牌组」标题旁轮播学习原则；关闭后将永久隐藏，直到在此重新开启。",
   settingsAnswerButtonsTitle: "答题按钮",
   settingsAnswerButtonsSub: "默认的简洁模式是「重来 + 良好」，减少每次答题的决策负担；从 Anki 迁移、习惯 1–4 键的用户可切回原生四按钮。",
   answerButtonsBinary: "简洁双按钮",
@@ -850,7 +931,10 @@ const ZH_CN_DICT = {
   shortcutHintsEnabledToast: "已开启界面快捷键角标",
   showAnswerBtn: "显示答案",
   showTopDecksOnly: "仅显示主牌组",
+  sidebarCollapseTooltip: "收起侧边栏",
   sidebarDecks: "牌组",
+  sidebarExpandTooltip: "展开侧边栏",
+  sidebarToggleLabel: "切换侧边栏",
   slashInsertBtn: "/ 插入格式",
   sortDefault: "默认顺序",
   sortDueAsc: "到期最早 ↑",
@@ -867,29 +951,32 @@ const ZH_CN_DICT = {
   startVacationBtn: "开启休假保护",
   statsAllTimeLabel: "历史累计",
   statsAnswerButtonsSub: "基于真实 revlog 评分记录（共 {total} 次作答）",
-  statsAnswerButtonsTitle: "答题按钮分布与各阶段通过率",
-  statsAvgRetentionLabel: "平均记忆留存率",
+  statsAnswerButtonsTitle: "答题按钮分布",
+  statsAvgRetentionLabel: "平均留存率",
   statsCalculatingLocal: "正在实时聚合本地 revlog 统计模型...",
+  statsDaysLater: "{n}天后",
   statsForecast30dSub: "未来 30 天每日预计到期卡片负载分布（区分年轻卡与成熟卡）",
-  statsForecast30dTitle: "未来 30 天复习负荷预测 (FSRS Forecast)",
-  statsHourlyTitle: "24 小时黄金专注时段分布",
+  statsForecast30dTitle: "未来 30 天负荷",
+  statsHourlyTitle: "24 小时学习时段",
   statsLast30dLabel: "近 30 天",
   statsLearningCardsLegend: "学习中 / 重学中",
   statsMatureCardsLegend: "成熟卡 (间隔 ≥ 21天)",
   statsMaturePassRateLabel: "成熟卡通过率 (间隔 ≥ 21天)",
   statsMaturitySub: "全库共 {total} 张卡片的生命周期阶段结构",
-  statsMaturityTitle: "卡片熟记度与生命周期结构",
+  statsMaturityTitle: "卡片熟记度",
   statsNoHourlyData: "暂无分时段复习数据",
   statsPageSub: "基于 Anki 原生 revlog 与 FSRS 状态实时聚合，深度洞察你的长期记忆曲线。",
-  statsPageTitle: "FSRS 记忆统计与学习洞察",
+  statsPageTitle: "学习统计",
   statsPeakHourSummary: "黄金时段 {hour}:00（累计 {count} 次 · 正确率 {acc}%）",
   statsRetentionCurveSub: "过去 12 周每周复习卡片的真实记忆留存率演进趋势",
-  statsRetentionCurveTitle: "历史记忆留存率趋势曲线",
+  statsRetentionCurveTitle: "近 12 周留存率",
   statsSyncingCloud: "正在同步 AnkiWeb 云端统计数据...",
+  statsThisWeekLabel: "本周",
   statsTotalReviewsLabel: "半年累计复习",
   statsTrueRetentionSub: "严格遵循 Anki FSRS True Retention 口径（仅统计复习队列 type=1，排除初学与重学步伐）",
-  statsTrueRetentionTitle: "FSRS 真实记忆留存率 (True Retention)",
+  statsTrueRetentionTitle: "真实记忆留存率",
   statsUnseenCardsLegend: "未学新卡",
+  statsWeeksAgo: "{n}周前",
   statsYoungCardsLegend: "年轻卡 (间隔 < 21天)",
   statsYoungPassRateLabel: "年轻卡通过率 (间隔 < 21天)",
   statusActive: "生效中",
@@ -1056,7 +1143,7 @@ const ZH_CN_DICT = {
   avatarSectionLabel: "个人头像",
   avatarSectionSub: "显示在左下角个人卡片；仅保存在本地，不随 AnkiWeb 同步",
   avatarModeInitial: "默认首字母",
-  avatarUploadBtn: "上传图片",
+  avatarUploadBtn: "上传头像",
   avatarResetBtn: "恢复默认",
   avatarSavedToast: "头像已更新",
   avatarResetToast: "已恢复默认首字母头像",
@@ -1071,6 +1158,15 @@ const ZH_CN_DICT = {
   avatarPreset_mountain: "山峰",
   avatarPreset_compass: "罗盘",
   avatarPreset_flame: "火花",
+  avatarCropTitle: "调整头像",
+  avatarCropHint: "拖动调整位置 · 滚轮或滑块缩放",
+  avatarCropZoomLabel: "缩放",
+  avatarCropRotateLeft: "向左旋转 90°",
+  avatarCropRotateRight: "向右旋转 90°",
+  avatarCropReset: "重置位置",
+  avatarCropChangePhoto: "重新选图",
+  avatarCropApplyBtn: "应用头像",
+  avatarCropStageAria: "头像裁剪画布，使用方向键移动位置，加减号缩放",
   aboutVersionTitle: "版本信息",
   aboutStudioVersionLabel: "当前版本",
   aboutRuntimeEnvLabel: "运行环境",
@@ -1088,6 +1184,19 @@ const ZH_CN_DICT = {
   icuTabHistory: "减负记录",
   icuFooterRescueHint: "执行前自动建立 FSRS 快照，可在「减负记录」中一键撤销恢复原状",
   dayUnitSingular: "天",
+  forgetCardBtn: "重置进度",
+  forgetCardTooltip: "将此卡片重置为新卡，重新开始学习进度",
+  forgetCardToast: "已重置学习进度",
+  forgetCardFailedToast: "重置学习进度失败，请稍后重试",
+  copyDebugInfoShort: "调试信息",
+  weeklyRhythmAvgPaceLabel: "平均每张",
+  weeklyRhythmCardsLabel: "复习量",
+  weeklyRhythmDurationLabel: "学习时长",
+  weeklyRhythmEmptyDay: "暂无复习记录",
+  weeklyRhythmLongestLabel: "最长单次",
+  durationMinutesShort: "{m} 分钟",
+  durationHoursShort: "{h} 小时",
+  durationHoursMinutesShort: "{h} 小时 {m} 分钟",
 
 } as const;
 
@@ -1549,7 +1658,7 @@ const EN_DICT: TranslationTable = {
   settingsShowShortcutBadgesTitle: "Show Shortcut Key Badges",
   settingsShowIllustrationsLabel: "Show illustrations",
   settingsShowTipsTitle: "Show learning tips on the dashboard",
-  settingsShowTipsSub: "Rotate learning principles beside the deck section title; turning it off hides it for today only.",
+  settingsShowTipsSub: "Rotate learning principles beside the deck section title; turning this off hides tips permanently until re-enabled here.",
   settingsAnswerButtonsTitle: "Answer buttons",
   settingsAnswerButtonsSub: "The default keeps it simple (Again + Good) to reduce decisions per card. Users coming from Anki can switch to the native four-button layout.",
   answerButtonsBinary: "Simple (2 buttons)",
@@ -1593,7 +1702,10 @@ const EN_DICT: TranslationTable = {
   shortcutHintsEnabledToast: "Shortcut badges enabled",
   showAnswerBtn: "Show Answer",
   showTopDecksOnly: "Top Decks Only",
+  sidebarCollapseTooltip: "Collapse sidebar",
   sidebarDecks: "Decks",
+  sidebarExpandTooltip: "Expand sidebar",
+  sidebarToggleLabel: "Toggle sidebar",
   slashInsertBtn: "/ Format",
   sortDefault: "Default",
   sortDueAsc: "Earliest Due ↑",
@@ -1610,29 +1722,32 @@ const EN_DICT: TranslationTable = {
   startVacationBtn: "Start Vacation",
   statsAllTimeLabel: "All-Time",
   statsAnswerButtonsSub: "Based on revlog grading history ({total} total answers)",
-  statsAnswerButtonsTitle: "Answer Buttons & Stage Pass Rates",
+  statsAnswerButtonsTitle: "Answer Buttons",
   statsAvgRetentionLabel: "Avg Retention",
   statsCalculatingLocal: "Aggregating local revlog analytics...",
+  statsDaysLater: "+{n}d",
   statsForecast30dSub: "Projected daily due workload over the next 30 days (Young vs. Mature)",
-  statsForecast30dTitle: "30-Day Review Workload Forecast",
-  statsHourlyTitle: "24-Hour Peak Focus Breakdown",
+  statsForecast30dTitle: "30-Day Forecast",
+  statsHourlyTitle: "24-Hour Activity",
   statsLast30dLabel: "Last 30 Days",
   statsLearningCardsLegend: "Learning / Relearning",
   statsMatureCardsLegend: "Mature (Ivl ≥ 21d)",
   statsMaturePassRateLabel: "Mature Pass Rate (Ivl ≥ 21d)",
   statsMaturitySub: "Lifecycle breakdown across {total} total cards",
-  statsMaturityTitle: "Card Maturity & Lifecycle Breakdown",
+  statsMaturityTitle: "Card Maturity",
   statsNoHourlyData: "No hourly review history yet",
   statsPageSub: "Real-time analytics powered by native Anki revlog & FSRS memory states.",
-  statsPageTitle: "FSRS Analytics & Memory Insights",
+  statsPageTitle: "Statistics",
   statsPeakHourSummary: "Peak hour {hour}:00 ({count} reviews · {acc}% accuracy)",
   statsRetentionCurveSub: "Weekly review pass-rate trend over the past 12 weeks",
-  statsRetentionCurveTitle: "Historical Retention Trend (12 Weeks)",
+  statsRetentionCurveTitle: "12-Week Retention",
   statsSyncingCloud: "Syncing statistics with AnkiWeb...",
+  statsThisWeekLabel: "This Week",
   statsTotalReviewsLabel: "6-Month Reviews",
   statsTrueRetentionSub: "Strict Anki FSRS True Retention (Review queue type=1 only, excluding learning steps)",
-  statsTrueRetentionTitle: "FSRS True Retention Breakdown",
+  statsTrueRetentionTitle: "True Retention",
   statsUnseenCardsLegend: "Unseen New",
+  statsWeeksAgo: "-{n}w",
   statsYoungCardsLegend: "Young (Ivl < 21d)",
   statsYoungPassRateLabel: "Young Pass Rate (Ivl < 21d)",
   statusActive: "Active",
@@ -1799,7 +1914,7 @@ const EN_DICT: TranslationTable = {
   avatarSectionLabel: "Avatar",
   avatarSectionSub: "Shown in the sidebar corner; saved locally and not synced via AnkiWeb",
   avatarModeInitial: "Initial",
-  avatarUploadBtn: "Upload photo",
+  avatarUploadBtn: "Upload avatar",
   avatarResetBtn: "Reset",
   avatarSavedToast: "Avatar updated",
   avatarResetToast: "Reset to default initial avatar",
@@ -1814,6 +1929,15 @@ const EN_DICT: TranslationTable = {
   avatarPreset_mountain: "Peak",
   avatarPreset_compass: "Compass",
   avatarPreset_flame: "Flame",
+  avatarCropTitle: "Crop Avatar",
+  avatarCropHint: "Drag to reposition · Scroll or slide to zoom",
+  avatarCropZoomLabel: "Zoom",
+  avatarCropRotateLeft: "Rotate left 90°",
+  avatarCropRotateRight: "Rotate right 90°",
+  avatarCropReset: "Reset",
+  avatarCropChangePhoto: "Choose another",
+  avatarCropApplyBtn: "Apply",
+  avatarCropStageAria: "Avatar crop canvas. Use arrow keys to move and plus or minus to zoom",
   aboutVersionTitle: "Version Information",
   aboutStudioVersionLabel: "Version",
   aboutRuntimeEnvLabel: "Environment",
@@ -1831,6 +1955,19 @@ const EN_DICT: TranslationTable = {
   icuTabHistory: "Relief History",
   icuFooterRescueHint: "Creates a local FSRS snapshot first so you can undo with one click",
   dayUnitSingular: "day",
+  forgetCardBtn: "Reset Card",
+  forgetCardTooltip: "Reset this card back to New and restart its schedule",
+  forgetCardToast: "Card progress reset",
+  forgetCardFailedToast: "Failed to reset card progress",
+  copyDebugInfoShort: "Debug Info",
+  weeklyRhythmAvgPaceLabel: "Avg / card",
+  weeklyRhythmCardsLabel: "Reviewed",
+  weeklyRhythmDurationLabel: "Study time",
+  weeklyRhythmEmptyDay: "No reviews",
+  weeklyRhythmLongestLabel: "Longest session",
+  durationMinutesShort: "{m} min",
+  durationHoursShort: "{h}h",
+  durationHoursMinutesShort: "{h}h {m}m",
 
 };
 /**

@@ -20,6 +20,7 @@ import {
   resolveThemeMode,
 } from '../../utils/themeTokens';
 import { normalizeCustomAvatarConfig } from '../../utils/avatarImage';
+import { runThemeViewTransition } from '../../utils/viewTransition';
 import { ChartTooltipContent, Tooltip } from '../common/Tooltip';
 import { HoverCard } from '../common/HoverCard';
 import { UserAvatar } from '../common/UserAvatar';
@@ -156,10 +157,12 @@ export const DesignSystemView: React.FC = () => {
                 <button
                   key={tOpt.id}
                   onClick={() => {
-                    appActions.setTheme(tOpt.id);
+                    runThemeViewTransition(() => {
+                      appActions.setTheme(tOpt.id);
+                    });
                     showToast(t('savedThemeToast', { name: tOpt.label }));
                   }}
-                  className={`px-3.5 py-2 rounded-xl text-[12px] font-medium cursor-pointer transition-transform active:scale-95 ${
+                  className={`px-3.5 py-2 rounded-xl text-[12px] font-medium cursor-pointer transition-transform motion-safe:active:scale-[0.975] ${
                     tOpt.style
                   } ${theme === tOpt.id ? 'ring-2 ring-[var(--brand)]/40' : 'opacity-80 hover:opacity-100'}`}
                 >
@@ -186,10 +189,12 @@ export const DesignSystemView: React.FC = () => {
                       aria-checked={active}
                       aria-label={fullLabel}
                       onClick={() => {
-                        appActions.setAccentColor(a.id);
+                        runThemeViewTransition(() => {
+                          appActions.setAccentColor(a.id);
+                        });
                         showToast(t('savedAccentToast', { name: shortLabel }));
                       }}
-                      className={`w-full min-w-0 overflow-hidden px-2.5 py-1.5 rounded-xl border text-[11px] flex items-center gap-1.5 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
+                      className={`w-full min-w-0 overflow-hidden px-2.5 py-1.5 rounded-xl border text-[11px] flex items-center gap-1.5 cursor-pointer transition-[background-color,border-color,color,box-shadow,opacity] focus-visible:outline-none focus-visible:ring-1.5 focus-visible:ring-[var(--brand)] ${
                         active
                           ? 'border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold shadow-2xs'
                           : 'border-black/10 dark:border-white/10 opacity-85 hover:opacity-100'
@@ -366,7 +371,7 @@ export const DesignSystemView: React.FC = () => {
                         : t('langAuto')
                     );
                   }}
-                  className={`px-3 py-2 rounded-xl border text-start cursor-pointer transition-all ${
+                  className={`px-3 py-2 rounded-xl border text-start cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                     active
                       ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] border-[var(--brand)] ring-1 ring-[var(--brand)]/35 font-semibold'
                       : 'border-[#E5E5EA] dark:border-[#2C2C35] hover:border-[var(--brand-border)]'
@@ -406,7 +411,7 @@ export const DesignSystemView: React.FC = () => {
                 onClick={() => {
                   void appActions.updatePreferences({ customAvatar: { kind: 'initial' } });
                 }}
-                className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-all ${
+                className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-[box-shadow,opacity] ${
                   normalizedAvatar.kind === 'initial'
                     ? `ring-2 ring-[var(--brand)] ring-offset-1 ${
                         isDark ? 'ring-offset-[#1A1B21]' : 'ring-offset-white'
@@ -439,7 +444,7 @@ export const DesignSystemView: React.FC = () => {
                         customAvatar: { kind: 'preset', presetId },
                       });
                     }}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-all ${
+                    className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-[box-shadow,opacity] ${
                       isSelected
                         ? `ring-2 ring-[var(--brand)] ring-offset-1 ${
                             isDark ? 'ring-offset-[#1A1B21]' : 'ring-offset-white'

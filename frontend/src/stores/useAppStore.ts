@@ -51,6 +51,7 @@ export type {
 };
 import {
   AvatarImageError,
+  type CropAvatarOptions,
   cropImageToSquareAvatarDataUrl,
   DEFAULT_CUSTOM_AVATAR,
   normalizeCustomAvatarConfig,
@@ -60,6 +61,7 @@ import {
   detectBrowserLanguage,
   detectOSPlatform,
   formatRelativeSyncLabel,
+  formatShortcut,
   LanguageOption,
   ResolvedLanguage,
   resolveLanguage,
@@ -167,6 +169,8 @@ export interface AppState {
   showIllustrations: boolean;
   /** 连续制卡：添加后保留窗口并清空正文，保留牌组/卡型/标签。 */
   continuousCardCreation: boolean;
+  /** 首页牌组标题旁是否显示学习小贴士（默认开启；设置中关闭后永久隐藏）。 */
+  showDashboardTips: boolean;
   /** 首页牌组标题旁的学习小贴士「今天不再显示」日期（YYYY-MM-DD）。 */
   tipsHiddenOn: string;
   /** 匿名使用统计开关（只上报匿名计数，不含卡片内容）。 */
@@ -192,6 +196,8 @@ export interface AppState {
   advancedStats: AdvancedStatsData;
   showAllDashboardDecks: boolean;
   collapsedDeckIds: string[];
+  /** 左侧主导航栏是否收起为紧凑图标栏（72px）。 */
+  sidebarCollapsed: boolean;
   sandboxNoteTypeIds: string[];
 
   // Reviewer & Real Timing
@@ -326,6 +332,7 @@ const initialState: AppState = {
   showShortcutHints: false,
   showIllustrations: true,
   continuousCardCreation: false,
+  showDashboardTips: true,
   tipsHiddenOn: '',
   analyticsEnabled: true,
   answerButtonMode: 'binary',
@@ -348,6 +355,7 @@ const initialState: AppState = {
   advancedStats: EMPTY_ADVANCED_STATS,
   showAllDashboardDecks: false,
   collapsedDeckIds: [],
+  sidebarCollapsed: false,
   sandboxNoteTypeIds: [],
 
   reviewQueue: [],
@@ -838,6 +846,10 @@ export const appActions = {
             ? normalizeCustomAvatarConfig(prefs.customAvatar)
             : state.customAvatar,
         collapsedDeckIds: prefs?.collapsedDeckIds ?? (dashValid ? [] : state.collapsedDeckIds),
+        sidebarCollapsed:
+          prefs?.sidebarCollapsed !== undefined
+            ? Boolean(prefs.sidebarCollapsed)
+            : state.sidebarCollapsed,
         sandboxNoteTypeIds: Array.isArray(prefs?.sandboxNoteTypeIds)
           ? prefs.sandboxNoteTypeIds.map((id) => String(id))
           : dashValid
@@ -852,6 +864,10 @@ export const appActions = {
           prefs?.continuousCardCreation !== undefined
             ? Boolean(prefs.continuousCardCreation)
             : state.continuousCardCreation,
+        showDashboardTips:
+          prefs?.showDashboardTips !== undefined
+            ? Boolean(prefs.showDashboardTips)
+            : state.showDashboardTips,
         tipsHiddenOn: prefs?.tipsHiddenOn !== undefined ? prefs.tipsHiddenOn : state.tipsHiddenOn,
         analyticsEnabled: prefs?.analyticsEnabled !== undefined ? prefs.analyticsEnabled : state.analyticsEnabled,
         answerButtonMode: prefs?.answerButtonMode === 'four' ? 'four' : 'binary',
@@ -1076,9 +1092,11 @@ export const appActions = {
     customNickname?: string;
     customAvatar?: CustomAvatarConfig;
     collapsedDeckIds?: string[];
+    sidebarCollapsed?: boolean;
     showShortcutHints?: boolean;
     showIllustrations?: boolean;
     continuousCardCreation?: boolean;
+    showDashboardTips?: boolean;
     tipsHiddenOn?: string;
     analyticsEnabled?: boolean;
     answerButtonMode?: 'binary' | 'four';
@@ -1103,12 +1121,23 @@ export const appActions = {
       ...(patch.customNickname !== undefined ? { customNickname: patch.customNickname } : {}),
       ...(normalizedAvatar !== undefined ? { customAvatar: normalizedAvatar } : {}),
       ...(patch.collapsedDeckIds ? { collapsedDeckIds: patch.collapsedDeckIds } : {}),
+      ...(patch.sidebarCollapsed !== undefined
+        ? { sidebarCollapsed: Boolean(patch.sidebarCollapsed) }
+        : {}),
       ...(patch.showShortcutHints !== undefined ? { showShortcutHints: patch.showShortcutHints } : {}),
       ...(patch.showIllustrations !== undefined
         ? { showIllustrations: Boolean(patch.showIllustrations) }
         : {}),
       ...(patch.continuousCardCreation !== undefined
         ? { continuousCardCreation: Boolean(patch.continuousCardCreation) }
+        : {}),
+      ...(patch.showDashboardTips !== undefined
+        ? {
+            showDashboardTips: Boolean(patch.showDashboardTips),
+            ...(patch.showDashboardTips && patch.tipsHiddenOn === undefined
+              ? { tipsHiddenOn: '' }
+              : {}),
+          }
         : {}),
       ...(patch.tipsHiddenOn !== undefined ? { tipsHiddenOn: patch.tipsHiddenOn } : {}),
       ...(patch.analyticsEnabled !== undefined ? { analyticsEnabled: patch.analyticsEnabled } : {}),
@@ -1171,9 +1200,12 @@ export const appActions = {
     return true;
   },
 
-  async saveAvatarFromImageSource(source: File | Blob | string): Promise<boolean> {
+  async saveAvatarFromImageSource(
+    source: File | Blob | string,
+    options?: CropAvatarOptions
+  ): Promise<boolean> {
     try {
-      const dataUrl = await cropImageToSquareAvatarDataUrl(source);
+      const dataUrl = await cropImageToSquareAvatarDataUrl(source, options);
       return await appActions.updatePreferences({
         customAvatar: { kind: 'image', dataUrl },
       });
@@ -1187,19 +1219,19 @@ export const appActions = {
     }
   },
 
-  async pickNativeAvatarImage(onFallbackToFilePicker?: () => void): Promise<boolean> {
+  async pickNativeAvatarDataUrl(onFallbackToFilePicker?: () => void): Promise<string | null> {
     if (!isAnkiNativeEnv()) {
       onFallbackToFilePicker?.();
-      return false;
+      return null;
     }
     try {
       const res = await callAnki<PickAvatarImageResult>('pick_avatar_image', {}, { timeoutMs: 0 });
       if (res?.unsupported) {
         onFallbackToFilePicker?.();
-        return false;
+        return null;
       }
       if (res?.canceled || (!res?.picked && !res?.error && !res?.dataUrl)) {
-        return false;
+        return null;
       }
       if (res?.error) {
         if (
@@ -1210,25 +1242,31 @@ export const appActions = {
         } else {
           showToast(tState('avatarUploadTooLargeToast'));
         }
-        return false;
+        return null;
       }
       if (res?.picked && res.dataUrl) {
-        return await appActions.saveAvatarFromImageSource(res.dataUrl);
+        return res.dataUrl;
       }
-      return false;
+      return null;
     } catch (err: any) {
       const msg = String(err?.message || err || '');
       if (/unknown action/i.test(msg)) {
         onFallbackToFilePicker?.();
-        return false;
+        return null;
       }
       if (/svg|format|mime|type|ext|unsupported|header|raster|invalid/i.test(msg)) {
         showToast(tState('avatarUploadInvalidToast'));
       } else {
         showToast(tState('avatarUploadTooLargeToast'));
       }
-      return false;
+      return null;
     }
+  },
+
+  async pickNativeAvatarImage(onFallbackToFilePicker?: () => void): Promise<boolean> {
+    const dataUrl = await appActions.pickNativeAvatarDataUrl(onFallbackToFilePicker);
+    if (!dataUrl) return false;
+    return await appActions.saveAvatarFromImageSource(dataUrl);
   },
 
   searchLibraryDebounced(overrides?: {
@@ -2153,6 +2191,13 @@ export const appActions = {
     appActions.updatePreferences({ collapsedDeckIds: nextCollapsed });
   },
 
+  toggleSidebar(forceCollapsed?: boolean) {
+    const nextCollapsed =
+      typeof forceCollapsed === 'boolean' ? forceCollapsed : !state.sidebarCollapsed;
+    if (nextCollapsed === state.sidebarCollapsed) return;
+    void appActions.updatePreferences({ sidebarCollapsed: nextCollapsed });
+  },
+
   async toggleNoteTypeSandbox(notetypeId: string) {
     const cleanId = String(notetypeId || '').trim();
     if (!cleanId) return;
@@ -3071,6 +3116,66 @@ export const appActions = {
       autoPlayCardSide(state.reviewQueue[state.currentCardIndex], 'front');
     }
     showToast(`${tState('buryCardBtn')}: ${currentCard.front}`);
+  },
+
+  async forgetCurrentReviewCard() {
+    const currentCard = state.reviewQueue[state.currentCardIndex];
+    if (!currentCard) return;
+
+    const snapshot = buildReviewUndoSnapshot(state, currentCard, {
+      wasFlipped: state.isCardFlipped,
+      nativeUndoable: true,
+      includeLibrarySnapshot: true,
+    });
+
+    appActions.stopAudio();
+    const epoch = ++reviewTransitionEpoch;
+    if (isAnkiNativeEnv()) {
+      try {
+        const res = await callAnki<{ changed?: boolean; error?: string }>('forget_cards', {
+          cardId: currentCard.id,
+          restorePosition: true,
+          resetCounts: false,
+        });
+        if (res && res.changed === false) {
+          showToast(res.error || tState('forgetCardFailedToast'));
+          return;
+        }
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : tState('forgetCardFailedToast'));
+        return;
+      }
+    }
+
+    const nextLib = state.libraryCards.map((c) =>
+      c.id === currentCard.id
+        ? {
+            ...c,
+            status: 'new' as LibraryCardItem['status'],
+            dueText: tState('statusNew'),
+            intervalDays: 0,
+            suspended: false,
+            buried: false,
+          }
+        : c
+    );
+
+    const nextQueue = state.reviewQueue.filter((c) => c.id !== currentCard.id);
+    const nextIdx = Math.min(state.currentCardIndex, Math.max(0, nextQueue.length - 1));
+    setAppState((prev) => ({
+      undoStack: [...prev.undoStack, snapshot],
+      reviewQueue: nextQueue,
+      libraryCards: nextLib,
+      currentCardIndex: nextIdx,
+      isSessionComplete: nextQueue.length === 0,
+      isCardFlipped: false,
+      inlineEditing: false,
+      cardShownAtMs: Date.now(),
+    }));
+    if (epoch === reviewTransitionEpoch && state.inReviewMode && !state.isSessionComplete) {
+      autoPlayCardSide(state.reviewQueue[state.currentCardIndex], 'front');
+    }
+    showToast(`${tState('forgetCardToast')}: ${currentCard.front}`);
   },
 
   async setCurrentReviewCardFlag(flag: CardFlagColor, toggleIfSame = true) {

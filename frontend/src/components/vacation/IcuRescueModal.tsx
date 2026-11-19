@@ -241,6 +241,7 @@ export const IcuRescueModal: React.FC = () => {
           aria-labelledby={activeTab === 'rescue' ? rescueTabId : historyTabId}
           className="p-5 space-y-3.5 vacation-modal-body flex-1"
         >
+          <div key={activeTab} className="ui-tab-enter">
           {activeTab === 'rescue' ? (
             /* TAB 1: 减负方案 (SCHEDULE RELIEF PLAN) */
             <div className="space-y-3.5">
@@ -560,7 +561,7 @@ export const IcuRescueModal: React.FC = () => {
                                       </span>
                                       <div className="flex-1 h-2 rounded-full bg-black/[0.06] dark:bg-white/10 overflow-hidden">
                                         <div
-                                          className="h-full rounded-full transition-all duration-300"
+                                          className="h-full rounded-full transition-[width] duration-300"
                                           style={{
                                             width: `${pct}%`,
                                             backgroundColor: brandHex,
@@ -653,6 +654,7 @@ export const IcuRescueModal: React.FC = () => {
               )}
             </div>
           )}
+          </div>
         </div>
 
         {/* Footer */}

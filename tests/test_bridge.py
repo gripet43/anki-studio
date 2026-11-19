@@ -308,6 +308,23 @@ class MockCol:
                     if cid in col_self._cards:
                         col_self._cards[cid].queue = 2
 
+            @staticmethod
+            def schedule_cards_as_new(cids, restore_position=False, reset_counts=False):
+                col_self.forgotten_cids = getattr(col_self, "forgotten_cids", [])
+                col_self.forgotten_cids.extend(cids)
+                col_self.last_forget_opts = {
+                    "restore_position": restore_position,
+                    "reset_counts": reset_counts,
+                }
+                for cid in cids:
+                    if cid in col_self._cards:
+                        col_self._cards[cid].type = 0
+                        col_self._cards[cid].queue = 0
+                        col_self._cards[cid].ivl = 0
+                        if reset_counts:
+                            col_self._cards[cid].reps = 0
+                            col_self._cards[cid].lapses = 0
+
         class Decks:
             @staticmethod
             def children(did):
@@ -690,6 +707,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 "language": "en",
                 "customNickname": "Dr. Lee",
                 "collapsedDeckIds": ["1"],
+                "sidebarCollapsed": True,
                 "showShortcutHints": True,
                 "showIllustrations": False,
                 "continuousCardCreation": True,
@@ -703,6 +721,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(prefs_res["data"]["preferences"]["language"], "en")
         self.assertEqual(prefs_res["data"]["preferences"]["customNickname"], "Dr. Lee")
         self.assertEqual(prefs_res["data"]["preferences"]["customAvatar"], {"kind": "initial"})
+        self.assertTrue(prefs_res["data"]["preferences"]["sidebarCollapsed"])
         self.assertTrue(prefs_res["data"]["preferences"]["showShortcutHints"])
         self.assertFalse(prefs_res["data"]["preferences"]["showIllustrations"])
         self.assertTrue(prefs_res["data"]["preferences"]["continuousCardCreation"])
@@ -714,6 +733,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         get_prefs = self._call("get_preferences", {})
         self.assertEqual(get_prefs["status"], "success")
         self.assertEqual(get_prefs["data"]["customAvatar"], {"kind": "initial"})
+        self.assertTrue(get_prefs["data"]["sidebarCollapsed"])
         self.assertTrue(get_prefs["data"]["showShortcutHints"])
         self.assertFalse(get_prefs["data"]["showIllustrations"])
         self.assertTrue(get_prefs["data"]["continuousCardCreation"])
@@ -724,6 +744,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
 
         dash_prefs = self._call("get_dashboard", {})["data"]["preferences"]
         self.assertEqual(dash_prefs["customAvatar"], {"kind": "initial"})
+        self.assertTrue(dash_prefs["sidebarCollapsed"])
         self.assertFalse(dash_prefs["showIllustrations"])
         self.assertTrue(dash_prefs["autoPlayFrontAudio"])
         self.assertFalse(dash_prefs["autoPlayBackAudio"])
@@ -4066,7 +4087,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 selected_box["path"] = str(bmp_file)
                 scaled_res = self._call("pick_avatar_image", {})["data"]
                 self.assertTrue(scaled_res["picked"])
-                self.assertEqual(scaled_calls, [(512, 512, 1, 1)])
+                self.assertEqual(scaled_calls, [(1024, 1024, 1, 1)])
                 self.assertEqual(
                     scaled_res["dataUrl"],
                     "data:image/webp;base64," + base64.b64encode(webp_bytes).decode("ascii"),
@@ -4103,6 +4124,119 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 broken_svg_res = self._call("pick_avatar_image", {})["data"]
                 self.assertFalse(broken_svg_res["picked"])
                 self.assertEqual(broken_svg_res.get("errorCode"), "invalid_type")
+
+    def test_49_dashboard_tips_permanent_toggle_vs_hide_today(self):
+        """Settings toggle permanently disables dashboard tips; dashboard button only sets tipsHiddenOn."""
+        # 1. Default enabled
+        prefs0 = self._call("get_preferences", {})["data"]
+        self.assertTrue(prefs0["showDashboardTips"])
+        self.assertEqual(prefs0["tipsHiddenOn"], "")
+        dash0 = self._call("get_dashboard", {})["data"]
+        self.assertTrue(dash0["preferences"]["showDashboardTips"])
+        self.assertEqual(dash0["preferences"]["tipsHiddenOn"], "")
+
+        # 2. Dashboard "hide today" only sets tipsHiddenOn without turning off permanent setting
+        hide_today_res = self._call("save_preferences", {"tipsHiddenOn": "2026-11-19"})["data"]
+        self.assertTrue(hide_today_res["saved"])
+        self.assertTrue(hide_today_res["preferences"]["showDashboardTips"])
+        self.assertEqual(hide_today_res["preferences"]["tipsHiddenOn"], "2026-11-19")
+
+        # 3. Settings switch OFF permanently disables tips
+        perm_off = self._call("save_preferences", {"showDashboardTips": False})["data"]
+        self.assertFalse(perm_off["preferences"]["showDashboardTips"])
+        self.assertFalse(self.config_store["show_dashboard_tips"])
+        self.assertTrue(self.config_store["dashboard_tips_dismissed"])
+        dash_off = self._call("get_dashboard", {})["data"]
+        self.assertFalse(dash_off["preferences"]["showDashboardTips"])
+
+        # 4. Settings switch ON re-enables permanently AND clears any leftover hide-today date
+        perm_on = self._call("save_preferences", {"showDashboardTips": True})["data"]
+        self.assertTrue(perm_on["preferences"]["showDashboardTips"])
+        self.assertEqual(perm_on["preferences"]["tipsHiddenOn"], "")
+        self.assertFalse(self.config_store["dashboard_tips_dismissed"])
+
+        # 5. Legacy `dashboard_tips_dismissed: True` (without explicit `show_dashboard_tips`) stays permanently off
+        self.config_store.pop("show_dashboard_tips", None)
+        self.config_store["dashboard_tips_dismissed"] = True
+        self.config_store["dashboard_tips_hidden_on"] = ""
+        legacy_prefs = self._call("get_preferences", {})["data"]
+        self.assertFalse(legacy_prefs["showDashboardTips"])
+        self.assertEqual(legacy_prefs["tipsHiddenOn"], "")
+
+    def test_50_forget_cards_resets_progress_and_supports_native_undo(self):
+        """Verify forget_cards uses native schedule_cards_as_new and supports Anki native undo."""
+        card = self.mock_col._cards[201]
+        orig_type, orig_queue, orig_ivl = card.type, card.queue, card.ivl
+        try:
+            res = self._call(
+                "forget_cards",
+                {"cardId": "201", "restorePosition": True, "resetCounts": False},
+            )
+            self.assertEqual(res["status"], "success")
+            self.assertTrue(res["data"]["changed"])
+            self.assertEqual(res["data"]["cardIds"], ["201"])
+            self.assertIn(201, self.mock_col.forgotten_cids)
+            self.assertEqual(
+                self.mock_col.last_forget_opts,
+                {"restore_position": True, "reset_counts": False},
+            )
+            self.assertEqual(card.type, 0)
+            self.assertEqual(card.queue, 0)
+            self.assertEqual(card.ivl, 0)
+
+            # Empty/invalid cardIds fail gracefully without raising
+            empty_res = self._call("forget_cards", {"cardId": "not-a-number"})
+            self.assertEqual(empty_res["status"], "success")
+            self.assertFalse(empty_res["data"]["changed"])
+        finally:
+            card.type, card.queue, card.ivl = orig_type, orig_queue, orig_ivl
+
+        # Real Anki Collection end-to-end check (when running under Anki Python env)
+        try:
+            import anki.collection as anki_col_mod
+        except Exception:
+            return
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            col = anki_col_mod.Collection(str(Path(tmpdir) / "col.anki2"))
+            try:
+                model = col.models.by_name("Basic")
+                note = col.new_note(model)
+                note["Front"] = "Reset Test Front"
+                note["Back"] = "Reset Test Back"
+                col.add_note(note, col.decks.id("Default"))
+                c = note.cards()[0]
+                c.type = 2
+                c.queue = 2
+                c.ivl = 21
+                c.reps = 4
+                c.lapses = 1
+                c.due = col.sched.today + 7
+                col.update_card(c)
+
+                real_router = BridgeRouter(
+                    col_getter=lambda: col,
+                    config_getter=lambda: {},
+                    config_writer=lambda _u: {},
+                )
+                out = real_router.action_forget_cards({"cardId": str(c.id)})
+                self.assertTrue(out["changed"])
+
+                after = col.get_card(c.id)
+                self.assertEqual(after.type, 0)
+                self.assertEqual(after.queue, 0)
+                self.assertEqual(after.ivl, 0)
+                self.assertEqual(after.reps, 4)
+
+                undo_out = real_router.action_undo({"language": "zh-CN"})
+                self.assertTrue(undo_out["undone"])
+                restored = col.get_card(c.id)
+                self.assertEqual(restored.type, 2)
+                self.assertEqual(restored.queue, 2)
+                self.assertEqual(restored.ivl, 21)
+                self.assertEqual(restored.reps, 4)
+            finally:
+                col.close()
 
 
 if __name__ == "__main__":

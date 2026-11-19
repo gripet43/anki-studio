@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { callAnki, isAnkiNativeEnv } from '../../bridge/pycmd';
 import { Tooltip } from '../common/Tooltip';
+import {
+  AlertTriangleIcon,
+  CheckIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  SpinnerIcon,
+} from '../common/Icons';
 import { usePresence } from '../../hooks/usePresence';
 import { formatShortcut, translate } from '../../i18n/translations';
 import { appActions, LibraryCardItem, ReviewCardItem, setAppState, showToast, useAppStore } from '../../stores/useAppStore';
@@ -1203,7 +1210,7 @@ export const CardEditorModal: React.FC = () => {
                     {activePresetLabel}
                   </span>
                   {!isEditMode && (
-                    <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <svg className="w-2.5 h-2.5 opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="m6 9 6 6 6-6" />
                     </svg>
                   )}
@@ -1251,7 +1258,7 @@ export const CardEditorModal: React.FC = () => {
                       >
                         <div className="text-[12px] font-semibold flex items-center justify-between">
                           <span>{opt.title}</span>
-                          {isSel && <span>✓</span>}
+                          {isSel && <CheckIcon className="w-3.5 h-3.5" strokeWidth={2.4} />}
                         </div>
                         <div className={`text-[10px] mt-0.5 ${isSel ? 'text-white/80' : 'text-[#8E8E93]'}`}>
                           {opt.desc}
@@ -1352,7 +1359,7 @@ export const CardEditorModal: React.FC = () => {
                 className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 text-xs cursor-pointer transition-colors"
                 aria-label={t('close')}
               >
-                ✕
+                <CloseIcon className="w-4 h-4" />
               </button>
             </Tooltip>
           </div>
@@ -1390,7 +1397,7 @@ export const CardEditorModal: React.FC = () => {
             {effectiveDuplicateCount > 0 && (
               <div className="px-3.5 py-2.5 rounded-xl border bg-[var(--status-warning-soft)] border-[var(--status-warning)]/40 text-[var(--status-warning)] flex items-center justify-between gap-3 text-[12px] animate-in fade-in duration-150">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-bold shrink-0">⚠️</span>
+                  <AlertTriangleIcon className="w-4 h-4" />
                   <span className="font-medium truncate">
                     {t('duplicateDetectedBanner', { n: effectiveDuplicateCount })}
                   </span>
@@ -1440,7 +1447,7 @@ export const CardEditorModal: React.FC = () => {
                       role="radio"
                       aria-checked={clozeGroupingMode === 'combined'}
                       onClick={() => handleSwitchClozeMode('combined')}
-                      className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-all ${
+                      className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                         clozeGroupingMode === 'combined'
                           ? 'bg-[var(--brand)] text-white shadow-2xs'
                           : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white'
@@ -1453,7 +1460,7 @@ export const CardEditorModal: React.FC = () => {
                       role="radio"
                       aria-checked={clozeGroupingMode === 'split'}
                       onClick={() => handleSwitchClozeMode('split')}
-                      className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-all ${
+                      className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                         clozeGroupingMode === 'split'
                           ? 'bg-[var(--brand)] text-white shadow-2xs'
                           : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white'
@@ -1565,7 +1572,12 @@ export const CardEditorModal: React.FC = () => {
                           onClick={() => setShowMoreFields((prev) => !prev)}
                           className="text-[12px] font-semibold text-[var(--brand-text)] hover:underline flex items-center gap-1.5 cursor-pointer"
                         >
-                          <span>{showMoreFields ? '▾' : '▸'}</span>
+                          <ChevronRightIcon
+                            className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                              showMoreFields ? 'rotate-90' : 'rtl:rotate-180'
+                            }`}
+                            strokeWidth={2.3}
+                          />
                           <span>{t('moreFieldsBtn', { n: emptyFieldKeys.length })}</span>
                         </button>
 
@@ -1679,7 +1691,12 @@ export const CardEditorModal: React.FC = () => {
                         onClick={() => setShowMoreFields((prev) => !prev)}
                         className="text-[12px] font-semibold text-[var(--brand-text)] hover:underline flex items-center gap-1 cursor-pointer"
                       >
-                        <span>{showMoreFields ? '▾' : '▸'}</span>
+                        <ChevronRightIcon
+                          className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                            showMoreFields ? 'rotate-90' : 'rtl:rotate-180'
+                          }`}
+                          strokeWidth={2.3}
+                        />
                         <span>
                           {t('moreFieldsBtn', { n: nonEmptyEntries.length || allEntries.length })}
                         </span>
@@ -1873,7 +1890,7 @@ export const CardEditorModal: React.FC = () => {
                               setPreviewClozeOrd(ord);
                               setPreviewFlipped(false);
                             }}
-                            className={`h-5.5 px-2 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-all ${
+                            className={`h-5.5 px-2 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                               active
                                 ? 'bg-[var(--brand)] text-white shadow-2xs'
                                 : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white'
@@ -1900,7 +1917,7 @@ export const CardEditorModal: React.FC = () => {
                         setPreviewReverseDir('forward');
                         setPreviewFlipped(false);
                       }}
-                      className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-all ${
+                      className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                         previewReverseDir === 'forward'
                           ? 'bg-[var(--brand)] text-white shadow-2xs'
                           : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white'
@@ -1914,7 +1931,7 @@ export const CardEditorModal: React.FC = () => {
                         setPreviewReverseDir('reverse');
                         setPreviewFlipped(false);
                       }}
-                      className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-all ${
+                      className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                         previewReverseDir === 'reverse'
                           ? 'bg-[var(--brand)] text-white shadow-2xs'
                           : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white'
@@ -1945,7 +1962,7 @@ export const CardEditorModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setPreviewFlipped(false)}
-                  className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-all ${
+                  className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                     !previewFlipped
                       ? 'bg-[var(--brand-soft)] text-[var(--brand-text)] shadow-2xs'
                       : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white'
@@ -1956,7 +1973,7 @@ export const CardEditorModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setPreviewFlipped(true)}
-                  className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-all ${
+                  className={`h-5.5 px-2.5 rounded-[6px] text-[11px] font-semibold cursor-pointer transition-[background-color,border-color,color,box-shadow] ${
                     previewFlipped
                       ? 'bg-[var(--status-success-soft)] text-[var(--status-success)] shadow-2xs'
                       : 'text-[#8E8E93] hover:text-[#1D1D1F] dark:hover:text-white'
@@ -1970,7 +1987,7 @@ export const CardEditorModal: React.FC = () => {
             {/* Reviewer-Grade Flashcard Simulation Stage */}
             <div
               onClick={() => setPreviewFlipped((prev) => !prev)}
-              className={`flex-1 min-h-[340px] rounded-2xl border p-6 sm:p-8 flex flex-col justify-between transition-all cursor-pointer select-text ui-card-enter ${
+              className={`flex-1 min-h-[340px] rounded-2xl border p-6 sm:p-8 flex flex-col justify-between transition-[background-color,border-color,box-shadow] cursor-pointer select-text ui-card-enter ${
                 isDark
                   ? 'bg-[#1A1B25] border-[#2A2C3B] shadow-[0_14px_38px_rgba(0,0,0,0.36)]'
                   : 'bg-white border-[#E6E8EF] shadow-[0_10px_30px_rgba(15,23,42,0.05)]'
@@ -2272,7 +2289,7 @@ export const CardEditorModal: React.FC = () => {
                 style={{ backgroundColor: brandHex }}
                 className="btn-primary !h-9 !px-5"
               >
-                {submitting && <span className="animate-spin text-xs">⟳</span>}
+                {submitting && <SpinnerIcon className="w-3.5 h-3.5 motion-safe:animate-spin" />}
                 <span>
                   {isEditMode
                     ? t('saveChangesBtn')

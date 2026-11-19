@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { PresenceState } from '../../hooks/usePresence';
 import { translate } from '../../i18n/translations';
 import { useAppStore } from '../../stores/useAppStore';
 import { Tooltip } from '../common/Tooltip';
+import { MinusIcon, PlusIcon } from '../common/Icons';
 
 export type LightboxTarget =
   | { mode: 'img'; src: string; alt?: string }
@@ -9,6 +11,7 @@ export type LightboxTarget =
 
 interface ReviewerImageLightboxProps {
   target: LightboxTarget;
+  presenceState?: PresenceState;
   onClose: () => void;
 }
 
@@ -20,6 +23,7 @@ const MAX_SCALE = 5.0;
  */
 export const ReviewerImageLightbox: React.FC<ReviewerImageLightboxProps> = ({
   target,
+  presenceState = 'entered',
   onClose,
 }) => {
   const { resolvedLang } = useAppStore();
@@ -144,6 +148,7 @@ export const ReviewerImageLightbox: React.FC<ReviewerImageLightboxProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={t('reviewImageZoomHint')}
+      data-state={presenceState}
       onWheel={handleWheel}
       onClick={(e) => {
         if (movedDuringDragRef.current) return;
@@ -151,7 +156,7 @@ export const ReviewerImageLightbox: React.FC<ReviewerImageLightboxProps> = ({
           onClose();
         }
       }}
-      className="fixed inset-0 z-[120] bg-black/82 backdrop-blur-md flex items-center justify-center overflow-hidden select-none"
+      className="reviewer-lightbox fixed inset-0 z-[120] bg-black/82 backdrop-blur-md flex items-center justify-center overflow-hidden select-none"
     >
       {/* Top-Right Close Button */}
       <Tooltip variant="compact" content={t('close')} shortcut="Esc" side="bottom">
@@ -161,7 +166,7 @@ export const ReviewerImageLightbox: React.FC<ReviewerImageLightboxProps> = ({
           aria-label={t('close')}
           className="fixed top-5 end-5 z-[130] w-10 h-10 rounded-full bg-white/12 hover:bg-white/22 border border-white/15 text-white flex items-center justify-center cursor-pointer transition-colors"
         >
-          <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <svg className="w-4.5 h-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
@@ -169,32 +174,34 @@ export const ReviewerImageLightbox: React.FC<ReviewerImageLightboxProps> = ({
       </Tooltip>
 
       {/* Interactive Pan/Zoom Media Stage */}
-      <div
-        onMouseDown={handleCanvasMouseDown}
-        onDoubleClick={handleCanvasDoubleClick}
-        onDragStart={(e) => e.preventDefault()}
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${scale})`,
-          transition: isDragging ? 'none' : 'transform 120ms cubic-bezier(0.22, 1, 0.36, 1)',
-        }}
-        className={`max-w-[90vw] max-h-[84vh] flex items-center justify-center origin-center ${
-          isDragging ? 'cursor-grabbing' : scale > 1.02 ? 'cursor-grab' : 'cursor-zoom-in'
-        }`}
-      >
-        {target.mode === 'img' ? (
-          <img
-            src={target.src}
-            alt={target.alt || ''}
-            draggable={false}
-            className="max-w-[88vw] max-h-[82vh] w-auto h-auto object-contain rounded-xl shadow-2xl bg-white/5"
-          />
-        ) : (
-          <div
-            className="rounded-xl shadow-2xl overflow-hidden [&_.anki-io-wrap]:!m-0 [&_.anki-io-wrap_img]:!max-h-[82vh] [&_.anki-io-wrap_img]:!max-w-[88vw] [&_.anki-io-wrap_img]:!w-auto [&_.anki-io-wrap_img]:!h-auto"
-            dangerouslySetInnerHTML={{ __html: target.html }}
-          />
-        )}
+      <div className="reviewer-lightbox-stage pointer-events-none flex items-center justify-center">
+        <div
+          onMouseDown={handleCanvasMouseDown}
+          onDoubleClick={handleCanvasDoubleClick}
+          onDragStart={(e) => e.preventDefault()}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${scale})`,
+            transition: isDragging ? 'none' : 'transform var(--dur-fast) cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+          className={`pointer-events-auto max-w-[90vw] max-h-[84vh] flex items-center justify-center origin-center ${
+            isDragging ? 'cursor-grabbing' : scale > 1.02 ? 'cursor-grab' : 'cursor-zoom-in'
+          }`}
+        >
+          {target.mode === 'img' ? (
+            <img
+              src={target.src}
+              alt={target.alt || ''}
+              draggable={false}
+              className="max-w-[88vw] max-h-[82vh] w-auto h-auto object-contain rounded-xl shadow-2xl bg-white/5"
+            />
+          ) : (
+            <div
+              className="rounded-xl shadow-2xl overflow-hidden [&_.anki-io-wrap]:!m-0 [&_.anki-io-wrap_img]:!max-h-[82vh] [&_.anki-io-wrap_img]:!max-w-[88vw] [&_.anki-io-wrap_img]:!w-auto [&_.anki-io-wrap_img]:!h-auto"
+              dangerouslySetInnerHTML={{ __html: target.html }}
+            />
+          )}
+        </div>
       </div>
 
       {/* Bottom Control Dock */}
@@ -209,9 +216,9 @@ export const ReviewerImageLightbox: React.FC<ReviewerImageLightboxProps> = ({
               onClick={() => stepZoom(-0.25)}
               disabled={scale <= MIN_SCALE}
               aria-label={t('zoomOutBtn')}
-              className="w-7 h-7 rounded-full hover:bg-white/15 disabled:opacity-35 flex items-center justify-center text-[15px] font-semibold cursor-pointer transition-colors"
+              className="w-7 h-7 rounded-full hover:bg-white/15 disabled:opacity-35 flex items-center justify-center cursor-pointer transition-colors"
             >
-              −
+              <MinusIcon className="w-3.5 h-3.5" strokeWidth={2.2} />
             </button>
           </Tooltip>
           <span className="min-w-[52px] text-center text-[12px] font-mono tabular-nums text-white/90">
@@ -223,9 +230,9 @@ export const ReviewerImageLightbox: React.FC<ReviewerImageLightboxProps> = ({
               onClick={() => stepZoom(0.25)}
               disabled={scale >= MAX_SCALE}
               aria-label={t('zoomInBtn')}
-              className="w-7 h-7 rounded-full hover:bg-white/15 disabled:opacity-35 flex items-center justify-center text-[15px] font-semibold cursor-pointer transition-colors"
+              className="w-7 h-7 rounded-full hover:bg-white/15 disabled:opacity-35 flex items-center justify-center cursor-pointer transition-colors"
             >
-              +
+              <PlusIcon className="w-3.5 h-3.5" strokeWidth={2.2} />
             </button>
           </Tooltip>
           <div className="w-[1px] h-4 bg-white/15 mx-0.5" />

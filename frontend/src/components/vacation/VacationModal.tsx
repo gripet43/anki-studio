@@ -290,6 +290,7 @@ export const VacationModal: React.FC = () => {
           aria-labelledby={activeTab === 'status' ? statusTabId : historyTabId}
           className="p-5 space-y-3.5 vacation-modal-body flex-1"
         >
+          <div key={activeTab} className="ui-tab-enter">
           {activeTab === 'status' ? (
             isAlreadyActive ? (
               /* ACTIVE VACATION VIEW — Serene, Clear & Reversible */
@@ -612,6 +613,7 @@ export const VacationModal: React.FC = () => {
               )}
             </div>
           )}
+          </div>
         </div>
 
         {/* Footer */}

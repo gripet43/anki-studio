@@ -19,6 +19,8 @@ import {
   formatRelativeSyncLabel,
   formatRelativeTimeString,
   formatDetailedSyncTimestamp,
+  formatMonthDayWithWeekday,
+  formatStudyMinutes,
 } from '../../../frontend/src/i18n/translations';
 
 function withNavigator<T>(stub: { language?: string; userAgent?: string; platform?: string }, fn: () => T): T {
@@ -177,4 +179,24 @@ test('vacation sanctuary streak labels name the study streak and frozen state ex
   equal(translate('zh-CN', 'vacationStreakFrozen', { n: 24 }), '连续打卡 24 天已冻结');
   equal(translate('en', 'streakDays', { n: 24 }), '24d streak');
   equal(translate('en', 'vacationStreakFrozen', { n: 24 }), '24d streak frozen');
+});
+
+section('i18n · weekly rhythm chart tooltip date & duration formatting');
+
+test('formatMonthDayWithWeekday formats date + weekday cleanly and avoids bare single-stroke CJK numerals', () => {
+  equal(formatMonthDayWithWeekday('2026-11-16', 'zh-CN'), '11月16日 周一');
+  equal(formatMonthDayWithWeekday('2026-11-16', 'en'), 'Mon, Nov 16');
+  equal(formatMonthDayWithWeekday('', 'zh-CN', 0), '周一');
+  equal(formatMonthDayWithWeekday('', 'en', 0), 'Mon');
+  equal(formatMonthDayWithWeekday('', 'zh-CN', 6), '周日');
+});
+
+test('formatStudyMinutes localizes minutes and hours cleanly without mixed-language units', () => {
+  equal(formatStudyMinutes(33, 'zh-CN'), '33 分钟');
+  equal(formatStudyMinutes(60, 'zh-CN'), '1 小时');
+  equal(formatStudyMinutes(95, 'zh-CN'), '1 小时 35 分钟');
+  equal(formatStudyMinutes(0, 'zh-CN'), '0 分钟');
+  equal(formatStudyMinutes(33, 'en'), '33 min');
+  equal(formatStudyMinutes(120, 'en'), '2h');
+  equal(formatStudyMinutes(95, 'en'), '1h 35m');
 });

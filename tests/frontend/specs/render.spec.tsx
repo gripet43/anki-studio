@@ -16,7 +16,9 @@ import { SyncStatusPill } from '../../../frontend/src/components/dashboard/SyncS
 import { CardEditorModal } from '../../../frontend/src/components/quick-add/CardEditorModal';
 import { DecksView } from '../../../frontend/src/components/decks/DecksView';
 import { ReviewerView } from '../../../frontend/src/components/reviewer/ReviewerView';
+import { ReviewerImageLightbox } from '../../../frontend/src/components/reviewer/ReviewerImageLightbox';
 import { SettingsModal } from '../../../frontend/src/components/settings/SettingsModal';
+import { StatsView } from '../../../frontend/src/components/stats/StatsView';
 import { VacationModal } from '../../../frontend/src/components/vacation/VacationModal';
 import { IcuRescueModal } from '../../../frontend/src/components/vacation/IcuRescueModal';
 import {
@@ -38,6 +40,10 @@ import {
   HoverCard,
   HOVERCARD_SIZE_CLASSES,
 } from '../../../frontend/src/components/common/HoverCard';
+import {
+  StudioSelect,
+  STUDIO_SELECT_SIZE_CLASSES,
+} from '../../../frontend/src/components/common/StudioSelect';
 
 function render(element: React.ReactElement): string {
   const html = renderToStaticMarkup(element);
@@ -557,12 +563,14 @@ test('SettingsModal enforces ARIA tablist semantics, de-noised tabs, schematics,
     ok(appHtml.includes('aria-orientation="vertical"'), 'expected vertical tablist orientation');
     ok(appHtml.includes('role="tab"'), 'expected role="tab" on sidebar buttons');
     ok(appHtml.includes('role="tabpanel"'), 'expected role="tabpanel" on content pane');
+    ok(appHtml.includes('ui-tab-enter'), 'expected subtle .ui-tab-enter wrapper for tab switches');
     ok(appHtml.includes('overscroll-contain'), 'expected scroll containment on tabpanel');
-    ok(appHtml.includes('<details class="group">'), 'expected collapsible <details> disclosure for language selector');
+    ok(appHtml.includes('<details class="group studio-details">'), 'expected collapsible <details> disclosure with .studio-details for language selector');
     ok(appHtml.includes('settings-text-input'), 'expected crisp accessible .settings-text-input field');
     ok(appHtml.includes('aria-label="清空"'), 'expected 1-click clear button when nickname is populated');
     ok(
-      appHtml.indexOf('aria-label="上传图片"') < appHtml.indexOf('aria-label="默认首字母"'),
+      appHtml.indexOf('aria-label="上传头像"') !== -1 &&
+        appHtml.indexOf('aria-label="上传头像"') < appHtml.indexOf('aria-label="默认首字母"'),
       'upload action should sit in the header row rather than wrapping below presets'
     );
     doesNotMatch(appHtml, /当前生效名称：张耀/, 'duplicate active-name helper should hide when input already shows it');
@@ -592,11 +600,18 @@ test('SettingsModal enforces ARIA tablist semantics, de-noised tabs, schematics,
     doesNotMatch(scHtml, /<kbd[^>]*>[^<]*遗忘/, 'rating prose must never be wrapped inside <kbd>');
     ok(scHtml.includes('卡片信息') && scHtml.includes('旗标') && scHtml.includes('展开下一条提示'), 'expected complete reviewer shortcut entries');
 
-    // 4. Maintenance tab
+    // 4. Sync tab (crisp vector SyncArrowsIcon, no Unicode ⟳ glyph)
+    setAppState({ settingsInitialTab: 'sync' });
+    const syncHtml = render(React.createElement(SettingsModal));
+    ok(syncHtml.includes('<svg') && syncHtml.includes('立即同步'), 'expected crisp SVG icon inside sync CTA button');
+    doesNotMatch(syncHtml, /⟳/, 'sync CTA must use crisp vector SVG rather than Unicode ⟳ glyph');
+
+    // 5. Maintenance tab
     setAppState({ settingsInitialTab: 'maintenance' });
     const maintHtml = render(React.createElement(SettingsModal));
     ok(maintHtml.includes('divide-y'), 'expected single-level divide-y diagnostics card without box-in-box nesting');
     ok(maintHtml.includes('role="status"') && maintHtml.includes('aria-live="polite"'), 'expected polite live status regions');
+    doesNotMatch(maintHtml, />\s*[↓↑]\s*</, 'import/export cards must render SVG Download/Upload icons rather than text arrows');
     doesNotMatch(maintHtml, /1\.\s*检查数据库完整性|2\.\s*清理空白卡片|3\.\s*检查冗余媒体文件/, 'independent diagnostics must omit fake step numbers');
 
     // 5. Native tab
@@ -685,6 +700,155 @@ test('IcuRescueModal shares Studio modal shell, choice cards, range slider, and 
       theme: prev.theme,
       systemDark: prev.systemDark,
       dashboard: prev.dashboard,
+    });
+  }
+});
+
+section('render · ReviewerImageLightbox');
+
+test('ReviewerImageLightbox renders unified .reviewer-lightbox presence container and stage', () => {
+  const html = render(
+    React.createElement(ReviewerImageLightbox, {
+      target: { mode: 'img', src: 'https://example.invalid/sample.png', alt: 'Sample' },
+      presenceState: 'entering',
+      onClose: () => {},
+    })
+  );
+  ok(html.includes('reviewer-lightbox'), 'expected .reviewer-lightbox root class');
+  ok(html.includes('reviewer-lightbox-stage'), 'expected .reviewer-lightbox-stage zoom isolation wrapper');
+  ok(html.includes('data-state="entering"'), 'expected presence state data-state attribute');
+});
+
+section('render · StudioSelect');
+
+test('StudioSelect renders accessible combobox trigger and SSR-safe closed state', () => {
+  const html = render(
+    React.createElement(StudioSelect, {
+      id: 'deck-select-test',
+      value: 'deck-2',
+      options: [
+        { value: 'deck-1', label: '4000 Words' },
+        { value: 'deck-2', label: 'Default' },
+        { value: 'deck-3', label: '错题' },
+      ],
+      onChange: () => {},
+      ariaLabel: 'Deck',
+      size: 'md',
+    }),
+  );
+  ok(html.includes('role="combobox"'), 'StudioSelect trigger must expose role="combobox"');
+  ok(html.includes('aria-haspopup="listbox"'), 'StudioSelect trigger must declare listbox popup');
+  ok(html.includes('aria-expanded="false"'), 'Closed StudioSelect must set aria-expanded="false"');
+  ok(html.includes('id="deck-select-test"'), 'StudioSelect must forward id for label htmlFor binding');
+  ok(html.includes('>Default<'), 'StudioSelect must display active option label');
+  ok(html.includes('ui-select-trigger') && html.includes('ui-select-chevron'), 'StudioSelect classes must be present');
+  ok(
+    STUDIO_SELECT_SIZE_CLASSES.sm.includes('h-8') &&
+      STUDIO_SELECT_SIZE_CLASSES.md.includes('h-9') &&
+      STUDIO_SELECT_SIZE_CLASSES.lg.includes('h-10'),
+    'StudioSelect size scale must expose sm/md/lg heights',
+  );
+});
+
+section('render · StatsView');
+
+test('StatsView renders minimal headers, SVG retention spline, proportional bars, and accessible retention table', () => {
+  const prev = getAppState();
+  setAppState({
+    resolvedLang: 'zh-CN',
+    theme: 'light',
+    systemDark: false,
+    isInitialSyncing: false,
+    syncing: false,
+    syncJustFinished: false,
+    dashboard: {
+      ...prev.dashboard,
+      heatmap: {
+        ...prev.dashboard.heatmap,
+        totalYearReviews: 13925,
+        retentionRate: 90,
+      },
+    },
+    advancedStats: {
+      maturityBreakdown: {
+        mature: 1582,
+        young: 148,
+        learning: 1,
+        newCards: 3579,
+        suspended: 51,
+        buried: 0,
+        total: 5361,
+      },
+      forecast30d: Array.from({ length: 30 }, (_, i) => ({
+        dayOffset: i,
+        label: i === 0 ? '今天' : `+${i}d`,
+        mature: i % 3 === 0 ? 0 : 25,
+        young: i % 3 === 0 ? 0 : 15,
+        total: i % 3 === 0 ? 0 : 40,
+      })),
+      retentionCurve: Array.from({ length: 12 }, (_, i) => ({
+        period: `W-${12 - i}`,
+        retentionRate: i === 11 ? 89.8 : 85 + (i % 5),
+        lapseRate: 10,
+        reviews: 120 + i * 10,
+      })),
+      hourlyDistribution: Array.from({ length: 24 }, (_, h) => ({
+        hour: `${String(h).padStart(2, '0')}:00`,
+        count: h === 20 ? 2174 : h * 15,
+        accuracy: h === 20 ? 91 : 85,
+      })),
+      answerButtons: {
+        again: 1577,
+        hard: 127,
+        good: 9589,
+        easy: 2632,
+        total: 13925,
+        young: { pass: 850, total: 1000, rate: 85 },
+        mature: { pass: 910, total: 1000, rate: 91 },
+      },
+      trueRetention: {
+        last30d: {
+          overall: { pass: 855, total: 994, rate: 86 },
+          young: { pass: 87, total: 100, rate: 87 },
+          mature: { pass: 768, total: 894, rate: 85.9 },
+        },
+        allTime: {
+          overall: { pass: 9794, total: 11073, rate: 88.4 },
+          young: { pass: 892, total: 1000, rate: 89.2 },
+          mature: { pass: 8902, total: 10073, rate: 88.4 },
+        },
+      },
+      dailyLoad: 40.8,
+    },
+  });
+  try {
+    const html = render(React.createElement(StatsView));
+    ok(html.includes('>学习统计<'), 'expected concise single-line page title');
+    doesNotMatch(html, /基于 Anki 原生 revlog/, 'verbose marketing page subtitle must stay off page face');
+    doesNotMatch(html, /20:00:00/, 'peak hour badge must not double-append :00');
+    ok(html.includes('20:00 · 91%'), 'expected concise peak hour badge');
+    doesNotMatch(html, /#FF9F0A/i, 'low-contrast hardcoded #FF9F0A must be removed');
+    doesNotMatch(html, /\(30d \/ All\)/, 'hardcoded English (30d / All) must be replaced by localized table headers');
+    ok(html.includes('86.0%') && html.includes('88.4%'), 'True Retention KPIs must use consistent 1-decimal formatting');
+    ok(html.includes('<svg viewBox="0 0 420 140"') && html.includes('vector-effect="non-scaling-stroke"'), 'retention card must render smooth SVG spline');
+    ok(html.includes('aria-valuemax="100"'), 'Answer Buttons progress bars must scale against 100% total share');
+    ok(html.includes('<table') && html.includes('scope="col"') && html.includes('scope="row"'), 'True Retention breakdown must use an accessible semantic table');
+    ok(html.includes('dashboard-surface') && html.includes('max-w-[1440px]'), 'StatsView must share Dashboard surface & max-width shell');
+    ok(
+      html.includes('>5天后<') && html.includes('>11周前<') && html.includes('>本周<'),
+      'X-axis day/week ticks must be localized to active language',
+    );
+    doesNotMatch(html, />\+\d+d<|>-\d+w</, 'X-axis ticks must not hardcode English d/w units in zh-CN');
+  } finally {
+    setAppState({
+      resolvedLang: prev.resolvedLang,
+      theme: prev.theme,
+      systemDark: prev.systemDark,
+      isInitialSyncing: prev.isInitialSyncing,
+      syncing: prev.syncing,
+      syncJustFinished: prev.syncJustFinished,
+      dashboard: prev.dashboard,
+      advancedStats: prev.advancedStats,
     });
   }
 });

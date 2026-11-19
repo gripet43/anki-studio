@@ -5,7 +5,15 @@ import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 import { EmptyStateIllustration } from '../common/ThemeIllustrations';
+import { StudioSelect } from '../common/StudioSelect';
 import { Tooltip } from '../common/Tooltip';
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  PlayTriangleIcon,
+} from '../common/Icons';
 
 export const DecksView: React.FC = () => {
   const {
@@ -110,15 +118,16 @@ export const DecksView: React.FC = () => {
           </h1>
           {isSyncPending ? (
             <div className="flex items-center gap-2 mt-1">
-              <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-ping" />
+              <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] motion-safe:animate-ping" />
               <span className="text-[12px] font-medium text-[var(--status-warning)] tracking-tight">
                 {syncing ? t('decksSyncingCloud') : t('decksLoadingLocal')}
               </span>
             </div>
           ) : syncJustFinished ? (
             <div className="flex items-center gap-1.5 mt-1 animate-in fade-in duration-300">
+              <CheckIcon className="w-3.5 h-3.5 text-[var(--status-success)]" strokeWidth={2.8} />
               <span className="text-[12px] font-semibold text-[var(--status-success)] tracking-tight">
-                ✓ {t('syncCompleted')}
+                {t('syncCompleted')}
               </span>
             </div>
           ) : (
@@ -134,7 +143,7 @@ export const DecksView: React.FC = () => {
             onClick={() => appActions.openSettings('maintenance')}
             className="btn-secondary !h-10 !px-3.5 flex items-center gap-1.5"
           >
-            <svg className="w-3.5 h-3.5 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg className="w-3.5 h-3.5 opacity-80 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
@@ -147,7 +156,7 @@ export const DecksView: React.FC = () => {
             onClick={() => appActions.openCustomStudyModal('mistakes')}
             className="btn-secondary !h-10 !px-4 flex items-center gap-1.5"
           >
-            <svg className="w-3.5 h-3.5 text-[var(--brand-text)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <svg className="w-3.5 h-3.5 text-[var(--brand-text)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="10" />
               <circle cx="12" cy="12" r="4" />
             </svg>
@@ -173,32 +182,37 @@ export const DecksView: React.FC = () => {
               {t('createDeckModalTitle')}
             </h3>
             <button
+              type="button"
               onClick={() => setShowCreateModal(false)}
-              className={`text-xs ${subText} cursor-pointer`}
+              aria-label={t('close')}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center ${subText} hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors`}
             >
-              ✕
+              <CloseIcon className="w-3.5 h-3.5" />
             </button>
           </div>
 
           <div className="grid grid-cols-12 gap-3 items-end">
             <div className="col-span-4">
-              <label className={`block text-[11px] ${subText} mb-1.5`}>
+              <label
+                id="create-deck-parent-label"
+                htmlFor="create-deck-parent-select"
+                className={`block text-[11px] ${subText} mb-1.5`}
+              >
                 {t('parentDeckLabel')}
               </label>
-              <select
+              <StudioSelect
+                id="create-deck-parent-select"
+                ariaLabelledBy="create-deck-parent-label"
+                size="lg"
                 value={parentFullName}
-                onChange={(e) => setParentFullName(e.target.value)}
-                className={`w-full h-10 px-3 rounded-xl border text-[13px] focus:outline-none focus:border-[var(--brand)] ${
-                  isDark ? 'bg-[#14141A] border-[#2A2C36]' : 'bg-[#F8F8FA] border-[#E5E5EA]'
-                }`}
-              >
-                <option value="">{t('topLevelDeckOption')}</option>
-                {decks.map((p) => (
-                  <option key={p.id} value={p.fullName}>
-                    {p.fullName}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: '', label: t('topLevelDeckOption') },
+                  ...decks.map((p) => ({ value: p.fullName, label: p.fullName })),
+                ]}
+                onChange={setParentFullName}
+                searchable="auto"
+                className="w-full"
+              />
             </div>
 
             <div className="col-span-5">
@@ -299,12 +313,19 @@ export const DecksView: React.FC = () => {
                   >
                     {hasChildren ? (
                       <button
+                        type="button"
+                        aria-expanded={!isCollapsed}
                         onClick={() => appActions.toggleDeckCollapse(deck.id)}
                         className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs cursor-pointer shrink-0 ${
                           isDark ? 'bg-[#262630] text-white' : 'bg-[#F2F2F7] text-[#3A3A3C]'
                         }`}
                       >
-                        {isCollapsed ? '▸' : '▾'}
+                        <ChevronRightIcon
+                          className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                            isCollapsed ? 'rtl:rotate-180' : 'rotate-90'
+                          }`}
+                          strokeWidth={2.3}
+                        />
                       </button>
                     ) : (
                       <span className="w-6 text-center text-[#8E8E93] text-xs shrink-0">
@@ -456,7 +477,7 @@ export const DecksView: React.FC = () => {
                           style={{ backgroundColor: brandHex }}
                           className="btn-primary !h-8 !px-3.5 !text-[12px]"
                         >
-                          <span className="text-[10px]">▶</span>
+                          <PlayTriangleIcon className="w-2.5 h-2.5" />
                           <span>{t('navStudy')}</span>
                         </button>
                       </>
@@ -506,9 +527,9 @@ export const DecksView: React.FC = () => {
                 type="button"
                 onClick={() => setEditingOptionsDeck(null)}
                 aria-label={t('close')}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current cursor-pointer"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-current hover:bg-black/5 dark:hover:bg-white/8 cursor-pointer transition-colors"
               >
-                ✕
+                <CloseIcon className="w-4 h-4" />
               </button>
             </header>
 
@@ -650,15 +671,13 @@ export const DecksView: React.FC = () => {
 
               {/* 3. Progressive Disclosure: Learning Steps & Leech Threshold */}
               <details
-                className={`rounded-2xl border px-4 py-3 group ${
+                className={`studio-details rounded-2xl border px-4 py-3 group ${
                   isDark ? 'bg-[#14151C] border-[#262834]' : 'bg-[#F8F8FA] border-[#EAECEF]'
                 }`}
               >
                 <summary className="text-[12px] font-semibold cursor-pointer flex items-center justify-between list-none">
                   <span>{t('deckOptAdvancedStepsSummary')}</span>
-                  <span className={`text-[11px] ${subText} group-open:rotate-180 transition-transform`}>
-                    ▾
-                  </span>
+                  <ChevronDownIcon className={`w-3.5 h-3.5 ${subText} studio-details-chevron`} />
                 </summary>
 
                 <div className="pt-3.5 mt-3 border-t border-black/5 dark:border-white/5 grid grid-cols-3 gap-3">
