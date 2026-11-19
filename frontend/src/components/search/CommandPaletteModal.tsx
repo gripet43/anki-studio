@@ -65,6 +65,7 @@ export const CommandPaletteModal: React.FC = () => {
     accentColor,
     resolvedLang,
     envInfo,
+    showShortcutHints,
   } = useAppStore();
 
   const [copiedSide, setCopiedSide] = useState<'front' | 'back' | 'all' | null>(null);
@@ -735,9 +736,11 @@ export const CommandPaletteModal: React.FC = () => {
                       className="btn-primary w-full !h-9 !text-[12px]"
                     >
                       <span>{t('editInCardEditorBtn')}</span>
-                      <kbd className="px-1.5 py-0.5 rounded bg-white/20 text-[10px] font-mono leading-none">
-                        ↵
-                      </kbd>
+                      {showShortcutHints && (
+                        <kbd className="px-1.5 py-0.5 rounded bg-white/20 text-[10px] font-mono leading-none">
+                          ↵
+                        </kbd>
+                      )}
                     </button>
                   </div>
                 </>

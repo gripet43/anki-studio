@@ -179,6 +179,7 @@ export const CardEditorModal: React.FC = () => {
     libraryCardStyles,
     libraryFrontCardStyles,
     continuousCardCreation,
+    showShortcutHints,
   } = useAppStore();
 
   const resolvedTheme = resolveThemeMode(theme, systemDark);
@@ -2195,9 +2196,11 @@ export const CardEditorModal: React.FC = () => {
                   className="h-7 px-3 rounded-lg font-semibold text-[11px] bg-[var(--brand-soft)] hover:bg-[var(--brand-soft-strong)] text-[var(--brand-text)] flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors"
                 >
                   <span>{previewFlipped ? t('questionSideBadge') : t('showAnswerBtn')}</span>
-                  <kbd className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-black/5 dark:bg-white/10">
-                    Space
-                  </kbd>
+                  {showShortcutHints && (
+                    <kbd className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-black/5 dark:bg-white/10">
+                      Space
+                    </kbd>
+                  )}
                 </button>
               </div>
             </div>

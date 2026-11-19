@@ -950,9 +950,11 @@ export const ReviewerView: React.FC = () => {
           }`}
         >
           <span>{isNewDayReady ? t('newDayReadySub', { n: newDayPendingCount }) : t('reviewCompletedSub')}</span>
-          <span>
-            {showShortcutHints ? `Esc · ${formatShortcut('Cmd Z', platform)}` : 'Esc'}
-          </span>
+          {showShortcutHints && (
+            <span>
+              {`Esc · ${formatShortcut('Cmd Z', platform)}`}
+            </span>
+          )}
         </footer>
       </div>
     );
@@ -1633,7 +1635,9 @@ export const ReviewerView: React.FC = () => {
               >
                 <div className="px-2.5 py-1 text-[10px] text-[var(--text-secondary)] flex items-center justify-between">
                   <span>{t('flagFilterLabel')}</span>
-                  <span className="font-mono">{formatShortcut('Cmd 1-7', platform)}</span>
+                  {showShortcutHints && (
+                    <span className="font-mono">{formatShortcut('Cmd 1-7', platform)}</span>
+                  )}
                 </div>
                 {([1, 2, 3, 4, 5, 6, 7] as Array<Exclude<CardFlagColor, 0>>).map((fNum) => {
                   const spec = ANKI_FLAG_PALETTE[fNum];
@@ -2456,12 +2460,7 @@ export const ReviewerView: React.FC = () => {
                     </kbd>
                   </>
                 ) : (
-                  <span className="inline-flex items-center gap-2.5">
-                    <span>{t('showAnswerBtn')}</span>
-                    <kbd className="reviewer-badge-trim px-1.5 py-0.5 rounded-md bg-white/18 text-[11px] font-mono font-medium opacity-85">
-                      Space
-                    </kbd>
-                  </span>
+                  <span>{t('showAnswerBtn')}</span>
                 )}
               </button>
             ) : optionKeyHeld || answerButtonMode === 'four' ? (
@@ -2682,11 +2681,13 @@ export const ReviewerView: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between text-[11px] text-[var(--text-secondary)] mb-2">
                   <span>{t('flagFilterLabel')}</span>
-                  <span className="font-mono text-[10px]">
-                    {activeFlagSpec
-                      ? t(`flagLabel_${activeFlagNum}` as any)
-                      : formatShortcut('Cmd 1-7', platform)}
-                  </span>
+                  {(activeFlagSpec || showShortcutHints) && (
+                    <span className="font-mono text-[10px]">
+                      {activeFlagSpec
+                        ? t(`flagLabel_${activeFlagNum}` as any)
+                        : formatShortcut('Cmd 1-7', platform)}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center justify-between gap-1">
                   {([1, 2, 3, 4, 5, 6, 7] as Array<Exclude<CardFlagColor, 0>>).map((fNum) => {

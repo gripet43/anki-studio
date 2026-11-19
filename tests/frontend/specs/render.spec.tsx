@@ -503,6 +503,7 @@ test('ReviewerView session-complete screen renders semantic article, subgrid sta
     ok(html.includes('<footer class="reviewer-complete-actions">'), 'expected <footer> action group');
     const btns = Array.from(html.matchAll(/class="reviewer-complete-btn reviewer-complete-btn--(primary|secondary)"/g));
     equal(btns.length, 2, 'expected both session-complete actions to share .reviewer-complete-btn sizing');
+    ok(!html.includes('>Esc<'), 'session-complete footer hides Esc hint when showShortcutHints is false');
   } finally {
     setAppState({
       inReviewMode: prev.inReviewMode,
@@ -516,6 +517,59 @@ test('ReviewerView session-complete screen renders semantic article, subgrid sta
       sessionTotalTimeMs: prev.sessionTotalTimeMs,
       reviewScopeDeckId: prev.reviewScopeDeckId,
       pendingDayRollover: prev.pendingDayRollover,
+    });
+  }
+});
+
+test('ReviewerView respects showShortcutHints toggle for Show Answer Space, Flag Cmd 1-7, and footer hints', () => {
+  const prev = getAppState();
+  const sampleCard = {
+    id: '101',
+    noteId: '201',
+    deckId: '1',
+    deckName: 'Default',
+    front: 'Front Question',
+    back: 'Back Answer',
+    tags: [],
+    flag: 0,
+    audioFiles: [],
+    frontAudioFiles: [],
+    backAudioFiles: [],
+    hints: [],
+    history: [],
+    fields: { Front: 'Front Question', Back: 'Back Answer' },
+    predictions: { again: '1m', hard: '6m', good: '10m', easy: '4d' },
+  } as any;
+  try {
+    setAppState({
+      inReviewMode: true,
+      isSessionComplete: false,
+      isCardFlipped: false,
+      inspectorOpen: true,
+      showShortcutHints: false,
+      resolvedLang: 'zh-CN',
+      reviewQueue: [sampleCard],
+      currentCardIndex: 0,
+    });
+    const hiddenHtml = renderToStaticMarkup(React.createElement(ReviewerView));
+    ok(hiddenHtml.includes('显示答案'), 'Show Answer button still renders label');
+    ok(!hiddenHtml.includes('<kbd'), 'ReviewerView renders zero <kbd> badges when showShortcutHints is false');
+    ok(!hiddenHtml.includes('Cmd 1-7'), 'Flag panels hide Cmd 1-7 hint when showShortcutHints is false');
+
+    setAppState({ showShortcutHints: true });
+    const visibleHtml = renderToStaticMarkup(React.createElement(ReviewerView));
+    ok(visibleHtml.includes('Space / Enter'), 'Show Answer reveals Space / Enter when showShortcutHints is true');
+    ok(visibleHtml.includes('Cmd 1-7'), 'Flag panels reveal Cmd 1-7 when showShortcutHints is true');
+  } finally {
+    setAppState({
+      inReviewMode: prev.inReviewMode,
+      isSessionComplete: prev.isSessionComplete,
+      isCardFlipped: prev.isCardFlipped,
+      inspectorOpen: prev.inspectorOpen,
+      showShortcutHints: prev.showShortcutHints,
+      resolvedLang: prev.resolvedLang,
+      reviewQueue: prev.reviewQueue,
+      currentCardIndex: prev.currentCardIndex,
     });
   }
 });
