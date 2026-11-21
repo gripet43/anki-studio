@@ -18,62 +18,6 @@ export const ZEN_AMBIENCE_SCENES: readonly ZenAmbienceScene[] = [
   'warmth',
 ] as const;
 
-export const ZEN_CEREMONY_DATE_STORAGE_KEY = 'anki_studio_zen_ceremony_date';
-
-interface SimpleStorageLike {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-}
-
-/** Returns local calendar date string YYYY-MM-DD for once-per-day incense ritual gating. */
-export function getLocalZenDateKey(date: Date = new Date()): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function resolveZenStorage(storage?: SimpleStorageLike | null): SimpleStorageLike | null {
-  if (storage !== undefined) return storage;
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Returns true if the user already completed today's interactive incense ceremony.
- * SSR-safe: returns false when localStorage is unavailable.
- */
-export function hasCompletedZenCeremonyToday(
-  todayKey: string = getLocalZenDateKey(),
-  storage?: SimpleStorageLike | null
-): boolean {
-  const store = resolveZenStorage(storage);
-  if (!store) return false;
-  try {
-    return store.getItem(ZEN_CEREMONY_DATE_STORAGE_KEY) === todayKey;
-  } catch {
-    return false;
-  }
-}
-
-/** Records today's local date so repeat same-day Zen entries glide directly into the courtyard. */
-export function markZenCeremonyCompletedToday(
-  todayKey: string = getLocalZenDateKey(),
-  storage?: SimpleStorageLike | null
-): void {
-  const store = resolveZenStorage(storage);
-  if (!store) return;
-  try {
-    store.setItem(ZEN_CEREMONY_DATE_STORAGE_KEY, todayKey);
-  } catch {
-    // Ignore storage quota or private-mode errors
-  }
-}
-
 const ZH_DIGITS = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'] as const;
 
 /** Formats a positive integer (1..99) into natural Chinese numerals (一..十五..二十). */

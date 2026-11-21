@@ -3,7 +3,7 @@ import { translate } from '../../i18n/translations';
 import { appActions, useAppStore } from '../../stores/useAppStore';
 import { resolveThemeMode } from '../../utils/themeTokens';
 import { playZenEnterBell, playZenIncenseIgnite, prewarmZenAudio } from '../../utils/zenAudio';
-import { markZenCeremonyCompletedToday, resolveZenTimePeriod } from '../../utils/zenMode';
+import { resolveZenTimePeriod } from '../../utils/zenMode';
 import { ZenEnsoGlyph } from './ZenEnsoGlyph';
 import {
   INCENSE_RING_COMPLETE_MS,
@@ -61,7 +61,6 @@ export const ZenThresholdOverlay: React.FC = () => {
     clearAllTimers();
     litAtRef.current = Date.now();
     bellStruckRef.current = false;
-    markZenCeremonyCompletedToday();
     setPhase('lit');
     setBellStruck(false);
     playZenIncenseIgnite(soundEnabledRef.current);

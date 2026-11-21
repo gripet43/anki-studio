@@ -90,7 +90,7 @@ import {
   stopZenAmbience,
 } from '../utils/zenAudio';
 import { runZenViewTransition } from '../utils/viewTransition';
-import { hasCompletedZenCeremonyToday, type ZenAmbienceScene } from '../utils/zenMode';
+import type { ZenAmbienceScene } from '../utils/zenMode';
 
 export type NavTab = 'dashboard' | 'library' | 'stats' | 'decks' | 'design-system';
 export type { AccentColor, ThemeMode };
@@ -2775,8 +2775,7 @@ export const appActions = {
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const shouldShowThreshold =
-      !prefersReducedMotion && !wasInReview && !hasCompletedZenCeremonyToday();
+    const shouldShowThreshold = !prefersReducedMotion && !wasInReview;
     runZenViewTransition('enter', () => {
       if (state.zenMode) return;
       setAppState({

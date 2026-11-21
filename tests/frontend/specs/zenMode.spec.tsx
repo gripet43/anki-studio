@@ -35,10 +35,7 @@ import {
 } from '../../../frontend/src/utils/zenAudio';
 import {
   formatZenIncenseRemaining,
-  getLocalZenDateKey,
-  hasCompletedZenCeremonyToday,
   isZenBlockedGlobalShortcut,
-  markZenCeremonyCompletedToday,
   resolveZenCompleteSubKey,
   resolveZenHomeState,
   resolveZenIncenseCopy,
@@ -320,22 +317,6 @@ section('zenMode pure logic', () => {
       0,
       'runs full refresh rate during active focused studying'
     );
-
-    // Daily-first incense ceremony helper is SSR-safe and tracks per-calendar-day completion
-    const memStore = new Map<string, string>();
-    const fakeStorage = {
-      getItem: (k: string) => memStore.get(k) ?? null,
-      setItem: (k: string, v: string) => {
-        memStore.set(k, v);
-      },
-    };
-    const todayKey = getLocalZenDateKey(new Date(2026, 10, 21));
-    equal(todayKey, '2026-11-21');
-    equal(hasCompletedZenCeremonyToday(todayKey, fakeStorage), false);
-    markZenCeremonyCompletedToday(todayKey, fakeStorage);
-    equal(hasCompletedZenCeremonyToday(todayKey, fakeStorage), true);
-    equal(hasCompletedZenCeremonyToday('2026-11-22', fakeStorage), false);
-    equal(hasCompletedZenCeremonyToday(todayKey, null), false);
 
     // Node SSR environment lacks AudioContext — all acoustic & ambience APIs must fail softly without throwing
     equal(playZenIncenseIgnite(true), false);
