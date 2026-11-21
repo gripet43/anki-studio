@@ -5638,29 +5638,6 @@ dialog.avatar-crop-dialog[open]::backdrop {
   color: rgba(242, 236, 222, 0.9);
 }
 
-.zen-threshold-ripple {
-  position: absolute;
-  width: 156px;
-  height: 156px;
-  border-radius: 9999px;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 14%, transparent);
-  filter: blur(0.6px);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.zen-threshold-ripple--outer {
-  border-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
-}
-
-.dark .zen-threshold-ripple {
-  border-color: rgba(242, 234, 218, 0.18);
-}
-
-.dark .zen-threshold-ripple--outer {
-  border-color: rgba(242, 234, 218, 0.1);
-}
-
 .zen-threshold-cue {
   font-size: 15px;
   font-weight: 500;
@@ -5822,20 +5799,6 @@ dialog.avatar-crop-dialog[open]::backdrop {
     }
     to {
       opacity: 1;
-    }
-  }
-
-  @keyframes zen-threshold-halo {
-    0% {
-      transform: scale(0.96);
-      opacity: 0;
-    }
-    22% {
-      opacity: 0.24;
-    }
-    100% {
-      transform: scale(1.58);
-      opacity: 0;
     }
   }
 
@@ -6067,15 +6030,6 @@ dialog.avatar-crop-dialog[open]::backdrop {
 
   .zen-threshold-prompt {
     animation: zen-prompt-breathe 4.4s ease-in-out infinite;
-  }
-
-  /* Twin acoustic halos bloom on the exact frame the singing bowl strikes at Ensō completion */
-  .zen-threshold-ripple {
-    animation: zen-threshold-halo 1700ms cubic-bezier(0.16, 1, 0.3, 1) 0ms both;
-  }
-
-  .zen-threshold-ripple--outer {
-    animation: zen-threshold-halo 2000ms cubic-bezier(0.16, 1, 0.3, 1) 240ms both;
   }
 
   .zen-seal-dot {

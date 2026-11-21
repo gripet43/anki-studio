@@ -202,8 +202,6 @@ export const ZenThresholdOverlay: React.FC = () => {
       {bellStruck && (
         <div className="zen-threshold-core fixed left-1/2 top-[calc(50%-38px)] -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center pointer-events-none">
           <div className="relative flex items-center justify-center w-[156px] h-[156px]">
-            <span aria-hidden="true" className="zen-threshold-ripple" />
-            <span aria-hidden="true" className="zen-threshold-ripple zen-threshold-ripple--outer" />
             <ZenEnsoGlyph
               variant="open"
               className="zen-enso-svg zen-threshold-enso w-[156px] h-[156px] relative z-10 opacity-0 motion-reduce:opacity-100"

@@ -121,6 +121,23 @@ export const INK_START_MS = 950;
 export const INCENSE_RING_COMPLETE_MS = INK_START_MS + INCENSE_RING_FORM_MS;
 export const ZEN_INCENSE_BURN_DURATION_MS = 15 * 60 * 1000;
 
+const BELL_WAVE_START_MS = INCENSE_RING_COMPLETE_MS - 30; // 2720ms — locked to exact singing-bowl strike frame
+// Three harmonic bronze-bowl acoustic waves (all complete within 2480ms < 2550ms Act-3 hold so nothing is clipped)
+const BELL_ACOUSTIC_WAVES: ReadonlyArray<{
+  delayMs: number;
+  durationMs: number;
+  rStart: number;
+  rEnd: number;
+  widthStart: number;
+  widthEnd: number;
+  peakAlpha: number;
+  bandWidth: number;
+}> = [
+  { delayMs: 0, durationMs: 1850, rStart: 62, rEnd: 235, widthStart: 1.55, widthEnd: 0.45, peakAlpha: 0.34, bandWidth: 16 },
+  { delayMs: 250, durationMs: 2000, rStart: 64, rEnd: 280, widthStart: 1.25, widthEnd: 0.38, peakAlpha: 0.24, bandWidth: 18 },
+  { delayMs: 520, durationMs: 1960, rStart: 66, rEnd: 325, widthStart: 1.0, widthEnd: 0.32, peakAlpha: 0.16, bandWidth: 20 },
+];
+
 const SMOKE_TOTAL_JOURNEY_MS = 2650;
 const ASCENT_JOURNEY_SPLIT = 0.4;
 const IDLE_PAUSE_MS = 90_000; // Pause burn after 90s of no interaction
@@ -1552,6 +1569,70 @@ export const ZenIncenseCanvas: React.FC<ZenIncenseCanvasProps> = ({
             ctx.stroke();
           }
           ctx.globalAlpha = 1;
+        }
+      }
+
+      // 5c. Singing-Bowl Acoustic Resonance Waves (Retina 2x Canvas 2D — continuous C-infinity expansion,
+      //     physically thinning wavefront + subtle trailing pressure sheen, zero CSS scale-upscaling pops)
+      if (isRitual && isActivelyLit && litElapsedMs > BELL_WAVE_START_MS) {
+        const bellElapsedMs = litElapsedMs - BELL_WAVE_START_MS;
+        const waveRgb: [number, number, number] = isDark ? [242, 233, 212] : [44, 42, 38];
+        const maxSafeR = Math.max(160, Math.min(width, height) * 0.45);
+
+        // Subtle center mallet-strike resonance bloom (0 -> 1350ms)
+        if (bellElapsedMs < 1350) {
+          const bp = bellElapsedMs / 1350;
+          const bEase = 1 - Math.pow(1 - bp, 2.4);
+          const bRadius = 58 + 72 * bEase;
+          const bAlpha = (isDark ? 0.085 : 0.062) * Math.sin(Math.PI * Math.min(1, bp / 0.18) * 0.5) * Math.pow(1 - bp, 1.9);
+          if (bAlpha > 0.002) {
+            const bloomGrad = ctx.createRadialGradient(cx, ensoCy, 42, cx, ensoCy, bRadius);
+            bloomGrad.addColorStop(0, `rgba(${waveRgb[0]}, ${waveRgb[1]}, ${waveRgb[2]}, 0)`);
+            bloomGrad.addColorStop(0.55, `rgba(${waveRgb[0]}, ${waveRgb[1]}, ${waveRgb[2]}, ${bAlpha})`);
+            bloomGrad.addColorStop(1, `rgba(${waveRgb[0]}, ${waveRgb[1]}, ${waveRgb[2]}, 0)`);
+            ctx.fillStyle = bloomGrad;
+            ctx.beginPath();
+            ctx.arc(cx, ensoCy, bRadius, 0, TWO_PI);
+            ctx.fill();
+          }
+        }
+
+        // Three harmonic wavefronts radiating smoothly off the Ensō ink circumference
+        for (const w of BELL_ACOUSTIC_WAVES) {
+          const elapsed = bellElapsedMs - w.delayMs;
+          if (elapsed <= 0 || elapsed >= w.durationMs) continue;
+          const p = elapsed / w.durationMs;
+          const easeOut = 1 - Math.pow(1 - p, 2.75);
+          const rTarget = Math.min(w.rEnd, maxSafeR);
+          const radius = w.rStart + (rTarget - w.rStart) * easeOut;
+
+          // Smooth raised-cosine onset (0 -> 8%) × continuous physical exponential acoustic decay
+          const attack = p < 0.08 ? 0.5 - 0.5 * Math.cos(Math.PI * (p / 0.08)) : 1;
+          const decay = Math.pow(1 - p, 2.25);
+          const darkBoost = isDark ? 1.14 : 1.0;
+          const alpha = w.peakAlpha * darkBoost * attack * decay;
+          if (alpha < 0.002) continue;
+
+          // 1) Whisper-soft acoustic mist band trailing right behind the wavefront
+          const innerR = Math.max(1, radius - w.bandWidth * (0.75 + 0.55 * easeOut));
+          const outerR = radius + 3.5;
+          const bandGrad = ctx.createRadialGradient(cx, ensoCy, innerR, cx, ensoCy, outerR);
+          const waveStop = Math.max(0.05, Math.min(0.95, (radius - innerR) / (outerR - innerR)));
+          bandGrad.addColorStop(0, `rgba(${waveRgb[0]}, ${waveRgb[1]}, ${waveRgb[2]}, 0)`);
+          bandGrad.addColorStop(waveStop, `rgba(${waveRgb[0]}, ${waveRgb[1]}, ${waveRgb[2]}, ${alpha * 0.24})`);
+          bandGrad.addColorStop(1, `rgba(${waveRgb[0]}, ${waveRgb[1]}, ${waveRgb[2]}, 0)`);
+          ctx.fillStyle = bandGrad;
+          ctx.beginPath();
+          ctx.arc(cx, ensoCy, outerR, 0, TWO_PI);
+          ctx.fill();
+
+          // 2) Delicate wavefront stroke that thins organically as circumference grows
+          const strokeWidth = w.widthStart + (w.widthEnd - w.widthStart) * easeOut;
+          ctx.beginPath();
+          ctx.arc(cx, ensoCy, radius, 0, TWO_PI);
+          ctx.strokeStyle = `rgba(${waveRgb[0]}, ${waveRgb[1]}, ${waveRgb[2]}, ${alpha})`;
+          ctx.lineWidth = strokeWidth;
+          ctx.stroke();
         }
       }
 
