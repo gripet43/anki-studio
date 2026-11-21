@@ -168,7 +168,7 @@ export const VacationModal: React.FC = () => {
   return (
     <div
       data-state={presence.state}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[5px] select-none ui-modal-backdrop modal-contain-scroll"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 select-none ui-modal-backdrop modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-labelledby={modalTitleId}
@@ -637,7 +637,6 @@ export const VacationModal: React.FC = () => {
                 type="button"
                 onClick={handleStartVacation}
                 disabled={isSubmitting}
-                style={{ backgroundColor: brandHex }}
                 className="btn-primary vacation-action-btn !px-4 !text-[12px]"
               >
                 {isSubmitting

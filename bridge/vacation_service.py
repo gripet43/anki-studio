@@ -536,8 +536,58 @@ class VacationService:
         ids = [int(cid) for cid in cids]
         if not ids or not hasattr(col, "get_card"):
             return ids, []
-        good: List[int] = []
-        skipped: List[int] = []
+
+        # Batch SQL pre-check on real Anki: only invoke get_card() on rows with
+        # out-of-range integer values instead of N individual Rust round-trips.
+        if not hasattr(col, "_cards") and hasattr(col, "db") and hasattr(col.db, "all"):
+            try:
+                row_map: Dict[int, Tuple[Any, ...]] = {}
+                for start in range(0, len(ids), 500):
+                    chunk = ids[start : start + 500]
+                    placeholders = ",".join("?" for _ in chunk)
+                    for r in col.db.all(
+                        f"SELECT id, due, ivl, queue, type, factor, reps, lapses, odue, odid "
+                        f"FROM cards WHERE id IN ({placeholders})",
+                        *chunk,
+                    ):
+                        row_map[int(r[0])] = r
+                good: List[int] = []
+                skipped: List[int] = []
+                _SAFE_MAX = 2_000_000_000
+                for cid in ids:
+                    row = row_map.get(cid)
+                    if row is None:
+                        skipped.append(cid)
+                        continue
+                    _, due_v, ivl_v, q_v, t_v, fac_v, reps_v, lap_v, odue_v, odid_v = row
+                    looks_safe = (
+                        isinstance(due_v, int) and -_SAFE_MAX <= due_v <= _SAFE_MAX
+                        and isinstance(ivl_v, int) and -_SAFE_MAX <= ivl_v <= _SAFE_MAX
+                        and isinstance(q_v, int) and -3 <= q_v <= 4
+                        and isinstance(t_v, int) and 0 <= t_v <= 3
+                        and isinstance(fac_v, int) and 0 <= fac_v <= _SAFE_MAX
+                        and isinstance(reps_v, int) and 0 <= reps_v <= _SAFE_MAX
+                        and isinstance(lap_v, int) and 0 <= lap_v <= _SAFE_MAX
+                        and isinstance(odue_v, int) and -_SAFE_MAX <= odue_v <= _SAFE_MAX
+                        and isinstance(odid_v, int) and 0 <= odid_v <= _SAFE_MAX
+                    )
+                    if looks_safe:
+                        good.append(cid)
+                        continue
+                    try:
+                        card = col.get_card(cid)
+                        if card is None:
+                            skipped.append(cid)
+                        else:
+                            good.append(cid)
+                    except Exception:
+                        skipped.append(cid)
+                return good, skipped
+            except Exception:
+                pass
+
+        good = []
+        skipped = []
         for cid in ids:
             try:
                 card = col.get_card(cid)
@@ -653,55 +703,107 @@ class VacationService:
             card_samples = []
             weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
-            for idx, cid in enumerate(rescheduled_cids):
-                c_due = sched_today + 1
-                c_ivl = 0
-                c_did = 1
-                front_text = ""
+            used_sql_receipt = False
+            if not hasattr(col, "_cards") and hasattr(col, "db") and hasattr(col.db, "all"):
+                try:
+                    card_rows: Dict[int, Tuple[int, int, int, int]] = {}
+                    for start in range(0, len(rescheduled_cids), 500):
+                        chunk = rescheduled_cids[start : start + 500]
+                        placeholders = ",".join("?" for _ in chunk)
+                        for r in col.db.all(
+                            f"SELECT id, due, ivl, did, nid FROM cards WHERE id IN ({placeholders})",
+                            *chunk,
+                        ):
+                            card_rows[int(r[0])] = (int(r[1] or 0), int(r[2] or 0), int(r[3] or 1), int(r[4] or 0))
+                    sample_cids = rescheduled_cids[:30]
+                    sample_nids = list({card_rows[c][3] for c in sample_cids if c in card_rows and card_rows[c][3]})
+                    note_fronts: Dict[int, str] = {}
+                    if sample_nids:
+                        placeholders = ",".join("?" for _ in sample_nids)
+                        for nr in col.db.all(
+                            f"SELECT id, flds FROM notes WHERE id IN ({placeholders})",
+                            *sample_nids,
+                        ):
+                            if nr and nr[1]:
+                                note_fronts[int(nr[0])] = re.sub(r"<[^>]*>", "", str(nr[1]).split("\x1f", 1)[0]).strip()
+                    for idx, cid in enumerate(rescheduled_cids):
+                        row_info = card_rows.get(cid)
+                        c_due, c_ivl, c_did, c_nid = row_info if row_info else (sched_today + 1, 0, 1, 0)
+                        d_off = max(1, min(days, c_due - sched_today))
+                        day_counts[d_off] = day_counts.get(d_off, 0) + 1
+                        if idx < 30:
+                            front_text = note_fronts.get(c_nid, "")
+                            deck_name = "Default"
+                            if hasattr(col, "decks") and hasattr(col.decks, "name"):
+                                try:
+                                    deck_name = col.decks.name(c_did) or "Default"
+                                except Exception:
+                                    pass
+                            target_date = today_date + datetime.timedelta(days=d_off)
+                            card_samples.append({
+                                "id": str(cid),
+                                "front": front_text[:100] if front_text else f"卡片 #{cid}",
+                                "deckName": deck_name,
+                                "intervalDays": c_ivl,
+                                "dayOffset": d_off,
+                                "newDueDate": f"{target_date.month}月{target_date.day}日",
+                            })
+                    used_sql_receipt = True
+                except Exception:
+                    day_counts = {d: 0 for d in range(1, days + 1)}
+                    card_samples = []
+                    used_sql_receipt = False
 
-                if hasattr(col, "get_card"):
-                    try:
-                        c = col.get_card(cid)
-                        c_due = c.due
-                        c_ivl = c.ivl
-                        c_did = c.did
-                        if len(card_samples) < 30:
-                            note = c.note()
-                            if note and hasattr(note, "fields") and note.fields:
-                                front_text = re.sub(r"<[^>]*>", "", str(note.fields[0])).strip()
-                    except Exception:
-                        pass
-                elif hasattr(col, "db"):
-                    try:
-                        r = col.db.first("SELECT due, ivl, did, nid FROM cards WHERE id = ?", cid)
-                        if r:
-                            c_due, c_ivl, c_did, nid = r
-                            if len(card_samples) < 30:
-                                nr = col.db.first("SELECT flds FROM notes WHERE id = ?", nid)
-                                if nr and nr[0]:
-                                    front_text = re.sub(r"<[^>]*>", "", str(nr[0]).split("\x1f")[0]).strip()
-                    except Exception:
-                        pass
+            if not used_sql_receipt:
+                for idx, cid in enumerate(rescheduled_cids):
+                    c_due = sched_today + 1
+                    c_ivl = 0
+                    c_did = 1
+                    front_text = ""
 
-                d_off = max(1, min(days, c_due - sched_today))
-                day_counts[d_off] = day_counts.get(d_off, 0) + 1
-
-                if len(card_samples) < 30:
-                    deck_name = "Default"
-                    if hasattr(col, "decks") and hasattr(col.decks, "name"):
+                    if hasattr(col, "get_card"):
                         try:
-                            deck_name = col.decks.name(c_did) or "Default"
+                            c = col.get_card(cid)
+                            c_due = c.due
+                            c_ivl = c.ivl
+                            c_did = c.did
+                            if len(card_samples) < 30:
+                                note = c.note()
+                                if note and hasattr(note, "fields") and note.fields:
+                                    front_text = re.sub(r"<[^>]*>", "", str(note.fields[0])).strip()
                         except Exception:
                             pass
-                    target_date = today_date + datetime.timedelta(days=d_off)
-                    card_samples.append({
-                        "id": str(cid),
-                        "front": front_text[:100] if front_text else f"卡片 #{cid}",
-                        "deckName": deck_name,
-                        "intervalDays": c_ivl,
-                        "dayOffset": d_off,
-                        "newDueDate": f"{target_date.month}月{target_date.day}日",
-                    })
+                    elif hasattr(col, "db"):
+                        try:
+                            r = col.db.first("SELECT due, ivl, did, nid FROM cards WHERE id = ?", cid)
+                            if r:
+                                c_due, c_ivl, c_did, nid = r
+                                if len(card_samples) < 30:
+                                    nr = col.db.first("SELECT flds FROM notes WHERE id = ?", nid)
+                                    if nr and nr[0]:
+                                        front_text = re.sub(r"<[^>]*>", "", str(nr[0]).split("\x1f")[0]).strip()
+                        except Exception:
+                            pass
+
+                    d_off = max(1, min(days, c_due - sched_today))
+                    day_counts[d_off] = day_counts.get(d_off, 0) + 1
+
+                    if len(card_samples) < 30:
+                        deck_name = "Default"
+                        if hasattr(col, "decks") and hasattr(col.decks, "name"):
+                            try:
+                                deck_name = col.decks.name(c_did) or "Default"
+                            except Exception:
+                                pass
+                        target_date = today_date + datetime.timedelta(days=d_off)
+                        card_samples.append({
+                            "id": str(cid),
+                            "front": front_text[:100] if front_text else f"卡片 #{cid}",
+                            "deckName": deck_name,
+                            "intervalDays": c_ivl,
+                            "dayOffset": d_off,
+                            "newDueDate": f"{target_date.month}月{target_date.day}日",
+                        })
 
             day_distribution = []
             for d in range(1, days + 1):
@@ -933,11 +1035,29 @@ class VacationService:
             if not cids:
                 cids = list(col.find_cards(f"{deck_filter}is:due")) if hasattr(col, "find_cards") else []
 
-            if cids and hasattr(col, "get_card"):
-                try:
-                    cids.sort(key=lambda cid: int(getattr(col.get_card(int(cid)), "ivl", 0) or 0), reverse=True)
-                except Exception:
-                    pass
+            if cids:
+                sorted_via_sql = False
+                if not hasattr(col, "_cards") and hasattr(col, "db") and hasattr(col.db, "all"):
+                    try:
+                        ivl_map: Dict[int, int] = {}
+                        int_cids = [int(c) for c in cids]
+                        for start in range(0, len(int_cids), 500):
+                            chunk = int_cids[start : start + 500]
+                            placeholders = ",".join("?" for _ in chunk)
+                            for r in col.db.all(
+                                f"SELECT id, ivl FROM cards WHERE id IN ({placeholders})",
+                                *chunk,
+                            ):
+                                ivl_map[int(r[0])] = int(r[1] or 0)
+                        cids.sort(key=lambda cid: ivl_map.get(int(cid), 0), reverse=True)
+                        sorted_via_sql = True
+                    except Exception:
+                        sorted_via_sql = False
+                if not sorted_via_sql and hasattr(col, "get_card"):
+                    try:
+                        cids.sort(key=lambda cid: int(getattr(col.get_card(int(cid)), "ivl", 0) or 0), reverse=True)
+                    except Exception:
+                        pass
 
             selected_cids = [str(cid) for cid in cids[:limit]]
 
@@ -983,6 +1103,27 @@ class VacationService:
     def _snapshot_card_schedule(col, cids: List[int]) -> Dict[str, Dict[str, int]]:
         """Records due/interval/queue before rescheduling so a revert can be lossless."""
         snapshot: Dict[str, Dict[str, int]] = {}
+        if not cids:
+            return snapshot
+        if not hasattr(col, "_cards") and hasattr(col, "db") and hasattr(col.db, "all"):
+            try:
+                int_cids = [int(c) for c in cids]
+                for start in range(0, len(int_cids), 500):
+                    chunk = int_cids[start : start + 500]
+                    placeholders = ",".join("?" for _ in chunk)
+                    for r in col.db.all(
+                        f"SELECT id, due, ivl, queue FROM cards WHERE id IN ({placeholders})",
+                        *chunk,
+                    ):
+                        snapshot[str(int(r[0]))] = {
+                            "due": int(r[1] or 0),
+                            "ivl": int(r[2] or 0),
+                            "queue": int(r[3] if r[3] is not None else 2),
+                        }
+                if snapshot:
+                    return snapshot
+            except Exception:
+                snapshot = {}
         for cid in cids:
             try:
                 card = col.get_card(int(cid))

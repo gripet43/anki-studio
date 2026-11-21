@@ -708,6 +708,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 "customNickname": "Dr. Lee",
                 "collapsedDeckIds": ["1"],
                 "sidebarCollapsed": True,
+                "compatMode": True,
                 "showShortcutHints": True,
                 "showIllustrations": False,
                 "continuousCardCreation": True,
@@ -715,6 +716,10 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 "autoPlayBackAudio": False,
                 "reviewStageWidth": "wide",
                 "reviewContentScale": 130,
+                "zenSoundEnabled": False,
+                "zenSfxVolume": 0.35,
+                "zenAmbienceVolume": 0.65,
+                "zenAmbience": "rain",
             },
         )
         self.assertEqual(prefs_res["status"], "success")
@@ -722,6 +727,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(prefs_res["data"]["preferences"]["customNickname"], "Dr. Lee")
         self.assertEqual(prefs_res["data"]["preferences"]["customAvatar"], {"kind": "initial"})
         self.assertTrue(prefs_res["data"]["preferences"]["sidebarCollapsed"])
+        self.assertTrue(prefs_res["data"]["preferences"]["compatMode"])
         self.assertTrue(prefs_res["data"]["preferences"]["showShortcutHints"])
         self.assertFalse(prefs_res["data"]["preferences"]["showIllustrations"])
         self.assertTrue(prefs_res["data"]["preferences"]["continuousCardCreation"])
@@ -729,11 +735,16 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertFalse(prefs_res["data"]["preferences"]["autoPlayBackAudio"])
         self.assertEqual(prefs_res["data"]["preferences"]["reviewStageWidth"], "wide")
         self.assertEqual(prefs_res["data"]["preferences"]["reviewContentScale"], 130)
+        self.assertFalse(prefs_res["data"]["preferences"]["zenSoundEnabled"])
+        self.assertEqual(prefs_res["data"]["preferences"]["zenSfxVolume"], 0.35)
+        self.assertEqual(prefs_res["data"]["preferences"]["zenAmbienceVolume"], 0.65)
+        self.assertEqual(prefs_res["data"]["preferences"]["zenAmbience"], "rain")
 
         get_prefs = self._call("get_preferences", {})
         self.assertEqual(get_prefs["status"], "success")
         self.assertEqual(get_prefs["data"]["customAvatar"], {"kind": "initial"})
         self.assertTrue(get_prefs["data"]["sidebarCollapsed"])
+        self.assertTrue(get_prefs["data"]["compatMode"])
         self.assertTrue(get_prefs["data"]["showShortcutHints"])
         self.assertFalse(get_prefs["data"]["showIllustrations"])
         self.assertTrue(get_prefs["data"]["continuousCardCreation"])
@@ -741,14 +752,23 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertFalse(get_prefs["data"]["autoPlayBackAudio"])
         self.assertEqual(get_prefs["data"]["reviewStageWidth"], "wide")
         self.assertEqual(get_prefs["data"]["reviewContentScale"], 130)
+        self.assertFalse(get_prefs["data"]["zenSoundEnabled"])
+        self.assertEqual(get_prefs["data"]["zenSfxVolume"], 0.35)
+        self.assertEqual(get_prefs["data"]["zenAmbienceVolume"], 0.65)
+        self.assertEqual(get_prefs["data"]["zenAmbience"], "rain")
 
         dash_prefs = self._call("get_dashboard", {})["data"]["preferences"]
         self.assertEqual(dash_prefs["customAvatar"], {"kind": "initial"})
         self.assertTrue(dash_prefs["sidebarCollapsed"])
+        self.assertTrue(dash_prefs["compatMode"])
         self.assertFalse(dash_prefs["showIllustrations"])
         self.assertTrue(dash_prefs["autoPlayFrontAudio"])
         self.assertFalse(dash_prefs["autoPlayBackAudio"])
         self.assertTrue(dash_prefs["continuousCardCreation"])
+        self.assertFalse(dash_prefs["zenSoundEnabled"])
+        self.assertEqual(dash_prefs["zenSfxVolume"], 0.35)
+        self.assertEqual(dash_prefs["zenAmbienceVolume"], 0.65)
+        self.assertEqual(dash_prefs["zenAmbience"], "rain")
 
         # Legacy oled migrates cleanly -> dark; auto & invalid normalize cleanly
         oled_mig = self._call("save_preferences", {"theme": "oled"})
@@ -851,6 +871,14 @@ class BridgeRouterAuditTest(unittest.TestCase):
 
         res_sys = self._call("start_system_move", {})
         self.assertEqual(res_sys["status"], "success")
+
+        res_zen_hide = self._call("set_zen_window_chrome", {"hidden": True})
+        self.assertEqual(res_zen_hide["status"], "success")
+        self.assertTrue(res_zen_hide["data"]["hidden"])
+
+        res_zen_show = self._call("set_zen_window_chrome", {"hidden": False})
+        self.assertEqual(res_zen_show["status"], "success")
+        self.assertFalse(res_zen_show["data"]["hidden"])
 
     def test_11_vacation_and_anti_avalanche_rescue(self):
         """Verify Vacation Mode, Streak Freeze, Backlog Amortization and Low Energy sessions."""
@@ -4237,6 +4265,377 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 self.assertEqual(restored.reps, 4)
             finally:
                 col.close()
+
+
+    def test_51_custom_study_sql_fast_path_avoids_n_plus_one(self):
+        """Custom study preview & start must run via single-query SQL without N+1 get_card/note calls."""
+        from anki_modern_os.bridge.review_service import ReviewService
+
+        db = MockDB()
+        cur = db.conn.cursor()
+        cur.execute("DELETE FROM cards")
+        cur.execute("DELETE FROM notes")
+        cur.execute("DELETE FROM revlog")
+
+        now_sec = int(time.time())
+        cutoff = now_sec + 3600
+        # Deck 10 (parent) + Deck 11 (child) + Deck 20 (other)
+        # Seed cards covering mistakes (revlog + fallback lapses + fallback tag), flagged, ahead, extra_new, suspended
+        notes_seed = [
+            (1, " 算法 高频 ", "Q1\x1fA1"),
+            (2, " 易错 算法 ", "Q2\x1fA2"),
+            (3, " 算法2 ", "Q3\x1fA3"),  # must NOT match exact tag='算法'
+            (4, " 高频 ", "Q4\x1fA4"),
+            (5, " 正常 ", "Q5\x1fA5"),
+            (6, " 正常 ", "Q6\x1fA6"),
+        ]
+        for nid, tags, flds in notes_seed:
+            cur.execute(
+                "INSERT INTO notes VALUES (?, ?, 1, 0, 0, ?, ?, ?, 0, 0, '')",
+                (nid, f"g-{nid}", tags, flds, f"Q{nid}"),
+            )
+
+        # (cid, nid, did, type, queue, due, ivl, lapses, flags)
+        cards_seed = [
+            (1001, 1, 10, 2, 2, 12, 20, 4, 1),   # review, due=12 (ahead <= 13), flag=1, lapses=4, recent miss
+            (1002, 2, 11, 2, 2, 11, 5, 0, 3),    # review in child deck 11, tag '易错', flag=3
+            (1003, 3, 10, 0, 0, 1, 0, 0, 0),     # new card, tag '算法2'
+            (1004, 4, 20, 2, 2, 10, 3, 2, 1),    # deck 20, due=10, lapses=2, flag=1
+            (1005, 5, 10, 2, -1, 10, 1, 9, 1),   # suspended: must ALWAYS be excluded
+            (1006, 6, 10, 0, 0, 2, 0, 0, 0),     # new card in deck 10
+        ]
+        for cid, nid, did, ctype, queue, due, ivl, lapses, flags in cards_seed:
+            cur.execute(
+                "INSERT INTO cards VALUES (?, ?, ?, 0, 0, 0, ?, ?, ?, ?, 2500, 3, ?, 0, 0, 0, ?, '')",
+                (cid, nid, did, ctype, queue, due, ivl, lapses, flags),
+            )
+
+        # Recent ease=1 miss on 1001 (2 days ago) and suspended 1005 (1 day ago)
+        cur.execute(
+            "INSERT INTO revlog VALUES (?, 1001, 0, 1, 1, 10, 2500, 2000, 1)",
+            ((cutoff - 2 * 86400) * 1000,),
+        )
+        cur.execute(
+            "INSERT INTO revlog VALUES (?, 1005, 0, 1, 1, 10, 2500, 2000, 1)",
+            ((cutoff - 1 * 86400) * 1000,),
+        )
+        db.conn.commit()
+
+        get_card_calls = []
+
+        class _SqlOnlyCol:
+            def __init__(self, sql_db):
+                self.db = sql_db
+                self.sched = SimpleNamespace(today=10, day_cutoff=cutoff)
+
+                class _Decks:
+                    @staticmethod
+                    def get(did, default=False):
+                        names = {10: "Parent", 11: "Parent::Child", 20: "Other"}
+                        return {"id": int(did), "name": names.get(int(did), "Default")}
+
+                    @staticmethod
+                    def children(did):
+                        return [("Parent::Child", 11)] if int(did) == 10 else []
+
+                self.decks = _Decks()
+
+            def find_cards(self, query):
+                raise AssertionError("SQL fast path should not call find_cards")
+
+            def get_card(self, cid):
+                get_card_calls.append(int(cid))
+                row = self.db.first(
+                    "SELECT id, nid, did, type, queue, due, ivl, reps, lapses, flags FROM cards WHERE id = ?",
+                    int(cid),
+                )
+                nrow = self.db.first("SELECT flds, tags FROM notes WHERE id = ?", int(row[1]))
+                flds = nrow[0].split("\x1f")
+                note = MockNote(row[1], {"正面": flds[0], "释义": flds[1]}, nrow[1].split(), cids=[row[0]])
+                c = MockCard(row[0], note, queue=row[4], ctype=row[3], due=row[5], ivl=row[6])
+                c.did = row[2]
+                c.lapses = row[8]
+                c.flags = row[9]
+                return c
+
+        svc = ReviewService(col_getter=lambda: _SqlOnlyCol(db))
+        try:
+            # 1. preview_custom_study must make ZERO get_card() calls across all presets
+            p_mistakes = svc.preview_custom_study({"preset": "mistakes", "days": 7, "limit": 30})
+            self.assertTrue(p_mistakes["success"])
+            self.assertEqual(p_mistakes["totalMatched"], 1)  # only 1001 (1005 is suspended)
+
+            # Deck 10 includes child deck 11, excludes deck 20 and suspended 1005
+            p_flagged_d10 = svc.preview_custom_study({"preset": "flagged", "deckId": "10", "limit": 30})
+            self.assertEqual(p_flagged_d10["totalMatched"], 2)  # 1001 + 1002
+
+            # Exact tag match: '算法' matches 1001 & 1002, must NOT match '算法2' (1003)
+            p_tag = svc.preview_custom_study({"preset": "custom", "tag": "算法", "limit": 30})
+            self.assertEqual(p_tag["totalMatched"], 2)
+
+            p_ahead = svc.preview_custom_study({"preset": "ahead", "days": 3, "limit": 30})
+            self.assertEqual(p_ahead["totalMatched"], 3)  # 1001, 1002, 1004 (1005 suspended)
+
+            p_new = svc.preview_custom_study({"preset": "extra_new", "limit": 30})
+            self.assertEqual(p_new["totalMatched"], 2)  # 1003, 1006
+
+            self.assertEqual(get_card_calls, [])
+
+            # 2. start_custom_study with limit=2 only calls get_card for the 2 selected cards & respects sortOrder
+            s_ahead = svc.start_custom_study(
+                {"preset": "ahead", "days": 3, "sortOrder": "lapses_desc", "limit": 2}
+            )
+            self.assertTrue(s_ahead["success"])
+            self.assertEqual(s_ahead["totalMatched"], 3)
+            self.assertEqual(s_ahead["cardIds"], ["1001", "1004"])  # lapses 4 > 2 > 0
+            self.assertEqual(len(get_card_calls), 2)
+
+            # 3. Mistakes fallback (when no recent revlog misses in 1-day window) matches lapses>0 + mistake tags
+            get_card_calls.clear()
+            s_fallback = svc.start_custom_study({"preset": "mistakes", "days": 1, "limit": 10})
+            self.assertEqual(s_fallback["totalMatched"], 3)  # 1001 (lapses=4), 1004 (lapses=2), 1002 (tag 易错)
+            self.assertEqual(s_fallback["cardIds"], ["1001", "1004", "1002"])
+        finally:
+            db.conn.close()
+
+    def test_52_p0_p1_sql_fast_paths_avoid_n_plus_one(self):
+        """Verify P0+P1 SQL fast paths avoid N+1 get_card/get_note loops across Search, Deck, Vacation, Safety, and Flag."""
+        from anki_modern_os.bridge.deck_service import DeckService
+        from anki_modern_os.bridge.safety import capture_schedule
+        from anki_modern_os.bridge.search_service import SearchService
+        from anki_modern_os.bridge.vacation_service import VacationService
+
+        db = MockDB()
+        cur = db.conn.cursor()
+        cur.execute("DELETE FROM cards")
+        cur.execute("DELETE FROM notes")
+        cur.execute("DELETE FROM revlog")
+
+        for i in range(1, 7):
+            cur.execute(
+                "INSERT INTO notes VALUES (?, ?, 1, 0, 0, ' tagA ', ?, ?, 0, 0, '')",
+                (i, f"g-{i}", f"Word {7 - i}\x1fDef {i}", f"Word {7 - i}"),
+            )
+            lapses = i
+            ivl = i * 10
+            flags = 1 if i % 2 == 0 else 0
+            cur.execute(
+                "INSERT INTO cards VALUES (?, ?, 1, 0, 0, 0, 2, 2, ?, ?, 2500, 3, ?, 0, 0, 0, ?, '')",
+                (100 + i, i, 10 - i, ivl, lapses, flags),
+            )
+        cur.execute("INSERT INTO notes VALUES (7, 'g-7', 1, 0, 0, '', '   \x1fBack7', '', 0, 0, '')")
+        cur.execute("INSERT INTO cards VALUES (107, 7, 1, 0, 0, 0, 0, 0, 1, 0, 2500, 0, 0, 0, 0, 0, 0, '')")
+        cur.execute(
+            "INSERT INTO notes VALUES (8, 'g-8', 2, 0, 0, '', 'Only {{c1::one}}\x1fExtra', 'Only one', 0, 0, '')"
+        )
+        cur.execute("INSERT INTO cards VALUES (108, 8, 1, 0, 0, 0, 0, 0, 2, 0, 2500, 0, 0, 0, 0, 0, 0, '')")
+        cur.execute("INSERT INTO cards VALUES (109, 8, 1, 1, 0, 0, 0, 0, 3, 0, 2500, 0, 0, 0, 0, 0, 0, '')")
+        cur.execute("INSERT INTO cards VALUES (999, 999, 1, 0, 0, 0, 0, 0, 4, 0, 2500, 0, 0, 0, 0, 0, 0, '')")
+        db.conn.commit()
+
+        get_card_calls = []
+        flag_bulk_calls = []
+
+        class _FastSqlCol:
+            def __init__(self, sql_db):
+                self.db = sql_db
+                self.sched = SimpleNamespace(today=10, set_due_date=lambda cids, expr: None)
+                self.decks = SimpleNamespace(
+                    get=lambda did, default=False: {"id": int(did), "name": "Default"},
+                    name=lambda did: "Default",
+                )
+                self.models = SimpleNamespace(
+                    all=lambda: [
+                        {"id": 1, "name": "Basic", "type": 0},
+                        {"id": 2, "name": "Cloze", "type": 1},
+                    ]
+                )
+                self.tags = SimpleNamespace(all=lambda: ["tagA"])
+
+            def find_cards(self, query):
+                return [101, 102, 103, 104, 105, 106]
+
+            def set_user_flag_for_cards(self, flag_val, cids):
+                flag_bulk_calls.append((flag_val, list(cids)))
+
+            def get_card(self, cid):
+                get_card_calls.append(int(cid))
+                row = self.db.first(
+                    "SELECT id, nid, did, ord, type, queue, due, ivl, reps, lapses, flags FROM cards WHERE id = ?",
+                    int(cid),
+                )
+                nrow = self.db.first("SELECT flds, tags, sfld FROM notes WHERE id = ?", int(row[1]))
+                flds = nrow[0].split("\x1f")
+                note = MockNote(row[1], {"正面": flds[0], "释义": flds[1]}, nrow[1].split(), cids=[row[0]])
+                note.sfld = nrow[2]
+                c = MockCard(row[0], note, queue=row[5], ctype=row[4], due=row[6], ivl=row[7])
+                c.ord = row[3]
+                c.reps = row[8]
+                c.lapses = row[9]
+                c.flags = row[10]
+                return c
+
+        fcol = _FastSqlCol(db)
+        try:
+            # 1. P0-1: SearchService with sortBy='lapses_desc' + difficulty='high' + flag='1' + limit=2
+            #    must ONLY serialize the 2 page cards (not all 6!)
+            ssvc = SearchService(col_getter=lambda: fcol)
+            res = ssvc.search_cards(
+                {
+                    "query": "",
+                    "difficulty": "high",
+                    "flag": "1",
+                    "sortBy": "lapses_desc",
+                    "offset": 0,
+                    "limit": 2,
+                    "includeFacets": False,
+                }
+            )
+            self.assertEqual(res["filteredCount"], 3)
+            self.assertEqual([c["id"] for c in res["cards"]], ["106", "104"])
+            self.assertEqual(get_card_calls, [106, 104])
+
+            # 2. P0-2: DeckService._scan_empty_cards makes ZERO get_card calls on SQL collection
+            get_card_calls.clear()
+            dsvc = DeckService(col_getter=lambda: fcol)
+            empty_items = dsvc._scan_empty_cards(fcol)
+            reasons = {item["cardId"]: item["reason"] for item in empty_items}
+            self.assertEqual(reasons.get("107"), "empty_front")
+            self.assertEqual(reasons.get("109"), "missing_c2")
+            self.assertEqual(reasons.get("999"), "orphaned_note")
+            self.assertNotIn("108", reasons)
+            self.assertEqual(get_card_calls, [])
+
+            # 3. P1-1: VacationService.start_low_energy_session sorts by ivl DESC via SQL with ZERO get_card calls
+            get_card_calls.clear()
+            vsvc = VacationService(col_getter=lambda: fcol)
+            low_res = vsvc.start_low_energy_session({"limit": 5})
+            self.assertTrue(low_res["success"])
+            self.assertEqual(low_res["cardIds"][:3], ["106", "105", "104"])
+            self.assertEqual(get_card_calls, [])
+
+            # 4. P1-3: _filter_schedulable_cids, capture_schedule, _snapshot_card_schedule use batch SQL
+            get_card_calls.clear()
+            good_cids, skipped_cids = vsvc._filter_schedulable_cids(fcol, [101, 102, 103, 88888])
+            self.assertEqual(good_cids, [101, 102, 103])
+            self.assertEqual(skipped_cids, [88888])
+            snap = capture_schedule(fcol, good_cids)
+            self.assertEqual(set(snap.keys()), {"101", "102", "103"})
+            snap2 = vsvc._snapshot_card_schedule(fcol, good_cids)
+            self.assertEqual(set(snap2.keys()), {"101", "102", "103"})
+            self.assertEqual(get_card_calls, [])
+
+            # 5. P1-4: _expand_note_card_ids and batch_action(setFlag) avoid per-card get_card loops
+            get_card_calls.clear()
+            expanded = ssvc._expand_note_card_ids(fcol, [108])
+            self.assertEqual(expanded, [108, 109])
+            flag_res = ssvc.batch_action({"actionType": "setFlag", "cardIds": ["108"], "flag": 2})
+            self.assertTrue(flag_res["success"])
+            self.assertEqual(flag_bulk_calls, [(2, [108, 109])])
+            self.assertEqual(get_card_calls, [])
+        finally:
+            db.conn.close()
+
+    def test_53_library_deck_facet_counts_cross_filter_and_rollup(self):
+        """Deck dropdown facetCounts must cross-filter by active tag/status/etc. and roll up child decks to parents."""
+        from anki_modern_os.bridge.search_service import SearchService
+
+        db = MockDB()
+        cur = db.conn.cursor()
+        cur.execute("DELETE FROM cards")
+        cur.execute("DELETE FROM notes")
+        cur.execute("DELETE FROM revlog")
+
+        cur.execute("INSERT INTO notes VALUES (1, 'g1', 1, 0, 0, ' physics ', 'P1\x1fA1', 'P1', 0, 0, '')")
+        cur.execute("INSERT INTO notes VALUES (2, 'g2', 1, 0, 0, ' physics ', 'P2\x1fA2', 'P2', 0, 0, '')")
+        cur.execute("INSERT INTO notes VALUES (3, 'g3', 1, 0, 0, ' jlpt ', 'J1\x1fA3', 'J1', 0, 0, '')")
+        cur.execute("INSERT INTO notes VALUES (4, 'g4', 2, 0, 0, ' jlpt ', 'J2 {{c1::a}} {{c2::b}}\x1fA4', 'J2', 0, 0, '')")
+        cur.execute("INSERT INTO cards VALUES (101, 1, 10, 0, 0, 0, 2, 2, 20, 10, 2500, 1, 0, 0, 0, 0, 0, '')")
+        cur.execute("INSERT INTO cards VALUES (102, 1, 11, 1, 0, 0, 2, 2, 20, 10, 2500, 1, 0, 0, 0, 0, 0, '')")
+        cur.execute("INSERT INTO cards VALUES (103, 2, 11, 0, 0, 0, 2, 2, 20, 10, 2500, 1, 0, 0, 0, 0, 0, '')")
+        cur.execute("INSERT INTO cards VALUES (104, 3, 21, 0, 0, 0, 2, 2, 20, 10, 2500, 1, 0, 0, 0, 0, 0, '')")
+        cur.execute("INSERT INTO cards VALUES (105, 4, 21, 0, 0, 0, 2, 2, 20, 10, 2500, 1, 0, 0, 0, 0, 0, '')")
+        cur.execute("INSERT INTO cards VALUES (106, 4, 21, 1, 0, 0, 2, 2, 20, 10, 2500, 1, 0, 0, 0, 0, 0, '')")
+        db.conn.commit()
+
+        deck_map = {
+            10: "[A] Physics",
+            11: "[A] Physics::Paper 1",
+            20: "JLPT",
+            21: "JLPT::N1",
+        }
+
+        class _DeckFacetCol:
+            def __init__(self, sql_db):
+                self.db = sql_db
+                self.sched = SimpleNamespace(today=10)
+
+                class _Decks:
+                    @staticmethod
+                    def get(did, default=False):
+                        name = deck_map.get(int(did))
+                        return {"id": int(did), "name": name} if name else None
+
+                    @staticmethod
+                    def all_names_and_ids():
+                        return [SimpleNamespace(id=k, name=v) for k, v in deck_map.items()]
+
+                self.decks = _Decks()
+                self.tags = SimpleNamespace(all=lambda: ["physics", "jlpt"])
+
+            def find_cards(self, query):
+                rows = self.db.all(
+                    "SELECT c.id, c.did, n.tags FROM cards c JOIN notes n ON c.nid = n.id ORDER BY c.id ASC"
+                )
+                out = []
+                for cid, did, tags_str in rows:
+                    if 'tag:"jlpt"' in query and "jlpt" not in tags_str.split():
+                        continue
+                    if 'tag:"physics"' in query and "physics" not in tags_str.split():
+                        continue
+                    if 'deck:"[A] Physics"' in query and did not in (10, 11):
+                        continue
+                    if 'deck:"JLPT"' in query and did not in (20, 21):
+                        continue
+                    if "is:" in query or "rated:" in query:
+                        if "is:review" not in query:
+                            continue
+                    out.append(int(cid))
+                return out
+
+            def get_card(self, cid):
+                row = self.db.first(
+                    "SELECT id, nid, did, ord, type, queue, due, ivl, reps, lapses, flags FROM cards WHERE id = ?",
+                    int(cid),
+                )
+                nrow = self.db.first("SELECT flds, tags, sfld FROM notes WHERE id = ?", int(row[1]))
+                flds = nrow[0].split("\x1f")
+                note = MockNote(row[1], {"正面": flds[0], "释义": flds[1]}, nrow[1].split(), cids=[row[0]])
+                note.sfld = nrow[2]
+                c = MockCard(row[0], note, queue=row[5], ctype=row[4], due=row[6], ivl=row[7])
+                c.did = row[2]
+                return c
+
+        svc = SearchService(col_getter=lambda: _DeckFacetCol(db))
+        try:
+            res = svc.search_cards({"tag": "jlpt", "deckId": "10", "limit": 10})
+            self.assertEqual(res["filteredCount"], 0)
+            facets = res["facetCounts"]
+            self.assertEqual(facets["deckAllCount"], 2)
+            self.assertEqual(facets["deckCounts"].get("10", 0), 0)
+            self.assertEqual(facets["deckCounts"].get("11", 0), 0)
+            self.assertEqual(facets["deckCounts"].get("20"), 2)
+            self.assertEqual(facets["deckCounts"].get("21"), 2)
+
+            res_all = svc.search_cards({"limit": 10})
+            facets_all = res_all["facetCounts"]
+            self.assertEqual(facets_all["deckAllCount"], 4)
+            self.assertEqual(facets_all["deckCounts"].get("10"), 2)
+            self.assertEqual(facets_all["deckCounts"].get("11"), 2)
+            self.assertEqual(facets_all["deckCounts"].get("20"), 2)
+            self.assertEqual(facets_all["deckCounts"].get("21"), 2)
+        finally:
+            db.conn.close()
 
 
 if __name__ == "__main__":

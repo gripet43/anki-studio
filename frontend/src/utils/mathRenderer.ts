@@ -116,7 +116,11 @@ function decodeMathEntities(raw: string): string {
     .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number.parseInt(dec, 10)));
 }
 
-function formatLatexExpression(expr: string, isDisplayMode: boolean): string {
+function formatLatexExpression(
+  expr: string,
+  isDisplayMode: boolean,
+  styleMode: 'tailwind' | 'sandbox' = 'tailwind'
+): string {
   // Bug #13 Fix: Escape raw `<` and `>` first so `a < b` or `x > 0` is never parsed as an HTML tag
   let s = decodeMathEntities(expr)
     .trim()
@@ -124,48 +128,60 @@ function formatLatexExpression(expr: string, isDisplayMode: boolean): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
+  const isSandbox = styleMode === 'sandbox';
+
   // Remove \left and \right sizing commands
   s = s.replace(/\\left\b/g, '').replace(/\\right\b/g, '');
 
   // LaTeX 函数名是正体（\sin(x) 里的 sin 不该跟着变量一起斜体）
   s = s.replace(
     /\\(sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|log|ln|lg|exp|lim|max|min|det|gcd)\b/g,
-    '<span class="not-italic">$1</span>'
+    isSandbox ? '<span class="anki-math-fn">$1</span>' : '<span class="not-italic">$1</span>'
   );
 
   // \text{...} or \mathrm{...}
   s = s.replace(
     /\\(?:text|mathrm|mathbf|mathit)\{([^{}]*)\}/g,
-    '<span class="font-sans not-italic">$1</span>'
+    isSandbox
+      ? '<span class="anki-math-text">$1</span>'
+      : '<span class="font-sans not-italic">$1</span>'
   );
 
   // \frac{a}{b} (support nested up to 2 levels)
   const fracRegex = /\\frac\{([^{}]*)\}\{([^{}]*)\}/g;
+  const fracTpl = isSandbox
+    ? '<span class="anki-math-frac"><span class="anki-math-frac-num">$1</span><span class="anki-math-frac-den">$2</span></span>'
+    : '<span class="inline-flex flex-col items-center align-middle mx-1 text-[0.9em] leading-tight">' +
+      '<span class="border-b border-current px-1 pb-0.5">$1</span>' +
+      '<span class="px-1 pt-0.5">$2</span>' +
+      '</span>';
   for (let pass = 0; pass < 2; pass++) {
-    s = s.replace(
-      fracRegex,
-      '<span class="inline-flex flex-col items-center align-middle mx-1 text-[0.9em] leading-tight">' +
-        '<span class="border-b border-current px-1 pb-0.5">$1</span>' +
-        '<span class="px-1 pt-0.5">$2</span>' +
-      '</span>'
-    );
+    s = s.replace(fracRegex, fracTpl);
   }
 
   // \sqrt[n]{x} and \sqrt{x}
   s = s.replace(
     /\\sqrt\[([^\]]+)\]\{([^{}]*)\}/g,
-    '<span class="inline-flex items-baseline"><sup class="text-[0.7em] mr-0.5">$1</sup>√<span class="border-t border-current px-0.5">$2</span></span>'
+    isSandbox
+      ? '<span class="anki-math-sqrt"><sup class="anki-math-sqrt-idx">$1</sup>√<span class="anki-math-sqrt-rad">$2</span></span>'
+      : '<span class="inline-flex items-baseline"><sup class="text-[0.7em] mr-0.5">$1</sup>√<span class="border-t border-current px-0.5">$2</span></span>'
   );
   s = s.replace(
     /\\sqrt\{([^{}]*)\}/g,
-    '<span class="inline-flex items-baseline">√<span class="border-t border-current px-0.5">$1</span></span>'
+    isSandbox
+      ? '<span class="anki-math-sqrt">√<span class="anki-math-sqrt-rad">$1</span></span>'
+      : '<span class="inline-flex items-baseline">√<span class="border-t border-current px-0.5">$1</span></span>'
   );
 
   // Superscripts and subscripts: ^{...}, _{...}, ^x, _x
-  s = s.replace(/\^\{([^{}]+)\}/g, '<sup class="text-[0.75em] leading-none ml-0.5">$1</sup>');
-  s = s.replace(/_\{([^{}]+)\}/g, '<sub class="text-[0.75em] leading-none ml-0.5">$1</sub>');
-  s = s.replace(/\^([A-Za-z0-9+\-=])/g, '<sup class="text-[0.75em] leading-none">$1</sup>');
-  s = s.replace(/_([A-Za-z0-9+\-=])/g, '<sub class="text-[0.75em] leading-none">$1</sub>');
+  const supCls = isSandbox ? 'anki-math-sup' : 'text-[0.75em] leading-none ml-0.5';
+  const subCls = isSandbox ? 'anki-math-sub' : 'text-[0.75em] leading-none ml-0.5';
+  const supShortCls = isSandbox ? 'anki-math-sup' : 'text-[0.75em] leading-none';
+  const subShortCls = isSandbox ? 'anki-math-sub' : 'text-[0.75em] leading-none';
+  s = s.replace(/\^\{([^{}]+)\}/g, `<sup class="${supCls}">$1</sup>`);
+  s = s.replace(/_\{([^{}]+)\}/g, `<sub class="${subCls}">$1</sub>`);
+  s = s.replace(/\^([A-Za-z0-9+\-=])/g, `<sup class="${supShortCls}">$1</sup>`);
+  s = s.replace(/_([A-Za-z0-9+\-=])/g, `<sub class="${subShortCls}">$1</sub>`);
 
   // Replace known LaTeX Greek letters and math operators
   for (const [cmd, sym] of Object.entries(GREEK_AND_SYMBOLS)) {
@@ -176,11 +192,72 @@ function formatLatexExpression(expr: string, isDisplayMode: boolean): string {
   // Clean remaining formatting commands like \, \; \quad \qquad
   s = s.replace(/\\(?:quad|qquad|,|;|!|:)/g, ' ');
 
-  const wrapperClass = isDisplayMode
+  const wrapperClass = isSandbox
+    ? isDisplayMode
+      ? 'anki-math-display'
+      : 'anki-math-inline'
+    : isDisplayMode
     ? 'my-2.5 py-2 px-3.5 rounded-xl bg-[var(--brand-soft)] border border-[var(--brand-border)] block text-center font-serif italic text-[1.08em] tracking-wide'
     : 'px-1.5 py-0.5 mx-0.5 rounded bg-[var(--brand-soft)] text-[var(--brand-text)] font-serif italic text-[1.02em] inline-block align-baseline';
 
   return `<span class="${wrapperClass}">${s}</span>`;
+}
+
+const SANDBOX_PROTECTED_BLOCK_RE =
+  /<(script|style|textarea|pre|code)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
+
+/**
+ * Renders LaTeX / MathJax expressions inside sandboxed iframe card HTML while
+ * strictly preserving `<script>`, `<style>`, `<pre>`, `<code>`, and `<textarea>`
+ * blocks verbatim and emitting self-contained `.anki-math-*` semantic classes.
+ */
+export function renderLatexInSandboxHtml(rawHtml: string | undefined | null): string {
+  if (!rawHtml) return '';
+  let html = String(rawHtml);
+  if (!html.includes('\\') && !html.includes('$') && !html.includes('[')) {
+    return html;
+  }
+
+  const protectedBlocks: string[] = [];
+  html = html.replace(SANDBOX_PROTECTED_BLOCK_RE, (match) => {
+    const idx = protectedBlocks.push(match) - 1;
+    return `\uE000ANKI_SB_BLOCK_${idx}\uE001`;
+  });
+
+  // 1. Display math
+  html = html.replace(/\\\[([\s\S]*?)\\\]/g, (_, expr) =>
+    formatLatexExpression(expr, true, 'sandbox')
+  );
+  html = html.replace(/\$\$([\s\S]*?)\$\$/g, (_, expr) =>
+    formatLatexExpression(expr, true, 'sandbox')
+  );
+  html = html.replace(/\[latex\]([\s\S]*?)\[\/latex\]/gi, (_, expr) =>
+    formatLatexExpression(expr, true, 'sandbox')
+  );
+  html = html.replace(/\[\$\$\]([\s\S]*?)\[\/\$\$\]/g, (_, expr) =>
+    formatLatexExpression(expr, true, 'sandbox')
+  );
+
+  // 2. Inline math
+  html = html.replace(/\\\(([\s\S]*?)\\\)/g, (_, expr) =>
+    formatLatexExpression(expr, false, 'sandbox')
+  );
+  html = html.replace(/\[\$\]([\s\S]*?)\[\/\$\]/g, (_, expr) =>
+    formatLatexExpression(expr, false, 'sandbox')
+  );
+  html = html.replace(/\$([^\n$<>]+?)\$/g, (match, expr) => {
+    const trimmed = String(expr).trim();
+    if (!trimmed || /^\d+(\.\d+)?$/.test(trimmed)) return match;
+    return formatLatexExpression(expr, false, 'sandbox');
+  });
+
+  if (protectedBlocks.length > 0) {
+    html = html.replace(/\uE000ANKI_SB_BLOCK_(\d+)\uE001/g, (_, idxStr: string) => {
+      return protectedBlocks[Number(idxStr)] ?? '';
+    });
+  }
+
+  return html;
 }
 
 /**
@@ -315,6 +392,9 @@ export function renderMathAndRichHtml(
   return preservedStyleBlocks.length > 0 ? `${preservedStyleBlocks.join('')}${html}` : html;
 }
 
+const PREVIEW_HTML_CACHE_MAX = 500;
+const previewHtmlCache = new Map<string, string>();
+
 /**
  * Formats rich card HTML for library preview surfaces by resolving media/math/cloze
  * and normalizing multi-block HTML boundaries so multi-paragraph cards clamp cleanly
@@ -324,6 +404,13 @@ export function formatCardPreviewHtml(
   rawHtml: string | undefined | null,
   options: { singleLine?: boolean; maskClozeAsQuestion?: boolean } = {}
 ): string {
+  if (!rawHtml) return '';
+  const cacheKey = `${options.singleLine ? '1' : '0'}:${options.maskClozeAsQuestion ? '1' : '0'}:${rawHtml}`;
+  const cached = previewHtmlCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   const rendered = renderMathAndRichHtml(rawHtml, options.maskClozeAsQuestion ?? false);
   if (!rendered) return '';
 
@@ -350,6 +437,11 @@ export function formatCardPreviewHtml(
 
   // Keep rich media, Image Occlusion wrappers, and tables intact in card boxes
   if (!options.singleLine && /<(?:img|table|svg|canvas|video|audio)\b|anki-io-wrap/i.test(sanitized)) {
+    if (previewHtmlCache.size >= PREVIEW_HTML_CACHE_MAX) {
+      const firstKey = previewHtmlCache.keys().next().value;
+      if (firstKey !== undefined) previewHtmlCache.delete(firstKey);
+    }
+    previewHtmlCache.set(cacheKey, sanitized);
     return sanitized;
   }
 
@@ -372,6 +464,11 @@ export function formatCardPreviewHtml(
     normalized = normalized.replace(/<br\s*\/?>/gi, ' ').replace(/\s{2,}/g, ' ').trim();
   }
 
+  if (previewHtmlCache.size >= PREVIEW_HTML_CACHE_MAX) {
+    const firstKey = previewHtmlCache.keys().next().value;
+    if (firstKey !== undefined) previewHtmlCache.delete(firstKey);
+  }
+  previewHtmlCache.set(cacheKey, normalized);
   return normalized;
 }
 

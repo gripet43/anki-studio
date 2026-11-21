@@ -148,44 +148,136 @@ const badTokenRes = await worker.fetch(
 );
 check("缺密钥或错密钥访问 /v1/stats 返回 401 且不查 D1", noTokenRes.status === 401 && badTokenRes.status === 401 && unauthorizedEnv.batches.length === 0);
 
+const nowTs = Math.trunc(Date.now() / 1000);
 const statsEnv = makeEnv({
   DASHBOARD_TOKEN: "secret-123",
-  onBatch: (stmts) =>
-    stmts.map((_, idx) => {
-      if (idx === 0) {
-        return {
-          results: [{
-            active_15m: 3,
-            active_1h: 7,
-            dau_today: 12,
-            dau_yesterday: 10,
-            wau_7d: 40,
-            mau_30d: 90,
-            total_installs: 120,
-            events_today: 28,
-            total_events: 500,
-          }],
-        };
-      }
-      if (idx === 2) return { results: [{ country: "CN", installs: 10, events: 25 }] };
-      return { results: [] };
-    }),
+  onBatch: () => [
+    {
+      results: [
+        {
+          ts: nowTs - 60,
+          install_id: "11111111111111111111111111111111",
+          event: "review_session",
+          version: "1.6.13",
+          os: "darwin",
+          anki_version: "26.9.4",
+          locale: "zh-CN",
+          tz_offset: 8,
+          country: "CN",
+          colo: "HKG",
+          props: JSON.stringify({ cards_bucket: "21-50" }),
+        },
+        {
+          ts: nowTs - 86400,
+          install_id: "11111111111111111111111111111111",
+          event: "app_open",
+          version: "1.6.13",
+          os: "darwin",
+          anki_version: "26.9.4",
+          locale: "zh-CN",
+          tz_offset: 8,
+          country: "CN",
+          colo: "HKG",
+          props: null,
+        },
+        {
+          ts: nowTs - 120,
+          install_id: "22222222222222222222222222222222",
+          event: "app_open",
+          version: "1.6.13",
+          os: "windows",
+          anki_version: "26.9.4",
+          locale: "zh-CN",
+          tz_offset: 8,
+          country: "CN",
+          colo: "SIN",
+          props: null,
+        },
+        {
+          ts: nowTs - 30,
+          install_id: "d31d6419111111111111111111111111",
+          event: "app_open",
+          version: "1.6.13",
+          os: "darwin",
+          anki_version: "26.9.4",
+          locale: "zh-CN",
+          tz_offset: 8,
+          country: "US",
+          colo: "SJC",
+          props: null,
+        },
+      ],
+    },
+  ],
 });
 const okStatsRes = await worker.fetch(
-  new Request("https://example.workers.dev/v1/stats?range=7d&tz=8", {
+  new Request("https://example.workers.dev/v1/stats?range=7d&tz=8&fresh=1&exclude=D31D6419,bad!,abcd1234", {
     headers: { Authorization: "Bearer secret-123" },
   }),
   statsEnv
 );
 const okStats = await okStatsRes.json();
 check(
-  "合法密钥访问 /v1/stats 返回 200 及完整汇总字段",
+  "合法密钥访问 /v1/stats 单次查询在内存聚合并返回完整汇总字段",
   okStatsRes.status === 200 &&
-    okStats.summary?.active_15m === 3 &&
-    okStats.summary?.dau_today === 12 &&
+    okStats.summary?.active_15m === 2 &&
+    okStats.summary?.dau_today === 2 &&
+    okStats.summary?.new_today === 1 &&
+    okStats.summary?.d1_cohort_7d === 1 &&
+    okStats.summary?.d1_retained_7d === 1 &&
+    okStats.summary?.reviews_in_range === 1 &&
     okStats.countries?.[0]?.country === "CN" &&
-    statsEnv.batches.length === 1,
+    okStats.anki_versions?.[0]?.anki_version === "26.9.4" &&
+    okStats.review_buckets?.[0]?.bucket === "21-50" &&
+    JSON.stringify(okStats.excluded) === JSON.stringify(["d31d6419", "abcd1234"]) &&
+    statsEnv.batches.length === 1 &&
+    statsEnv.batches[0].length === 1,
   JSON.stringify(okStats)
+);
+
+// Cached second call within 60s should not hit D1 again.
+const cachedRes = await worker.fetch(
+  new Request("https://example.workers.dev/v1/stats?range=today&tz=8", {
+    headers: { Authorization: "Bearer secret-123" },
+  }),
+  statsEnv
+);
+check("60 秒内切换时间范围命中内存缓存，不重复查询 D1", cachedRes.status === 200 && statsEnv.batches.length === 1);
+
+const failingD1Env = makeEnv({
+  DASHBOARD_TOKEN: "secret-123",
+  onBatch: () => {
+    throw new Error("D1_ERROR: Your account has exceeded D1's free tier daily row read limit.");
+  },
+});
+const d1ErrRes = await worker.fetch(
+  new Request("https://example.workers.dev/v1/stats?range=7d&tz=8&fresh=1", {
+    headers: { Authorization: "Bearer secret-123" },
+  }),
+  failingD1Env
+);
+const d1ErrJson = await d1ErrRes.json();
+check(
+  "D1 超日读限额时返回 JSON 503 清晰提示而非 HTML 500",
+  d1ErrRes.status === 503 && d1ErrJson.error === "d1_daily_quota_exceeded",
+  `status=${d1ErrRes.status}, body=${JSON.stringify(d1ErrJson)}`
+);
+
+// 6. Client timestamp drift clamping (ts=0 or far future is clamped to server time).
+const clampEnv = makeEnv();
+const clampRes = await worker.fetch(
+  makeRequest("POST", EVENTS_PATH, "AnkiStudio/1.5.9", {
+    schema: 1,
+    events: [{ ...validEvent(), ts: 0 }],
+  }),
+  clampEnv
+);
+const clampedTs = clampEnv.batches[0]?.[0]?.args?.[0];
+const nowSec = Math.trunc(Date.now() / 1000);
+check(
+  "异常客户端时间戳 ts=0 自动回落到服务器当前时间",
+  clampRes.status === 200 && Math.abs(clampedTs - nowSec) <= 5,
+  `clampedTs=${clampedTs}, now=${nowSec}`
 );
 
 console.log(`\n${passed} passed, ${failures.length} failed`);

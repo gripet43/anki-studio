@@ -509,7 +509,7 @@ export const CardEditorModal: React.FC = () => {
           }
         })
         .catch(() => {});
-    }, 220);
+    }, 350);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -850,6 +850,20 @@ export const CardEditorModal: React.FC = () => {
       .slice(0, 8);
   }, [libraryAllTags, tagInput, tags]);
 
+  // Layered Escape: when the unsaved-changes confirmation dialog is open, Esc dismisses only the confirmation dialog
+  useEffect(() => {
+    if (!quickAddOpen || !confirmDiscardOpen) return;
+    const onConfirmEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setConfirmDiscardOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onConfirmEsc, true);
+    return () => window.removeEventListener('keydown', onConfirmEsc, true);
+  }, [quickAddOpen, confirmDiscardOpen]);
+
   // Global keyboard shortcuts inside CardEditorModal (Space to flip in Preview mode, Escape to return to Edit mode)
   useEffect(() => {
     if (!quickAddOpen || ioEditorOpen || confirmDiscardOpen) return;
@@ -1074,7 +1088,7 @@ export const CardEditorModal: React.FC = () => {
 
   const modalBg = isDark
     ? 'bg-[#171821] border-[#2C2E3C] text-white'
-    : 'bg-white border-[#E5E5EA] text-[#1D1D1F]';
+    : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-primary)]';
 
   const cardBorder = isDark ? 'border-[#2B2D3A]' : 'border-[#EAEAEA]';
   const inputBg = isDark ? 'bg-[#13141C]' : 'bg-[#FAFAFC]';
@@ -2058,13 +2072,19 @@ export const CardEditorModal: React.FC = () => {
                         : 'anki-native-card';
                       return `<div class="${rootClass}"><div class="card">${html}</div></div>`;
                     };
-                    const nativeFrontHtml = resolveMediaInHtml(
-                      wrapWithCardStyle(rawFrontHtml, frontCssToInject, true),
-                      effectiveMediaBaseUrl
+                    const nativeFrontHtml = renderMathAndRichHtml(
+                      resolveMediaInHtml(
+                        wrapWithCardStyle(rawFrontHtml, frontCssToInject, true),
+                        effectiveMediaBaseUrl
+                      ),
+                      !previewFlipped
                     );
-                    const nativeBackHtml = resolveMediaInHtml(
-                      wrapWithCardStyle(rawBackHtml, backCssToInject, false),
-                      effectiveMediaBaseUrl
+                    const nativeBackHtml = renderMathAndRichHtml(
+                      resolveMediaInHtml(
+                        wrapWithCardStyle(rawBackHtml, backCssToInject, false),
+                        effectiveMediaBaseUrl
+                      ),
+                      false
                     );
                     return (
                       <>
@@ -2289,7 +2309,6 @@ export const CardEditorModal: React.FC = () => {
                 type="button"
                 onClick={() => handleSubmit()}
                 disabled={!canSubmit || submitting}
-                style={{ backgroundColor: brandHex }}
                 className="btn-primary !h-9 !px-5"
               >
                 {submitting && <SpinnerIcon className="w-3.5 h-3.5 motion-safe:animate-spin" />}
@@ -2302,51 +2321,6 @@ export const CardEditorModal: React.FC = () => {
             )}
           </div>
         </div>
-
-        {/* Unsaved changes confirmation dialog */}
-        {confirmDiscardOpen && (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="absolute inset-0 z-50 bg-black/65 flex items-center justify-center p-4 animate-in fade-in duration-150"
-          >
-            <div
-              className={`w-[360px] max-w-full rounded-2xl border p-5 shadow-2xl space-y-3 ${
-                isDark
-                  ? 'bg-[#1E1F2B] border-[#343648] text-white'
-                  : 'bg-white border-[#E5E5EA] text-[#1D1D1F]'
-              }`}
-            >
-              <div className="font-bold text-[15px]">
-                {t('discardUnsavedTitle')}
-              </div>
-              <p className="text-[12px] text-[#8E8E93] leading-relaxed">
-                {t('discardUnsavedSub')}
-              </p>
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  autoFocus
-                  onClick={() => setConfirmDiscardOpen(false)}
-                  className={`h-8 px-3.5 rounded-xl border text-[12px] font-medium cursor-pointer transition-colors ${
-                    isDark ? 'border-[#343648] hover:bg-white/5' : 'border-[#E5E5EA] hover:bg-black/5'
-                  }`}
-                >
-                  {t('keepEditingBtn')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirmDiscardOpen(false);
-                    appActions.closeCardEditor();
-                  }}
-                  className="h-8 px-3.5 rounded-xl bg-[var(--status-danger)] text-white text-[12px] font-semibold cursor-pointer hover:opacity-90 transition-opacity"
-                >
-                  {t('discardBtn')}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Visual Image Occlusion Studio Modal */}
         <ImageOcclusionEditorModal
@@ -2364,6 +2338,54 @@ export const CardEditorModal: React.FC = () => {
           }}
         />
       </div>
+
+      {/* Unsaved changes confirmation dialog — rendered as sibling of modal panel so backdrop covers the editor border cleanly */}
+      {confirmDiscardOpen && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="discard-unsaved-title"
+          aria-describedby="discard-unsaved-desc"
+          className="fixed inset-0 z-[60] bg-black/32 flex items-center justify-center p-4 ui-modal-backdrop modal-contain-scroll"
+        >
+          <div
+            className="w-full max-w-[380px] rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] text-[var(--text-primary)] p-5 shadow-[0_20px_56px_rgba(0,0,0,0.24)] ui-modal-panel"
+          >
+            <h3
+              id="discard-unsaved-title"
+              className="font-semibold text-[15px] leading-snug tracking-tight text-[var(--text-primary)]"
+            >
+              {t('discardUnsavedTitle')}
+            </h3>
+            <p
+              id="discard-unsaved-desc"
+              className="mt-2 text-[13px] text-[var(--text-secondary)] leading-relaxed"
+            >
+              {t('discardUnsavedSub')}
+            </p>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setConfirmDiscardOpen(false)}
+                className="btn-secondary !h-8 !px-3.5 !rounded-lg !text-[12px] focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2"
+              >
+                {t('keepEditingBtn')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmDiscardOpen(false);
+                  appActions.closeCardEditor();
+                }}
+                className="btn-danger-tinted !h-8 !px-3.5 !rounded-lg !text-[12px]"
+              >
+                {t('discardBtn')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

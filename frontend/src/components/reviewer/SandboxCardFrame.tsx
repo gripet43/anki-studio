@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { appActions } from '../../stores/useAppStore';
+import { renderLatexInSandboxHtml } from '../../utils/mathRenderer';
 import { getSandboxPlayAudioFile } from '../../utils/reviewAudio';
 
 interface SandboxCardFrameProps {
@@ -7,6 +8,8 @@ interface SandboxCardFrameProps {
   frontHtml: string;
   backHtml: string;
   cssText: string;
+  mediaHttpBaseUrl?: string;
+  preloadScripts?: string[];
   isFlipped: boolean;
   isDark: boolean;
   audioFiles?: string[];
@@ -18,40 +21,102 @@ interface SandboxCardFrameProps {
   onImageZoom?: (target: { src: string; alt?: string }) => void;
 }
 
-export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
-  cardId,
-  frontHtml,
-  backHtml,
-  cssText,
-  isFlipped,
-  isDark,
-  audioFiles,
-  frontAudioFiles,
-  backAudioFiles,
-  sandboxQuestionAudioFiles,
-  sandboxAnswerAudioFiles,
-  contentScale = 1,
-  onImageZoom,
-}) => {
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [frameHeight, setFrameHeight] = useState<number>(280);
-  const initialSideHtmlRef = useRef<string>(isFlipped ? backHtml : frontHtml);
-  const initialScaleRef = useRef<number>(contentScale);
-  const prevCardIdRef = useRef<string>(cardId);
+export function normalizeSandboxHttpBaseUrl(raw?: string): string {
+  const clean = String(raw || '').trim();
+  if (!clean || !/^https?:\/\//i.test(clean)) return '';
+  return clean.endsWith('/') ? clean : `${clean}/`;
+}
 
-  if (prevCardIdRef.current !== cardId) {
-    prevCardIdRef.current = cardId;
-    initialSideHtmlRef.current = isFlipped ? backHtml : frontHtml;
-    initialScaleRef.current = contentScale;
+export function sanitizeSandboxPreloadScripts(urls?: string[]): string[] {
+  if (!Array.isArray(urls) || urls.length === 0) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of urls) {
+    const clean = String(item || '').trim();
+    if (!clean || !/^https?:\/\//i.test(clean)) continue;
+    if (!seen.has(clean)) {
+      seen.add(clean);
+      out.push(clean);
+    }
   }
+  return out;
+}
 
-  const srcDocHtml = useMemo(() => {
-    const initialBody = initialSideHtmlRef.current || '';
-    const initialZoom = initialScaleRef.current || 1;
-    const themeClass = isDark ? 'nightMode night_mode' : '';
-    const textColor = isDark ? '#EFEFF5' : '#1D1D1F';
+function escapeHtmlAttr(val: string): string {
+  return val
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
-    return `<!DOCTYPE html>
+export interface BuildSandboxSrcDocParams {
+  cardId: string;
+  initialBody: string;
+  cssText: string;
+  isDark: boolean;
+  initialZoom: number;
+  mediaHttpBaseUrl?: string;
+  preloadScripts?: string[];
+}
+
+export function buildSandboxSrcDoc({
+  cardId,
+  initialBody,
+  cssText,
+  isDark,
+  initialZoom,
+  mediaHttpBaseUrl,
+  preloadScripts,
+}: BuildSandboxSrcDocParams): string {
+  const themeClass = isDark ? 'nightMode night_mode' : '';
+  const textColor = isDark ? '#EFEFF5' : '#1D1D1F';
+  const normalizedBase = normalizeSandboxHttpBaseUrl(mediaHttpBaseUrl);
+  const safePreloadScripts = sanitizeSandboxPreloadScripts(preloadScripts);
+
+  const relativeScriptResolverTag = normalizedBase
+    ? `<script>
+// 仅拦截 <script> 的相对路径赋值并补上本地 HTTP 媒体基址（如 Enhanced Cloze 动态加载 _jquery.min.js），
+// 刻意不注入 base 标签，避免破坏页面内的 href="#" 锚点与内联 SVG url(#id) 引用。
+(function () {
+  var base = ${JSON.stringify(normalizedBase)};
+  function resolveRelScript(val) {
+    if (typeof val !== 'string') return val;
+    var s = val.trim();
+    if (!s || /^(?:https?:|\/\/|data:|blob:|file:|\/)/i.test(s)) return val;
+    return base + s.replace(/^\.\//, '');
+  }
+  try {
+    var desc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+    if (desc && typeof desc.set === 'function') {
+      Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: desc.get,
+        set: function (v) { return desc.set.call(this, resolveRelScript(v)); }
+      });
+    }
+  } catch (e) {}
+  try {
+    var origSetAttr = HTMLScriptElement.prototype.setAttribute;
+    if (typeof origSetAttr === 'function') {
+      HTMLScriptElement.prototype.setAttribute = function (name, value) {
+        if (typeof name === 'string' && name.toLowerCase() === 'src') {
+          return origSetAttr.call(this, name, resolveRelScript(String(value)));
+        }
+        return origSetAttr.call(this, name, value);
+      };
+    }
+  } catch (e) {}
+})();
+</script>`
+    : '';
+
+  const preloadScriptTags = safePreloadScripts
+    .map((src) => `<script src="${escapeHtmlAttr(src)}"></script>`)
+    .join('\n');
+
+  return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8" />
@@ -115,10 +180,90 @@ export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
     font-weight: inherit;
     color: inherit;
   }
+  .anki-math-inline {
+    display: inline-block;
+    vertical-align: baseline;
+    padding: 1px 6px;
+    margin: 0 2px;
+    border-radius: 5px;
+    background: #ECF3FA;
+    color: #235F9F;
+    font-family: Georgia, "Times New Roman", serif;
+    font-style: italic;
+    font-size: 1.02em;
+  }
+  .anki-math-display {
+    display: block;
+    margin: 10px 0;
+    padding: 8px 14px;
+    border-radius: 12px;
+    background: #ECF3FA;
+    border: 1px solid #B0D0EF;
+    color: #235F9F;
+    text-align: center;
+    font-family: Georgia, "Times New Roman", serif;
+    font-style: italic;
+    font-size: 1.08em;
+    letter-spacing: 0.02em;
+  }
+  .nightMode .anki-math-inline,
+  .night_mode .anki-math-inline {
+    background: rgba(62, 138, 217, 0.18);
+    color: #98CCFD;
+  }
+  .nightMode .anki-math-display,
+  .night_mode .anki-math-display {
+    background: rgba(62, 138, 217, 0.18);
+    border-color: rgba(152, 204, 253, 0.35);
+    color: #98CCFD;
+  }
+  .anki-math-fn {
+    font-style: normal;
+  }
+  .anki-math-text {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+    font-style: normal;
+  }
+  .anki-math-frac {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    vertical-align: middle;
+    margin: 0 4px;
+    font-size: 0.9em;
+    line-height: 1.2;
+  }
+  .anki-math-frac-num {
+    border-bottom: 1px solid currentColor;
+    padding: 0 4px 2px;
+  }
+  .anki-math-frac-den {
+    padding: 2px 4px 0;
+  }
+  .anki-math-sqrt {
+    display: inline-flex;
+    align-items: baseline;
+  }
+  .anki-math-sqrt-idx {
+    font-size: 0.7em;
+    margin-inline-end: 2px;
+  }
+  .anki-math-sqrt-rad {
+    border-top: 1px solid currentColor;
+    padding: 0 2px;
+  }
+  .anki-math-sup,
+  .anki-math-sub {
+    font-size: 0.75em;
+    line-height: 1;
+    margin-inline-start: 1px;
+  }
 </style>
 <style id="anki-model-css">
 ${cssText || ''}
 </style>
+${relativeScriptResolverTag}
+${preloadScriptTags}
 <script>
 // 部分中文选择题/刷题模板（如「选择题模板（单选多选自动匹配）」）依赖作者配套
 // 插件注入的全局状态 gData；缺失时模板脚本会直接抛 ReferenceError，选项列表与
@@ -333,10 +478,56 @@ ${cssText || ''}
 </script>
 </head>
 <body class="card ${themeClass}">
-  <div id="qa">${initialBody}</div>
+  <div id="qa">${renderLatexInSandboxHtml(initialBody)}</div>
 </body>
 </html>`;
-  }, [cardId, cssText, isDark]);
+}
+
+export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
+  cardId,
+  frontHtml,
+  backHtml,
+  cssText,
+  mediaHttpBaseUrl,
+  preloadScripts,
+  isFlipped,
+  isDark,
+  audioFiles,
+  frontAudioFiles,
+  backAudioFiles,
+  sandboxQuestionAudioFiles,
+  sandboxAnswerAudioFiles,
+  contentScale = 1,
+  onImageZoom,
+}) => {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [frameHeight, setFrameHeight] = useState<number>(280);
+  const initialSideHtmlRef = useRef<string>(isFlipped ? backHtml : frontHtml);
+  const initialScaleRef = useRef<number>(contentScale);
+  const prevCardIdRef = useRef<string>(cardId);
+
+  if (prevCardIdRef.current !== cardId) {
+    prevCardIdRef.current = cardId;
+    initialSideHtmlRef.current = isFlipped ? backHtml : frontHtml;
+    initialScaleRef.current = contentScale;
+  }
+
+  const preloadKey = (preloadScripts || []).join('\u0000');
+
+  const srcDocHtml = useMemo(
+    () =>
+      buildSandboxSrcDoc({
+        cardId,
+        initialBody: initialSideHtmlRef.current || '',
+        cssText,
+        isDark,
+        initialZoom: initialScaleRef.current || 1,
+        mediaHttpBaseUrl,
+        preloadScripts,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cardId, cssText, isDark, mediaHttpBaseUrl, preloadKey]
+  );
 
   // Swap #qa in-place on flip without reloading the iframe (prevents white flash!)
   useEffect(() => {
@@ -347,7 +538,7 @@ ${cssText || ''}
         type: 'anki-sandbox-flip',
         cardId,
         isFlipped,
-        html: isFlipped ? backHtml : frontHtml,
+        html: renderLatexInSandboxHtml(isFlipped ? backHtml : frontHtml),
       },
       '*'
     );

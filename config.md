@@ -36,8 +36,15 @@
   一般不需要手动修改。
 - `sidebar_collapsed`：`true` / `false`（默认 `false`）
   左侧主导航栏是否收起为紧凑图标栏（`72px`）。点击侧边栏顶部的缩放按钮或按 `Cmd+\`（Windows / Linux 为 `Ctrl+\`）后由界面自动保存。
-- `sandbox_notetype_ids`：启用了「原生沙盒兼容模式」的卡型 ID 数组。在复习界面按卡型
-  切换后由界面自动维护，用于让个别模板在隔离 iframe 中渲染；一般不需要手动修改。
+- `compat_mode`：`true` / `false`（默认 `false`）
+  全局原生沙盒兼容模式开关。开启后所有复习卡片统一在隔离 iframe 沙盒中以原生模板渲染，不再按卡型单独切换；若历史配置中曾为任意卡型开启过 `sandbox_notetype_ids`，升级后会自动继承开启。
+- `sandbox_notetype_ids`：历史按卡型记录的兼容模式 ID 数组（保留用于向后兼容与升级迁移，一般不需要手动修改）。
+- `zen_sound_enabled`：`true` / `false`（默认 `true`）
+  禅模式仪式与触感音效开关（燃香、颂钵、法鼓、和纸翻面与落卡声），与环境声景独立控制。
+- `zen_sfx_volume` / `zen_ambience_volume`：`0.0` ~ `1.0`（默认 `0.5`）
+  禅模式仪式音效与背景环境声景的独立音量。
+- `zen_ambience`：`"silent"` | `"rain"` | `"wind"` | `"warmth"`（默认 `"silent"`）
+  禅模式可选离线环境声景（静默 / 檐雨 / 松风 / 暖寂），退出禅模式时淡出、再次进入时自动恢复。
 
 ## 匿名使用统计（可选）
 

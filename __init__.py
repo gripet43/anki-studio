@@ -1177,6 +1177,8 @@ class AnkiModernHost:
         self._webview_needs_profile_reset = False
         try:
             self._apply_cocoa_immersive_titlebar(int(mw.winId()), True)
+            from .bridge.router import set_cocoa_traffic_lights_hidden
+            set_cocoa_traffic_lights_hidden(int(mw.winId()), False)
         except Exception:
             pass
 
@@ -1222,6 +1224,8 @@ class AnkiModernHost:
             return
 
         try:
+            from .bridge.router import set_cocoa_traffic_lights_hidden
+            set_cocoa_traffic_lights_hidden(int(mw.winId()), False)
             self._apply_cocoa_immersive_titlebar(int(mw.winId()), False)
         except Exception:
             pass

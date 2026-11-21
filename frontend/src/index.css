@@ -20,18 +20,23 @@
     --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Inter", system-ui, sans-serif;
     --font-mono: "SF Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-    /* Unified Motion Duration & Easing Tokens (A1) */
+    /* Unified Motion Duration & Easing Tokens (Spatial Scale Hierarchy) */
     --dur-instant: 90ms;
     --dur-fast: 120ms;
     --dur-base: 180ms;
-    --dur-slow: 260ms;
     --dur-reveal: 240ms;
+    --dur-slow: 260ms;
     --dur-draw: 320ms;
+    --dur-panel: 340ms;
+    --dur-spatial: 400ms;
     --dur-shimmer: 1.6s;
     --dur-sweep: 1.4s;
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     --ease-in: cubic-bezier(0.4, 0, 1, 1);
     --ease-std: cubic-bezier(0.4, 0, 0.2, 1);
+    /* Physical spring tokens — graceful exponential-out fallback for engines without CSS linear() */
+    --ease-spring-gentle: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring-snappy: cubic-bezier(0.16, 1, 0.3, 1);
 
     /* Default SaaS Accent Tokens (Linear Indigo — overridden dynamically at runtime) */
     --brand: #5B5BD6;
@@ -199,6 +204,45 @@
   :is(.library-card-title, .library-card-answer, .library-card-snippet-body) :where(img[height]) {
     height: revert-layer;
     width: auto;
+  }
+}
+
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    /* Critically damped spring (zeta=1.0, 0% overshoot): zero initial velocity, brisk glide, magnetic settle */
+    --ease-spring-gentle: linear(
+      0,
+      0.018 3%,
+      0.064 6%,
+      0.15 10%,
+      0.249 14%,
+      0.374 19%,
+      0.511 25%,
+      0.645 32%,
+      0.762 40%,
+      0.853 49%,
+      0.917 59%,
+      0.959 70%,
+      0.984 82%,
+      0.995 92%,
+      1
+    );
+    /* Tactile spring (~3% micro-overshoot): transform-only (never apply to opacity) */
+    --ease-spring-snappy: linear(
+      0,
+      0.009,
+      0.035 2.1%,
+      0.141 4.4%,
+      0.723 12.9%,
+      0.938 16.7%,
+      1.017 19.3%,
+      1.032 21.7%,
+      1.028 24.4%,
+      1.003 33.4%,
+      0.996 40.5%,
+      1.001 57%,
+      1
+    );
   }
 }
 
@@ -471,21 +515,90 @@ ruby rt {
   background-color: var(--brand);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   transition:
-    background-color var(--dur-fast) var(--ease-std),
-    border-color var(--dur-fast) var(--ease-std),
-    color var(--dur-fast) var(--ease-std),
-    transform var(--dur-fast) var(--ease-std),
-    box-shadow var(--dur-fast) var(--ease-std),
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-reveal) var(--ease-out),
+    translate var(--dur-reveal) var(--ease-spring-gentle),
+    scale var(--dur-instant) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out),
     opacity var(--dur-fast) var(--ease-std);
   cursor: pointer;
 }
-.btn-primary:hover:not(:disabled) {
-  background-color: var(--brand-hover);
-  filter: brightness(1.03);
+
+@media (hover: hover) {
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--brand-hover);
+    box-shadow:
+      0 4px 12px -2px rgba(var(--brand-rgb), 0.32),
+      0 1px 3px rgba(0, 0, 0, 0.08);
+  }
 }
+
+.btn-primary:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
 .btn-primary:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* Dashboard Hero Primary CTA ("开始今日学习") — Elevated Tactile Hover, Press & Focus */
+.hero-study-cta {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 4px 12px -2px rgba(var(--brand-rgb), 0.28),
+    0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.hero-study-cta-icon {
+  transition: translate var(--dur-reveal) var(--ease-spring-snappy);
+}
+
+@media (hover: hover) {
+  .hero-study-cta:hover:not(:disabled) {
+    background-color: var(--brand-hover);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.28),
+      0 8px 20px -4px rgba(var(--brand-rgb), 0.38),
+      0 2px 6px rgba(0, 0, 0, 0.08);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .btn-primary:hover:not(:disabled) {
+      translate: 0 -0.5px;
+    }
+    .hero-study-cta:hover:not(:disabled) {
+      translate: 0 -1.5px;
+    }
+    .hero-study-cta:hover:not(:disabled) .hero-study-cta-icon {
+      translate: 2px 0;
+    }
+    [dir="rtl"] .hero-study-cta:hover:not(:disabled) .hero-study-cta-icon {
+      translate: -2px 0;
+    }
+  }
+}
+
+.hero-study-cta:active:not(:disabled) {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 2px 6px -1px rgba(var(--brand-rgb), 0.22);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-study-cta:active:not(:disabled) {
+    translate: 0 0;
+    scale: 0.982;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-study-cta-icon {
+    transition: none;
+  }
 }
 
 .btn-secondary {
@@ -542,13 +655,83 @@ ruby rt {
   background-color: var(--brand-soft);
 }
 
+.btn-danger-tinted {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  height: 2.25rem;
+  padding: 0 0.875rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid color-mix(in srgb, var(--status-danger) 24%, transparent);
+  background-color: var(--status-danger-soft);
+  color: var(--status-danger-text);
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    border-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    transform var(--dur-instant) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-std);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .btn-danger-tinted:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--status-danger) 18%, var(--status-danger-soft));
+    border-color: color-mix(in srgb, var(--status-danger) 44%, transparent);
+  }
+}
+
+.dark .btn-danger-tinted {
+  background-color: rgba(224, 90, 102, 0.16);
+  border-color: rgba(224, 90, 102, 0.28);
+  color: var(--status-danger-text);
+}
+
+@media (hover: hover) {
+  .dark .btn-danger-tinted:hover:not(:disabled) {
+    background-color: rgba(224, 90, 102, 0.26);
+    border-color: rgba(224, 90, 102, 0.48);
+  }
+}
+
+.btn-danger-tinted:focus-visible {
+  outline: 2px solid var(--status-danger-text);
+  outline-offset: 2px;
+}
+
+.btn-danger-tinted:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (forced-colors: active) {
+  .btn-danger-tinted {
+    border: 1px solid ButtonBorder;
+    background-color: Canvas;
+    color: ButtonText;
+  }
+  .btn-danger-tinted:focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
-  .btn-primary:active:not(:disabled),
+  .btn-primary:active:not(:disabled) {
+    translate: 0 0;
+    scale: 0.985;
+  }
   .btn-secondary:active:not(:disabled) {
     transform: scale(0.988);
   }
   .btn-ghost:active:not(:disabled) {
     transform: scale(0.975);
+  }
+  .btn-danger-tinted:active:not(:disabled) {
+    transform: scale(0.985);
   }
 }
 
@@ -1789,11 +1972,70 @@ ruby rt {
 
 /* Reviewer & View Transition Utilities (C1-C3, D) */
 .ui-view-enter {
-  animation: ui-view-enter var(--dur-base) var(--ease-out) both;
+  animation: ui-view-enter var(--dur-reveal) var(--ease-spring-gentle) both;
 }
 
 .ui-card-enter {
-  animation: ui-view-enter var(--dur-base) var(--ease-out) both;
+  animation: ui-view-enter var(--dur-reveal) var(--ease-spring-gentle) both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes reviewer-card-fly-left {
+    0% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate3d(-115%, -18px, 0) rotate(-13deg) scale(0.95);
+    }
+  }
+
+  @keyframes reviewer-card-fly-right {
+    0% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate3d(115%, -18px, 0) rotate(13deg) scale(0.95);
+    }
+  }
+
+  @keyframes reviewer-card-stack-rise {
+    0% {
+      opacity: 0;
+      transform: translate3d(0, 14px, 0) scale(0.965);
+    }
+    100% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  .reviewer-card-shell.ui-card-enter {
+    animation: reviewer-card-stack-rise 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .reviewer-card-swipe-left {
+    pointer-events: none;
+    will-change: transform, opacity;
+    animation: reviewer-card-fly-left 260ms cubic-bezier(0.32, 0.04, 0.22, 1) both;
+  }
+
+  .reviewer-card-swipe-right {
+    pointer-events: none;
+    will-change: transform, opacity;
+    animation: reviewer-card-fly-right 260ms cubic-bezier(0.32, 0.04, 0.22, 1) both;
+  }
+
+  [dir="rtl"] .reviewer-card-swipe-left {
+    animation-name: reviewer-card-fly-right;
+  }
+
+  [dir="rtl"] .reviewer-card-swipe-right {
+    animation-name: reviewer-card-fly-left;
+  }
 }
 
 .ui-tab-enter {
@@ -1801,13 +2043,13 @@ ruby rt {
 }
 
 .ui-answer-reveal {
-  animation: ui-answer-reveal var(--dur-base) var(--ease-out) both;
+  animation: ui-answer-reveal var(--dur-reveal) var(--ease-spring-gentle) both;
 }
 
 .ui-divider-reveal {
   transform-origin: left center;
   transform-origin: inline-start center;
-  animation: ui-divider-reveal var(--dur-base) var(--ease-out) both;
+  animation: ui-divider-reveal var(--dur-slow) var(--ease-spring-gentle) both;
 }
 
 [dir="rtl"] .ui-divider-reveal {
@@ -1817,7 +2059,7 @@ ruby rt {
 
 /* Modal & Toast Presence State Machine Styles (B1, E1, E2) */
 .ui-modal-backdrop {
-  transition: opacity var(--dur-fast) var(--ease-std);
+  transition: opacity var(--dur-base) var(--ease-out);
 }
 
 .ui-modal-backdrop[data-state="entering"],
@@ -1830,18 +2072,19 @@ ruby rt {
 }
 
 .ui-modal-backdrop[data-state="leaving"] {
+  transition-duration: var(--dur-fast);
   pointer-events: none;
 }
 
 .ui-modal-panel {
   transition:
     opacity var(--dur-base) var(--ease-out),
-    transform var(--dur-base) var(--ease-out);
+    transform var(--dur-slow) var(--ease-spring-gentle);
 }
 
 .ui-modal-panel[data-state="entering"] {
   opacity: 0;
-  transform: translateY(8px) scale(0.98);
+  transform: translateY(10px) scale(0.975);
 }
 
 .ui-modal-panel[data-state="entered"] {
@@ -1854,31 +2097,31 @@ ruby rt {
   opacity: 0;
   transform: translateY(4px) scale(0.985);
   transition-duration: var(--dur-fast);
-  transition-timing-function: var(--ease-std);
+  transition-timing-function: var(--ease-out);
   pointer-events: none;
 }
 
 .ui-toast {
   transition:
     opacity var(--dur-base) var(--ease-out),
-    transform var(--dur-base) var(--ease-out);
+    transform var(--dur-draw) var(--ease-spring-snappy);
 }
 
 .ui-toast[data-state="entering"] {
   opacity: 0;
-  transform: translateY(-12px);
+  transform: translateY(-14px) scale(0.96);
 }
 
 .ui-toast[data-state="entered"] {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
 }
 
 .ui-toast[data-state="leaving"] {
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(-8px) scale(0.98);
   transition-duration: var(--dur-fast);
-  transition-timing-function: var(--ease-std);
+  transition-timing-function: var(--ease-out);
   pointer-events: none;
 }
 
@@ -1897,47 +2140,41 @@ ruby rt {
 }
 
 .ui-tooltip[data-state="entering"],
-.ui-tooltip[data-state="leaving"],
-.ui-hovercard[data-state="entering"],
-.ui-hovercard[data-state="leaving"] {
-  will-change: opacity, transform;
-}
-
-.ui-tooltip[data-state="entering"],
 .ui-hovercard[data-state="entering"] {
   opacity: 0;
 }
 
 .ui-tooltip[data-state="entering"][data-side="top"],
 .ui-hovercard[data-state="entering"][data-side="top"] {
-  transform: translate3d(0, 2px, 0);
+  transform: translateY(2px);
 }
 
 .ui-tooltip[data-state="entering"][data-side="bottom"],
 .ui-hovercard[data-state="entering"][data-side="bottom"] {
-  transform: translate3d(0, -2px, 0);
+  transform: translateY(-2px);
 }
 
 .ui-tooltip[data-state="entering"][data-side="left"],
 .ui-hovercard[data-state="entering"][data-side="left"] {
-  transform: translate3d(2px, 0, 0);
+  transform: translateX(2px);
 }
 
 .ui-tooltip[data-state="entering"][data-side="right"],
 .ui-hovercard[data-state="entering"][data-side="right"] {
-  transform: translate3d(-2px, 0, 0);
+  transform: translateX(-2px);
 }
 
 .ui-tooltip[data-state="entered"],
 .ui-hovercard[data-state="entered"] {
   opacity: 1;
-  transform: translate3d(0, 0, 0);
+  /* 稳态撤掉常驻 GPU 合成层，避免 Windows QtWebEngine 悬停切换 Tooltip 时反复升降层触发闪屏 */
+  transform: none;
 }
 
 .ui-tooltip[data-state="leaving"],
 .ui-hovercard[data-state="leaving"] {
   opacity: 0;
-  transform: translate3d(0, 0, 0);
+  transform: none;
   transition-duration: var(--dur-instant);
   transition-timing-function: var(--ease-in);
   pointer-events: none;
@@ -2134,6 +2371,66 @@ html.theme-switching .vacation-section-card {
 ::view-transition-new(root) {
   animation-duration: var(--dur-base);
   animation-timing-function: var(--ease-std);
+}
+
+@keyframes zen-vt-workspace-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0.88;
+    transform: scale(0.984);
+  }
+}
+
+@keyframes zen-vt-sanctuary-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes zen-vt-sanctuary-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.9;
+  }
+}
+
+@keyframes zen-vt-workspace-in {
+  from {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+html.zen-vt-entering::view-transition-old(root) {
+  mix-blend-mode: normal;
+  animation: zen-vt-workspace-out 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+html.zen-vt-entering::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation: zen-vt-sanctuary-in 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+html.zen-vt-exiting::view-transition-old(root) {
+  mix-blend-mode: normal;
+  animation: zen-vt-sanctuary-out 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+html.zen-vt-exiting::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation: zen-vt-workspace-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Precision Reduced Motion Fallback: suppress spatial motion & infinite loops, keep color/opacity feedback */
@@ -2347,7 +2644,7 @@ html.theme-switching .vacation-section-card {
 .library-card {
   perspective: 1400px;
   cursor: pointer;
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  transition: transform var(--dur-reveal) var(--ease-out), box-shadow var(--dur-reveal) var(--ease-out);
 }
 
 .library-card-flip,
@@ -2359,7 +2656,7 @@ html.theme-switching .vacation-section-card {
   position: relative;
   display: grid;
   transform-style: preserve-3d;
-  transition: transform 640ms var(--ease-out);
+  transition: transform 640ms var(--ease-spring-gentle);
   transition-delay: 0ms;
 }
 
@@ -3151,11 +3448,20 @@ html.theme-switching .vacation-section-card {
   }
 }
 
-/* Reviewer Side Inspector & Fullscreen Lightbox Presence Transitions */
+/* Reviewer Side Inspector, Linked Stage Shift & Fullscreen Lightbox Presence Transitions */
+@media (prefers-reduced-motion: no-preference) {
+  .reviewer-stage-shift {
+    transition: transform var(--dur-base) var(--ease-out);
+  }
+  .reviewer-stage-shift[data-shifted="true"] {
+    transition: transform var(--dur-panel) var(--ease-spring-gentle);
+  }
+}
+
 .reviewer-inspector {
   transition:
-    transform var(--dur-base) var(--ease-out),
-    opacity var(--dur-fast) var(--ease-std);
+    transform var(--dur-panel) var(--ease-spring-gentle),
+    opacity var(--dur-base) var(--ease-out);
 }
 
 .reviewer-inspector[data-state="entering"] {
@@ -3176,8 +3482,8 @@ html.theme-switching .vacation-section-card {
 .reviewer-inspector[data-state="leaving"] {
   opacity: 0;
   transform: translateX(100%);
-  transition-duration: var(--dur-fast);
-  transition-timing-function: var(--ease-in);
+  transition-duration: var(--dur-base), var(--dur-fast);
+  transition-timing-function: var(--ease-out), var(--ease-std);
   will-change: transform, opacity;
   pointer-events: none;
 }
@@ -3187,7 +3493,7 @@ html.theme-switching .vacation-section-card {
 }
 
 .reviewer-lightbox {
-  transition: opacity var(--dur-fast) var(--ease-std);
+  transition: opacity var(--dur-base) var(--ease-out);
 }
 
 .reviewer-lightbox[data-state="entering"],
@@ -3196,6 +3502,7 @@ html.theme-switching .vacation-section-card {
 }
 
 .reviewer-lightbox[data-state="leaving"] {
+  transition-duration: var(--dur-fast);
   pointer-events: none;
 }
 
@@ -3206,12 +3513,12 @@ html.theme-switching .vacation-section-card {
 .reviewer-lightbox-stage {
   transition:
     opacity var(--dur-base) var(--ease-out),
-    transform var(--dur-base) var(--ease-out);
+    transform var(--dur-slow) var(--ease-spring-gentle);
 }
 
 .reviewer-lightbox[data-state="entering"] .reviewer-lightbox-stage {
   opacity: 0;
-  transform: scale(0.96);
+  transform: scale(0.955);
 }
 
 .reviewer-lightbox[data-state="entered"] .reviewer-lightbox-stage {
@@ -3223,7 +3530,7 @@ html.theme-switching .vacation-section-card {
   opacity: 0;
   transform: scale(0.975);
   transition-duration: var(--dur-fast);
-  transition-timing-function: var(--ease-in);
+  transition-timing-function: var(--ease-out);
 }
 
 .reviewer-popover[popover] {
@@ -3267,7 +3574,7 @@ html.theme-switching .vacation-section-card {
     transform: translateY(-4px) scale(0.98);
     transition:
       opacity var(--dur-fast) var(--ease-out),
-      transform var(--dur-fast) var(--ease-out),
+      transform var(--dur-reveal) var(--ease-spring-gentle),
       display var(--dur-fast),
       overlay var(--dur-fast);
     transition-behavior: allow-discrete;
@@ -3676,15 +3983,8 @@ html.theme-switching .vacation-section-card {
   }
   .reviewer-complete-stat {
     animation:
-      ui-fade-in 180ms cubic-bezier(0.16, 1, 0.3, 1) backwards,
-      ui-stat-rise 280ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  }
-  @supports (animation-timing-function: linear(0, 1)) {
-    .reviewer-complete-stat {
-      animation-timing-function:
-        cubic-bezier(0.16, 1, 0.3, 1),
-        linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 19.3%, 1.032 21.7%, 1.028 24.4%, 1.003 33.4%, 0.996 40.5%, 1.001 57%, 1);
-    }
+      ui-fade-in var(--dur-base) var(--ease-out) backwards,
+      ui-stat-rise 280ms var(--ease-spring-snappy) backwards;
   }
   .reviewer-complete-stat:nth-child(1) { animation-delay: 40ms; }
   .reviewer-complete-stat:nth-child(2) { animation-delay: 80ms; }
@@ -3771,14 +4071,7 @@ html.theme-switching .vacation-section-card {
   border: 0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22), 0 0.5px 1px rgba(0, 0, 0, 0.1);
   transform: translateX(0);
-  transition: transform var(--dur-base) cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-@supports (transition-timing-function: linear(0, 1)) {
-  .anki-switch[data-switch-fallback="true"]::before {
-    transition-duration: 280ms;
-    transition-timing-function: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 19.3%, 1.032 21.7%, 1.028 24.4%, 1.003 33.4%, 0.996 40.5%, 1.001 57%, 1);
-  }
+  transition: transform 280ms var(--ease-spring-snappy);
 }
 
 .anki-switch[data-switch-fallback="true"]:checked {
@@ -3909,12 +4202,12 @@ html.theme-switching .vacation-section-card {
 }
 
 .dashboard-progress-ring-arc {
-  transition: stroke 0.3s ease;
+  transition: stroke 300ms var(--ease-std);
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .dashboard-progress-ring-arc {
-    transition: stroke-dashoffset 0.85s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.3s ease;
+    transition: stroke-dashoffset 850ms var(--ease-out), stroke 300ms var(--ease-std);
   }
 }
 
@@ -4003,42 +4296,14 @@ html.theme-switching .vacation-section-card {
 
 @media (prefers-reduced-motion: no-preference) {
   .studio-sidebar {
-    /* Strongly non-linear exponential-out fallback for engines without CSS linear() */
     transition:
-      width 400ms cubic-bezier(0.16, 1, 0.3, 1),
-      background-color 220ms var(--ease-std, cubic-bezier(0.4, 0, 0.2, 1)),
-      border-color 220ms var(--ease-std, cubic-bezier(0.4, 0, 0.2, 1));
-  }
-
-  @supports (transition-timing-function: linear(0, 1)) {
-    .studio-sidebar {
-      /* Critically damped spring (zeta=1.0): zero initial velocity, brisk glide, silky magnetic settle */
-      --sidebar-spring-easing: linear(
-        0,
-        0.018 3%,
-        0.064 6%,
-        0.15 10%,
-        0.249 14%,
-        0.374 19%,
-        0.511 25%,
-        0.645 32%,
-        0.762 40%,
-        0.853 49%,
-        0.917 59%,
-        0.959 70%,
-        0.984 82%,
-        0.995 92%,
-        1
-      );
-      transition-timing-function:
-        var(--sidebar-spring-easing),
-        var(--ease-std, cubic-bezier(0.4, 0, 0.2, 1)),
-        var(--ease-std, cubic-bezier(0.4, 0, 0.2, 1));
-    }
+      width var(--dur-spatial) var(--ease-spring-gentle),
+      background-color 220ms var(--ease-std),
+      border-color 220ms var(--ease-std);
   }
 
   .studio-sidebar[data-motion="true"] .studio-sidebar-reveal {
-    animation: studio-sidebar-reveal-in 320ms cubic-bezier(0.16, 1, 0.3, 1) 45ms both;
+    animation: studio-sidebar-reveal-in var(--dur-draw) var(--ease-spring-gentle) 45ms both;
   }
 
   [dir="rtl"] .studio-sidebar[data-motion="true"] .studio-sidebar-reveal {
@@ -4046,11 +4311,11 @@ html.theme-switching .vacation-section-card {
   }
 
   .studio-sidebar[data-motion="true"] .studio-sidebar-rail-reveal {
-    animation: studio-sidebar-rail-in 280ms cubic-bezier(0.16, 1, 0.3, 1) 35ms both;
+    animation: studio-sidebar-rail-in 280ms var(--ease-spring-gentle) 35ms both;
   }
 
   .sidebar-collapse-btn {
-    transition: background-color 0.16s ease, color 0.16s ease;
+    transition: background-color 160ms var(--ease-std), color 160ms var(--ease-std);
   }
 }
 
@@ -4150,7 +4415,10 @@ html.theme-switching .vacation-section-card {
 
 @media (prefers-reduced-motion: no-preference) {
   .sidebar-footer-tool-btn {
-    transition: background-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease;
+    transition:
+      background-color 160ms var(--ease-std),
+      box-shadow 160ms var(--ease-std),
+      color 160ms var(--ease-std);
   }
 }
 
@@ -4178,30 +4446,26 @@ html.theme-switching .vacation-section-card {
 
 /* Vacation Modal — Studio Surfaces, Tabs, Interactive Chips, Accordion & Switches */
 .vacation-modal-panel {
-  border-color: color-mix(in srgb, var(--border-subtle) 72%, rgba(20, 24, 32, 0.1));
+  border-color: var(--border-subtle);
   background-color: var(--bg-card);
   color: var(--text-primary);
   box-shadow:
-    0 24px 64px -14px rgba(20, 24, 32, 0.28),
-    0 2px 8px rgba(20, 24, 32, 0.06);
+    0 24px 64px -14px rgba(20, 24, 32, 0.24),
+    0 2px 8px rgba(20, 24, 32, 0.05);
   outline: none;
 }
 
 .dark .vacation-modal-panel {
-  border-color: rgba(255, 255, 255, 0.11);
-  background-color: #181920;
-  color: #f2f3f7;
+  border-color: var(--border-subtle);
+  background-color: var(--bg-card);
+  color: var(--text-primary);
   box-shadow:
     0 28px 72px -12px rgba(0, 0, 0, 0.56),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .vacation-modal-header {
-  border-block-end: 1px solid color-mix(in srgb, var(--border-subtle) 85%, transparent);
-}
-
-.dark .vacation-modal-header {
-  border-block-end-color: rgba(255, 255, 255, 0.08);
+  border-block-end: 1px solid var(--border-subtle);
 }
 
 .vacation-modal-body {
@@ -4210,13 +4474,8 @@ html.theme-switching .vacation-section-card {
 }
 
 .vacation-modal-footer {
-  border-block-start: 1px solid color-mix(in srgb, var(--border-subtle) 85%, transparent);
-  background-color: color-mix(in srgb, var(--bg-subtle) 54%, var(--bg-card));
-}
-
-.dark .vacation-modal-footer {
-  border-block-start-color: rgba(255, 255, 255, 0.08);
-  background-color: rgba(255, 255, 255, 0.025);
+  border-block-start: 1px solid var(--border-subtle);
+  background-color: color-mix(in srgb, var(--bg-subtle) 50%, var(--bg-card));
 }
 
 .vacation-footer-hint {
@@ -4228,13 +4487,12 @@ html.theme-switching .vacation-section-card {
 
 .vacation-section-card {
   border-radius: 0.875rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 68%, rgba(20, 24, 32, 0.08));
-  background-color: color-mix(in srgb, var(--bg-subtle) 65%, var(--bg-card));
+  border: 1px solid var(--border-subtle);
+  background-color: color-mix(in srgb, var(--bg-subtle) 56%, var(--bg-card));
 }
 
 .dark .vacation-section-card {
-  border-color: rgba(255, 255, 255, 0.09);
-  background-color: rgba(255, 255, 255, 0.032);
+  background-color: color-mix(in srgb, var(--bg-subtle) 72%, var(--bg-card));
 }
 
 .vacation-tablist {
@@ -4242,14 +4500,9 @@ html.theme-switching .vacation-section-card {
   align-items: center;
   padding: 0.1875rem;
   border-radius: 0.625rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 75%, rgba(20, 24, 32, 0.06));
-  background-color: color-mix(in srgb, var(--bg-subtle) 88%, rgba(20, 24, 32, 0.06));
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-subtle);
   gap: 0.125rem;
-}
-
-.dark .vacation-tablist {
-  border-color: rgba(255, 255, 255, 0.08);
-  background-color: rgba(255, 255, 255, 0.06);
 }
 
 .vacation-tab {
@@ -4276,17 +4529,14 @@ html.theme-switching .vacation-section-card {
 }
 
 .vacation-tab[aria-selected="true"] {
-  border-color: color-mix(in srgb, var(--border-subtle) 50%, rgba(20, 24, 32, 0.12));
-  background-color: #ffffff;
+  border-color: var(--border-subtle);
+  background-color: var(--bg-card);
   color: var(--text-primary);
-  box-shadow: 0 1px 2px rgba(20, 24, 32, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .dark .vacation-tab[aria-selected="true"] {
-  border-color: rgba(255, 255, 255, 0.12);
-  background-color: #2a2c38;
-  color: #f2f3f7;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 
 .vacation-close-btn {
@@ -4301,13 +4551,8 @@ html.theme-switching .vacation-section-card {
 }
 
 .vacation-close-btn:hover {
-  background-color: rgba(20, 24, 32, 0.06);
+  background-color: var(--bg-subtle);
   color: var(--text-primary);
-}
-
-.dark .vacation-close-btn:hover {
-  background-color: rgba(255, 255, 255, 0.08);
-  color: #f2f3f7;
 }
 
 .vacation-duration-fieldset {
@@ -4324,45 +4569,33 @@ html.theme-switching .vacation-section-card {
   min-block-size: 2.375rem;
   padding: 0.375rem 0.625rem;
   border-radius: 0.625rem;
-  border: 1.5px solid color-mix(in srgb, var(--border-subtle) 45%, rgba(20, 24, 32, 0.14));
-  background-color: #ffffff;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-card);
   color: var(--text-primary);
   font-size: 0.75rem;
   font-weight: 500;
   line-height: 1.25;
   text-wrap: balance;
-  box-shadow: 0 1px 1.5px rgba(20, 24, 32, 0.03);
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.025);
   cursor: pointer;
 }
 
 .dark .vacation-preset-btn {
-  border-color: rgba(255, 255, 255, 0.12);
-  background-color: rgba(255, 255, 255, 0.04);
-  color: #e2e4ec;
   box-shadow: none;
 }
 
 .vacation-preset-btn:hover:not([aria-pressed="true"]) {
   border-color: var(--brand-border);
-  background-color: color-mix(in srgb, var(--brand-soft) 32%, #ffffff);
-}
-
-.dark .vacation-preset-btn:hover:not([aria-pressed="true"]) {
-  background-color: rgba(255, 255, 255, 0.075);
+  background-color: color-mix(in srgb, var(--brand-soft) 45%, var(--bg-card));
 }
 
 .vacation-preset-btn[aria-pressed="true"],
 .vacation-choice-card[aria-pressed="true"] {
-  border-color: var(--brand);
-  background-color: color-mix(in srgb, var(--brand-soft) 78%, #ffffff);
+  border-color: var(--brand-border);
+  background-color: var(--brand-soft);
   color: var(--brand-text);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(var(--brand-rgb), 0.1);
-}
-
-.dark .vacation-preset-btn[aria-pressed="true"],
-.dark .vacation-choice-card[aria-pressed="true"] {
-  background-color: var(--brand-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-border) 55%, transparent);
 }
 
 .vacation-choice-card {
@@ -4372,28 +4605,21 @@ html.theme-switching .vacation-section-card {
   justify-content: flex-start;
   padding: 0.875rem;
   border-radius: 0.875rem;
-  border: 1.5px solid color-mix(in srgb, var(--border-subtle) 45%, rgba(20, 24, 32, 0.14));
-  background-color: #ffffff;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-card);
   color: var(--text-primary);
   text-align: start;
-  box-shadow: 0 1px 1.5px rgba(20, 24, 32, 0.03);
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.025);
   cursor: pointer;
 }
 
 .dark .vacation-choice-card {
-  border-color: rgba(255, 255, 255, 0.12);
-  background-color: rgba(255, 255, 255, 0.04);
-  color: #e2e4ec;
   box-shadow: none;
 }
 
 .vacation-choice-card:hover:not([aria-pressed="true"]) {
   border-color: var(--brand-border);
-  background-color: color-mix(in srgb, var(--brand-soft) 28%, #ffffff);
-}
-
-.dark .vacation-choice-card:hover:not([aria-pressed="true"]) {
-  background-color: rgba(255, 255, 255, 0.075);
+  background-color: color-mix(in srgb, var(--brand-soft) 40%, var(--bg-card));
 }
 
 .vacation-tab:focus-visible,
@@ -4418,9 +4644,9 @@ html.theme-switching .vacation-section-card {
   --slider-thumb-size: 1.125rem;
   --slider-track-radius: 999px;
   --slider-thumb-radius: 50%;
-  --slider-track-color: rgba(20, 24, 32, 0.22);
+  --slider-track-color: var(--border-subtle);
   --slider-fill-color: var(--brand);
-  --slider-thumb-color: #ffffff;
+  --slider-thumb-color: var(--bg-card);
   --slider-direction: to right;
 
   --attr-min: attr(min type(<number>), 1);
@@ -4447,8 +4673,8 @@ html.theme-switching .vacation-section-card {
 }
 
 .dark .studio-range-slider {
-  --slider-track-color: rgba(255, 255, 255, 0.24);
-  --slider-thumb-color: #1f212a;
+  --slider-track-color: var(--border-subtle);
+  --slider-thumb-color: var(--bg-card);
 }
 
 @supports not (opacity: progress(1, 0, 100)) {
@@ -4484,17 +4710,17 @@ html.theme-switching .vacation-section-card {
   inline-size: var(--slider-thumb-size);
   block-size: var(--slider-thumb-size);
   margin-block-start: calc((var(--slider-track-size) - var(--slider-thumb-size)) / 2);
-  border: 2.5px solid var(--slider-fill-color);
+  border: 2px solid var(--slider-fill-color);
   border-radius: var(--slider-thumb-radius);
   background: var(--slider-thumb-color);
-  box-shadow: 0 1px 4px rgba(20, 24, 32, 0.22);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
 }
 
 .studio-range-slider:hover::-webkit-slider-thumb,
 .studio-range-slider:active::-webkit-slider-thumb {
   box-shadow:
-    0 1px 4px rgba(20, 24, 32, 0.24),
-    0 0 0 5px rgba(var(--brand-rgb), 0.16);
+    0 1px 4px rgba(0, 0, 0, 0.18),
+    0 0 0 5px rgba(var(--brand-rgb), 0.14);
 }
 
 /* Firefox range pseudo-elements (strictly separate blocks) */
@@ -4514,10 +4740,10 @@ html.theme-switching .vacation-section-card {
 .studio-range-slider::-moz-range-thumb {
   inline-size: var(--slider-thumb-size);
   block-size: var(--slider-thumb-size);
-  border: 2.5px solid var(--slider-fill-color);
+  border: 2px solid var(--slider-fill-color);
   border-radius: var(--slider-thumb-radius);
   background: var(--slider-thumb-color);
-  box-shadow: 0 1px 4px rgba(20, 24, 32, 0.22);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
 }
 
 .studio-slider-scale {
@@ -4554,11 +4780,7 @@ html.theme-switching .vacation-section-card {
 }
 
 .vacation-safeguards-summary:hover {
-  background-color: rgba(20, 24, 32, 0.025);
-}
-
-.dark .vacation-safeguards-summary:hover {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: color-mix(in srgb, var(--bg-subtle) 70%, transparent);
 }
 
 .studio-details-chevron {
@@ -4592,14 +4814,10 @@ details.vacation-safeguards-details:not([open])::details-content {
 
 .vacation-safeguards-list {
   padding: 0.5rem 1rem 0.75rem;
-  border-block-start: 1px solid color-mix(in srgb, var(--border-subtle) 85%, transparent);
+  border-block-start: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
-}
-
-.dark .vacation-safeguards-list {
-  border-block-start-color: rgba(255, 255, 255, 0.08);
 }
 
 .vacation-safeguard-row {
@@ -4632,14 +4850,12 @@ details.vacation-safeguards-details:not([open])::details-content {
 }
 
 .btn-secondary.vacation-action-btn {
-  background-color: #ffffff;
-  border-color: color-mix(in srgb, var(--border-subtle) 45%, rgba(20, 24, 32, 0.14));
-  box-shadow: 0 1px 1.5px rgba(20, 24, 32, 0.03);
+  background-color: var(--bg-card);
+  border-color: var(--border-subtle);
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.025);
 }
 
 .dark .btn-secondary.vacation-action-btn {
-  background-color: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.12);
   box-shadow: none;
 }
 
@@ -4806,18 +5022,8 @@ details.vacation-safeguards-details:not([open])::details-content {
   transition:
     background-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-base) cubic-bezier(0.22, 1, 0.36, 1),
-    transform var(--dur-instant) cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-@supports (transition-timing-function: linear(0, 1)) {
-  .settings-segmented-option {
-    transition-timing-function:
-      cubic-bezier(0.16, 1, 0.3, 1),
-      cubic-bezier(0.16, 1, 0.3, 1),
-      linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 19.3%, 1.032 21.7%, 1.028 24.4%, 1.003 33.4%, 0.996 40.5%, 1.001 57%, 1),
-      linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 19.3%, 1.032 21.7%, 1.028 24.4%, 1.003 33.4%, 0.996 40.5%, 1.001 57%, 1);
-  }
+    box-shadow var(--dur-base) var(--ease-spring-snappy),
+    transform var(--dur-instant) var(--ease-spring-snappy);
 }
 
 .settings-segmented-option:not(:has(> input:checked), [data-selected="true"])
@@ -5009,12 +5215,12 @@ dialog.avatar-crop-dialog {
   margin: auto;
   overflow: visible;
   opacity: 0;
-  transform: translateY(6px) scale(0.975);
+  transform: translateY(8px) scale(0.975);
   transition:
     opacity var(--dur-base) var(--ease-out),
-    transform var(--dur-base) var(--ease-out),
-    overlay var(--dur-base),
-    display var(--dur-base);
+    transform var(--dur-slow) var(--ease-spring-gentle),
+    overlay var(--dur-slow),
+    display var(--dur-slow);
   transition-behavior: allow-discrete;
 }
 
@@ -5032,8 +5238,7 @@ dialog.avatar-crop-dialog:modal {
 dialog.avatar-crop-dialog::backdrop {
   overflow: hidden;
   overscroll-behavior: contain;
-  background: rgba(10, 12, 18, 0.54);
-  backdrop-filter: blur(4px);
+  background: rgba(10, 12, 18, 0.56);
   opacity: 0;
   transition:
     opacity var(--dur-base) var(--ease-std),
@@ -5163,4 +5368,1934 @@ dialog.avatar-crop-dialog[open]::backdrop {
 .avatar-crop-slider:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* ============================================================================
+ * Minimalist Zen Mode (Ma · In'ei Shoji Light · Washi Paper · Ensō Ritual)
+ * ============================================================================ */
+
+:root {
+  --font-zen-serif:
+    "Songti SC",
+    "STSong",
+    "Noto Serif CJK SC",
+    "Hiragino Mincho ProN",
+    "Yu Mincho",
+    "New York",
+    Georgia,
+    "Times New Roman",
+    serif;
+  --font-zen-calligraphy:
+    "Ma Shan Zheng",
+    "马善政毛笔楷书",
+    "Kaiti SC",
+    "STKaiti",
+    "BiauKai",
+    "DFKai-SB",
+    "KaiTi",
+    "YuKyokasho",
+    "Hiragino Mincho ProN",
+    var(--font-zen-serif);
+}
+
+.zen-serif {
+  font-family: var(--font-zen-serif);
+}
+
+/* Shoji light vignette (In'ei 陰翳) — Luminous gallery Washi paper + circadian light temperatures + subtle grain */
+.zen-sanctuary-bg {
+  --zen-shoji-center: rgba(255, 254, 250, 0.65);
+  --zen-shoji-edge: rgba(44, 38, 30, 0.036);
+  --zen-bloom-color: rgba(255, 252, 245, 0.34);
+  background-color: #f8f6f1;
+  background-image: radial-gradient(
+    ellipse 86% 78% at 50% 44%,
+    var(--zen-shoji-center) 0%,
+    transparent 68%,
+    var(--zen-shoji-edge) 100%
+  );
+  color: var(--text-primary);
+}
+
+/* Four circadian Shoji light temperatures (Light Mode — luminous Washi without muddy grey corners) */
+.zen-sanctuary-bg[data-zen-period="morning"],
+.zen-threshold-overlay[data-zen-period="morning"] {
+  background-color: #f6f8f9;
+  --zen-shoji-center: rgba(250, 253, 255, 0.72);
+  --zen-shoji-edge: rgba(42, 58, 70, 0.036);
+  --zen-bloom-color: rgba(238, 248, 252, 0.36);
+}
+
+.zen-sanctuary-bg[data-zen-period="afternoon"],
+.zen-threshold-overlay[data-zen-period="afternoon"] {
+  background-color: #f9f7f2;
+  --zen-shoji-center: rgba(255, 254, 250, 0.7);
+  --zen-shoji-edge: rgba(44, 39, 32, 0.036);
+  --zen-bloom-color: rgba(255, 252, 244, 0.34);
+}
+
+.zen-sanctuary-bg[data-zen-period="evening"],
+.zen-threshold-overlay[data-zen-period="evening"] {
+  background-color: #f8f4ec;
+  --zen-shoji-center: rgba(255, 250, 242, 0.68);
+  --zen-shoji-edge: rgba(70, 48, 28, 0.044);
+  --zen-bloom-color: rgba(255, 242, 222, 0.32);
+}
+
+.zen-sanctuary-bg[data-zen-period="night"],
+.zen-threshold-overlay[data-zen-period="night"] {
+  background-color: #f5f6f9;
+  --zen-shoji-center: rgba(249, 250, 254, 0.66);
+  --zen-shoji-edge: rgba(30, 38, 56, 0.045);
+  --zen-bloom-color: rgba(238, 242, 252, 0.28);
+}
+
+.zen-home-shell {
+  position: relative;
+}
+
+.zen-review-shell {
+  position: fixed;
+  inset: 0;
+}
+
+.dark .zen-sanctuary-bg {
+  --zen-shoji-center: rgba(235, 232, 224, 0.055);
+  --zen-shoji-edge: rgba(4, 5, 8, 0.54);
+  --zen-bloom-color: rgba(235, 228, 214, 0.048);
+  background-color: #0d0e12;
+  color: #ece9e1;
+}
+
+/* Four circadian Shoji light temperatures (Dark Mode) */
+.dark .zen-sanctuary-bg[data-zen-period="morning"],
+.dark .zen-threshold-overlay[data-zen-period="morning"] {
+  background-color: #0b0e14;
+  --zen-shoji-center: rgba(214, 228, 242, 0.062);
+  --zen-shoji-edge: rgba(3, 5, 10, 0.56);
+  --zen-bloom-color: rgba(196, 218, 238, 0.045);
+}
+
+.dark .zen-sanctuary-bg[data-zen-period="afternoon"],
+.dark .zen-threshold-overlay[data-zen-period="afternoon"] {
+  background-color: #0d0e12;
+  --zen-shoji-center: rgba(235, 232, 224, 0.055);
+  --zen-shoji-edge: rgba(4, 5, 8, 0.54);
+  --zen-bloom-color: rgba(235, 230, 220, 0.042);
+}
+
+.dark .zen-sanctuary-bg[data-zen-period="evening"],
+.dark .zen-threshold-overlay[data-zen-period="evening"] {
+  background-color: #100e0d;
+  --zen-shoji-center: rgba(244, 214, 174, 0.072);
+  --zen-shoji-edge: rgba(8, 5, 3, 0.58);
+  --zen-bloom-color: rgba(242, 206, 158, 0.055);
+}
+
+.dark .zen-sanctuary-bg[data-zen-period="night"],
+.dark .zen-threshold-overlay[data-zen-period="night"] {
+  background-color: #0a0b10;
+  --zen-shoji-center: rgba(240, 224, 200, 0.064);
+  --zen-shoji-edge: rgba(2, 3, 7, 0.62);
+  --zen-bloom-color: rgba(232, 216, 190, 0.048);
+}
+
+/* Living Shoji light bloom — GPU compositor-only opacity + transform drift */
+.zen-sanctuary-bg::before {
+  content: "";
+  position: fixed;
+  inset: -12%;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(
+    ellipse 52% 46% at 50% 42%,
+    var(--zen-bloom-color) 0%,
+    transparent 70%
+  );
+  opacity: 0.78;
+}
+
+.zen-sanctuary-bg::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0.028;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23w)' opacity='1'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
+}
+
+.dark .zen-sanctuary-bg::after {
+  opacity: 0.036;
+}
+
+/* Scholar's Incense Ceremony (焚香入静 — shares exact .zen-sanctuary-bg circadian polarity for zero-shift handoff) */
+.zen-threshold-overlay--chamber {
+  opacity: 1;
+  /* Dissolve veil promptly (60ms -> 420ms) as caption exhales so ZenHomeView's "开卷" blooms in one continuous breath */
+  transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1) 60ms;
+}
+
+.zen-threshold-overlay[data-zen-threshold="exiting"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.zen-threshold-caption {
+  transition:
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.zen-threshold-overlay[data-zen-threshold="exiting"] .zen-threshold-caption {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.zen-threshold-overlay[data-zen-threshold="exiting"] .zen-threshold-skip {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Prevent ZenHomeView's Ensō from flashing before the incense smoke condenses into the ring */
+[data-zen-mode="true"]:has([data-zen-threshold="awaiting"]) [data-zen-view="home"],
+[data-zen-mode="true"]:has([data-zen-threshold="lit"]) [data-zen-view="home"] {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+
+/* Lock ZenHomeView's Ensō at scale(1)/opacity(1) while threshold is mounted so breathing starts smoothly from 0% on unmount */
+[data-zen-mode="true"]:has([data-zen-threshold]) [data-zen-view="home"] .zen-enso-breath {
+  animation: none !important;
+  transform: scale(1) !important;
+  opacity: 1 !important;
+}
+
+/* While threshold exits, keep ZenHomeView non-interactive until dismissed and reveal its chrome AFTER threshold veil clears */
+[data-zen-mode="true"]:has([data-zen-threshold="exiting"]) [data-zen-view="home"] {
+  pointer-events: none;
+}
+
+.zen-threshold-skip {
+  height: 30px;
+  padding-inline: 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  opacity: 0.62;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    opacity var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    background-color var(--dur-fast) var(--ease-std);
+}
+
+.zen-threshold-skip:hover,
+.zen-threshold-skip:focus-visible {
+  opacity: 1;
+  color: var(--text-primary);
+  background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.dark .zen-threshold-skip {
+  color: rgba(236, 231, 220, 0.48);
+  opacity: 1;
+}
+
+.dark .zen-threshold-skip:hover,
+.dark .zen-threshold-skip:focus-visible {
+  color: rgba(236, 231, 220, 0.92);
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.zen-threshold-skip:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.zen-threshold-prompt {
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  padding-inline-start: 0.22em;
+  color: var(--text-secondary);
+}
+
+.dark .zen-threshold-prompt {
+  color: rgba(236, 231, 220, 0.74);
+}
+
+.zen-threshold-overlay .zen-threshold-enso {
+  color: rgba(28, 27, 25, 0.88);
+}
+
+.dark .zen-threshold-overlay .zen-threshold-enso {
+  color: rgba(242, 236, 222, 0.9);
+}
+
+.zen-threshold-ripple {
+  position: absolute;
+  width: 156px;
+  height: 156px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 14%, transparent);
+  filter: blur(0.6px);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.zen-threshold-ripple--outer {
+  border-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.dark .zen-threshold-ripple {
+  border-color: rgba(242, 234, 218, 0.18);
+}
+
+.dark .zen-threshold-ripple--outer {
+  border-color: rgba(242, 234, 218, 0.1);
+}
+
+.zen-threshold-cue {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.44em;
+  padding-inline-start: 0.44em;
+  color: var(--text-primary);
+  opacity: 0.88;
+}
+
+.dark .zen-threshold-cue {
+  color: rgba(244, 239, 228, 0.9);
+}
+
+.zen-threshold-sub {
+  font-size: 12.5px;
+  letter-spacing: 0.16em;
+  padding-inline-start: 0.16em;
+  color: var(--text-muted);
+  opacity: 0.76;
+}
+
+.dark .zen-threshold-sub {
+  color: rgba(232, 226, 214, 0.56);
+}
+
+/* Ensō (円相) authentic sumi-e raster ink artwork & carved vermilion hanko stamp */
+@property --zen-sweep {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 360deg;
+}
+
+@property --zen-tail-fade {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+
+
+.zen-enso-frame {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.zen-enso-sweep {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.zen-enso-ink {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.zen-enso-ink--open {
+  -webkit-mask-image: url('./assets/illustrations/zen/zen-enso-open-2x.webp');
+  mask-image: url('./assets/illustrations/zen/zen-enso-open-2x.webp');
+}
+
+.zen-enso-ink--closed {
+  -webkit-mask-image: url('./assets/illustrations/zen/zen-enso-closed-2x.webp');
+  mask-image: url('./assets/illustrations/zen/zen-enso-closed-2x.webp');
+}
+
+.zen-enso-svg {
+  color: rgba(30, 29, 27, 0.86);
+  transition:
+    color var(--dur-base) var(--ease-std),
+    transform var(--dur-slow) var(--ease-out);
+}
+
+.dark .zen-enso-svg {
+  color: rgba(238, 234, 224, 0.84);
+}
+
+.zen-enso-complete {
+  color: rgba(30, 29, 27, 0.9);
+}
+
+.dark .zen-enso-complete {
+  color: rgba(238, 234, 224, 0.9);
+}
+
+.zen-seal-stamp {
+  position: absolute;
+  inset-inline-end: 6%;
+  inset-block-end: 5%;
+  width: 21%;
+  height: 21%;
+  display: block;
+  background-color: #b83e32;
+  -webkit-mask-image: url('./assets/illustrations/zen/zen-seal-2x.webp');
+  mask-image: url('./assets/illustrations/zen/zen-seal-2x.webp');
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  opacity: 0.92;
+}
+
+.dark .zen-seal-stamp {
+  background-color: #d8685b;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes zen-shoji-drift {
+    0%,
+    100% {
+      transform: scale(1) translate3d(0, 0, 0);
+      opacity: 0.72;
+    }
+    50% {
+      transform: scale(1.06) translate3d(0, -1.6%, 0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes zen-enso-sweep-draw {
+    from {
+      --zen-sweep: 0deg;
+      opacity: 0.5;
+    }
+    to {
+      --zen-sweep: 360deg;
+      opacity: 1;
+    }
+  }
+
+  @keyframes zen-enso-embrace-draw {
+    from {
+      --zen-sweep: 0deg;
+      opacity: 0.35;
+    }
+    25% {
+      opacity: 0.92;
+    }
+    to {
+      --zen-sweep: 432deg;
+      opacity: 1;
+    }
+  }
+
+  @keyframes zen-threshold-veil-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes zen-threshold-halo {
+    0% {
+      transform: scale(0.96);
+      opacity: 0;
+    }
+    22% {
+      opacity: 0.24;
+    }
+    100% {
+      transform: scale(1.58);
+      opacity: 0;
+    }
+  }
+
+  @keyframes zen-cue-sub-rise {
+    from {
+      opacity: 0;
+      translate: 0 7px;
+    }
+    to {
+      opacity: 0.72;
+      translate: 0 0;
+    }
+  }
+
+  @keyframes zen-seal-stamp {
+    from {
+      opacity: 0;
+      transform: scale(1.22);
+    }
+    to {
+      opacity: 0.92;
+      transform: scale(1);
+    }
+  }
+
+  /* Asymmetric 4-6 calming breath curve (4s gentle inhale -> 6s long soft exhale; starts at 1/1 for zero-jump handoff) */
+  @keyframes zen-enso-breathe {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    40% {
+      transform: scale(1.026);
+      opacity: 0.9;
+    }
+  }
+
+  @keyframes zen-cue-rise {
+    from {
+      opacity: 0;
+      translate: 0 6px;
+    }
+    to {
+      opacity: 0.78;
+      translate: 0 0;
+    }
+  }
+
+  @keyframes zen-paper-settle {
+    from {
+      opacity: 0;
+      filter: blur(3.5px);
+      translate: 0 8px;
+      scale: 0.992;
+    }
+    to {
+      opacity: 1;
+      filter: blur(0px);
+      translate: 0 0;
+      scale: 1;
+    }
+  }
+
+  @keyframes zen-paper-ink-dissolve {
+    0% {
+      opacity: 1;
+      filter: blur(0px);
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    45% {
+      opacity: 0.56;
+      filter: blur(2.4px);
+      transform: translate3d(0, -2px, 0) scale(1.008);
+    }
+    100% {
+      opacity: 0;
+      filter: blur(7px);
+      transform: translate3d(0, -6px, 0) scale(1.018);
+    }
+  }
+
+  @keyframes zen-ink-fade {
+    from {
+      opacity: 0;
+      translate: 0 4px;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  @keyframes zen-popover-enter {
+    from {
+      opacity: 0;
+      translate: 0 -4px;
+      scale: 0.98;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+      scale: 1;
+    }
+  }
+
+  @keyframes zen-rate-ink-ring {
+    from {
+      opacity: 0.32;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 0;
+      transform: scale(1.12);
+    }
+  }
+
+  .zen-sanctuary-bg::before {
+    animation: zen-shoji-drift 22s ease-in-out infinite;
+  }
+
+  .zen-enso-stroke {
+    -webkit-mask-image: conic-gradient(
+      from 0deg,
+      #000 var(--zen-sweep),
+      transparent calc(var(--zen-sweep) + 24deg)
+    );
+    mask-image: conic-gradient(
+      from 0deg,
+      #000 var(--zen-sweep),
+      transparent calc(var(--zen-sweep) + 24deg)
+    );
+    animation: zen-enso-sweep-draw 960ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .zen-enso-stroke--open {
+    -webkit-mask-image: conic-gradient(
+      from 6deg,
+      #000 var(--zen-sweep),
+      transparent calc(var(--zen-sweep) + 24deg)
+    );
+    mask-image: conic-gradient(
+      from 6deg,
+      #000 var(--zen-sweep),
+      transparent calc(var(--zen-sweep) + 24deg)
+    );
+  }
+
+  @keyframes zen-prompt-breathe {
+    0%,
+    100% {
+      opacity: 0.54;
+    }
+    50% {
+      opacity: 0.88;
+    }
+  }
+
+  @keyframes zen-home-seal-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+      filter: blur(2.5px);
+    }
+    to {
+      opacity: 0.88;
+      transform: translateY(0);
+      filter: blur(0px);
+    }
+  }
+
+  /* Use transform (never translate) so Tailwind v4 -translate-x-1/2 centering is preserved */
+  @keyframes zen-home-period-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes zen-home-deck-in {
+    from {
+      opacity: 0;
+      transform: translateY(5px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes zen-incense-rise {
+    from {
+      opacity: 0;
+      translate: 0 12px;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  @keyframes zen-invite-arrive {
+    from {
+      opacity: 0;
+      translate: 0 6px;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  /* Fallback veil fade only when View Transitions are unavailable (explicit .zen-vt-fallback class prevents re-trigger on VT cleanup) */
+  html.zen-vt-fallback .zen-threshold-overlay--chamber {
+    animation: zen-threshold-veil-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .zen-threshold-overlay .zen-incense-canvas {
+    animation: zen-incense-rise 540ms cubic-bezier(0.22, 1, 0.36, 1) 200ms both;
+  }
+
+  .zen-threshold-invite-inner {
+    animation: zen-invite-arrive 540ms cubic-bezier(0.22, 1, 0.36, 1) 440ms both;
+  }
+
+  .zen-threshold-prompt {
+    animation: zen-prompt-breathe 4.4s ease-in-out infinite;
+  }
+
+  /* Twin acoustic halos bloom on the exact frame the singing bowl strikes at Ensō completion */
+  .zen-threshold-ripple {
+    animation: zen-threshold-halo 1700ms cubic-bezier(0.16, 1, 0.3, 1) 0ms both;
+  }
+
+  .zen-threshold-ripple--outer {
+    animation: zen-threshold-halo 2000ms cubic-bezier(0.16, 1, 0.3, 1) 240ms both;
+  }
+
+  .zen-seal-dot {
+    transform-origin: center;
+    animation: zen-seal-stamp 420ms cubic-bezier(0.22, 1, 0.36, 1) 580ms both;
+  }
+
+  .zen-enso-breath {
+    animation: zen-enso-breathe 10s cubic-bezier(0.42, 0, 0.25, 1) infinite;
+  }
+
+  .zen-threshold-cue {
+    animation: zen-cue-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) 60ms both;
+  }
+
+  .zen-threshold-sub {
+    animation: zen-cue-sub-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) 260ms both;
+  }
+
+  /* Choreographed upward smoke-breath handoff: 开卷 (ink bloom at center) -> 时段 (rises with smoke) -> 全部 (book-slip settles) -> 顶栏 */
+  [data-zen-mode="true"]:has([data-zen-threshold="exiting"]) [data-zen-view="home"] .zen-home-seal-reveal {
+    animation: zen-home-seal-in 620ms cubic-bezier(0.22, 1, 0.36, 1) 180ms both;
+  }
+
+  [data-zen-mode="true"]:has([data-zen-threshold="exiting"]) [data-zen-view="home"] .zen-home-period-reveal {
+    animation: zen-home-period-in 580ms cubic-bezier(0.22, 1, 0.36, 1) 420ms both;
+  }
+
+  [data-zen-mode="true"]:has([data-zen-threshold="exiting"]) [data-zen-view="home"] .zen-home-deck-reveal {
+    animation: zen-home-deck-in 540ms cubic-bezier(0.22, 1, 0.36, 1) 640ms both;
+  }
+
+  [data-zen-mode="true"]:has([data-zen-threshold="exiting"]) [data-zen-view="home"] .zen-home-header {
+    animation: zen-threshold-veil-in 520ms cubic-bezier(0.22, 1, 0.36, 1) 780ms both;
+  }
+
+  .zen-paper-enter {
+    animation: zen-paper-settle 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .zen-paper-dissolve {
+    pointer-events: none;
+    will-change: opacity, filter, transform;
+    animation: zen-paper-ink-dissolve 260ms cubic-bezier(0.25, 0.08, 0.3, 1) both;
+  }
+
+  .zen-ink-reveal {
+    animation: zen-ink-fade 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .zen-sound-popover {
+    animation: zen-popover-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .zen-rate-btn--pulsing::after {
+    animation: zen-rate-ink-ring 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+
+
+  /* Smooth constant-velocity counter-clockwise Ensō glide with a steady soft-dissolving trailing tail (zero pause or jump) */
+  @keyframes zen-enso-turn-ccw {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+
+  .zen-enso-trigger .zen-enso-sweep {
+    --zen-tail-fade: 1;
+    transform-origin: center;
+    -webkit-mask-image: conic-gradient(
+      from 352deg,
+      #000 0deg,
+      #000 175deg,
+      rgba(0, 0, 0, var(--zen-tail-fade)) 295deg,
+      rgba(0, 0, 0, var(--zen-tail-fade)) 360deg
+    );
+    mask-image: conic-gradient(
+      from 352deg,
+      #000 0deg,
+      #000 175deg,
+      rgba(0, 0, 0, var(--zen-tail-fade)) 295deg,
+      rgba(0, 0, 0, var(--zen-tail-fade)) 360deg
+    );
+    transition: --zen-tail-fade 420ms ease-out;
+    animation: zen-enso-turn-ccw 8.5s linear infinite;
+    animation-play-state: paused;
+  }
+
+  .zen-enso-trigger:hover .zen-enso-sweep,
+  .zen-enso-trigger:focus-visible .zen-enso-sweep {
+    --zen-tail-fade: 0;
+    animation-play-state: running;
+  }
+}
+
+/* Zen Home typography, Ensō ceremonial start trigger, & bare deck scroll */
+.zen-period-label {
+  font-size: 15.5px;
+  font-weight: 500;
+  letter-spacing: 0.36em;
+  padding-inline-start: 0.36em;
+  color: var(--text-primary);
+  opacity: 0.84;
+  margin-bottom: 34px;
+}
+
+.dark .zen-period-label {
+  color: rgba(242, 238, 228, 0.86);
+  opacity: 1;
+}
+
+/* Subtle stillness fade during deep temple drum resonance before entering review */
+.zen-home-shell--starting .zen-home-chrome-reveal,
+.zen-home-shell--starting .zen-home-header {
+  opacity: 0.25;
+  transition: opacity 720ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+.zen-home-shell--starting .zen-enso-trigger {
+  opacity: 0.72;
+  transform: scale(0.985);
+  transition:
+    opacity 880ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 880ms cubic-bezier(0.22, 1, 0.36, 1);
+  cursor: default;
+}
+
+.zen-home-title {
+  font-size: clamp(1.375rem, 2.2vw, 1.7rem);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  padding-inline-start: 0.1em;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.zen-enso-trigger {
+  position: relative;
+  width: 156px;
+  height: 156px;
+  border-radius: 9999px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.zen-enso-aura {
+  position: absolute;
+  inset: 14px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(32, 32, 35, 0.055) 0%,
+    rgba(32, 32, 35, 0) 72%
+  );
+  opacity: 0;
+  transform: scale(0.92);
+  transition:
+    opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out);
+}
+
+.dark .zen-enso-aura {
+  background: radial-gradient(
+    circle,
+    rgba(240, 236, 226, 0.08) 0%,
+    rgba(240, 236, 226, 0) 72%
+  );
+}
+
+.zen-enso-trigger:hover .zen-enso-aura,
+.zen-enso-trigger:focus-visible .zen-enso-aura {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.zen-enso-trigger:hover .zen-enso-svg,
+.zen-enso-trigger:focus-visible .zen-enso-svg {
+  color: var(--text-primary);
+  transform: scale(1.035);
+}
+
+.zen-enso-trigger:active {
+  transform: scale(0.97);
+}
+
+.zen-enso-center-label {
+  position: absolute;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.28em;
+  padding-inline-start: 0.28em;
+  color: var(--text-primary);
+  opacity: 0.88;
+  transition:
+    opacity var(--dur-base) var(--ease-std),
+    letter-spacing var(--dur-slow) var(--ease-out);
+}
+
+.zen-enso-trigger:hover .zen-enso-center-label,
+.zen-enso-trigger:focus-visible .zen-enso-center-label {
+  opacity: 1;
+  letter-spacing: 0.34em;
+  padding-inline-start: 0.34em;
+}
+
+/* CJK Scholar's Calligraphy Inscription (简体中文使用高清水墨手写贴图，繁/日回退竖排楷书) */
+:is(:lang(zh), :lang(ja)) .zen-enso-center-label:not(.zen-enso-center-label--art) {
+  font-family: var(--font-zen-calligraphy);
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.28em;
+  padding-inline-start: 0.28em;
+  color: rgba(30, 29, 27, 0.86);
+}
+
+.dark :is(:lang(zh), :lang(ja)) .zen-enso-center-label:not(.zen-enso-center-label--art) {
+  color: rgba(238, 234, 224, 0.86);
+}
+
+:is(:lang(zh), :lang(ja)) .zen-enso-trigger:hover .zen-enso-center-label:not(.zen-enso-center-label--art),
+:is(:lang(zh), :lang(ja)) .zen-enso-trigger:focus-visible .zen-enso-center-label:not(.zen-enso-center-label--art) {
+  opacity: 1;
+  letter-spacing: 0.34em;
+  padding-inline-start: 0.34em;
+}
+
+.zen-enso-center-label--art {
+  padding-inline-start: 0;
+  letter-spacing: 0;
+  color: rgba(30, 29, 27, 0.86);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dark .zen-enso-center-label--art {
+  color: rgba(238, 234, 224, 0.86);
+}
+
+.zen-enso-calligraphy {
+  display: block;
+  width: 53px;
+  height: 29px;
+  margin-top: 2px;
+  background-color: currentColor;
+  -webkit-mask-image: url('./assets/illustrations/zen/zen-begin-zh-2x.png');
+  mask-image: url('./assets/illustrations/zen/zen-begin-zh-2x.png');
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+
+.zen-enso-trigger:hover .zen-enso-center-label--art,
+.zen-enso-trigger:focus-visible .zen-enso-center-label--art {
+  opacity: 1;
+  letter-spacing: 0;
+  padding-inline-start: 0;
+  color: var(--text-primary);
+}
+
+.zen-enso-trigger:hover .zen-enso-calligraphy,
+.zen-enso-trigger:focus-visible .zen-enso-calligraphy {
+  transform: scale(1.035);
+}
+
+.zen-sound-toggle,
+.zen-exit-ghost {
+  height: 32px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  opacity: 0.68;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    background-color var(--dur-fast) var(--ease-std),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.zen-sound-toggle {
+  position: relative;
+  width: 32px;
+}
+
+.zen-sound-toggle--ambient {
+  opacity: 0.92;
+  color: var(--text-primary);
+}
+
+.zen-sound-active-dot {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 5px;
+  width: 4.5px;
+  height: 4.5px;
+  border-radius: 9999px;
+  background-color: #2e6e56;
+}
+
+.dark .zen-sound-active-dot {
+  background-color: #8fd2b8;
+}
+
+/* Quiet Washi acoustic disclosure popover (sound toggle + ambient soundscapes) */
+.zen-sound-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  z-index: 45;
+  min-width: 248px;
+  padding: 12px 13px;
+  border-radius: 16px;
+  background-color: color-mix(in srgb, var(--bg-card) 98%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 86%, transparent);
+  box-shadow:
+    0 18px 46px -18px rgba(20, 18, 14, 0.16),
+    0 1px 0 rgba(255, 255, 255, 0.65) inset;
+  color: var(--text-primary);
+}
+
+.dark .zen-sound-popover {
+  background-color: rgba(24, 25, 31, 0.97);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 22px 54px -16px rgba(0, 0, 0, 0.72);
+}
+
+.zen-sound-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.zen-sound-label,
+.zen-sound-section-title {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.zen-sound-switch {
+  height: 26px;
+  padding-inline: 10px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 14%, transparent);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    border-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std);
+}
+
+.zen-sound-switch.is-active {
+  background-color: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 24%, transparent);
+  color: var(--text-primary);
+}
+
+.zen-sound-switch:hover {
+  border-color: color-mix(in srgb, var(--text-primary) 32%, transparent);
+  color: var(--text-primary);
+}
+
+.zen-sound-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 8px;
+  transition: opacity var(--dur-fast) var(--ease-std);
+}
+
+.zen-sound-volume-row.is-dimmed {
+  opacity: 0.42;
+}
+
+.zen-volume-slider:disabled {
+  cursor: default;
+}
+
+.zen-volume-icon {
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.zen-volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.zen-volume-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--text-primary) 58%, transparent) 0%,
+    color-mix(in srgb, var(--text-primary) 58%, transparent) var(--zen-vol-pct, 50%),
+    color-mix(in srgb, var(--text-primary) 13%, transparent) var(--zen-vol-pct, 50%),
+    color-mix(in srgb, var(--text-primary) 13%, transparent) 100%
+  );
+}
+
+[dir="rtl"] .zen-volume-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to left,
+    color-mix(in srgb, var(--text-primary) 58%, transparent) 0%,
+    color-mix(in srgb, var(--text-primary) 58%, transparent) var(--zen-vol-pct, 50%),
+    color-mix(in srgb, var(--text-primary) 13%, transparent) var(--zen-vol-pct, 50%),
+    color-mix(in srgb, var(--text-primary) 13%, transparent) 100%
+  );
+}
+
+.zen-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border-radius: 9999px;
+  background-color: var(--text-primary);
+  border: 1.5px solid var(--bg-card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.zen-volume-slider:hover::-webkit-slider-thumb,
+.zen-volume-slider:active::-webkit-slider-thumb {
+  transform: scale(1.16);
+}
+
+.zen-volume-slider::-moz-range-track {
+  height: 3px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--text-primary) 13%, transparent);
+}
+
+.zen-volume-slider::-moz-range-progress {
+  height: 3px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--text-primary) 58%, transparent);
+}
+
+.zen-volume-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background-color: var(--text-primary);
+  border: 1.5px solid var(--bg-card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+}
+
+.zen-volume-slider:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.zen-volume-value {
+  min-width: 30px;
+  text-align: end;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.zen-sound-divider {
+  height: 1px;
+  margin-block: 10px;
+  background-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.zen-sound-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zen-sound-pills {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.zen-sound-pill {
+  height: 30px;
+  padding-inline: 10px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 450;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    border-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std);
+}
+
+.zen-sound-pill:hover {
+  background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  color: var(--text-primary);
+}
+
+.zen-sound-pill.is-selected {
+  background-color: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 28%, transparent);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.zen-sound-pill-dot {
+  width: 4.5px;
+  height: 4.5px;
+  border-radius: 9999px;
+  background-color: currentColor;
+  opacity: 0.72;
+  flex-shrink: 0;
+}
+
+.zen-exit-ghost {
+  padding-inline: 12px;
+  letter-spacing: 0.08em;
+}
+
+.zen-sound-toggle:hover,
+.zen-sound-toggle:focus-visible,
+.zen-exit-ghost:hover,
+.zen-exit-ghost:focus-visible {
+  opacity: 1;
+  color: var(--text-primary);
+  background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.zen-sound-toggle:active,
+.zen-exit-ghost:active {
+  transform: scale(0.97);
+}
+
+/* Sumi ink pill actions (Closure / Vacation / Empty states) */
+.zen-ink-btn {
+  min-width: 152px;
+  height: 42px;
+  padding-inline: 26px;
+  border-radius: 9999px;
+  border: 1px solid #242529;
+  background-color: #242529;
+  color: #f7f5f0;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.zen-ink-btn:hover {
+  background-color: #141518;
+}
+
+.dark .zen-ink-btn {
+  border-color: #ebe8e0;
+  background-color: #ebe8e0;
+  color: #131418;
+}
+
+.dark .zen-ink-btn:hover {
+  background-color: #f7f5f0;
+}
+
+.zen-ink-ghost-btn {
+  min-width: 136px;
+  height: 42px;
+  padding-inline: 22px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 16%, transparent);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    background-color var(--dur-fast) var(--ease-std),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.zen-ink-ghost-btn:hover {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--text-primary) 30%, transparent);
+  background-color: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
+.zen-ink-btn:active,
+.zen-ink-ghost-btn:active {
+  transform: scale(0.98);
+}
+
+/* Borderless calligraphic book-slip (无框墨签 · 一签择卷) & floating Washi scroll popover */
+.zen-deck-picker-trigger {
+  position: relative;
+  height: 32px;
+  padding-inline: 10px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0.72;
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  padding-inline-start: calc(10px + 0.22em);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--dur-base) var(--ease-std),
+    opacity var(--dur-base) var(--ease-std),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.zen-deck-picker-trigger::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 24px;
+  height: 1px;
+  translate: -50% 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, currentColor 38%, transparent) 50%,
+    transparent 100%
+  );
+  opacity: 0.34;
+  transition:
+    width 260ms var(--ease-out),
+    opacity 220ms var(--ease-std);
+}
+
+.zen-deck-picker-trigger:hover,
+.zen-deck-picker-trigger:focus-visible,
+.zen-deck-picker-trigger.is-open {
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+.zen-deck-picker-trigger:hover::after,
+.zen-deck-picker-trigger:focus-visible::after,
+.zen-deck-picker-trigger.is-open::after {
+  width: 66px;
+  opacity: 0.78;
+}
+
+.zen-deck-picker-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--text-primary) 28%, transparent);
+  outline-offset: 4px;
+}
+
+.zen-deck-picker-trigger:active {
+  transform: scale(0.985);
+}
+
+.zen-deck-slip-dot,
+.zen-deck-active-dot {
+  width: 4.5px;
+  height: 4.5px;
+  border-radius: 9999px;
+  background-color: #b83e32;
+  flex-shrink: 0;
+}
+
+.dark .zen-deck-slip-dot,
+.dark .zen-deck-active-dot {
+  background-color: #d8685b;
+}
+
+.zen-deck-popover {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  translate: -50% 6px;
+  scale: 0.985;
+  z-index: 45;
+  width: 248px;
+  padding: 6px;
+  border-radius: 12px;
+  background-color: color-mix(in srgb, var(--bg-canvas) 96%, #ffffff 4%);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
+  box-shadow:
+    0 16px 40px -20px rgba(24, 20, 14, 0.16),
+    0 1px 0 rgba(255, 255, 255, 0.55) inset;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 200ms var(--ease-out),
+    translate 200ms var(--ease-out),
+    scale 200ms var(--ease-out),
+    visibility 200ms;
+}
+
+.zen-deck-popover.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  translate: -50% 0;
+  scale: 1;
+}
+
+.dark .zen-deck-popover {
+  background-color: rgba(22, 23, 29, 0.97);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.74);
+}
+
+.zen-deck-list {
+  list-style: none;
+  margin: 0;
+  padding: 2px 0;
+  max-height: 184px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 8px,
+    #000 calc(100% - 8px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 8px,
+    #000 calc(100% - 8px),
+    transparent 100%
+  );
+}
+
+.zen-deck-list::-webkit-scrollbar {
+  display: none;
+}
+
+.zen-deck-list > li {
+  width: 100%;
+  display: flex;
+}
+
+.zen-deck-all-row,
+.zen-deck-row {
+  width: 100%;
+  min-height: 34px;
+  padding-inline: 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std);
+}
+
+.zen-deck-all-row:hover,
+.zen-deck-all-row:focus-visible,
+.zen-deck-row:hover,
+.zen-deck-row:focus-visible {
+  background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  color: var(--text-primary);
+}
+
+.zen-deck-all-row.is-selected,
+.zen-deck-row.is-selected {
+  background-color: color-mix(in srgb, var(--text-primary) 7.5%, transparent);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Subtle calligraphic hover whisper beside the review incense stick ("余 九分") */
+.zen-incense-hover-label {
+  font-size: 12.5px;
+  letter-spacing: 0.2em;
+  padding-inline-start: 0.2em;
+  color: var(--text-secondary);
+  opacity: 0.82;
+  animation: zen-ink-fade 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.dark .zen-incense-hover-label {
+  color: rgba(232, 226, 214, 0.72);
+}
+
+/* Serene "一炷香尽" closure veil (appears only after finishing the active card; no backdrop-filter to avoid Windows ANGLE flicker) */
+.zen-incense-complete-veil {
+  background-color: color-mix(in srgb, var(--bg-canvas) 94%, transparent);
+  animation: zen-threshold-veil-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.dark .zen-incense-complete-veil {
+  background-color: rgba(12, 13, 18, 0.92);
+}
+
+.zen-incense-complete-card {
+  animation: zen-paper-settle 520ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
+}
+
+/* Invisible-until-needed top control edge (3s entry guide + hover + keyboard :focus-within + popover open + touch fallback) */
+.zen-review-hoverbar {
+  opacity: 0;
+  translate: 0 -4px;
+  transition:
+    opacity 380ms var(--ease-out),
+    translate 380ms var(--ease-out);
+}
+
+.zen-review-hoverbar:hover,
+.zen-review-hoverbar:focus-within,
+.zen-review-hoverbar[data-popover-open="true"],
+.zen-review-hoverbar[data-intro-visible="true"] {
+  opacity: 1;
+  translate: 0 0;
+}
+
+@media (hover: hover) {
+  .zen-cursor-idle,
+  .zen-cursor-idle * {
+    cursor: none !important;
+  }
+}
+
+@media (hover: none) {
+  .zen-review-hoverbar {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+.zen-edge-btn {
+  height: 32px;
+  padding-inline: 11px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.zen-edge-btn:hover,
+.zen-edge-btn:focus-visible {
+  background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  color: var(--text-primary);
+}
+
+.zen-edge-btn:active {
+  transform: scale(0.98);
+}
+
+/* Translucent Washi paper card floating gently in Shoji light */
+.zen-card-paper {
+  background-color: color-mix(in srgb, var(--bg-card) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
+  box-shadow:
+    0 24px 68px -26px rgba(24, 22, 18, 0.085),
+    0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  color: var(--text-primary);
+}
+
+.dark .zen-card-paper {
+  background-color: rgba(23, 24, 30, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  box-shadow: 0 28px 80px -22px rgba(0, 0, 0, 0.68);
+  color: #f0ede6;
+}
+
+.zen-paper-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 12%, transparent) 18%,
+    color-mix(in srgb, var(--text-primary) 12%, transparent) 82%,
+    transparent 100%
+  );
+}
+
+/* Calm ink-hairline Show Answer control (no corporate solid bar) */
+.zen-reveal-btn {
+  height: 46px;
+  padding-inline: 24px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 18%, transparent);
+  background-color: color-mix(in srgb, var(--bg-card) 58%, transparent);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  padding-inline-start: calc(24px + 0.16em);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    border-color var(--dur-fast) var(--ease-std),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.zen-reveal-btn:hover {
+  background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 34%, transparent);
+}
+
+.dark .zen-reveal-btn {
+  border-color: rgba(236, 233, 225, 0.18);
+  background-color: rgba(255, 255, 255, 0.03);
+  color: #f0ede6;
+}
+
+.dark .zen-reveal-btn:hover {
+  border-color: rgba(236, 233, 225, 0.34);
+  background-color: rgba(255, 255, 255, 0.07);
+}
+
+.zen-reveal-btn:active {
+  transform: scale(0.985);
+}
+
+/* Wabi-Sabi stone pebble rating controls — low-saturation Shu vermilion & Celadon ink (WCAG AA) */
+.zen-rate-btn {
+  position: relative;
+  height: 46px;
+  padding-inline: 18px;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  padding-inline-start: calc(18px + 0.1em);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-std),
+    border-color var(--dur-fast) var(--ease-std);
+}
+
+.zen-rate-btn::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  border: 1px solid currentColor;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.zen-rate-btn:active {
+  transform: scale(0.985);
+}
+
+.zen-rate-btn--danger {
+  background-color: rgba(184, 67, 54, 0.065);
+  border-color: rgba(184, 67, 54, 0.22);
+  color: #9e3328;
+}
+
+.zen-rate-btn--danger:hover {
+  background-color: rgba(184, 67, 54, 0.11);
+  border-color: rgba(184, 67, 54, 0.42);
+}
+
+.dark .zen-rate-btn--danger {
+  background-color: rgba(217, 104, 91, 0.1);
+  border-color: rgba(217, 104, 91, 0.26);
+  color: #f0a49a;
+}
+
+.dark .zen-rate-btn--danger:hover {
+  background-color: rgba(217, 104, 91, 0.16);
+  border-color: rgba(217, 104, 91, 0.46);
+}
+
+.zen-rate-btn--warning {
+  background-color: rgba(158, 102, 34, 0.065);
+  border-color: rgba(158, 102, 34, 0.22);
+  color: #8a5214;
+}
+
+.zen-rate-btn--warning:hover {
+  background-color: rgba(158, 102, 34, 0.11);
+  border-color: rgba(158, 102, 34, 0.42);
+}
+
+.dark .zen-rate-btn--warning {
+  background-color: rgba(212, 152, 74, 0.1);
+  border-color: rgba(212, 152, 74, 0.25);
+  color: #ebbf82;
+}
+
+.dark .zen-rate-btn--warning:hover {
+  background-color: rgba(212, 152, 74, 0.16);
+  border-color: rgba(212, 152, 74, 0.44);
+}
+
+.zen-rate-btn--success {
+  background-color: rgba(46, 110, 86, 0.075);
+  border-color: rgba(46, 110, 86, 0.24);
+  color: #1e5a44;
+}
+
+.zen-rate-btn--success:hover {
+  background-color: rgba(46, 110, 86, 0.125);
+  border-color: rgba(46, 110, 86, 0.46);
+}
+
+.dark .zen-rate-btn--success {
+  background-color: rgba(84, 166, 134, 0.11);
+  border-color: rgba(84, 166, 134, 0.26);
+  color: #8fd2b8;
+}
+
+.dark .zen-rate-btn--success:hover {
+  background-color: rgba(84, 166, 134, 0.17);
+  border-color: rgba(84, 166, 134, 0.46);
+}
+
+.zen-rate-btn--info {
+  background-color: rgba(52, 98, 148, 0.065);
+  border-color: rgba(52, 98, 148, 0.22);
+  color: #265482;
+}
+
+.zen-rate-btn--info:hover {
+  background-color: rgba(52, 98, 148, 0.11);
+  border-color: rgba(52, 98, 148, 0.42);
+}
+
+.dark .zen-rate-btn--info {
+  background-color: rgba(102, 158, 214, 0.1);
+  border-color: rgba(102, 158, 214, 0.25);
+  color: #9ec8ee;
+}
+
+.dark .zen-rate-btn--info:hover {
+  background-color: rgba(102, 158, 214, 0.16);
+  border-color: rgba(102, 158, 214, 0.44);
+}
+
+.zen-enso-trigger:focus-visible,
+.zen-sound-toggle:focus-visible,
+.zen-sound-switch:focus-visible,
+.zen-sound-pill:focus-visible,
+.zen-exit-ghost:focus-visible,
+.zen-ink-btn:focus-visible,
+.zen-ink-ghost-btn:focus-visible,
+.zen-deck-row:focus-visible,
+.zen-edge-btn:focus-visible,
+.zen-audio-btn:focus-visible,
+.zen-reveal-btn:focus-visible,
+.zen-rate-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zen-review-hoverbar {
+    translate: 0 0;
+    transition: opacity 100ms ease-out;
+  }
+
+  .zen-enso-trigger:active,
+  .zen-sound-toggle:active,
+  .zen-exit-ghost:active,
+  .zen-ink-btn:active,
+  .zen-ink-ghost-btn:active,
+  .zen-deck-row:active,
+  .zen-edge-btn:active,
+  .zen-reveal-btn:active,
+  .zen-rate-btn:active {
+    transform: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .zen-sound-toggle,
+  .zen-sound-switch,
+  .zen-sound-pill,
+  .zen-exit-ghost,
+  .zen-edge-btn,
+  .zen-deck-row,
+  .zen-reveal-btn,
+  .zen-rate-btn {
+    min-height: 2.75rem;
+  }
+
+  .zen-sound-toggle {
+    min-width: 2.75rem;
+  }
+}
+
+@media (forced-colors: active) {
+  .zen-card-paper,
+  .zen-sound-popover,
+  .zen-sound-switch,
+  .zen-sound-pill,
+  .zen-rate-btn,
+  .zen-reveal-btn,
+  .zen-ink-btn,
+  .zen-ink-ghost-btn,
+  .zen-edge-btn:hover,
+  .zen-exit-ghost:hover {
+    border: 1px solid ButtonBorder;
+  }
+
+  .zen-sound-pill[aria-pressed="true"],
+  .zen-sound-switch[aria-pressed="true"] {
+    border: 2px solid Highlight;
+  }
+
+  .zen-enso-ink,
+  .zen-enso-calligraphy {
+    background-color: CanvasText;
+  }
+
+  .zen-seal-stamp {
+    background-color: Highlight;
+  }
+
+  .zen-enso-trigger:focus-visible,
+  .zen-sound-toggle:focus-visible,
+  .zen-sound-switch:focus-visible,
+  .zen-sound-pill:focus-visible,
+  .zen-exit-ghost:focus-visible,
+  .zen-ink-btn:focus-visible,
+  .zen-ink-ghost-btn:focus-visible,
+  .zen-deck-row:focus-visible,
+  .zen-edge-btn:focus-visible,
+  .zen-audio-btn:focus-visible,
+  .zen-reveal-btn:focus-visible,
+  .zen-rate-btn:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 3px;
+  }
 }

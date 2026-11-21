@@ -230,7 +230,7 @@ export const SettingsModal: React.FC = () => {
 
   const supportsNativeSwitch =
     typeof HTMLInputElement !== 'undefined' && 'switch' in HTMLInputElement.prototype;
-  const studioVersion = envInfo.studioVersion || '1.6.13';
+  const studioVersion = envInfo.studioVersion || '1.7.0';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 
@@ -552,7 +552,7 @@ export const SettingsModal: React.FC = () => {
     <>
     <div
       data-state={presence.state}
-      className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[5px] flex items-center justify-center p-4 sm:p-6 select-none ui-modal-backdrop modal-contain-scroll"
+      className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 sm:p-6 select-none ui-modal-backdrop modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-labelledby={modalTitleId}
@@ -1432,6 +1432,12 @@ export const SettingsModal: React.FC = () => {
                         <dd className="shrink-0"><Keycap>{shortcutHint}</Keycap></dd>
                       </div>
                       <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
+                        <dt className={`${subText} truncate`}>{t('zenShortcutLabel')}</dt>
+                        <dd className="shrink-0">
+                          <Keycap>{formatShortcut('Cmd + Shift + Z', envInfo.platform)}</Keycap>
+                        </dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-black/[0.035] dark:bg-white/[0.04]">
                         <dt className={`${subText} truncate`}>{t('sidebarToggleLabel')}</dt>
                         <dd className="shrink-0">
                           <Keycap>{formatShortcut('Cmd + \\', envInfo.platform)}</Keycap>
@@ -1900,9 +1906,9 @@ export const SettingsModal: React.FC = () => {
                   <div className="flex items-center gap-3.5 min-w-0">
                     <div
                       aria-hidden="true"
-                      className="w-11 h-11 rounded-2xl shrink-0 flex items-center justify-center shadow-xs border border-black/5 dark:border-white/10 bg-black/[0.025] dark:bg-white/[0.05]"
+                      className="w-11 h-11 rounded-2xl shrink-0 flex items-center justify-center bg-gradient-to-b from-white to-[#F5F6F8] dark:from-[#23252E] dark:to-[#191B22] border border-black/[0.08] dark:border-white/[0.11] shadow-[0_1px_3px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,0.9)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.06)]"
                     >
-                      <AnkiStudioLogo size={26} />
+                      <AnkiStudioLogo size={24} />
                     </div>
                     <div className="min-w-0">
                       <h4 className="text-[15px] font-bold tracking-tight text-balance">Anki Studio</h4>

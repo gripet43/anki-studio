@@ -12,10 +12,53 @@ import base64
 import datetime
 import json
 from pathlib import Path
+import sys
 import time
 import traceback
 import urllib.parse
 from typing import Any, Callable, Dict, Optional, Tuple, Union
+
+
+def set_cocoa_traffic_lights_hidden(win_id: int, hidden: bool) -> bool:
+    """
+    Cross-platform safe macOS helper: hides or restores the native NSWindow traffic-light
+    buttons (Close=0, Miniaturize=1, Zoom=2) so Zen Mode renders without top-left chrome.
+    Always returns False safely on non-macOS platforms or mock windows.
+    """
+    if not sys.platform.startswith("darwin") or not win_id:
+        return False
+    try:
+        import ctypes
+        import ctypes.util
+
+        lib_path = ctypes.util.find_library("objc")
+        if not lib_path:
+            return False
+        objc = ctypes.cdll.LoadLibrary(lib_path)
+        sel = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_char_p)(("sel_registerName", objc))
+        msg_id = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(("objc_msgSend", objc))
+        msg_btn = ctypes.CFUNCTYPE(
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong
+        )(("objc_msgSend", objc))
+        msg_set_bool = ctypes.CFUNCTYPE(
+            None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_bool
+        )(("objc_msgSend", objc))
+
+        ns_window = msg_id(int(win_id), sel(b"window"))
+        if not ns_window:
+            return False
+
+        sel_std_btn = sel(b"standardWindowButton:")
+        sel_set_hidden = sel(b"setHidden:")
+        touched = False
+        for button_type in (0, 1, 2):  # NSWindowCloseButton, Miniaturize, Zoom
+            btn = msg_btn(ns_window, sel_std_btn, button_type)
+            if btn:
+                msg_set_bool(btn, sel_set_hidden, bool(hidden))
+                touched = True
+        return touched
+    except Exception:
+        return False
 
 from .analytics_service import AnalyticsService
 from .day_rollover import DayRolloverTracker, read_day_timing, refresh_scheduler_if_needed
@@ -345,6 +388,9 @@ class BridgeRouter:
         cfg = self._get_config()
         review_stage_width, review_content_scale = self.deck_service._normalize_review_display_prefs(cfg)
         auto_play_front_audio, auto_play_back_audio = self.deck_service._normalize_review_audio_prefs(cfg)
+        zen_sound_enabled, zen_sfx_volume, zen_ambience_volume, zen_ambience = (
+            self.deck_service._normalize_zen_audio_prefs(cfg)
+        )
         return {
             "theme": self.deck_service._normalize_theme_mode(cfg.get("theme")),
             "accentColor": cfg.get("accent_color", "indigo"),
@@ -354,6 +400,7 @@ class BridgeRouter:
             "customAvatar": self._resolve_custom_avatar(cfg),
             "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
             "sidebarCollapsed": self.deck_service._coerce_bool(cfg.get("sidebar_collapsed"), False),
+            "compatMode": self.deck_service._resolve_compat_mode(cfg),
             "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
             "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
             "showIllustrations": self.deck_service._coerce_bool(cfg.get("show_illustrations"), True),
@@ -365,6 +412,10 @@ class BridgeRouter:
             "autoPlayBackAudio": auto_play_back_audio,
             "reviewStageWidth": review_stage_width,
             "reviewContentScale": review_content_scale,
+            "zenSoundEnabled": zen_sound_enabled,
+            "zenSfxVolume": zen_sfx_volume,
+            "zenAmbienceVolume": zen_ambience_volume,
+            "zenAmbience": zen_ambience,
             "envInfo": self.deck_service._resolve_platform_and_version(),
         }
 
@@ -384,6 +435,10 @@ class BridgeRouter:
         if "sidebarCollapsed" in data:
             patch["sidebar_collapsed"] = self.deck_service._coerce_bool(
                 data["sidebarCollapsed"], False
+            )
+        if "compatMode" in data:
+            patch["compat_mode"] = self.deck_service._coerce_bool(
+                data["compatMode"], False
             )
         if "sandboxNoteTypeIds" in data and isinstance(data["sandboxNoteTypeIds"], list):
             patch["sandbox_notetype_ids"] = [str(x) for x in data["sandboxNoteTypeIds"] if str(x).strip()]
@@ -437,6 +492,27 @@ class BridgeRouter:
                 except ValueError:
                     hidden_on = ""
             patch["dashboard_tips_hidden_on"] = hidden_on
+        if "zenSoundEnabled" in data:
+            patch["zen_sound_enabled"] = self.deck_service._coerce_bool(
+                data["zenSoundEnabled"], True
+            )
+        if "zenSfxVolume" in data:
+            try:
+                sfx_val = float(data["zenSfxVolume"])
+            except (TypeError, ValueError):
+                sfx_val = 0.5
+            patch["zen_sfx_volume"] = round(max(0.0, min(1.0, sfx_val)), 2)
+        if "zenAmbienceVolume" in data:
+            try:
+                amb_val = float(data["zenAmbienceVolume"])
+            except (TypeError, ValueError):
+                amb_val = 0.5
+            patch["zen_ambience_volume"] = round(max(0.0, min(1.0, amb_val)), 2)
+        if "zenAmbience" in data:
+            scene_val = str(data["zenAmbience"] or "silent").strip().lower()
+            patch["zen_ambience"] = (
+                scene_val if scene_val in ("silent", "rain", "wind", "warmth") else "silent"
+            )
 
         has_avatar_update = "customAvatar" in data
         prev_avatar: Any = None
@@ -474,6 +550,9 @@ class BridgeRouter:
 
         review_stage_width, review_content_scale = self.deck_service._normalize_review_display_prefs(saved)
         auto_play_front_audio, auto_play_back_audio = self.deck_service._normalize_review_audio_prefs(saved)
+        zen_sound_enabled, zen_sfx_volume, zen_ambience_volume, zen_ambience = (
+            self.deck_service._normalize_zen_audio_prefs(saved)
+        )
         return {
             "saved": True,
             "preferences": {
@@ -485,6 +564,7 @@ class BridgeRouter:
                 "customAvatar": self._resolve_custom_avatar(saved),
                 "collapsedDeckIds": saved.get("collapsed_deck_ids", []),
                 "sidebarCollapsed": self.deck_service._coerce_bool(saved.get("sidebar_collapsed"), False),
+                "compatMode": self.deck_service._resolve_compat_mode(saved),
                 "sandboxNoteTypeIds": [str(x) for x in (saved.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(saved.get("show_shortcut_hints", False)),
                 "showIllustrations": self.deck_service._coerce_bool(saved.get("show_illustrations"), True),
@@ -497,6 +577,10 @@ class BridgeRouter:
                 "autoPlayBackAudio": auto_play_back_audio,
                 "reviewStageWidth": review_stage_width,
                 "reviewContentScale": review_content_scale,
+                "zenSoundEnabled": zen_sound_enabled,
+                "zenSfxVolume": zen_sfx_volume,
+                "zenAmbienceVolume": zen_ambience_volume,
+                "zenAmbience": zen_ambience,
             },
         }
 
@@ -715,9 +799,12 @@ class BridgeRouter:
                 "autoPlayBackAudio": auto_play_back_audio,
                 "reviewStageWidth": review_stage_width,
                 "reviewContentScale": review_content_scale,
+                "compatMode": self.deck_service._resolve_compat_mode(cfg),
                 "sandboxNoteTypeIds": sandbox_ids,
                 "showIllustrations": self.deck_service._coerce_bool(cfg.get("show_illustrations"), True),
-                "compatEnabledForCardNoteType": bool(nt_id and nt_id in sandbox_ids),
+                "compatEnabledForCardNoteType": bool(
+                    self.deck_service._resolve_compat_mode(cfg) or (nt_id and nt_id in sandbox_ids)
+                ),
             },
         }
         return result
@@ -966,6 +1053,20 @@ class BridgeRouter:
             return {"maximized": getattr(mw, "isMaximized", lambda: False)()}
         except Exception as e:
             return {"maximized": False, "error": str(e)}
+
+    def action_set_zen_window_chrome(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Hides/restores macOS native traffic-light window buttons while in Zen Mode."""
+        hidden = bool(data.get("hidden", False))
+        mw = self._get_mw()
+        if mw is None or not hasattr(mw, "winId"):
+            return {"hidden": hidden, "applied": False}
+        try:
+            raw_id = mw.winId()
+            win_id = int(raw_id) if raw_id is not None else 0
+            applied = set_cocoa_traffic_lights_hidden(win_id, hidden)
+            return {"hidden": hidden, "applied": bool(applied)}
+        except Exception:
+            return {"hidden": hidden, "applied": False}
 
     # ---- Vacation Mode & Anti-Avalanche Rescue Actions ----
 

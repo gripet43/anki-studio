@@ -11,10 +11,19 @@ import { StudioSelect } from '../common/StudioSelect';
 import { Tooltip } from '../common/Tooltip';
 import { ChevronDownIcon, CloseIcon } from '../common/Icons';
 import { translate } from '../../i18n/translations';
-import { appActions, useAppStore } from '../../stores/useAppStore';
-import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
+import { appActions, useAppStore, useAppStoreSelector } from '../../stores/useAppStore';
+import { resolveThemeMode } from '../../utils/themeTokens';
 
 export const CustomStudyModal: React.FC = () => {
+  const customStudyModalOpen = useAppStoreSelector((s) => s.customStudyModalOpen);
+  const presence = usePresence(customStudyModalOpen, 120);
+  if (!presence.mounted) return null;
+  return <CustomStudyModalContent presenceState={presence.state} />;
+};
+
+const CustomStudyModalContent: React.FC<{
+  presenceState: 'entering' | 'entered' | 'leaving';
+}> = ({ presenceState }) => {
   const {
     customStudyModalOpen,
     customStudyInitialPreset,
@@ -24,7 +33,6 @@ export const CustomStudyModal: React.FC = () => {
     libraryCards,
     theme,
     systemDark,
-    accentColor,
     resolvedLang,
   } = useAppStore();
 
@@ -35,18 +43,29 @@ export const CustomStudyModal: React.FC = () => {
     translate(resolvedLang, key, params);
   const resolvedTheme = resolveThemeMode(theme, systemDark);
   const isDark = resolvedTheme === 'dark';
-  const brandHex = getAccentScale(accentColor, resolvedTheme).brand;
 
   const [preset, setPreset] = useState<CustomStudyParams['preset']>(
     customStudyInitialPreset || 'mistakes'
   );
   const [deckId, setDeckId] = useState<string>(customStudyInitialDeckId || 'all');
-  const [days, setDays] = useState<number>(7);
-  const [flag, setFlag] = useState<string>('all');
+  const [days, setDays] = useState<number>(
+    customStudyInitialPreset === 'ahead' ? 3 : 7
+  );
+  const [flag, setFlag] = useState<string>(
+    customStudyInitialPreset === 'flagged' ? 'flagged' : 'all'
+  );
   const [tag, setTag] = useState<string>('all');
-  const [sortOrder, setSortOrder] = useState<CustomStudyParams['sortOrder']>('lapses_desc');
+  const [sortOrder, setSortOrder] = useState<CustomStudyParams['sortOrder']>(
+    customStudyInitialPreset === 'flagged'
+      ? 'ivl_asc'
+      : customStudyInitialPreset === 'ahead' || customStudyInitialPreset === 'extra_new'
+      ? 'due_asc'
+      : 'lapses_desc'
+  );
   const [limit, setLimit] = useState<number>(30);
-  const [isPreviewOnly, setIsPreviewOnly] = useState<boolean>(true);
+  const [isPreviewOnly, setIsPreviewOnly] = useState<boolean>(
+    customStudyInitialPreset !== 'extra_new'
+  );
   const [matchedCount, setMatchedCount] = useState<number | null>(null);
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
 
@@ -99,7 +118,9 @@ export const CustomStudyModal: React.FC = () => {
     return Array.from(s);
   }, [libraryAllTags, libraryCards]);
 
-  // Live preview of matched cards count
+  // Live preview of matched cards count — only re-query when actual filter criteria change
+  // (limit, sortOrder, and isPreviewOnly do not affect totalMatched).
+  const effectiveDays = preset === 'mistakes' || preset === 'ahead' ? days : 0;
   useEffect(() => {
     if (!customStudyModalOpen) return;
     let cancelled = false;
@@ -113,12 +134,9 @@ export const CustomStudyModal: React.FC = () => {
             {
               preset,
               deckId,
-              days,
+              days: effectiveDays || 7,
               flag,
               tag,
-              sortOrder,
-              limit,
-              isPreviewOnly,
             }
           );
           if (!cancelled && res && typeof res.totalMatched === 'number') {
@@ -158,17 +176,10 @@ export const CustomStudyModal: React.FC = () => {
     customStudyModalOpen,
     preset,
     deckId,
-    days,
+    effectiveDays,
     flag,
     tag,
-    sortOrder,
-    limit,
-    isPreviewOnly,
-    libraryCards,
   ]);
-
-  const presence = usePresence(customStudyModalOpen, 120);
-  if (!presence.mounted) return null;
 
   const modalBg = isDark
     ? 'bg-[#181920] border-[#2C2E3A] text-[#F2F3F7]'
@@ -383,14 +394,14 @@ export const CustomStudyModal: React.FC = () => {
 
   return (
     <div
-      data-state={presence.state}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-[5px] p-4 select-none ui-modal-backdrop modal-contain-scroll"
+      data-state={presenceState}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 select-none ui-modal-backdrop modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-labelledby="custom-study-modal-title"
     >
       <div
-        data-state={presence.state}
+        data-state={presenceState}
         className={`w-full max-w-[560px] rounded-2xl border shadow-[0_24px_70px_rgba(0,0,0,0.32)] overflow-hidden flex flex-col max-h-[86vh] ui-modal-panel ${modalBg}`}
       >
         {/* Top Header — Clean Studio Title + Global Target Deck Selector */}
@@ -768,8 +779,7 @@ export const CustomStudyModal: React.FC = () => {
               type="button"
               disabled={matchedCount === 0}
               onClick={handleStart}
-              style={{ backgroundColor: brandHex }}
-              className="btn-primary !h-9 !px-5 !text-[12px] font-semibold shadow-[0_4px_12px_rgba(var(--brand-rgb),0.22)] disabled:opacity-40 disabled:cursor-not-allowed"
+              className="btn-primary !h-9 !px-5 !text-[12px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg className="w-3 h-3 fill-current shrink-0" viewBox="0 0 24 24" aria-hidden="true">
                 <polygon points="6 4 20 12 6 20 6 4" />

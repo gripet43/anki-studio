@@ -127,6 +127,7 @@ Anki Studio 定位为**安静、克制、桌面级沉浸式学习工作区**，�
 | 侧边栏（`Sidebar`） | 展开 `240px`（`w-[240px]`）↔ 收起 `72px`（`w-[72px]`）紧凑图标栏 | macOS 顶部保留 `h-10`（`40px`）红黄绿交通灯拖拽区；收起态下工具栏自动转为纵向并由右侧 Tooltip 承接提示 |
 | 首页画布（`.dashboard-shell`） | `max-w-[1440px]` 居中 | 卡片使用 `.dashboard-surface` + `--dashboard-shadow-card` |
 | 复习舞台（`ReviewerView`） | 紧凑 `580px` / 宽幅 `840px` / 全宽 `1120px` | 由 `reviewStageWidth`（`auto / compact / wide / full`）与卡片复杂度控制 |
+| 极简禅模式（`ZenHomeView` / `ZenReviewView`） | 首页居中 `max-w-[420px]`（`156px` 真实手绘水墨圆相 WebP 开卷，4-6 吐纳呼吸 + 底部极淡残香余烟）；学习页沿用复习舞台宽度与 `440px` 素笺评判区（纯纸零烟） | 仅由工作台首页顶栏「同步按钮左侧」唯一图标或 `Cmd/Ctrl+Shift+Z` 进入；进入时隐藏 macOS 左上角红黄绿交通灯（退出/切原生必还原），步入暗墨「焚香入静」结界：由用户亲手点击或按空格点燃案头素香（`ZenIncenseCanvas` 实时流体青烟 + 火星轻响）→ 1.35s 烟起时敲响空间混响颂钵并显影真实水墨圆相与「焚香入静」→ 柔雾淡开融入四时障子光禅首页（随时可点击/按 Esc 跳过）；背诵页前 3 秒展示顶栏引导按键后隐退、纯键盘 2.5s 自动隐匿指针；全流程零待学数字、零 FSRS 间隔与零统计战报；完成态以闭合水墨圆相、朱砂「静」印与时辰素句收官 |
 | 卡片库画廊（`.library-card-grid`） | `repeat(auto-fill, minmax(min(100%, 230px), 1fr))` | 间距 `12px`（`gap: 0.75rem`），支持 Subgrid 对齐 |
 | 头像裁切视窗 | `256px × 256px`（`AVATAR_CROP_VIEWPORT_PX`） | 导出 `256×256` WebP/PNG（上限 512 KB） |
 
@@ -160,23 +161,25 @@ Anki Studio 定位为**安静、克制、桌面级沉浸式学习工作区**，�
 
 ## 5. 动效规范（Motion）
 
-### 5.1 时长与缓动 Token
+### 5.1 按空间尺度分层的时长与物理缓动 Token
 
-| Token | 值 | 适用场景 |
-|---|---|---|
-| `--dur-fast` | `120ms` | 按钮 hover/active、Tooltip/HoverCard 显隐（退出为 `80ms`） |
-| `--dur-base` | `180ms` | 普通状态切换、卡片展开 |
-| `--dur-reveal` | `240ms` | 答案揭示、面板显现 |
-| `--dur-slow` | `260ms` | 主题/强调色切换交叉淡入（`.theme-switching`） |
-| `--dur-draw` | `320ms` | 图表/环形进度绘制 |
-| `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | 入场与位移缓动 |
-| `--ease-std` | `cubic-bezier(0.4, 0, 0.2, 1)` | 颜色、透明度与常规状态过渡 |
+| 层级 | Token | 值 | 适用场景 |
+|---|---|---|---|
+| **微交互** | `--dur-instant` / `--dur-fast` | `90ms` / `120ms` | 按钮按压、Tooltip/HoverCard/下拉显隐、弹窗与 Toast 干脆退场 |
+| **状态切换** | `--dur-base` | `180ms` | 遮罩与透明度淡入、卡片信息抽屉退场、局部状态变化 |
+| **中幅揭示** | `--dur-reveal` / `--dur-slow` | `240ms` / `260ms` | 复习翻面答案揭示、页面视图切入、主弹窗与 `<dialog>` 入场、Popover 位移 |
+| **触感反馈** | `--dur-draw` | `320ms` | 顶部 Toast 灵动岛轻弹簧落位、图表与勾选路径绘制 |
+| **大幅空间** | `--dur-panel` / `--dur-spatial` | `340ms` / `400ms` | 右侧卡片抽屉 + 复习主舞台同步位移（`300px`）、左侧主导航栏缩放（`240px ↔ 72px`） |
+| **常规曲线** | `--ease-out` / `--ease-std` | `cubic-bezier(0.16, 1, 0.3, 1)` / `(0.4, 0, 0.2, 1)` | 退场与微交互强减速 / 颜色、边框与透明度过渡 |
+| **物理弹簧（无回弹）** | `--ease-spring-gentle` | 15 段临界阻尼 `linear()`（`@supports` 自动回退 `--ease-out`） | 零初速度起步 + 长尾磁吸落位；用于侧边栏、抽屉与舞台联动、大弹窗、答案揭示 |
+| **物理弹簧（微回弹）** | `--ease-spring-snappy` | 13 段 ~3% 轻回弹 `linear()`（`@supports` 自动回退 `--ease-out`） | 仅用于 `transform`（如 Toast 灵动岛、原生开关滑块、分段选中态、完成页指标弹起） |
 
 ### 5.2 动效约束
 
-- **显式属性过渡**：优先声明具体属性（如 `background-color, border-color, color, transform, opacity`），避免无节制使用 `transition-all` 引起布局属性抖动。
-- **按压触感**：主/次/幽灵按钮在 `:active:not(:disabled)` 时统一施加 `transform: scale(0.98)`。
-- **减弱动态效果**：全局 `@media (prefers-reduced-motion: reduce)` 会将动画与过渡压缩至 `0.01ms` 并关闭骨架屏扫光与浮层位移动画；新增自定义动效时不得绕过该规则（Tailwind 类同步配合 `motion-reduce:transition-none`）。
+- **进缓退快与联动同拍**：入场采用物理弹簧从容落位（`240–400ms`），退场加快 35%–45%（`120–180ms` + `--ease-out`）绝不拖泥带水；互相关联的容器（如 `.reviewer-inspector` 抽屉与 `.reviewer-stage-shift` 主舞台/底栏）必须共享同一时长与缓动曲线，杜绝错拍。
+- **严禁对 `opacity` 施加回弹弹簧**：`--ease-spring-snappy` 仅可驱动 `transform`，`opacity` 一律使用单调不超界的 `--ease-out` / `--ease-std`，避免透明度越界闪烁；禁止裸写浏览器默认 `ease`。
+- **显式属性与合成层优先**：优先声明具体合成层属性（`transform`、`opacity`）与颜色属性，全站保持 `0` 处 `transition-all`；主/次/幽灵按钮在 `:active:not(:disabled)` 施加轻微缩放按压触感。
+- **减弱动态效果（Opt-in 优先）**：新增空间位移、缩放或弹簧动效优先包裹在 `@media (prefers-reduced-motion: no-preference)` 内，确保 `reduce` 模式下自动直达最终态且不隐藏内容，仅保留温和的颜色/透明度反馈。
 
 ---
 
@@ -190,6 +193,7 @@ Anki Studio 定位为**安静、克制、桌面级沉浸式学习工作区**，�
 |---|---|---|---|
 | Primary | `.btn-primary` | `h-9`（`36px`） / `rounded-xl` | 页面或弹窗内唯一主操作（保存、确认、开始学习） |
 | Secondary | `.btn-secondary` | `h-9`（`36px`） / `rounded-xl` | 次要操作（取消、刷新、切换选项、侧栏快速制卡） |
+| Danger Tinted | `.btn-danger-tinted` | `h-9`（`36px`） / `rounded-xl` | 确认弹窗内的破坏性操作（如「放弃更改」）：低饱和浅红底配高对比深红字，悬停加深，防误触并贴合暖纸调性 |
 | Ghost | `.btn-ghost` | `h-8`（`32px`） / `rounded-lg` | 轻量辅助动作（更换图片、重置、低干扰文字按钮） |
 | Icon Button | `w-7 h-7` 或 `w-8 h-8` `rounded-lg` / `rounded-full` | `28px–32px` | 工具栏、关闭按钮、缩放微调；**必须**带 `aria-label` + `<Tooltip>` |
 
@@ -215,7 +219,7 @@ Anki Studio 定位为**安静、克制、桌面级沉浸式学习工作区**，�
 
 ### 6.3 弹窗与抽屉规范
 
-- **新一代子弹窗首选原生 `<dialog>`**：参考 [`AvatarCropModal.tsx`](../frontend/src/components/settings/AvatarCropModal.tsx)，使用 `showModal()` 进入 Top Layer、`closedby="any"` + 兼容外部点击回退、`<dialog>::backdrop` 磨砂遮罩；**不要**在原生 `<dialog>` 上重复写 `role="dialog"` 或 `aria-modal="true"`。
+- **新一代子弹窗首选原生 `<dialog>`**：参考 [`AvatarCropModal.tsx`](../frontend/src/components/settings/AvatarCropModal.tsx)，使用 `showModal()` 进入 Top Layer、`closedby="any"` + 兼容外部点击回退、`<dialog>::backdrop` 纯半透明暗幕遮罩（全屏弹窗遮罩统一禁用实时 `backdrop-filter: blur(...)`，防止 Windows QtWebEngine/ANGLE 合成层丢帧闪屏）；**不要**在原生 `<dialog>` 上重复写 `role="dialog"` 或 `aria-modal="true"`。
 - **原生 `[popover]` / `<dialog>` 严禁根节点直挂 `flex`/`grid`/`block`**：作者样式表的无条件 `display` 会覆盖浏览器默认的 `[popover]:not(:popover-open) { display: none }`，在配合 `opacity: 0` 过渡时会残留**不可见但可点击的幽灵拦截层**。布局类必须放在内层包裹 `<div>` 上，或限定在 `:popover-open` / `[open]` 伪类下，并在关闭态显式加 `display: none; pointer-events: none`。
 - **滚动隔离**：所有弹窗遮罩与可滚动内容区必须加 `.modal-contain-scroll`（`overscroll-behavior: contain`），防止滚动穿透到主工作区。
 - **嵌套弹窗防误关**：当主弹窗内打开子弹窗（如 `SettingsModal` 内打开 `AvatarCropModal`）时，父弹窗的全局 `Escape` 监听器必须检测子弹窗状态并让权，禁止一次按 `Esc` 同时关闭两层弹窗。

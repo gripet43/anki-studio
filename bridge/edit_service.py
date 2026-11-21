@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import base64
 import copy
+import hashlib
+import html as _html
 import os
 import re
 import time
@@ -35,6 +37,11 @@ _IO_RECT_SPAN_STRIP_RE = re.compile(
     r'<span\b[^>]*\bclass\s*=\s*["\'][^"\']*\banki-io-rect\b[^"\']*["\'][^>]*>[\s\S]*?</span\s*>',
     flags=re.I,
 )
+_DUP_SOUND_RE = re.compile(r"\[sound:[^\]]+\]")
+_DUP_CLOZE_RE = re.compile(r"\{\{c\d+::([\s\S]*?)(?:::[\s\S]*?)?\}\}")
+_DUP_BR_RE = re.compile(r"<br\s*/?>", flags=re.I)
+_DUP_TAG_RE = re.compile(r"<[^>]+>")
+_DUP_WS_RE = re.compile(r"\s+")
 
 
 def _find_cloze_field_names(field_items: Any) -> List[str]:
@@ -719,16 +726,27 @@ class EditService:
     def _normalize_for_dup_check(raw_html: str) -> str:
         if not raw_html:
             return ""
-        import html
-        s = re.sub(r"\[sound:[^\]]+\]", "", str(raw_html))
-        s = re.sub(r"\{\{c\d+::([\s\S]*?)(?:::[\s\S]*?)?\}\}", r"\1", s)
-        s = re.sub(r"<br\s*/?>", " ", s, flags=re.I)
-        s = re.sub(r"<[^>]+>", "", s)
-        s = html.unescape(s)
-        return re.sub(r"\s+", " ", s).strip().lower()
+        s = _DUP_SOUND_RE.sub("", str(raw_html))
+        s = _DUP_CLOZE_RE.sub(r"\1", s)
+        s = _DUP_BR_RE.sub(" ", s)
+        s = _DUP_TAG_RE.sub("", s)
+        s = _html.unescape(s)
+        return _DUP_WS_RE.sub(" ", s).strip().lower()
+
+    @staticmethod
+    def _plain_for_csum(raw_html: str) -> str:
+        s = _DUP_SOUND_RE.sub("", str(raw_html or ""))
+        s = _DUP_BR_RE.sub(" ", s)
+        s = _DUP_TAG_RE.sub("", s)
+        s = _html.unescape(s)
+        return _DUP_WS_RE.sub(" ", s).strip()
 
     def check_duplicate_note(self, data: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Checks whether a note with the same normalized front field already exists."""
+        """Checks whether a note with the same normalized front field already exists.
+
+        Uses Anki's indexed `notes.csum` and lightweight `notes.sfld` lookup on real
+        collections so 60k+ note libraries resolve in milliseconds without reading `flds`.
+        """
         data = data or {}
         raw_front = str(data.get("front", "") or "").strip()
         exclude_nid = str(data.get("excludeNoteId", "") or "").strip()
@@ -743,20 +761,67 @@ class EditService:
 
         matched_nids: List[str] = []
         matched_preview = ""
-        try:
-            rows = col.db.all("SELECT id, flds FROM notes")
-            for r in rows:
-                nid_str = str(r[0])
-                if exclude_nid and nid_str == exclude_nid:
-                    continue
-                flds_raw = str(r[1] or "")
-                first_field = flds_raw.split("\x1f", 1)[0]
-                if self._normalize_for_dup_check(first_field) == norm_target:
-                    matched_nids.append(nid_str)
-                    if not matched_preview:
-                        matched_preview = re.sub(r"<[^>]+>", "", first_field).strip()[:80]
-        except Exception:
-            pass
+        used_fast_path = False
+
+        if not hasattr(col, "_cards"):
+            try:
+                plain_raw = self._plain_for_csum(raw_front)
+                csum_candidates = set()
+                for cand in (plain_raw, norm_target):
+                    if cand:
+                        csum_candidates.add(int(hashlib.sha1(cand.encode("utf-8")).hexdigest()[:8], 16))
+                try:
+                    from anki.utils import field_checksum
+                    csum_candidates.add(int(field_checksum(raw_front)))
+                except Exception:
+                    pass
+
+                seen_ids = set()
+                candidate_rows = []
+                if csum_candidates:
+                    placeholders = ",".join("?" for _ in csum_candidates)
+                    candidate_rows.extend(
+                        col.db.all(
+                            f"SELECT id, sfld FROM notes WHERE csum IN ({placeholders}) LIMIT 50",
+                            *csum_candidates,
+                        )
+                    )
+                if not candidate_rows:
+                    candidate_rows.extend(
+                        col.db.all(
+                            "SELECT id, sfld FROM notes WHERE sfld = ? COLLATE NOCASE LIMIT 50",
+                            norm_target,
+                        )
+                    )
+                used_fast_path = True
+                for r in candidate_rows:
+                    nid_str = str(r[0])
+                    if nid_str in seen_ids or (exclude_nid and nid_str == exclude_nid):
+                        continue
+                    seen_ids.add(nid_str)
+                    sfld_val = str(r[1] or "")
+                    if self._normalize_for_dup_check(sfld_val) == norm_target:
+                        matched_nids.append(nid_str)
+                        if not matched_preview:
+                            matched_preview = _DUP_TAG_RE.sub("", sfld_val).strip()[:80]
+            except Exception:
+                used_fast_path = False
+
+        if not used_fast_path:
+            try:
+                rows = col.db.all("SELECT id, flds FROM notes")
+                for r in rows:
+                    nid_str = str(r[0])
+                    if exclude_nid and nid_str == exclude_nid:
+                        continue
+                    flds_raw = str(r[1] or "")
+                    first_field = flds_raw.split("\x1f", 1)[0]
+                    if self._normalize_for_dup_check(first_field) == norm_target:
+                        matched_nids.append(nid_str)
+                        if not matched_preview:
+                            matched_preview = _DUP_TAG_RE.sub("", first_field).strip()[:80]
+            except Exception:
+                pass
 
         return {
             "isDuplicate": len(matched_nids) > 0,
@@ -1120,31 +1185,34 @@ class EditService:
                 "error": "Collection unavailable or no valid card IDs",
             }
 
-        try:
-            if hasattr(col, "set_user_flag_for_cards"):
+        native_done = False
+        if hasattr(col, "set_user_flag_for_cards"):
+            try:
                 col.set_user_flag_for_cards(flag, card_ids)
-        except Exception:
-            pass
+                native_done = not hasattr(col, "_cards")
+            except Exception:
+                native_done = False
 
-        for cid in card_ids:
-            try:
-                card = col.get_card(int(cid))
-                if card is not None:
-                    prev_flags = int(getattr(card, "flags", 0) or 0)
-                    card.flags = (prev_flags & ~7) | (flag & 7)
-                    if hasattr(col, "update_card"):
-                        col.update_card(card)
-            except Exception:
-                pass
-            try:
-                if hasattr(col, "db") and hasattr(col.db, "conn"):
-                    col.db.conn.execute(
-                        "UPDATE cards SET flags = (coalesce(flags, 0) & ~7) | ? WHERE id = ?",
-                        (flag & 7, int(cid)),
-                    )
-                    col.db.conn.commit()
-            except Exception:
-                pass
+        if not native_done:
+            for cid in card_ids:
+                try:
+                    card = col.get_card(int(cid))
+                    if card is not None:
+                        prev_flags = int(getattr(card, "flags", 0) or 0)
+                        card.flags = (prev_flags & ~7) | (flag & 7)
+                        if hasattr(col, "update_card"):
+                            col.update_card(card)
+                except Exception:
+                    pass
+                try:
+                    if hasattr(col, "db") and hasattr(col.db, "conn"):
+                        col.db.conn.execute(
+                            "UPDATE cards SET flags = (coalesce(flags, 0) & ~7) | ? WHERE id = ?",
+                            (flag & 7, int(cid)),
+                        )
+                        col.db.conn.commit()
+                except Exception:
+                    pass
 
         return {
             "changed": True,

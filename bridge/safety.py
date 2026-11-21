@@ -37,6 +37,27 @@ SCHEDULE_FIELDS = (
 
 def capture_schedule(col: Any, cids: List[Any]) -> Dict[str, Dict[str, Any]]:
     snapshot: Dict[str, Dict[str, Any]] = {}
+    if not cids:
+        return snapshot
+    if not hasattr(col, "_cards") and hasattr(col, "db") and hasattr(col.db, "all"):
+        try:
+            int_cids = [int(c) for c in cids]
+            cols_sql = ", ".join(SCHEDULE_FIELDS)
+            for start in range(0, len(int_cids), 500):
+                chunk = int_cids[start : start + 500]
+                placeholders = ",".join("?" for _ in chunk)
+                for row in col.db.all(
+                    f"SELECT id, {cols_sql} FROM cards WHERE id IN ({placeholders})",
+                    *chunk,
+                ):
+                    cid_str = str(int(row[0]))
+                    snapshot[cid_str] = {
+                        field: row[idx + 1] for idx, field in enumerate(SCHEDULE_FIELDS)
+                    }
+            if snapshot:
+                return snapshot
+        except Exception:
+            snapshot = {}
     for cid in cids:
         try:
             card = col.get_card(int(cid))

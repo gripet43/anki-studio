@@ -116,27 +116,61 @@ export const SyncStatusPill: React.FC = () => {
       className="sync-pill-forced-border"
       content={flyoutContent}
     >
-      {/* Lightweight Inline Status Trigger matching reference visual */}
+      {/* Single-Slot Lightweight Inline Sync Trigger */}
       <button
         type="button"
         onClick={(e) => handleTriggerSync(e)}
         aria-disabled={isSyncActive || undefined}
         aria-label={triggerAriaLabel}
-        className={`group relative select-none h-9 px-2.5 rounded-xl text-[12.5px] flex items-center gap-2 shrink-0 whitespace-nowrap transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] ${
+        className={`group relative select-none h-9 px-2.5 rounded-xl text-[12.5px] flex items-center gap-1.5 shrink-0 whitespace-nowrap transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)] ${
           isSyncActive
-            ? 'cursor-default'
+            ? 'cursor-default bg-[var(--status-warning)]/[0.08]'
+            : syncJustFinished
+            ? 'cursor-pointer bg-[var(--status-success)]/[0.08]'
             : 'cursor-pointer motion-safe:active:scale-[0.98] hover:bg-black/[0.035] dark:hover:bg-white/[0.05]'
         }`}
       >
-        {/* Status Icon：同步中为脉冲点，其余按快照真实状态显示云图标（已同步 = 绿色云） */}
+        {/* Single Leading Icon Slot: 常态/同步中为刷新箭头，刚完成瞬态切换为绿色对勾 */}
         <span
           aria-hidden="true"
           className="w-3.5 h-3.5 shrink-0 flex items-center justify-center"
         >
-          {isSyncActive ? (
-            <span className="w-2 h-2 rounded-full bg-[var(--status-warning)] motion-safe:animate-ping" />
+          {syncJustFinished && !isSyncActive ? (
+            <svg
+              aria-hidden="true"
+              className="w-3.5 h-3.5 text-[var(--status-success)] shrink-0"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12" className="animate-draw-check" />
+            </svg>
           ) : (
-            <SyncStateIcon state={syncVisualState} size="sm" />
+            <svg
+              aria-hidden="true"
+              style={isSyncActive ? { willChange: 'transform' } : undefined}
+              className={`w-3.5 h-3.5 shrink-0 transition-colors motion-safe:transition-[transform,rotate,color] motion-safe:duration-500 ${
+                isSyncActive
+                  ? 'motion-safe:animate-spin text-[var(--status-warning)]'
+                  : hasSynced
+                  ? 'text-[var(--text-secondary)] group-hover:text-[var(--brand-text)] motion-safe:group-hover:rotate-180'
+                  : 'text-[var(--text-muted)] group-hover:text-[var(--brand-text)] motion-safe:group-hover:rotate-180'
+              }`}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M16 21h5v-5" />
+            </svg>
           )}
         </span>
 
@@ -155,48 +189,23 @@ export const SyncStatusPill: React.FC = () => {
           ) : hasSynced ? (
             <time
               dateTime={isoTimestamp}
-              className="text-[12.5px] font-medium text-[var(--text-secondary)] tracking-tight tabular-nums leading-[1.4] whitespace-nowrap"
+              className="text-[12.5px] font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors tracking-tight tabular-nums leading-[1.4] whitespace-nowrap"
             >
               {relativeTimeStr}
             </time>
           ) : (
-            <span className="font-medium text-[12.5px] text-[var(--text-secondary)] leading-[1.4] whitespace-nowrap">
+            <span className="font-medium text-[12.5px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors leading-[1.4] whitespace-nowrap">
               {t('notSyncedShort')}
             </span>
           )}
         </div>
 
-        {/* Refresh Action Icon + Optional Shortcut Hint */}
-        <div className="flex items-center gap-1.5 ms-1 shrink-0">
-          <svg
-            aria-hidden="true"
-            style={isSyncActive ? { willChange: 'transform' } : undefined}
-            className={`w-3.5 h-3.5 transition-colors motion-safe:transition-[transform,rotate,color] motion-safe:duration-500 ${
-              isSyncActive
-                ? 'motion-safe:animate-spin text-[var(--status-warning)]'
-                : syncJustFinished
-                ? 'text-[var(--status-success)]'
-                : 'text-[var(--text-secondary)] group-hover:text-[var(--brand-text)] motion-safe:group-hover:rotate-180'
-            }`}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-            <path d="M16 21h5v-5" />
-          </svg>
-
-          {showShortcutHints && (
-            <kbd className="hidden sm:inline-block text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-[var(--text-secondary)] font-mono leading-none font-semibold">
-              Y
-            </kbd>
-          )}
-        </div>
+        {/* Optional Shortcut Hint */}
+        {showShortcutHints && (
+          <kbd className="hidden sm:inline-block ms-0.5 text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-[var(--text-secondary)] font-mono leading-[1.2] font-semibold">
+            Y
+          </kbd>
+        )}
 
         {/* Bottom Progress Sweep during active sync */}
         {isSyncActive && (

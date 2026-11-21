@@ -1092,8 +1092,10 @@ assert(
     sandboxCodeNoComments.includes('sandbox="allow-scripts"') &&
     !sandboxCodeNoComments.includes('allow-same-origin') &&
     sandboxCodeNoComments.includes('anki-sandbox-pycmd') &&
+    sandboxCodeNoComments.includes('renderLatexInSandboxHtml') &&
+    editorSrc.includes('const nativeFrontHtml = renderMathAndRichHtml(') &&
     reviewerSrc.includes('SandboxCardFrame') &&
-    reviewerSrc.includes('toggleNoteTypeSandbox'),
+    (reviewerSrc.includes('toggleCompatMode') || reviewerSrc.includes('toggleNoteTypeSandbox')),
   'Item #42: mathRenderer.ts 必须保护 <style> 块不被注入 <br/>，且 Track B SandboxCardFrame 必须使用 sandbox="allow-scripts"（严禁 allow-same-origin）与本地 HTTP 媒体服务'
 );
 
@@ -1863,5 +1865,43 @@ for (const file of componentTsxFiles) {
   }
 }
 
+// Item #69: 极简禅模式（从 0 往上构建的两页空间：ZenHomeView + ZenReviewView，入口位于今日进度区原轻量复习槽位）
+const zenHomeSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/zen/ZenHomeView.tsx'));
+const zenReviewSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/zen/ZenReviewView.tsx'));
+const zenUtilSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/zenMode.ts'));
+const zenAudioSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/zenAudio.ts'));
+const zenThresholdSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/zen/ZenThresholdOverlay.tsx'));
+const dashZenTriggerIdx = dashboardSrc.indexOf('data-zen-trigger="dashboard"');
+assert(
+  dashZenTriggerIdx > 0 &&
+    !dashboardSrc.includes('startLowEnergySession') &&
+    appSrc.includes('ZenHomeView') &&
+    appSrc.includes('ZenReviewView') &&
+    appSrc.includes('ZenThresholdOverlay') &&
+    appSrc.includes('isZenBlockedGlobalShortcut') &&
+    reviewerSrc.includes("!e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z'") &&
+    zenUtilSrc.includes('selectZenPendingDecks') &&
+    zenUtilSrc.includes('resolveZenHomeState') &&
+    zenUtilSrc.includes('resolveZenTimePeriod') &&
+    zenAudioSrc.includes('playZenEnterBell') &&
+    zenAudioSrc.includes('playZenCompleteBell') &&
+    zenThresholdSrc.includes('zen-threshold-overlay') &&
+    !zenHomeSrc.includes('.closest(') &&
+    !zenReviewSrc.includes('.closest(') &&
+    !zenHomeSrc.includes('isZh') &&
+    !zenReviewSrc.includes('isZh') &&
+    !zenReviewSrc.includes('predictions.') &&
+    cssBundle.includes('.zen-sanctuary-bg') &&
+    cssBundle.includes('.zen-enso-trigger') &&
+    cssBundle.includes('.zen-review-hoverbar') &&
+    cssBundle.includes('.zen-rate-btn--success') &&
+    !/\.zen-(?:incense-complete-veil|sound-popover|deck-popover)\s*\{[^}]*backdrop-filter/i.test(cssBundle),
+  'Item #69: Minimalist Zen Mode must expose its entry in the hero action bar (with low-energy entry hidden), include Roji threshold, Ensō ritual, SSR-safe Zen audio, isolate ZenHomeView/ZenReviewView without FSRS intervals or raw .closest(), guard Cmd+Z against Shift, avoid backdrop-filter on Zen overlays/popovers for Windows ANGLE stability, and emit compiled CSS'
+);
 
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

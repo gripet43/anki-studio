@@ -156,7 +156,7 @@ export const ReviewerImageLightbox: React.FC<ReviewerImageLightboxProps> = ({
           onClose();
         }
       }}
-      className="reviewer-lightbox fixed inset-0 z-[120] bg-black/82 backdrop-blur-md flex items-center justify-center overflow-hidden select-none"
+      className="reviewer-lightbox fixed inset-0 z-[120] bg-black/86 flex items-center justify-center overflow-hidden select-none"
     >
       {/* Top-Right Close Button */}
       <Tooltip variant="compact" content={t('close')} shortcut="Esc" side="bottom">

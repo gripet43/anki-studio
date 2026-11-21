@@ -8,8 +8,13 @@
   "language": "auto",
   "collapsed_deck_ids": [],
   "sidebar_collapsed": false,
+  "compat_mode": false,
   "show_shortcut_hints": false,
   "continuous_card_creation": false,
   "auto_play_front_audio": false,
-  "auto_play_back_audio": true
+  "auto_play_back_audio": true,
+  "zen_sound_enabled": true,
+  "zen_sfx_volume": 0.5,
+  "zen_ambience_volume": 0.5,
+  "zen_ambience": "silent"
 }

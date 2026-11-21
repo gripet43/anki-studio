@@ -301,6 +301,15 @@ class DeckService:
         return True
 
     @classmethod
+    def _resolve_compat_mode(cls, cfg: Dict[str, Any]) -> bool:
+        """Resolves global sandbox compatibility mode, seamlessly inheriting legacy per-notetype sandbox_notetype_ids."""
+        if not isinstance(cfg, dict):
+            return False
+        if "compat_mode" in cfg:
+            return cls._coerce_bool(cfg.get("compat_mode"), False)
+        return bool([str(x).strip() for x in (cfg.get("sandbox_notetype_ids") or []) if str(x).strip()])
+
+    @classmethod
     def _normalize_review_audio_prefs(cls, cfg: Dict[str, Any]) -> Tuple[bool, bool]:
         """Normalizes front and back audio auto-play preferences with safe defaults."""
         if not isinstance(cfg, dict):
@@ -309,6 +318,26 @@ class DeckService:
             cls._coerce_bool(cfg.get("auto_play_front_audio"), False),
             cls._coerce_bool(cfg.get("auto_play_back_audio"), True),
         )
+
+    @classmethod
+    def _normalize_zen_audio_prefs(cls, cfg: Dict[str, Any]) -> Tuple[bool, float, float, str]:
+        """Normalizes Zen Mode SFX and ambient soundscape preferences with safe defaults."""
+        if not isinstance(cfg, dict):
+            return True, 0.5, 0.5, "silent"
+        sound_enabled = cls._coerce_bool(cfg.get("zen_sound_enabled"), True)
+        try:
+            sfx_vol = float(cfg.get("zen_sfx_volume", 0.5))
+        except (TypeError, ValueError):
+            sfx_vol = 0.5
+        sfx_vol = round(max(0.0, min(1.0, sfx_vol)), 2)
+        try:
+            amb_vol = float(cfg.get("zen_ambience_volume", 0.5))
+        except (TypeError, ValueError):
+            amb_vol = 0.5
+        amb_vol = round(max(0.0, min(1.0, amb_vol)), 2)
+        raw_scene = str(cfg.get("zen_ambience") or "silent").strip().lower()
+        scene = raw_scene if raw_scene in ("silent", "rain", "wind", "warmth") else "silent"
+        return sound_enabled, sfx_vol, amb_vol, scene
 
     @staticmethod
     def _normalize_review_display_prefs(cfg: Dict[str, Any]) -> Tuple[str, int]:
@@ -509,6 +538,9 @@ class DeckService:
                         pass
             review_stage_width, review_content_scale = self._normalize_review_display_prefs(cfg)
             auto_play_front_audio, auto_play_back_audio = self._normalize_review_audio_prefs(cfg)
+            zen_sound_enabled, zen_sfx_volume, zen_ambience_volume, zen_ambience = (
+                self._normalize_zen_audio_prefs(cfg)
+            )
 
             return {
                 "userName": profile_name,
@@ -526,6 +558,7 @@ class DeckService:
                     "customAvatar": resolve_custom_avatar(cfg, avatars_dir=self._avatars_dir),
                     "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
                     "sidebarCollapsed": self._coerce_bool(cfg.get("sidebar_collapsed"), False),
+                    "compatMode": self._resolve_compat_mode(cfg),
                     "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                     "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
                     "showIllustrations": self._coerce_bool(cfg.get("show_illustrations"), True),
@@ -538,6 +571,10 @@ class DeckService:
                     "autoPlayBackAudio": auto_play_back_audio,
                     "reviewStageWidth": review_stage_width,
                     "reviewContentScale": review_content_scale,
+                    "zenSoundEnabled": zen_sound_enabled,
+                    "zenSfxVolume": zen_sfx_volume,
+                    "zenAmbienceVolume": zen_ambience_volume,
+                    "zenAmbience": zen_ambience,
                     "debugMode": bool(cfg.get("debug_mode", False)),
                 },
                 "vacation": {
@@ -588,6 +625,7 @@ class DeckService:
                         and self.vacation_service.get_or_reconstruct_receipt()
                     )
                 ),
+                "allTags": list(col.tags.all())[:150] if hasattr(col, "tags") else [],
                 "dayBoundary": day_boundary,
             }
         except Exception as e:
@@ -1500,6 +1538,8 @@ class DeckService:
         import re
         empty_items: List[Dict[str, Any]] = []
         seen_cids = set()
+        html_tag_re = re.compile(r"<[^>]+>")
+        media_tag_re = re.compile(r"<img\b|\[sound:", flags=re.I)
 
         if hasattr(col, "empty_cards"):
             try:
@@ -1510,6 +1550,64 @@ class DeckService:
                     if c_int not in seen_cids:
                         seen_cids.add(c_int)
                         empty_items.append({"cardId": str(c_int), "noteId": "", "reason": "native_empty"})
+            except Exception:
+                pass
+
+        # Single-query read-only SQL fast path on real Anki collections (avoids 2N get_card/get_note)
+        if not hasattr(col, "_cards") and hasattr(col, "db") and hasattr(col.db, "all"):
+            try:
+                cloze_mids = set()
+                if hasattr(col, "models") and hasattr(col.models, "all"):
+                    for m in col.models.all() or []:
+                        if isinstance(m, dict) and int(m.get("type", 0) or 0) == 1 and m.get("id") is not None:
+                            cloze_mids.add(int(m["id"]))
+
+                rows = col.db.all(
+                    "SELECT c.id, c.nid, c.ord, n.id, n.mid, n.flds "
+                    "FROM cards c LEFT JOIN notes n ON c.nid = n.id"
+                )
+                tag_sub = html_tag_re.sub
+                media_search = media_tag_re.search
+                for row in rows:
+                    c_int = int(row[0])
+                    if c_int in seen_cids:
+                        continue
+                    n_id = row[3]
+                    if n_id is None:
+                        seen_cids.add(c_int)
+                        empty_items.append({"cardId": str(c_int), "noteId": "", "reason": "orphaned_note"})
+                        continue
+                    flds_raw = str(row[5] or "")
+                    first_fld = flds_raw.split("\x1f", 1)[0].strip()
+                    if not first_fld:
+                        seen_cids.add(c_int)
+                        empty_items.append({
+                            "cardId": str(c_int),
+                            "noteId": str(n_id),
+                            "reason": "empty_front",
+                        })
+                        continue
+                    if "<" in first_fld:
+                        front_plain = tag_sub("", first_fld).strip()
+                        if not front_plain and not media_search(first_fld):
+                            seen_cids.add(c_int)
+                            empty_items.append({
+                                "cardId": str(c_int),
+                                "noteId": str(n_id),
+                                "reason": "empty_front",
+                            })
+                            continue
+                    mid_val = int(row[4] or 0)
+                    if mid_val in cloze_mids:
+                        target_ord = int(row[2] or 0) + 1
+                        if f"{{{{c{target_ord}::" not in flds_raw:
+                            seen_cids.add(c_int)
+                            empty_items.append({
+                                "cardId": str(c_int),
+                                "noteId": str(n_id),
+                                "reason": f"missing_c{target_ord}",
+                            })
+                return empty_items
             except Exception:
                 pass
 
@@ -1531,8 +1629,8 @@ class DeckService:
                 flds_dict = dict(note.items())
                 flds_vals = list(flds_dict.values())
                 front_raw = (flds_vals[0] if flds_vals else "").strip()
-                front_plain = re.sub(r"<[^>]+>", "", front_raw).strip()
-                has_img_or_sound = bool(re.search(r"<img\b|\[sound:", front_raw, flags=re.I))
+                front_plain = html_tag_re.sub("", front_raw).strip()
+                has_img_or_sound = bool(media_tag_re.search(front_raw))
 
                 model = note.note_type() if hasattr(note, "note_type") else {"type": 0}
                 is_cloze = bool(model and model.get("type") == 1)
@@ -1547,7 +1645,7 @@ class DeckService:
                 elif is_cloze:
                     target_ord = int(getattr(card, "ord", 0) or 0) + 1
                     all_text = "\n".join(flds_vals)
-                    if not re.search(rf"\{{\{{c{target_ord}::", all_text):
+                    if f"{{{{c{target_ord}::" not in all_text:
                         seen_cids.add(c_int)
                         empty_items.append({
                             "cardId": str(c_int),
@@ -1955,6 +2053,7 @@ class DeckService:
                 "customAvatar": resolve_custom_avatar(cfg, avatars_dir=avatars_dir),
                 "collapsedDeckIds": cfg.get("collapsed_deck_ids", []),
                 "sidebarCollapsed": cls._coerce_bool(cfg.get("sidebar_collapsed"), False),
+                "compatMode": cls._resolve_compat_mode(cfg),
                 "sandboxNoteTypeIds": [str(x) for x in (cfg.get("sandbox_notetype_ids") or [])],
                 "showShortcutHints": bool(cfg.get("show_shortcut_hints", False)),
                 "showIllustrations": cls._coerce_bool(cfg.get("show_illustrations"), True),
@@ -1962,6 +2061,10 @@ class DeckService:
                 "tipsHiddenOn": str(cfg.get("dashboard_tips_hidden_on") or "").strip(),
                 "autoPlayFrontAudio": cls._normalize_review_audio_prefs(cfg)[0],
                 "autoPlayBackAudio": cls._normalize_review_audio_prefs(cfg)[1],
+                "zenSoundEnabled": cls._normalize_zen_audio_prefs(cfg)[0],
+                "zenSfxVolume": cls._normalize_zen_audio_prefs(cfg)[1],
+                "zenAmbienceVolume": cls._normalize_zen_audio_prefs(cfg)[2],
+                "zenAmbience": cls._normalize_zen_audio_prefs(cfg)[3],
                 "debugMode": bool(cfg.get("debug_mode", False)),
             },
             "vacation": {

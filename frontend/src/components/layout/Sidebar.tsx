@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { translate } from '../../i18n/translations';
 import { appActions, NavTab, setAppState, useAppStore } from '../../stores/useAppStore';
 import { AnkiStudioLogo } from '../common/AnkiStudioLogo';
@@ -107,15 +107,53 @@ export const Sidebar: React.FC = () => {
   const navActiveBg = 'bg-[var(--brand-soft)] text-[var(--brand-text)] font-semibold';
   const navHoverBg = isDark ? 'hover:bg-white/5 text-[#EBEBF5]' : 'hover:bg-[var(--bg-subtle)] text-[#3A3A3C]';
 
-  const visibleSidebarDecks = decks.filter((d) => {
-    if (!d.isChild) return true;
-    const collapsedAncestor = decks.some(
-      (ancestor) =>
-        collapsedDeckIds.includes(ancestor.id) &&
-        d.fullName.startsWith(`${ancestor.fullName}::`)
-    );
-    return !collapsedAncestor;
-  });
+  const SIDEBAR_DECK_CHUNK = 60;
+  const [sidebarDeckLimit, setSidebarDeckLimit] = useState(SIDEBAR_DECK_CHUNK);
+
+  const { visibleSidebarDecks, decksWithChildren } = useMemo(() => {
+    const collapsedSet = new Set(collapsedDeckIds);
+    const collapsedPrefixes = new Set<string>();
+    const parentNames = new Set<string>();
+    const parentIds = new Set<string>();
+
+    for (const d of decks) {
+      if (collapsedSet.has(d.id)) {
+        collapsedPrefixes.add(d.fullName);
+      }
+      if (d.parentId) {
+        parentIds.add(d.parentId);
+      }
+      const sepIdx = d.fullName.lastIndexOf('::');
+      if (sepIdx > 0) {
+        parentNames.add(d.fullName.slice(0, sepIdx));
+      }
+    }
+
+    const withChildren = new Set<string>();
+    for (const d of decks) {
+      if (d.childrenCount > 0 || parentIds.has(d.id) || parentNames.has(d.fullName)) {
+        withChildren.add(d.id);
+      }
+    }
+
+    const visible = decks.filter((d) => {
+      if (!d.isChild || collapsedPrefixes.size === 0) return true;
+      let idx = d.fullName.indexOf('::');
+      while (idx > 0) {
+        if (collapsedPrefixes.has(d.fullName.slice(0, idx))) return false;
+        idx = d.fullName.indexOf('::', idx + 2);
+      }
+      return true;
+    });
+
+    return { visibleSidebarDecks: visible, decksWithChildren: withChildren };
+  }, [decks, collapsedDeckIds]);
+
+  const renderedSidebarDecks = useMemo(
+    () => visibleSidebarDecks.slice(0, sidebarDeckLimit),
+    [visibleSidebarDecks, sidebarDeckLimit]
+  );
+  const remainingSidebarDecks = Math.max(0, visibleSidebarDecks.length - renderedSidebarDecks.length);
 
   const navItems: Array<{ id: NavTab; label: string; icon: React.ReactNode }> = [
     {
@@ -334,12 +372,12 @@ export const Sidebar: React.FC = () => {
             onMouseDown={(e) => e.stopPropagation()}
             aria-haspopup="dialog"
             aria-label={`${t('settingsTabAbout')} · Anki Studio`}
-            className={`group/brand flex items-center min-w-0 rounded-xl cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2 ${
-              sidebarCollapsed ? 'justify-center' : 'gap-3 pe-1.5'
+            className={`group/brand flex items-center min-w-0 rounded-xl cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2 hover:bg-[var(--brand-soft)] ${
+              sidebarCollapsed ? 'w-9 h-9 justify-center' : 'gap-2.5 ps-1.5 pe-2.5 py-1 -ms-1.5'
             }`}
           >
-            <span className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center shadow-xs transition-colors duration-200 border border-black/5 dark:border-white/10 bg-black/[0.025] dark:bg-white/[0.05] group-hover/brand:bg-[var(--brand-soft)] group-hover/brand:border-[var(--brand-border)]">
-              <AnkiStudioLogo size={22} />
+            <span className="w-7 h-7 rounded-[8px] shrink-0 flex items-center justify-center bg-gradient-to-b from-white to-[#F5F6F8] dark:from-[#23252E] dark:to-[#191B22] border border-black/[0.09] dark:border-white/[0.11] shadow-[0_1px_2px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.9)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <AnkiStudioLogo size={16} />
             </span>
             {!sidebarCollapsed && (
               <span className="studio-sidebar-reveal font-semibold text-[15px] leading-tight tracking-tight truncate select-none transition-colors group-hover/brand:text-[var(--brand-text)]">
@@ -593,8 +631,17 @@ export const Sidebar: React.FC = () => {
             </nav>
           </div>
 
-          {/* Decks Section */}
-          <div className="studio-sidebar-reveal px-3 mt-6 flex-1 overflow-y-auto">
+          {/* Decks Section — O(N) tree with incremental scroll loading to keep 600+ deck profiles 60fps */}
+          <div
+            className="studio-sidebar-reveal px-3 mt-6 flex-1 overflow-y-auto"
+            onScroll={(e) => {
+              if (remainingSidebarDecks <= 0) return;
+              const el = e.currentTarget;
+              if (el.scrollHeight - el.scrollTop - el.clientHeight < 160) {
+                setSidebarDeckLimit((prev) => prev + SIDEBAR_DECK_CHUNK);
+              }
+            }}
+          >
             <div className="px-2.5 mb-2 flex items-center justify-between">
               <span className={`text-[11px] font-medium ${mutedText}`}>
                 {t('sidebarDecks')} ({decks.length})
@@ -612,10 +659,8 @@ export const Sidebar: React.FC = () => {
               </button>
             </div>
             <div className="space-y-0.5">
-              {visibleSidebarDecks.map((deck) => {
-                const hasChildren =
-                  deck.childrenCount > 0 ||
-                  decks.some((c) => c.parentId === deck.id || c.fullName.startsWith(`${deck.fullName}::`));
+              {renderedSidebarDecks.map((deck) => {
+                const hasChildren = decksWithChildren.has(deck.id);
                 const isCollapsed = collapsedDeckIds.includes(deck.id);
                 const dotColor = getDeckColorByHash(deck.id || deck.name);
 
@@ -658,15 +703,13 @@ export const Sidebar: React.FC = () => {
                           />
                         </span>
                       )}
-                      <Tooltip variant="compact" content={deck.name} onlyWhenTruncated side="right">
-                        <button
-                          type="button"
-                          onClick={() => appActions.startReview(deck.id)}
-                          className="truncate text-start flex-1 min-w-0 cursor-pointer"
-                        >
-                          {deck.name}
-                        </button>
-                      </Tooltip>
+                      <button
+                        type="button"
+                        onClick={() => appActions.startReview(deck.id)}
+                        className="truncate text-start flex-1 min-w-0 cursor-pointer"
+                      >
+                        {deck.name}
+                      </button>
                     </div>
                     {(deck.dueReview + deck.dueNew) > 0 && (
                       <span
@@ -677,51 +720,56 @@ export const Sidebar: React.FC = () => {
                     )}
                     {/* 悬停或键盘聚焦时把待复习数字换成「查看 / 学习」两个动作 */}
                     <div className="flex items-center gap-0.5 shrink-0 opacity-0 pointer-events-none w-0 overflow-hidden group-hover/deck:w-auto group-hover/deck:opacity-100 group-hover/deck:pointer-events-auto group-hover/deck:overflow-visible group-focus-within/deck:w-auto group-focus-within/deck:opacity-100 group-focus-within/deck:pointer-events-auto group-focus-within/deck:overflow-visible transition-opacity duration-150">
-                      <Tooltip variant="compact" content={t('viewInLibraryBtn')} side="top">
-                        <button
-                          type="button"
-                          aria-label={t('viewInLibraryBtn')}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setAppState({ activeTab: 'library' });
-                            appActions.searchLibraryDebounced({ deckId: deck.id });
-                          }}
-                          className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-[var(--brand-soft)] focus-visible:outline-2 focus-visible:outline-[var(--brand)] transition-colors cursor-pointer"
+                      <button
+                        type="button"
+                        aria-label={t('viewInLibraryBtn')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAppState({ activeTab: 'library' });
+                          appActions.searchLibraryDebounced({ deckId: deck.id });
+                        }}
+                        className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-[var(--brand-soft)] focus-visible:outline-2 focus-visible:outline-[var(--brand)] transition-colors cursor-pointer"
+                      >
+                        <svg
+                          className="w-3 h-3 shrink-0"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
                         >
-                          <svg
-                            className="w-3 h-3 shrink-0"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
-                          >
-                            <rect x="3" y="4" width="18" height="16" rx="2" />
-                            <line x1="3" y1="9" x2="21" y2="9" />
-                          </svg>
-                        </button>
-                      </Tooltip>
-                      <Tooltip variant="compact" content={t('startTodayStudy')} side="top">
-                        <button
-                          type="button"
-                          aria-label={t('startTodayStudy')}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            appActions.startReview(deck.id);
-                          }}
-                          className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-[var(--brand-soft)] focus-visible:outline-2 focus-visible:outline-[var(--brand)] transition-colors cursor-pointer"
-                        >
-                          <svg className="w-2.5 h-2.5 fill-current ms-0.5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                            <polygon points="5 3 19 12 5 21 5 3" />
-                          </svg>
-                        </button>
-                      </Tooltip>
+                          <rect x="3" y="4" width="18" height="16" rx="2" />
+                          <line x1="3" y1="9" x2="21" y2="9" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={t('startTodayStudy')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          appActions.startReview(deck.id);
+                        }}
+                        className="w-5 h-5 rounded-md flex items-center justify-center text-[#8E8E93] hover:text-[var(--brand-text)] hover:bg-[var(--brand-soft)] focus-visible:outline-2 focus-visible:outline-[var(--brand)] transition-colors cursor-pointer"
+                      >
+                        <svg className="w-2.5 h-2.5 fill-current ms-0.5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                          <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
+                      </button>
                     </div>
                   </div>
                 );
               })}
+              {remainingSidebarDecks > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSidebarDeckLimit((prev) => prev + SIDEBAR_DECK_CHUNK)}
+                  className={`w-full px-2.5 py-1.5 rounded-lg text-[11.5px] font-medium text-start cursor-pointer transition-colors ${mutedText} hover:text-[var(--brand-text)] hover:bg-black/[0.03] dark:hover:bg-white/[0.04]`}
+                >
+                  + {remainingSidebarDecks}
+                </button>
+              )}
             </div>
           </div>
         </>

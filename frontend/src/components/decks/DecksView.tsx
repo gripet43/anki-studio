@@ -166,7 +166,6 @@ export const DecksView: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowCreateModal((prev) => !prev)}
-            style={{ backgroundColor: brandHex }}
             className="btn-primary !h-10 !px-4"
           >
             <span>{t('newDeckBtn')}</span>
@@ -236,8 +235,8 @@ export const DecksView: React.FC = () => {
 
             <div className="col-span-3 flex items-center gap-2">
               <button
+                type="button"
                 onClick={handleCreateDeck}
-                style={{ backgroundColor: brandHex }}
                 className="btn-primary !h-10 flex-1"
               >
                 {t('confirm')}
@@ -473,8 +472,8 @@ export const DecksView: React.FC = () => {
                         </div>
 
                         <button
+                          type="button"
                           onClick={() => appActions.startReview(deck.id)}
-                          style={{ backgroundColor: brandHex }}
                           className="btn-primary !h-8 !px-3.5 !text-[12px]"
                         >
                           <PlayTriangleIcon className="w-2.5 h-2.5" />
@@ -501,7 +500,7 @@ export const DecksView: React.FC = () => {
       {optionsModalPresence.mounted && activeOptionsDeck && (
         <div
           data-state={optionsModalPresence.state}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 select-none ui-modal-backdrop"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/52 p-4 select-none ui-modal-backdrop"
         >
           <div
             data-state={optionsModalPresence.state}
@@ -747,7 +746,6 @@ export const DecksView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleSaveDeckOptions}
-                style={{ backgroundColor: brandHex }}
                 className="btn-primary !h-9 !px-5 !text-[12px]"
               >
                 {t('saveNickname')}

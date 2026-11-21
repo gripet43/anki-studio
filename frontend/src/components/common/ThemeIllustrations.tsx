@@ -86,14 +86,16 @@ export const ThemedDeckEmblem: React.FC<DeckEmblemProps> = ({
         <>
           {slot === 'book' && (
             <>
-              <rect x="4" y="4" width="16" height="16" rx="3" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.65" />
-              <path d="M12 16c0-5 2.5-8.5 5-9.5M12 14c-2.5-.8-4-2.8-3.8-5.2 2.2.2 3.8 1.6 3.8 5.2z" stroke={ink} strokeWidth="1.5" strokeLinecap="round" />
+              <path d="M12 19.5V11" stroke={ink} strokeWidth="1.65" strokeLinecap="round" />
+              <path d="M12 12.5C8.2 12.5 5.5 10 5.5 6.5c3.5 0 6.5 2.2 6.5 6z" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.6" strokeLinejoin="round" />
+              <path d="M12 11C15.8 11 18.5 8.5 18.5 5c-3.5 0-6.5 2.2-6.5 6z" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.6" strokeLinejoin="round" />
+              <path d="M9 19.5h6" stroke={ink} strokeWidth="1.5" strokeLinecap="round" />
             </>
           )}
           {slot === 'code' && (
             <>
-              <rect x="4" y="5" width="16" height="14" rx="3.5" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.65" />
-              <path d="M10 9l-3 3 3 3M14 9l3 3-3 3" stroke={ink} strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M4.5 7.5C7 7 9.8 7.5 12 9c2.2-1.5 5-2 7.5-1.5v10C17 17 14.2 17.5 12 19c-2.2-1.5-5-2-7.5-1.5v-10z" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.6" strokeLinejoin="round" />
+              <path d="M12 9v10" stroke={ink} strokeWidth="1.45" strokeLinecap="round" />
             </>
           )}
           {slot === 'heart' && (
@@ -104,8 +106,8 @@ export const ThemedDeckEmblem: React.FC<DeckEmblemProps> = ({
           )}
           {slot === 'folder' && (
             <>
-              <path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.65" />
-              <path d="M12 15c0-2.8 1.8-4.5 3.6-4.8" stroke={ink} strokeWidth="1.45" strokeLinecap="round" />
+              <path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.65" strokeLinejoin="round" />
+              <path d="M9.5 15c0-2.6 2-4.5 4.8-4.5 0 2.6-2 4.5-4.8 4.5z" stroke={ink} strokeWidth="1.45" strokeLinejoin="round" />
             </>
           )}
           {slot === 'sparkles' && (
@@ -134,8 +136,8 @@ export const ThemedDeckEmblem: React.FC<DeckEmblemProps> = ({
           )}
           {slot === 'code' && (
             <>
-              <ellipse cx="12" cy="14" rx="7" ry="4.5" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.65" />
-              <path d="M7 5l8 7M14.5 11.5l2 2" stroke={ink} strokeWidth="1.7" strokeLinecap="round" />
+              <path d="M12 18L4.5 9.5A10.5 10.5 0 0 1 19.5 9.5L12 18z" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.6" strokeLinejoin="round" />
+              <path d="M12 18V7.2M12 18l-3.6-9.5M12 18l3.6-9.5" stroke={ink} strokeWidth="1.35" strokeLinecap="round" />
             </>
           )}
           {slot === 'heart' && (
@@ -175,8 +177,9 @@ export const ThemedDeckEmblem: React.FC<DeckEmblemProps> = ({
           )}
           {slot === 'code' && (
             <>
-              <path d="M6 17h12l-1.5-8h-9L6 17z" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.6" strokeLinejoin="round" />
-              <path d="M9 9c1-2.5 5-2.5 6 0M16 11h3v2.5" stroke={ink} strokeWidth="1.5" strokeLinecap="round" />
+              <path d="M6 17h11l-1.4-8H7.4L6 17z" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.6" strokeLinejoin="round" />
+              <path d="M8.8 9c1-2.4 4.4-2.4 5.4 0" stroke={ink} strokeWidth="1.5" strokeLinecap="round" />
+              <path d="M16.1 10.8h1.6a1.8 1.8 0 0 1 0 3.6h-1.2" stroke={ink} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </>
           )}
           {slot === 'heart' && (
@@ -237,7 +240,9 @@ export const ThemedDeckEmblem: React.FC<DeckEmblemProps> = ({
           {slot === 'sparkles' && (
             <>
               <path d="M7 9l2-3 3 2 3-2 2 3v6a5 5 0 0 1-10 0V9z" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.6" strokeLinejoin="round" />
-              <path d="M11 13.5l1 1 1-1" stroke={ink} strokeWidth="1.45" strokeLinecap="round" />
+              <circle cx="10" cy="12" r="0.9" fill={ink} />
+              <circle cx="14" cy="12" r="0.9" fill={ink} />
+              <path d="M11 14.2l1 .9 1-.9" stroke={ink} strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
             </>
           )}
           {slot === 'layers' && (
@@ -278,8 +283,9 @@ export const ThemedDeckEmblem: React.FC<DeckEmblemProps> = ({
           )}
           {slot === 'sparkles' && (
             <>
-              <path d="M12 5v14M7 10l10 0M8.5 7l7 10" stroke={ink} strokeWidth="1.55" strokeLinecap="round" />
-              <circle cx="12" cy="10" r="2.2" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.4" />
+              <circle cx="12" cy="12" r="6.5" fill={ink} fillOpacity={washAlpha} stroke={ink} strokeWidth="1.55" />
+              <path d="M12 4.5v15M4.5 12h15" stroke={ink} strokeWidth="1.35" strokeLinecap="round" />
+              <circle cx="12" cy="12" r="2" fill={ink} />
             </>
           )}
           {slot === 'layers' && (

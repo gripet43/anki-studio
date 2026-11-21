@@ -79,6 +79,18 @@ import {
   resolveAutoPlayAudioFiles,
   resolveManualPlayAudioFiles,
 } from '../utils/reviewAudio';
+import {
+  playZenCompleteBell,
+  playZenEnterBell,
+  playZenPaperTouch,
+  setZenAmbienceDucked,
+  setZenAmbienceScene,
+  setZenAmbienceVolume,
+  setZenSfxVolume,
+  stopZenAmbience,
+} from '../utils/zenAudio';
+import { runZenViewTransition } from '../utils/viewTransition';
+import { hasCompletedZenCeremonyToday, type ZenAmbienceScene } from '../utils/zenMode';
 
 export type NavTab = 'dashboard' | 'library' | 'stats' | 'decks' | 'design-system';
 export type { AccentColor, ThemeMode };
@@ -148,6 +160,22 @@ export interface AppState {
   customStudyInitialDeckId: string | null;
   inspectorOpen: boolean;
   debugModeUnlocked: boolean;
+  /** 会话级极简禅模式（不持久化跨重启）：仅保留极简首页与纯净学习页。 */
+  zenMode: boolean;
+  /** 进入禅模式前所在的主工作台页签，退出时还原。 */
+  zenReturnTab: NavTab;
+  /** 是否在普通复习中途直接切换进入禅模式；若为 true，复习未完成时退出禅模式将无缝落回当前卡片的普通复习页。 */
+  zenEnteredFromReview: boolean;
+  /** 禅模式音效开关（燃香/颂钵/法鼓/微纸触感，默认开启，独立于环境声景）。 */
+  zenSoundEnabled: boolean;
+  /** 禅模式音效音量（0–1，默认 0.5 即 50%）。 */
+  zenSfxVolume: number;
+  /** 禅模式环境声景音量（0–1，默认 0.5 即 50%）。 */
+  zenAmbienceVolume: number;
+  /** 禅模式可选环境声景底床（严格默认 'silent' 静默；可一键切至檐雨/松风/暖寂）。 */
+  zenAmbience: ZenAmbienceScene;
+  /** 「露地」一息入禅结界过渡是否展示中（可随时点击/按键跳过，减弱动效自动跳过）。 */
+  zenThresholdVisible: boolean;
 
   // Cloud Sync State (Entire Main Interface Scope)
   syncing: boolean;
@@ -198,6 +226,8 @@ export interface AppState {
   collapsedDeckIds: string[];
   /** 左侧主导航栏是否收起为紧凑图标栏（72px）。 */
   sidebarCollapsed: boolean;
+  /** 全局原生沙盒兼容模式开关（开启后所有复习卡片统一走沙盒兼容渲染）。 */
+  compatMode: boolean;
   sandboxNoteTypeIds: string[];
 
   // Reviewer & Real Timing
@@ -240,6 +270,8 @@ export interface AppState {
   libraryFacetCounts: LibraryFacetCounts | null;
   libraryHasMoreFromBackend: boolean;
   libraryAllTags: string[];
+  libraryLoaded: boolean;
+  libraryStale: boolean;
   librarySearching: boolean;
   libraryViewMode: LibraryViewMode;
   librarySearchQuery: string;
@@ -274,6 +306,8 @@ export function createEmptyLibraryState() {
     libraryFacetCounts: null as LibraryFacetCounts | null,
     libraryHasMoreFromBackend: false,
     libraryAllTags: [] as string[],
+    libraryLoaded: false,
+    libraryStale: false,
     librarySearching: false,
     librarySearchQuery: '',
     libraryVisibleCount: 24,
@@ -315,6 +349,14 @@ const initialState: AppState = {
   customStudyInitialDeckId: null,
   inspectorOpen: false,
   debugModeUnlocked: false,
+  zenMode: false,
+  zenReturnTab: 'dashboard',
+  zenEnteredFromReview: false,
+  zenSoundEnabled: true,
+  zenSfxVolume: 0.5,
+  zenAmbienceVolume: 0.5,
+  zenAmbience: 'silent',
+  zenThresholdVisible: false,
 
   syncing: false,
   isInitialSyncing: true,
@@ -356,6 +398,7 @@ const initialState: AppState = {
   showAllDashboardDecks: false,
   collapsedDeckIds: [],
   sidebarCollapsed: false,
+  compatMode: false,
   sandboxNoteTypeIds: [],
 
   reviewQueue: [],
@@ -417,6 +460,38 @@ const EMPTY_CMDK_STATE: Pick<
 let libraryDebounceTimer: any = null;
 let cmdKDebounceTimer: any = null;
 let cmdKRequestSeq = 0;
+let zenAudioSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function persistZenAudioPrefs(
+  patch: {
+    zenSoundEnabled?: boolean;
+    zenSfxVolume?: number;
+    zenAmbienceVolume?: number;
+    zenAmbience?: ZenAmbienceScene;
+  },
+  debounceMs = 0
+) {
+  if (!isAnkiNativeEnv()) return;
+  if (zenAudioSaveTimer) {
+    clearTimeout(zenAudioSaveTimer);
+    zenAudioSaveTimer = null;
+  }
+  const flush = () => {
+    zenAudioSaveTimer = null;
+    callAnki('save_preferences', {
+      zenSoundEnabled: state.zenSoundEnabled,
+      zenSfxVolume: state.zenSfxVolume,
+      zenAmbienceVolume: state.zenAmbienceVolume,
+      zenAmbience: state.zenAmbience,
+      ...patch,
+    }).catch(() => {});
+  };
+  if (debounceMs > 0) {
+    zenAudioSaveTimer = setTimeout(flush, debounceMs);
+  } else {
+    flush();
+  }
+}
 
 function cancelPendingCmdKSearch() {
   cmdKRequestSeq += 1;
@@ -458,7 +533,7 @@ export function showToast(message: string) {
 const tState = (key: any, params?: Record<string, string | number>) =>
   translate(state.resolvedLang, key, params);
 
-const LIBRARY_PAGE_SIZE = 200;
+const LIBRARY_PAGE_SIZE = 48;
 
 let coldStartInProgress = false;
 let coldStartStartTs = 0;
@@ -748,32 +823,36 @@ export const appActions = {
     const startTs = coldStartStartTs || Date.now();
     const MIN_INITIAL_SYNC_ANIMATION_MS = isFirstLaunch ? 1800 : 0;
 
+    const shouldRefreshLibrary = state.activeTab === 'library';
+
     try {
       const [dash, searchRes] = await Promise.all([
         callAnki<DashboardData>('get_dashboard', {
           language: state.languagePref === 'auto' ? undefined : state.languagePref,
           customNickname: state.customNickname || undefined,
         }),
-        callAnki<{
-          total: number;
-          collectionTotal?: number;
-          filteredCount: number;
-          facetCounts?: LibraryFacetCounts | null;
-          hasMore: boolean;
-          cards: LibraryCardItem[];
-          allTags: string[];
-        }>('search_cards', {
-          query: state.librarySearchQuery,
-          status: state.filterStatus,
-          difficulty: state.filterDifficulty,
-          flag: state.filterFlag,
-          tag: state.filterTag,
-          deckId: state.filterDeckId,
-          sortBy: state.librarySortBy,
-          offset: 0,
-          limit: LIBRARY_PAGE_SIZE,
-          includeFacets: true,
-        }),
+        shouldRefreshLibrary
+          ? callAnki<{
+              total: number;
+              collectionTotal?: number;
+              filteredCount: number;
+              facetCounts?: LibraryFacetCounts | null;
+              hasMore: boolean;
+              cards: LibraryCardItem[];
+              allTags: string[];
+            }>('search_cards', {
+              query: state.librarySearchQuery,
+              status: state.filterStatus,
+              difficulty: state.filterDifficulty,
+              flag: state.filterFlag,
+              tag: state.filterTag,
+              deckId: state.filterDeckId,
+              sortBy: state.librarySortBy,
+              offset: 0,
+              limit: LIBRARY_PAGE_SIZE,
+              includeFacets: true,
+            })
+          : Promise.resolve(null),
         new Promise((resolve) => {
           const elapsed = Date.now() - startTs;
           const remaining = Math.max(0, MIN_INITIAL_SYNC_ANIMATION_MS - elapsed);
@@ -783,7 +862,7 @@ export const appActions = {
 
       const dashValid = Boolean(dash && dash.todayStats && Array.isArray(dash.decks));
       const realDecks = dash?.decks || [];
-      const realCards = searchRes?.cards || [];
+      const realCards = searchRes ? searchRes.cards || [] : state.libraryCards;
       const prefs = dash?.preferences;
       const effectiveLang = resolveLanguage(
         prefs?.language || state.languagePref,
@@ -850,6 +929,10 @@ export const appActions = {
           prefs?.sidebarCollapsed !== undefined
             ? Boolean(prefs.sidebarCollapsed)
             : state.sidebarCollapsed,
+        compatMode:
+          prefs?.compatMode !== undefined
+            ? Boolean(prefs.compatMode)
+            : state.compatMode,
         sandboxNoteTypeIds: Array.isArray(prefs?.sandboxNoteTypeIds)
           ? prefs.sandboxNoteTypeIds.map((id) => String(id))
           : dashValid
@@ -888,6 +971,22 @@ export const appActions = {
           REVIEW_CONTENT_SCALES.includes(prefs.reviewContentScale as ReviewContentScale)
             ? (prefs.reviewContentScale as ReviewContentScale)
             : state.reviewContentScale,
+        zenSoundEnabled:
+          prefs?.zenSoundEnabled !== undefined
+            ? Boolean(prefs.zenSoundEnabled)
+            : state.zenSoundEnabled,
+        zenSfxVolume:
+          typeof prefs?.zenSfxVolume === 'number' && Number.isFinite(prefs.zenSfxVolume)
+            ? Math.max(0, Math.min(1, Math.round(prefs.zenSfxVolume * 100) / 100))
+            : state.zenSfxVolume,
+        zenAmbienceVolume:
+          typeof prefs?.zenAmbienceVolume === 'number' && Number.isFinite(prefs.zenAmbienceVolume)
+            ? Math.max(0, Math.min(1, Math.round(prefs.zenAmbienceVolume * 100) / 100))
+            : state.zenAmbienceVolume,
+        zenAmbience:
+          prefs?.zenAmbience && ['silent', 'rain', 'wind', 'warmth'].includes(prefs.zenAmbience)
+            ? prefs.zenAmbience
+            : state.zenAmbience,
         debugModeUnlocked: Boolean(prefs?.debugMode) || state.debugModeUnlocked,
         envInfo: dash?.envInfo || state.envInfo,
         lastSyncedTimestamp: genuineSyncTs,
@@ -908,14 +1007,29 @@ export const appActions = {
           state.inReviewMode && state.reviewSessionDayKey === null && nextBoundary?.available
             ? nextBoundary.schedToday
             : state.reviewSessionDayKey,
-        libraryCards: realCards,
-        libraryTotalCount: searchRes?.collectionTotal ?? searchRes?.total ?? realCards.length,
-        libraryFilteredCount: searchRes?.filteredCount ?? realCards.length,
-        libraryFacetCounts: searchRes?.facetCounts ?? state.libraryFacetCounts,
-        libraryHasMoreFromBackend: Boolean(searchRes?.hasMore),
-        libraryAllTags: searchRes?.allTags || [],
+        ...(searchRes
+          ? {
+              libraryCards: realCards,
+              libraryTotalCount: searchRes.collectionTotal ?? searchRes.total ?? realCards.length,
+              libraryFilteredCount: searchRes.filteredCount ?? realCards.length,
+              libraryFacetCounts: searchRes.facetCounts ?? state.libraryFacetCounts,
+              libraryHasMoreFromBackend: Boolean(searchRes.hasMore),
+              libraryAllTags: searchRes.allTags || dash?.allTags || state.libraryAllTags,
+              libraryLoaded: true,
+              libraryStale: false,
+            }
+          : {
+              libraryStale: true,
+              libraryAllTags:
+                Array.isArray(dash?.allTags) && dash!.allTags!.length > 0
+                  ? dash!.allTags!
+                  : state.libraryAllTags,
+            }),
         cmdKResults: state.cmdKQuery.trim() ? state.cmdKResults : [],
       });
+
+      setZenSfxVolume(state.zenSfxVolume);
+      setZenAmbienceVolume(state.zenAmbienceVolume);
 
       if (rolledOver && !state.inReviewMode && nextBoundary?.available) {
         notifyDayRolloverOnce(nextBoundary.schedToday);
@@ -1093,6 +1207,7 @@ export const appActions = {
     customAvatar?: CustomAvatarConfig;
     collapsedDeckIds?: string[];
     sidebarCollapsed?: boolean;
+    compatMode?: boolean;
     showShortcutHints?: boolean;
     showIllustrations?: boolean;
     continuousCardCreation?: boolean;
@@ -1123,6 +1238,9 @@ export const appActions = {
       ...(patch.collapsedDeckIds ? { collapsedDeckIds: patch.collapsedDeckIds } : {}),
       ...(patch.sidebarCollapsed !== undefined
         ? { sidebarCollapsed: Boolean(patch.sidebarCollapsed) }
+        : {}),
+      ...(patch.compatMode !== undefined
+        ? { compatMode: Boolean(patch.compatMode) }
         : {}),
       ...(patch.showShortcutHints !== undefined ? { showShortcutHints: patch.showShortcutHints } : {}),
       ...(patch.showIllustrations !== undefined
@@ -1344,6 +1462,8 @@ export const appActions = {
               ...prev.libraryFrontCardStyles,
               ...(res.cardFrontStyles || {}),
             },
+            libraryLoaded: true,
+            libraryStale: false,
             librarySearching: false,
           }));
         } else {
@@ -2168,7 +2288,7 @@ export const appActions = {
     });
     if (tab === 'stats' && isAnkiNativeEnv()) {
       appActions.refreshStatistics();
-    } else if (tab === 'library' && isAnkiNativeEnv()) {
+    } else if (tab === 'library' && isAnkiNativeEnv() && (!state.libraryLoaded || state.libraryStale)) {
       appActions.searchLibraryDebounced();
     }
   },
@@ -2196,6 +2316,13 @@ export const appActions = {
       typeof forceCollapsed === 'boolean' ? forceCollapsed : !state.sidebarCollapsed;
     if (nextCollapsed === state.sidebarCollapsed) return;
     void appActions.updatePreferences({ sidebarCollapsed: nextCollapsed });
+  },
+
+  toggleCompatMode(forceEnabled?: boolean) {
+    const nextEnabled =
+      typeof forceEnabled === 'boolean' ? forceEnabled : !state.compatMode;
+    if (nextEnabled === state.compatMode) return;
+    void appActions.updatePreferences({ compatMode: nextEnabled });
   },
 
   async toggleNoteTypeSandbox(notetypeId: string) {
@@ -2344,15 +2471,75 @@ export const appActions = {
     showToast(`${tState('batchDelete')}: ${target.fullName}`);
   },
 
+  async prefetchReviewQueue(
+    deckId?: string,
+    includePreview = false
+  ): Promise<{ cards: ReviewCardItem[]; isPreviewOnly?: boolean } | null> {
+    if (!isAnkiNativeEnv()) return null;
+    const targetDeckId = deckId || state.activeDeckId || state.decks[0]?.id || '';
+    try {
+      const res = await callAnki<{ cards: ReviewCardItem[]; isPreviewOnly?: boolean }>(
+        'start_review',
+        {
+          deckId: targetDeckId,
+          includePreviewWhenEmpty: includePreview,
+        }
+      );
+      if (res && Array.isArray(res.cards)) {
+        return { cards: res.cards, isPreviewOnly: res.isPreviewOnly };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
   async startReview(
     deckId?: string,
     startOnAnswerSide = false,
     includePreview = false,
-    options?: { limit?: number; cardIds?: string[] }
+    options?: {
+      limit?: number;
+      cardIds?: string[];
+      preloadedCards?: ReviewCardItem[];
+      preloadedIsPreview?: boolean;
+    }
   ) {
     const targetDeckId = deckId || state.activeDeckId || state.decks[0]?.id || '';
     appActions.stopAudio();
     const epoch = ++reviewTransitionEpoch;
+
+    // Fast atomic handoff when cards were prefetched during Zen Mode's drum/incense glide:
+    // avoids empty-frame flash, IPC hitch, and double-mount on card reveal.
+    if (Array.isArray(options?.preloadedCards)) {
+      const cards = options.preloadedCards;
+      setAppState({
+        activeDeckId: targetDeckId,
+        reviewScopeDeckId: targetDeckId || 'all',
+        inReviewMode: true,
+        isSessionComplete: cards.length === 0,
+        isPreviewSession: Boolean(options.preloadedIsPreview || includePreview),
+        pendingDayRollover: null,
+        reviewSessionDayKey: state.dayBoundary?.available ? state.dayBoundary.schedToday : null,
+        reviewQueue: cards,
+        currentCardIndex: 0,
+        isCardFlipped: startOnAnswerSide,
+        cardShownAtMs: Date.now(),
+        sessionStudiedCount: 0,
+        sessionCorrectCount: 0,
+        sessionTotalTimeMs: 0,
+        undoStack: [],
+        revealedHintsCount: 2,
+        inlineEditing: false,
+        inspectorOpen: false,
+        slashMenuOpen: false,
+      });
+      if (cards.length > 0) {
+        autoPlayCardSide(cards[0], startOnAnswerSide ? 'back' : 'front');
+      }
+      return;
+    }
+
     setAppState({
       activeDeckId: targetDeckId,
       reviewScopeDeckId: targetDeckId || 'all',
@@ -2568,6 +2755,7 @@ export const appActions = {
       inReviewMode: false,
       isSessionComplete: false,
       isPreviewSession: false,
+      zenEnteredFromReview: false,
       pendingDayRollover: null,
       reviewSessionDayKey: null,
       undoStack: [],
@@ -2580,11 +2768,204 @@ export const appActions = {
     }
   },
 
+  enterZenMode() {
+    if (state.zenMode) return;
+    const wasInReview = state.inReviewMode;
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const shouldShowThreshold =
+      !prefersReducedMotion && !wasInReview && !hasCompletedZenCeremonyToday();
+    runZenViewTransition('enter', () => {
+      if (state.zenMode) return;
+      setAppState({
+        zenMode: true,
+        zenReturnTab: state.activeTab,
+        zenEnteredFromReview: wasInReview,
+        zenThresholdVisible: shouldShowThreshold,
+        cmdKOpen: false,
+        quickAddOpen: false,
+        editingCardData: null,
+        settingsOpen: false,
+        vacationModalOpen: false,
+        icuModalOpen: false,
+        rescueModalOpen: false,
+        receiptModalOpen: false,
+        customStudyModalOpen: false,
+        inspectorOpen: false,
+        inlineEditing: false,
+        slashMenuOpen: false,
+        optionKeyHeld: false,
+      });
+    });
+    setZenSfxVolume(state.zenSfxVolume);
+    setZenAmbienceVolume(state.zenAmbienceVolume);
+    if (state.zenAmbience !== 'silent' && state.zenAmbienceVolume > 0) {
+      setZenAmbienceScene(state.zenAmbience, true);
+    } else {
+      stopZenAmbience(0.4);
+    }
+    if (isAnkiNativeEnv()) {
+      callAnki('set_zen_window_chrome', { hidden: true }).catch(() => {});
+    }
+    // When the interactive incense ceremony is shown, the singing bowl is choreographed to strike
+    // at the golden peak after the user lights the incense; when skipping the threshold (reduced motion,
+    // mid-review entry, or repeat same-day entry), strike gently on arrival.
+    if (!shouldShowThreshold) {
+      playZenEnterBell(state.zenSoundEnabled);
+    }
+    trackAnalytics('feature_use', { feature: 'zen_mode' });
+    if (wasInReview) {
+      showToast(
+        tState('zenEnteredInReviewToast', {
+          key: formatShortcut('Cmd Shift Z', state.envInfo.platform),
+        })
+      );
+    }
+  },
+
+  dismissZenThreshold() {
+    if (state.zenThresholdVisible) {
+      setAppState({ zenThresholdVisible: false });
+    }
+  },
+
+  toggleZenSound() {
+    const next = !state.zenSoundEnabled;
+    const restoredVol = next && state.zenSfxVolume <= 0 ? 0.5 : state.zenSfxVolume;
+    if (next) {
+      setZenSfxVolume(restoredVol);
+    }
+    setAppState({ zenSoundEnabled: next, zenSfxVolume: restoredVol });
+    persistZenAudioPrefs({ zenSoundEnabled: next, zenSfxVolume: restoredVol });
+    if (next) {
+      playZenPaperTouch(true, 'settle');
+    }
+  },
+
+  setZenSfxVolume(volume: number) {
+    const clamped = Number.isFinite(volume)
+      ? Math.max(0, Math.min(1, Math.round(volume * 100) / 100))
+      : 0.5;
+    setZenSfxVolume(clamped);
+    if (clamped <= 0) {
+      setAppState({ zenSfxVolume: 0, zenSoundEnabled: false });
+      persistZenAudioPrefs({ zenSfxVolume: 0, zenSoundEnabled: false }, 200);
+      return;
+    }
+    setAppState({ zenSfxVolume: clamped, zenSoundEnabled: true });
+    persistZenAudioPrefs({ zenSfxVolume: clamped, zenSoundEnabled: true }, 200);
+  },
+
+  setZenAmbienceVolume(volume: number) {
+    const clamped = Number.isFinite(volume)
+      ? Math.max(0, Math.min(1, Math.round(volume * 100) / 100))
+      : 0.5;
+    setZenAmbienceVolume(clamped);
+    setAppState({ zenAmbienceVolume: clamped });
+    persistZenAudioPrefs({ zenAmbienceVolume: clamped }, 200);
+    if (clamped > 0 && state.zenAmbience !== 'silent') {
+      setZenAmbienceScene(state.zenAmbience, true);
+    }
+  },
+
+  setZenAmbience(scene: ZenAmbienceScene) {
+    if (scene === 'silent') {
+      setAppState({ zenAmbience: 'silent' });
+      setZenAmbienceScene('silent', false);
+      persistZenAudioPrefs({ zenAmbience: 'silent' });
+      return;
+    }
+    const effectiveVol = state.zenAmbienceVolume <= 0 ? 0.5 : state.zenAmbienceVolume;
+    setZenAmbienceVolume(effectiveVol);
+    setAppState({ zenAmbience: scene, zenAmbienceVolume: effectiveVol });
+    setZenAmbienceScene(scene, true);
+    persistZenAudioPrefs({ zenAmbience: scene, zenAmbienceVolume: effectiveVol });
+  },
+
+  exitZenMode() {
+    if (!state.zenMode) return;
+    if (state.inReviewMode) {
+      // Entered Zen Mode mid-review and still studying: drop cleanly back to standard Reviewer on the same card.
+      if (!state.isSessionComplete && state.zenEnteredFromReview) {
+        stopZenAmbience(1.25);
+        if (isAnkiNativeEnv()) {
+          callAnki('set_zen_window_chrome', { hidden: false }).catch(() => {});
+        }
+        runZenViewTransition('exit', () => {
+          setAppState({
+            zenMode: false,
+            zenEnteredFromReview: false,
+            zenThresholdVisible: false,
+            optionKeyHeld: false,
+          });
+        });
+        return;
+      }
+      appActions.exitZenModeAndReview();
+      return;
+    }
+    const returnTab = state.zenReturnTab || 'dashboard';
+    stopZenAmbience(1.25);
+    if (isAnkiNativeEnv()) {
+      callAnki('set_zen_window_chrome', { hidden: false }).catch(() => {});
+    }
+    runZenViewTransition('exit', () => {
+      setAppState({
+        zenMode: false,
+        zenEnteredFromReview: false,
+        zenThresholdVisible: false,
+        optionKeyHeld: false,
+        activeTab: returnTab,
+      });
+    });
+  },
+
+  exitZenModeAndReview() {
+    const wasInReview = state.inReviewMode;
+    const returnTab = wasInReview ? 'dashboard' : state.zenReturnTab || 'dashboard';
+    stopZenAmbience(1.25);
+    if (isAnkiNativeEnv()) {
+      callAnki('set_zen_window_chrome', { hidden: false }).catch(() => {});
+    }
+    runZenViewTransition('exit', () => {
+      setAppState({
+        zenMode: false,
+        zenEnteredFromReview: false,
+        zenThresholdVisible: false,
+        activeTab: returnTab,
+        optionKeyHeld: false,
+      });
+      if (wasInReview) {
+        appActions.exitReview();
+      }
+    });
+  },
+
+  toggleZenMode() {
+    if (state.zenMode) {
+      appActions.exitZenMode();
+    } else {
+      appActions.enterZenMode();
+    }
+  },
+
   flipCard() {
     const currentCard = state.reviewQueue[state.currentCardIndex];
     const nextFlipped = !state.isCardFlipped;
     setAppState({ isCardFlipped: nextFlipped });
     if (nextFlipped) {
+      if (state.zenMode) {
+        const backWillAutoPlay =
+          resolveAutoPlayAudioFiles(currentCard, 'back', {
+            autoPlayFrontAudio: state.autoPlayFrontAudio,
+            autoPlayBackAudio: state.autoPlayBackAudio,
+          }).length > 0;
+        if (!backWillAutoPlay) {
+          playZenPaperTouch(state.zenSoundEnabled, 'flip');
+        }
+      }
       autoPlayCardSide(currentCard, 'back');
     } else {
       appActions.stopAudio();
@@ -2600,7 +2981,7 @@ export const appActions = {
         : resolveManualPlayAudioFiles(currentCard, state.isCardFlipped);
     const targetFile = files[0];
     if (!targetFile) {
-      if (!silentToast) {
+      if (!silentToast && !state.zenMode) {
         showToast(tState('readAloud'));
       }
       return;
@@ -2610,6 +2991,9 @@ export const appActions = {
       clearTimeout(audioHighlightTimer);
       audioHighlightTimer = null;
     }
+    if (state.zenMode && state.zenAmbience !== 'silent' && state.zenAmbienceVolume > 0) {
+      setZenAmbienceDucked(true, 2600);
+    }
     setAppState({ playingAudioFile: targetFile });
     if (isAnkiNativeEnv()) {
       try {
@@ -2617,7 +3001,7 @@ export const appActions = {
       } catch {}
     }
 
-    if (!silentToast) {
+    if (!silentToast && !state.zenMode) {
       showToast(
         files.length > 1
           ? `${tState('readAloud')}: ${targetFile} (+${files.length - 1})`
@@ -2635,6 +3019,9 @@ export const appActions = {
     if (audioHighlightTimer) {
       clearTimeout(audioHighlightTimer);
       audioHighlightTimer = null;
+    }
+    if (state.zenMode) {
+      setZenAmbienceDucked(false, 0);
     }
     setAppState({ playingAudioFile: null });
     if (isAnkiNativeEnv()) {
@@ -2716,7 +3103,7 @@ export const appActions = {
     }));
   },
 
-  async answerCurrentCard(ease: 1 | 2 | 3 | 4) {
+  async answerCurrentCard(ease: 1 | 2 | 3 | 4, options?: { skipZenTouchSound?: boolean }) {
     const currentCard = state.reviewQueue[state.currentCardIndex];
     if (!currentCard) return;
 
@@ -2859,7 +3246,9 @@ export const appActions = {
       if (rolloverMergedCards.length > 0 && epoch === reviewTransitionEpoch && state.inReviewMode) {
         autoPlayCardSide(rolloverMergedCards[0], 'front');
       }
-      showToast(tState('dayRolloverQueueSyncedToast', { n: rolloverMergedCards.length }));
+      if (!state.zenMode) {
+        showToast(tState('dayRolloverQueueSyncedToast', { n: rolloverMergedCards.length }));
+      }
       appActions.initFromAnki(true, { skipReviewQueueRefresh: true });
       return;
     }
@@ -2869,13 +3258,34 @@ export const appActions = {
         autoPlayCardSide(state.reviewQueue[state.currentCardIndex], 'front');
       }
       // 一批学完了但调度器还有卡：明确告诉用户是「本批完成、继续下一批」，
-      // 而不是让他误以为今日已学完（也不能显示今日完成）。
-      showToast(tState('batchContinueToast', { n: nextQueue.length }));
+      // 而不是让他误以为今日已学完（也不能显示今日完成）。禅模式下静默继续不报张数。
+      if (!state.zenMode) {
+        showToast(tState('batchContinueToast', { n: nextQueue.length }));
+      }
       return;
     }
 
     if (epoch === reviewTransitionEpoch && state.inReviewMode && !state.isSessionComplete) {
       autoPlayCardSide(state.reviewQueue[state.currentCardIndex], 'front');
+    }
+
+    // 禅模式下评分保持完全静谧：不弹黑色 Toast，也不暴露 FSRS 预计间隔时间；
+    // 仅在圆满收官时响起双音颂钵，普通切卡在无语音冲突时配极微纸木落声。
+    if (state.zenMode) {
+      if (state.isSessionComplete) {
+        playZenCompleteBell(state.zenSoundEnabled);
+      } else if (!options?.skipZenTouchSound) {
+        const nextCard = state.reviewQueue[state.currentCardIndex];
+        const nextWillAutoPlay =
+          resolveAutoPlayAudioFiles(nextCard, 'front', {
+            autoPlayFrontAudio: state.autoPlayFrontAudio,
+            autoPlayBackAudio: state.autoPlayBackAudio,
+          }).length > 0;
+        if (!nextWillAutoPlay) {
+          playZenPaperTouch(state.zenSoundEnabled, 'settle');
+        }
+      }
+      return;
     }
 
     const dynamicIvl =
@@ -2901,6 +3311,9 @@ export const appActions = {
     appActions.stopAudio();
     reviewTransitionEpoch += 1;
     if (state.undoStack.length === 0) {
+      if (state.zenMode) {
+        return;
+      }
       if (isAnkiNativeEnv()) {
         try {
           const res = await callAnki<{ undone: boolean; label: string }>('undo');
@@ -2958,7 +3371,11 @@ export const appActions = {
     if (crossedDay && isAnkiNativeEnv()) {
       appActions.initFromAnki(true, { skipReviewQueueRefresh: true });
     }
-    showToast(`${tState('undoBtnShort')}: ${last.card.front}`);
+    if (state.zenMode) {
+      playZenPaperTouch(state.zenSoundEnabled, 'flip');
+    } else {
+      showToast(`${tState('undoBtnShort')}: ${last.card.front}`);
+    }
   },
 
   async deleteCurrentReviewCard() {
@@ -3871,6 +4288,14 @@ export const appActions = {
     sessionVerifiedSyncTs = 0;
     coldStartInProgress = false;
     cancelPendingCmdKSearch();
+    if (zenAudioSaveTimer) {
+      clearTimeout(zenAudioSaveTimer);
+      zenAudioSaveTimer = null;
+    }
+    stopZenAmbience(0.35);
+    if (isAnkiNativeEnv()) {
+      callAnki('set_zen_window_chrome', { hidden: false }).catch(() => {});
+    }
     setAppState((prev) => ({
       profileGeneration: prev.profileGeneration + 1,
       activeTab: 'dashboard',
@@ -3890,6 +4315,11 @@ export const appActions = {
       currentRescueReceipt: null,
       customStudyModalOpen: false,
       inspectorOpen: false,
+      zenMode: false,
+      zenReturnTab: 'dashboard',
+      zenEnteredFromReview: false,
+      zenAmbience: 'silent',
+      zenThresholdVisible: false,
       syncing: false,
       syncJustFinished: false,
       lastSyncedTimestamp: 0,
@@ -3930,5 +4360,16 @@ export function useAppStore(): AppState {
     },
     getAppState,
     getAppState
+  );
+}
+
+export function useAppStoreSelector<T>(selector: (s: AppState) => T): T {
+  return useSyncExternalStore(
+    (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    () => selector(state),
+    () => selector(state)
   );
 }

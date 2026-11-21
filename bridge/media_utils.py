@@ -17,6 +17,7 @@ import urllib.request
 from typing import Any, Dict, List, NamedTuple, Tuple
 
 IMG_TAG_RE = re.compile(r"<img\b[^>]*>", flags=re.I)
+SCRIPT_OPEN_TAG_RE = re.compile(r"<script\b[^>]*>", flags=re.I)
 IMG_SRC_ATTR_RE = re.compile(
     r'(\s|["\'])(src\s*=\s*)(?:(["\'])([^"\']*)\3|([^\s"\'=<>`]+))',
     flags=re.I,
@@ -1148,6 +1149,80 @@ ANKI_PLAY_TAG_RE = re.compile(r"\[anki:play:([^\]]+)\]", flags=re.I)
 ANKI_TTS_TAG_RE = re.compile(r"\[anki:tts:[^\]]*\]", flags=re.I)
 
 
+def resolve_media_script_src_for_sandbox(
+    raw_html: str, media_dir: str = "", http_base_url: str = ""
+) -> str:
+    """将沙盒模板里的静态相对路径 ``<script src=\"_xxx.js\">`` 改写为本地媒体 HTTP/file URL。
+
+    不依赖 ``<base href>``，避免破坏 ``href=\"#\"`` 锚点与内联 SVG ``url(#id)`` 引用。
+    """
+    if not raw_html or (not media_dir and not http_base_url):
+        return raw_html or ""
+
+    def _script_tag_replacer(tag_match: re.Match) -> str:
+        tag = tag_match.group(0)
+
+        def _attr_replacer(src_match: re.Match) -> str:
+            lead, eq_part, quote, quoted_val, unquoted_val = src_match.groups()
+            raw_src = quoted_val if quote is not None else unquoted_val
+            src_clean = html.unescape(str(raw_src or "").strip())
+            q = quote or '"'
+            if not src_clean:
+                return src_match.group(0)
+            lower_src = src_clean.lower()
+            if lower_src.startswith(("http://", "https://", "//", "data:", "blob:", "file://", "/")):
+                return src_match.group(0)
+            decoded_name = urllib.parse.unquote(src_clean)
+            uri = (
+                _to_http_uri(http_base_url, decoded_name)
+                if http_base_url
+                else _to_file_uri(media_dir, decoded_name)
+            )
+            return f'{lead}{eq_part}{q}{html.escape(uri, quote=True)}{q}'
+
+        return IMG_SRC_ATTR_RE.sub(_attr_replacer, tag, count=1)
+
+    return SCRIPT_OPEN_TAG_RE.sub(_script_tag_replacer, raw_html)
+
+
+_JQUERY_USAGE_RE = re.compile(r"\bjquery\b|\$\s*[.(]", flags=re.I)
+
+
+def find_sandbox_preload_scripts(
+    model: Any, media_dir: str = "", http_base_url: str = ""
+) -> List[str]:
+    """按需为依赖 jQuery 的沙盒模板预载本地媒体目录中的 ``_jquery.min.js``。
+
+    仅当模板含 ``<script>`` 且确实使用 jQuery（如 Enhanced Cloze v1.9/v1.14），
+    且本地 ``collection.media`` 存在对应文件并有本地 HTTP 媒体服务时才返回预载 URL。
+    无关模板（Basic、gData 选择题、Image Occlusion 等）返回空列表，零额外开销。
+    """
+    if not isinstance(model, dict) or not media_dir or not http_base_url:
+        return []
+    try:
+        parts: List[str] = []
+        for tmpl in (model.get("tmpls") or []):
+            if isinstance(tmpl, dict):
+                parts.append(str(tmpl.get("qfmt") or ""))
+                parts.append(str(tmpl.get("afmt") or ""))
+        blob = "\n".join(parts)
+    except Exception:
+        return []
+    lowered = blob.lower()
+    if "<script" not in lowered:
+        return []
+    if not _JQUERY_USAGE_RE.search(blob) and "enhanced-cloze" not in lowered:
+        return []
+    media_root = Path(media_dir)
+    for candidate in ("_jquery.min.js", "_jquery.js"):
+        try:
+            if (media_root / candidate).is_file():
+                return [_to_http_uri(http_base_url, candidate)]
+        except Exception:
+            continue
+    return []
+
+
 def resolve_media_for_sandbox(
     raw_html: str, media_dir: str = "", http_base_url: str = ""
 ) -> str:
@@ -1155,6 +1230,7 @@ def resolve_media_for_sandbox(
     if not raw_html:
         return ""
     text = resolve_media_img_src_for_webview(raw_html, media_dir, http_base_url=http_base_url)
+    text = resolve_media_script_src_for_sandbox(text, media_dir, http_base_url=http_base_url)
     text = ANKI_PLAY_TAG_RE.sub(
         lambda m: (
             f'<a href="#" class="soundLink replay-button" '

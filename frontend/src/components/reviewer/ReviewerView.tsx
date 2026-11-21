@@ -134,6 +134,7 @@ export const ReviewerView: React.FC = () => {
     showIllustrations,
     activeDeckId,
     reviewScopeDeckId,
+    compatMode,
     sandboxNoteTypeIds,
     autoPlayFrontAudio,
     autoPlayBackAudio,
@@ -171,6 +172,8 @@ export const ReviewerView: React.FC = () => {
   const [displayPopoverOpen, setDisplayPopoverOpen] = useState(false);
   const [audioPopoverOpen, setAudioPopoverOpen] = useState(false);
   const [lightboxTarget, setLightboxTarget] = useState<LightboxTarget | null>(null);
+  const [swipingDir, setSwipingDir] = useState<'left' | 'right' | null>(null);
+  const swipeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inspectorPresence = usePresence(inspectorOpen, 180);
   const lastLightboxTargetRef = useRef<LightboxTarget | null>(null);
   if (lightboxTarget) {
@@ -272,6 +275,11 @@ export const ReviewerView: React.FC = () => {
     setDisplayPopoverOpen(false);
     setAudioPopoverOpen(false);
     setLightboxTarget(null);
+    if (swipeTimerRef.current) {
+      clearTimeout(swipeTimerRef.current);
+      swipeTimerRef.current = null;
+    }
+    setSwipingDir(null);
     if (currentCard) {
       const fMap: Record<string, string> =
         currentCard.fields && Object.keys(currentCard.fields).length > 0
@@ -312,10 +320,39 @@ export const ReviewerView: React.FC = () => {
   }, [currentCard, editingField]);
 
   useEffect(() => {
-    if (inlineEditing && activeInputRef.current) {
-      activeInputRef.current.focus();
+    if (inlineEditing) {
+      if (swipeTimerRef.current) {
+        clearTimeout(swipeTimerRef.current);
+        swipeTimerRef.current = null;
+      }
+      setSwipingDir(null);
+      if (activeInputRef.current) {
+        activeInputRef.current.focus();
+      }
     }
   }, [inlineEditing, activeFieldKey]);
+
+  const triggerRateWithSwipe = useCallback(
+    (ease: 1 | 2 | 3 | 4) => {
+      if (swipingDir) return;
+      const prefersReducedMotion =
+        typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (prefersReducedMotion) {
+        appActions.answerCurrentCard(ease);
+        return;
+      }
+      const dir: 'left' | 'right' = ease <= 2 ? 'left' : 'right';
+      setSwipingDir(dir);
+      swipeTimerRef.current = setTimeout(() => {
+        swipeTimerRef.current = null;
+        setSwipingDir(null);
+        appActions.answerCurrentCard(ease);
+      }, 260);
+    },
+    [swipingDir]
+  );
 
   const commitInlineChanges = (nextFields?: Record<string, string>) => {
     if (!currentCard) return;
@@ -594,7 +631,7 @@ export const ReviewerView: React.FC = () => {
         e.preventDefault();
         // 原生 Anki：空格在正面显示答案，在背面等于「良好」。
         if (isCardFlipped) {
-          appActions.answerCurrentCard(3);
+          triggerRateWithSwipe(3);
         } else {
           appActions.flipCard();
         }
@@ -654,27 +691,27 @@ export const ReviewerView: React.FC = () => {
       if (answerButtonMode === 'four' || optionKeyHeld || e.altKey) {
         if (e.key === '1') {
           e.preventDefault();
-          appActions.answerCurrentCard(1);
+          triggerRateWithSwipe(1);
         } else if (e.key === '2') {
           e.preventDefault();
-          appActions.answerCurrentCard(2);
+          triggerRateWithSwipe(2);
         } else if (e.key === '3' || e.key === 'Enter') {
           e.preventDefault();
-          appActions.answerCurrentCard(3);
+          triggerRateWithSwipe(3);
         } else if (e.key === '4') {
           e.preventDefault();
-          appActions.answerCurrentCard(4);
+          triggerRateWithSwipe(4);
         }
       } else {
         if (e.key === '1') {
           e.preventDefault();
-          appActions.answerCurrentCard(1);
+          triggerRateWithSwipe(1);
         } else if (e.key === '2' || e.key === '3' || e.key === 'Enter') {
           e.preventDefault();
-          appActions.answerCurrentCard(3);
+          triggerRateWithSwipe(3);
         } else if (e.key === '4') {
           e.preventDefault();
-          appActions.answerCurrentCard(4);
+          triggerRateWithSwipe(4);
         }
       }
     };
@@ -712,6 +749,7 @@ export const ReviewerView: React.FC = () => {
     manualAudioFiles,
     reviewContentScale,
     reviewStageWidth,
+    triggerRateWithSwipe,
   ]);
 
   useEffect(() => {
@@ -766,6 +804,7 @@ export const ReviewerView: React.FC = () => {
   // 音频由 Anki 的 AVPlayer 播放，不随 React 组件销毁而停止。
   useEffect(() => {
     return () => {
+      if (swipeTimerRef.current) clearTimeout(swipeTimerRef.current);
       appActions.stopAudio();
     };
   }, []);
@@ -1007,8 +1046,7 @@ export const ReviewerView: React.FC = () => {
   const activeFlagSpec = activeFlagNum !== 0 ? ANKI_FLAG_PALETTE[activeFlagNum] : null;
 
   const isSandboxCard = Boolean(
-    (currentCard.needsSandbox ||
-      (currentCard.notetypeId && sandboxNoteTypeIds.includes(currentCard.notetypeId))) &&
+    (compatMode || currentCard.needsSandbox) &&
       (currentCard.sandboxFrontHtml || currentCard.sandboxBackHtml)
   );
   const combinedCardMarkup = [
@@ -1406,10 +1444,7 @@ export const ReviewerView: React.FC = () => {
                         displayPopoverOpen ||
                         reviewContentScale !== 100 ||
                         reviewStageWidth !== 'auto' ||
-                        Boolean(
-                          currentCard.notetypeId &&
-                            sandboxNoteTypeIds.includes(currentCard.notetypeId)
-                        )
+                        compatMode
                           ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)]'
                           : headerBtnSurface
                       }`}
@@ -1711,9 +1746,7 @@ export const ReviewerView: React.FC = () => {
                 {(() => {
                   const isCustomDisplay =
                     reviewContentScale !== 100 || reviewStageWidth !== 'auto';
-                  const isCompatEnabled = Boolean(
-                    currentCard.notetypeId && sandboxNoteTypeIds.includes(currentCard.notetypeId)
-                  );
+                  const isCompatEnabled = compatMode;
                   const stageWidthOptions: Array<{
                     value: ReviewStageWidth;
                     labelKey: any;
@@ -1876,8 +1909,10 @@ export const ReviewerView: React.FC = () => {
                         </div>
                       </fieldset>
 
-                      {/* Compat Mode (Sandboxed Note Type) — Native/Accessible Switch */}
-                      {currentCard.notetypeId && (
+                      {/* Global Compat Mode (Sandboxed Native Rendering) — Native/Accessible Switch */}
+                      {(currentCard.sandboxFrontHtml ||
+                        currentCard.sandboxBackHtml ||
+                        currentCard.notetypeId) && (
                         <div
                           className={`pt-3 border-t flex items-center justify-between gap-3 ${
                             isDark ? 'border-white/[0.08]' : 'border-[var(--border-subtle)]'
@@ -1895,10 +1930,7 @@ export const ReviewerView: React.FC = () => {
                             id={compatSwitchId}
                             type="checkbox"
                             checked={isCompatEnabled}
-                            onChange={() =>
-                              currentCard.notetypeId &&
-                              appActions.toggleNoteTypeSandbox(currentCard.notetypeId)
-                            }
+                            onChange={() => appActions.toggleCompatMode()}
                             {...({ switch: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
                             {...(supportsNativeSwitch
                               ? {}
@@ -1962,7 +1994,8 @@ export const ReviewerView: React.FC = () => {
           />
           {/* Scrollable Center Pane for Flashcard */}
           <div
-            className={`relative z-10 flex-1 overflow-y-auto px-6 py-6 flex flex-col items-center transition-transform duration-[var(--dur-slow)] ${
+            data-shifted={inspectorOpen ? 'true' : 'false'}
+            className={`reviewer-stage-shift relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 flex flex-col items-center ${
               inspectorOpen ? 'ltr:-translate-x-28 rtl:translate-x-28' : ''
             }`}
           >
@@ -1975,9 +2008,10 @@ export const ReviewerView: React.FC = () => {
               }
               className={`my-auto flex flex-col items-center w-full transition-[max-width] duration-200 ${stageMaxWidthClass}`}
             >
-              {/* Floating Zen Flashcard — Strict Light/Dark Adaptation + Card Enter (C2) */}
+              {/* Floating Flashcard — Strict Light/Dark Adaptation + Directional Swipe-Out */}
               <div
                 key={currentCard.id}
+                data-reviewer-swipe={swipingDir || 'none'}
                 onClick={handleCardMediaClick}
                 onDoubleClick={(e) => {
                   const target = e.target as HTMLElement | null;
@@ -1989,7 +2023,13 @@ export const ReviewerView: React.FC = () => {
                   }
                   if (currentCard) appActions.openCardEditor(currentCard);
                 }}
-                className={`reviewer-card-shell w-full rounded-[22px] border p-7 sm:p-8 relative transition-[background-color,border-color,box-shadow] duration-[var(--dur-base)] shadow-sm ui-card-enter ${cardContainerSurface}`}
+                className={`reviewer-card-shell w-full rounded-[22px] border p-7 sm:p-8 relative transition-[background-color,border-color,box-shadow] duration-[var(--dur-base)] shadow-sm ${
+                  swipingDir === 'left'
+                    ? 'reviewer-card-swipe-left'
+                    : swipingDir === 'right'
+                    ? 'reviewer-card-swipe-right'
+                    : 'ui-card-enter'
+                } ${cardContainerSurface}`}
               >
             {inlineEditing ? (
               <div className="space-y-4">
@@ -2204,6 +2244,8 @@ export const ReviewerView: React.FC = () => {
                       frontHtml={currentCard.sandboxFrontHtml || currentCard.frontHtml}
                       backHtml={currentCard.sandboxBackHtml || currentCard.backHtml}
                       cssText={currentCard.sandboxCss || ''}
+                      mediaHttpBaseUrl={currentCard.sandboxMediaBaseUrl || envInfo.mediaHttpBaseUrl}
+                      preloadScripts={currentCard.sandboxPreloadScripts}
                       isFlipped={isCardFlipped}
                       isDark={isDark}
                       audioFiles={currentCard.audioFiles}
@@ -2437,7 +2479,8 @@ export const ReviewerView: React.FC = () => {
       {/* Unified Bottom Decision Dock & Status Strip — Theme-Harmonized */}
       {!inlineEditing && (
         <footer
-          className={`reviewer-bottom-dock shrink-0 pt-3 pb-2.5 px-6 flex flex-col items-center justify-center border-t backdrop-blur-md transition-transform duration-[var(--dur-slow)] z-10 ${
+          data-shifted={inspectorOpen ? 'true' : 'false'}
+          className={`reviewer-bottom-dock reviewer-stage-shift shrink-0 pt-3 pb-2.5 px-6 flex flex-col items-center justify-center border-t backdrop-blur-md z-10 ${
             isDark ? 'border-white/[0.06]' : 'border-[var(--border-subtle)]'
           } ${inspectorOpen ? 'ltr:-translate-x-28 rtl:translate-x-28' : ''}`}
         >
@@ -2468,7 +2511,7 @@ export const ReviewerView: React.FC = () => {
               <div className="reviewer-cta-shell grid grid-cols-4 gap-3 w-[560px] max-w-full h-[58px]">
                 <button
                   type="button"
-                  onClick={() => appActions.answerCurrentCard(1)}
+                  onClick={() => triggerRateWithSwipe(1)}
                   className={`reviewer-cta-btn h-[58px] px-4 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger-text)]`}
@@ -2488,7 +2531,7 @@ export const ReviewerView: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => appActions.answerCurrentCard(2)}
+                  onClick={() => triggerRateWithSwipe(2)}
                   className={`reviewer-cta-btn h-[58px] px-4 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-warning-soft)] border-[var(--status-warning)]/35 hover:border-[var(--status-warning)] text-[var(--status-warning-text)]`}
@@ -2508,7 +2551,7 @@ export const ReviewerView: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => appActions.answerCurrentCard(3)}
+                  onClick={() => triggerRateWithSwipe(3)}
                   className={`reviewer-cta-btn h-[58px] px-4 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success-text)]`}
@@ -2528,7 +2571,7 @@ export const ReviewerView: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => appActions.answerCurrentCard(4)}
+                  onClick={() => triggerRateWithSwipe(4)}
                   className={`reviewer-cta-btn h-[58px] px-4 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-info-soft)] border-[var(--status-info)]/35 hover:border-[var(--status-info)] text-[var(--status-info-text)]`}
@@ -2551,7 +2594,7 @@ export const ReviewerView: React.FC = () => {
               <div className="reviewer-cta-shell w-[560px] h-[58px] flex items-center gap-4">
                 <button
                   type="button"
-                  onClick={() => appActions.answerCurrentCard(1)}
+                  onClick={() => triggerRateWithSwipe(1)}
                   className={`reviewer-cta-btn reviewer-cta-binary-again w-[170px] h-[58px] px-5 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger-text)]`}
@@ -2571,7 +2614,7 @@ export const ReviewerView: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => appActions.answerCurrentCard(3)}
+                  onClick={() => triggerRateWithSwipe(3)}
                   className={`reviewer-cta-btn reviewer-cta-binary-good w-[374px] h-[58px] px-6 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success)]`}
@@ -3032,6 +3075,7 @@ export const ReviewerView: React.FC = () => {
                         theme,
                         accentColor,
                         resolvedLang,
+                        compatMode,
                         sandboxNoteTypeIds,
                         autoPlayFrontAudio,
                         autoPlayBackAudio,

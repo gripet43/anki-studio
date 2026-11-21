@@ -12,12 +12,16 @@ import { StatsView } from './components/stats/StatsView';
 import { CustomStudyModal } from './components/study/CustomStudyModal';
 import { VacationModal } from './components/vacation/VacationModal';
 import { IcuRescueModal } from './components/vacation/IcuRescueModal';
+import { ZenHomeView } from './components/zen/ZenHomeView';
+import { ZenReviewView } from './components/zen/ZenReviewView';
+import { ZenThresholdOverlay } from './components/zen/ZenThresholdOverlay';
 import { usePresence } from './hooks/usePresence';
 import { ensureLanguageLoaded, isLanguageLoaded, isRtlLanguage, translate } from './i18n/translations';
 import { appActions, getAppState, setAppState, showToast, useAppStore } from './stores/useAppStore';
 import { isTypingTarget } from './utils/domTarget';
 import { buildThemeCssVars, resolveThemeMode } from './utils/themeTokens';
 import { isThemeViewTransitionActive } from './utils/viewTransition';
+import { isZenBlockedGlobalShortcut } from './utils/zenMode';
 
 const useIsomorphicLayoutEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect;
@@ -27,6 +31,7 @@ export const App: React.FC = () => {
     activeTab,
     profileGeneration,
     inReviewMode,
+    zenMode,
     cmdKOpen,
     quickAddOpen,
     editingCardData,
@@ -157,7 +162,7 @@ export const App: React.FC = () => {
     };
 
     const onOpenSettings = () => {
-      setAppState({ settingsOpen: true, settingsInitialTab: 'appearance' });
+      setAppState({ zenMode: false, settingsOpen: true });
     };
 
     const onDayChanged = (e: Event) => {
@@ -265,12 +270,13 @@ export const App: React.FC = () => {
   }, [dayBoundary?.available, dayBoundary?.dayCutoff, dayBoundary?.schedToday]);
 
   // Global keyboard shortcuts:
-  // - Cmd+K / Ctrl+K: Search Palette
-  // - Cmd+\ / Ctrl+\: Collapse / Expand Left Navigation Sidebar
-  // - Ctrl+P / Cmd+, / Ctrl+,: Preferences & Settings Modal (aligned with Anki Tools -> Preferences)
-  // - N: Quick Add Drawer
-  // - Ctrl+Opt+M / Ctrl+Alt+M: Fail-safe Native UI Toggle
-  // - Ctrl+Shift+D: Developer Design System View (Item #7)
+  // - Cmd+Shift+Z / Ctrl+Shift+Z: Toggle Minimalist Zen Mode
+  // - Cmd+K / Ctrl+K: Search Palette (suppressed in Zen Mode)
+  // - Cmd+\ / Ctrl+\: Collapse / Expand Left Navigation Sidebar (suppressed in Zen Mode / Reviewer)
+  // - Ctrl+P / Cmd+, / Ctrl+,: Preferences & Settings Modal (suppressed in Zen Mode)
+  // - N: Quick Add Drawer (suppressed in Zen Mode)
+  // - Ctrl+Opt+M / Ctrl+Alt+M: Fail-safe Native UI Toggle (always active)
+  // - Ctrl+Shift+D: Developer Design System View (suppressed in Zen Mode)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'm') {
@@ -280,6 +286,45 @@ export const App: React.FC = () => {
       }
 
       const typing = isTypingTarget(e.target);
+
+      // Cmd/Ctrl + Shift + Z: Toggle Zen Mode (blocked while typing or inside modals/inline edit)
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.altKey &&
+        e.shiftKey &&
+        e.key.toLowerCase() === 'z'
+      ) {
+        if (
+          !typing &&
+          !inlineEditing &&
+          !cmdKOpen &&
+          !quickAddOpen &&
+          !editingCardData &&
+          !settingsOpen &&
+          !vacationModalOpen &&
+          !icuModalOpen &&
+          !customStudyModalOpen
+        ) {
+          e.preventDefault();
+          appActions.toggleZenMode();
+        }
+        return;
+      }
+
+      if (
+        zenMode &&
+        isZenBlockedGlobalShortcut(e.key, {
+          metaKey: e.metaKey,
+          ctrlKey: e.ctrlKey,
+          altKey: e.altKey,
+          shiftKey: e.shiftKey,
+        })
+      ) {
+        if (e.metaKey || e.ctrlKey) {
+          e.preventDefault();
+        }
+        return;
+      }
 
       if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
         e.preventDefault();
@@ -302,6 +347,7 @@ export const App: React.FC = () => {
       ) {
         if (
           !typing &&
+          !zenMode &&
           !inReviewMode &&
           !inlineEditing &&
           !cmdKOpen &&
@@ -336,6 +382,7 @@ export const App: React.FC = () => {
       // N: Quick Add Drawer
       if (
         !typing &&
+        !zenMode &&
         !inReviewMode &&
         !cmdKOpen &&
         !quickAddOpen &&
@@ -347,7 +394,7 @@ export const App: React.FC = () => {
         return;
       }
 
-      // Y: Anki Standard Manual Cloud Sync
+      // Y: Anki Standard Manual Cloud Sync (also quietly supported on Zen Home)
       if (
         !typing &&
         !inReviewMode &&
@@ -368,6 +415,7 @@ export const App: React.FC = () => {
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [
+    zenMode,
     inReviewMode,
     inlineEditing,
     cmdKOpen,
@@ -387,46 +435,59 @@ export const App: React.FC = () => {
   return (
     <div
       dir={isRtl ? 'rtl' : 'ltr'}
+      data-zen-mode={zenMode ? 'true' : undefined}
       style={themeVars as React.CSSProperties}
       className={`w-screen h-screen overflow-hidden flex font-sans antialiased ${rootBg}`}
     >
-      {/* Left Navigation Sidebar */}
-      <Sidebar />
-
-      {/* Main Workspace Area — Keyed inner wrapper for 160ms view enter animation (D) */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      {zenMode ? (
         <div
-          key={`${profileGeneration}-${activeTab}`}
-          className="ui-view-enter flex-1 flex flex-col min-w-0 h-full overflow-hidden"
+          key={`${profileGeneration}-zen-${inReviewMode ? 'review' : 'home'}`}
+          className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative"
         >
-          {activeTab === 'dashboard' && <DashboardView />}
-          {activeTab === 'library' && <LibraryView />}
-          {activeTab === 'decks' && <DecksView />}
-          {activeTab === 'stats' && <StatsView />}
-          {activeTab === 'design-system' && <DesignSystemView />}
+          {inReviewMode ? <ZenReviewView /> : <ZenHomeView />}
+          <ZenThresholdOverlay />
         </div>
-      </main>
+      ) : (
+        <>
+          {/* Left Navigation Sidebar */}
+          <Sidebar />
 
-      {/* Fullscreen Reviewer & Inline WYSIWYG Editor */}
-      {inReviewMode && <ReviewerView />}
+          {/* Main Workspace Area — Keyed inner wrapper for 160ms view enter animation (D) */}
+          <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <div
+              key={`${profileGeneration}-${activeTab}`}
+              className="ui-view-enter flex-1 flex flex-col min-w-0 h-full overflow-hidden"
+            >
+              {activeTab === 'dashboard' && <DashboardView />}
+              {activeTab === 'library' && <LibraryView />}
+              {activeTab === 'decks' && <DecksView />}
+              {activeTab === 'stats' && <StatsView />}
+              {activeTab === 'design-system' && <DesignSystemView />}
+            </div>
+          </main>
 
-      {/* Raycast-Style Global Search Modal (Cmd + K) */}
-      <CommandPaletteModal />
+          {/* Fullscreen Zen Reviewer & Inline WYSIWYG Editor */}
+          {inReviewMode && <ReviewerView />}
 
-      {/* Right Slide-Over Quick Add Drawer (Shortcut N) */}
-      <QuickAddDrawer />
+          {/* Raycast-Style Global Search Modal (Cmd + K) */}
+          <CommandPaletteModal />
 
-      {/* Unified Settings & 3-Layer Native Switch Guide Modal (Item #9) */}
-      <SettingsModal />
+          {/* Right Slide-Over Quick Add Drawer (Shortcut N) */}
+          <QuickAddDrawer />
 
-      {/* Vacation Mode & Streak Freeze Modal */}
-      <VacationModal />
+          {/* Unified Settings & 3-Layer Native Switch Guide Modal (Item #9) */}
+          <SettingsModal />
 
-      {/* ICU Backlog Crisis Rescue & Evidence Modal */}
-      <IcuRescueModal />
+          {/* Vacation Mode & Streak Freeze Modal */}
+          <VacationModal />
 
-      {/* Custom Study, Mistake Drill & Flag/Tag Cram Modal */}
-      <CustomStudyModal />
+          {/* ICU Backlog Crisis Rescue & Evidence Modal */}
+          <IcuRescueModal />
+
+          {/* Custom Study, Mistake Drill & Flag/Tag Cram Modal */}
+          <CustomStudyModal />
+        </>
+      )}
 
       {/* Top-Center Dynamic Island Toast Notification with Presence Enter/Exit (E2) */}
       {toastPresence.mounted && (

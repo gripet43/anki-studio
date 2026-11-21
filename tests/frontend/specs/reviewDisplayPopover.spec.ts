@@ -71,8 +71,9 @@ test('renders semantic width fieldset radio cards, keycap scale stepper, anki-sw
     systemDark: false,
     reviewContentScale: 100,
     reviewStageWidth: 'auto',
-    sandboxNoteTypeIds: ['nt-basic'],
-    reviewQueue: [makeReviewCard()],
+    compatMode: true,
+    sandboxNoteTypeIds: [],
+    reviewQueue: [makeReviewCard({ notetypeId: 'nt-other-template' })],
     currentCardIndex: 0,
   });
   try {
@@ -118,7 +119,7 @@ test('renders semantic width fieldset radio cards, keycap scale stepper, anki-sw
     ok(compatInputMatch, 'expected .anki-switch.anki-switch-sm input for compat mode');
     const switchId = compatInputMatch[1];
     ok(pop.includes(`<label for="${switchId}"`), 'expected explicit label[for] linked to compat switch');
-    ok(pop.includes('checked=""') || pop.includes('checked'), 'expected compat switch checked when notetype is sandboxed');
+    ok(pop.includes('checked=""') || pop.includes('checked'), 'expected compat switch checked when global compatMode is enabled');
     doesNotMatch(pop, />Basic</, 'note type subtitle (Basic) must be omitted from compat toggle');
   } finally {
     setAppState({
@@ -130,6 +131,7 @@ test('renders semantic width fieldset radio cards, keycap scale stepper, anki-sw
       systemDark: prev.systemDark,
       reviewContentScale: prev.reviewContentScale,
       reviewStageWidth: prev.reviewStageWidth,
+      compatMode: prev.compatMode,
       sandboxNoteTypeIds: prev.sandboxNoteTypeIds,
       reviewQueue: prev.reviewQueue,
       currentCardIndex: prev.currentCardIndex,
@@ -148,6 +150,7 @@ test('activates header reset & scale reset affordances when scale/width customiz
     systemDark: true,
     reviewContentScale: 115,
     reviewStageWidth: 'wide',
+    compatMode: false,
     sandboxNoteTypeIds: [],
     reviewQueue: [makeReviewCard({ notetypeId: undefined })],
     currentCardIndex: 0,
@@ -176,6 +179,7 @@ test('activates header reset & scale reset affordances when scale/width customiz
       systemDark: prev.systemDark,
       reviewContentScale: prev.reviewContentScale,
       reviewStageWidth: prev.reviewStageWidth,
+      compatMode: prev.compatMode,
       sandboxNoteTypeIds: prev.sandboxNoteTypeIds,
       reviewQueue: prev.reviewQueue,
       currentCardIndex: prev.currentCardIndex,

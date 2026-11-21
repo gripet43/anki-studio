@@ -461,7 +461,7 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
   return (
     <div
       data-state={presence.state}
-      className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 select-none ui-modal-backdrop"
+      className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4 select-none ui-modal-backdrop"
     >
       <div
         data-state={presence.state}
@@ -786,7 +786,6 @@ export const ImageOcclusionEditorModal: React.FC<ImageOcclusionEditorModalProps>
               type="button"
               disabled={!imgSrc || rects.length === 0}
               onClick={handleConfirmApply}
-              style={{ backgroundColor: brandHex }}
               className="btn-primary !h-9 !px-5 !text-[12px] disabled:opacity-45"
             >
               {t('ioApplyBtn', { cards: nativeCardCount })}

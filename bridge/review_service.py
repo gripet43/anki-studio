@@ -24,6 +24,7 @@ from .media_utils import (
     SandboxRender,
     _av_filenames,
     convert_furigana_to_ruby,
+    find_sandbox_preload_scripts,
     get_media_dir,
     get_media_http_base_url,
     is_custom_styled_cloze_model,
@@ -281,18 +282,7 @@ class ReviewService:
         except Exception:
             return None
 
-    def _collect_custom_study_cids(self, col, data: Dict[str, Any]) -> Tuple[List[int], bool]:
-        """
-        Collects and sorts candidate card IDs for Custom Study / Mistake Drills / Flag & Tag Cram:
-        - preset: 'mistakes' | 'flagged' | 'ahead' | 'extra_new' | 'custom'
-        - deckId: 'all' or numeric deck ID
-        - days: lookback days for 'mistakes' (default 7) or lookahead days for 'ahead' (default 3)
-        - flag: 'all' | 'flagged' | '1'..'7'
-        - tag: 'all' or specific tag
-        - cardScope: 'all' | 'due' | 'review' | 'new'
-        - sortOrder: 'lapses_desc' | 'ivl_asc' | 'random' | 'due_asc'
-        - isPreviewOnly: bool (default True for cram/drills)
-        """
+    def _parse_custom_study_params(self, col, data: Dict[str, Any]) -> Dict[str, Any]:
         preset = str(data.get("preset", "mistakes") or "mistakes").strip()
         deck_id = data.get("deckId")
         try:
@@ -328,6 +318,205 @@ class ReviewService:
                         target_dids.add(int(child_did))
                 except Exception:
                     pass
+
+        return {
+            "preset": preset,
+            "days": days,
+            "flag_filter": flag_filter,
+            "tag_filter": tag_filter,
+            "card_scope": card_scope,
+            "sort_order": sort_order,
+            "is_preview_only": is_preview_only,
+            "deck_clause": deck_clause,
+            "target_dids": target_dids,
+        }
+
+    def _query_custom_study_sql(
+        self,
+        col,
+        params: Dict[str, Any],
+        *,
+        count_only: bool = False,
+        limit: Optional[int] = None,
+    ) -> Optional[Tuple[int, List[int]]]:
+        """
+        Single-query read-only SQLite fast path for Custom Study preview & session start.
+        Avoids N+1 `col.get_card()` / `card.note()` calls on the Qt main thread for large collections.
+        Returns `(total_matched, selected_cids)` or `None` if SQL fast path is unavailable.
+        """
+        if hasattr(col, "_cards") or not hasattr(col, "db") or not hasattr(col.db, "all"):
+            return None
+
+        preset = params["preset"]
+        days = params["days"]
+        flag_filter = params["flag_filter"]
+        tag_filter = params["tag_filter"]
+        card_scope = params["card_scope"]
+        sort_order = params["sort_order"]
+        target_dids = params["target_dids"]
+
+        base_where: List[str] = ["c.queue != -1"]
+        base_args: List[Any] = []
+        needs_notes_join = False
+
+        if target_dids is not None:
+            sorted_dids = sorted(int(d) for d in target_dids)
+            if not sorted_dids:
+                return 0, []
+            placeholders = ",".join("?" for _ in sorted_dids)
+            base_where.append(f"c.did IN ({placeholders})")
+            base_args.extend(sorted_dids)
+
+        if flag_filter == "flagged":
+            base_where.append("(c.flags & 7) > 0")
+        elif flag_filter in ("0", "1", "2", "3", "4", "5", "6", "7"):
+            base_where.append("(c.flags & 7) = ?")
+            base_args.append(int(flag_filter))
+
+        if tag_filter and tag_filter != "all":
+            needs_notes_join = True
+            base_where.append("instr(' ' || coalesce(n.tags, '') || ' ', ' ' || ? || ' ') > 0")
+            base_args.append(tag_filter)
+
+        cutoff = (
+            getattr(col.sched, "day_cutoff", int(time.time()) + 86400)
+            if hasattr(col, "sched")
+            else int(time.time()) + 86400
+        )
+        today_sched = int(getattr(col.sched, "today", 0) or 0) if hasattr(col, "sched") else 0
+
+        def _run_query(
+            extra_where: List[str],
+            extra_args: List[Any],
+            join_notes: bool,
+        ) -> Tuple[int, List[int]]:
+            from_clause = "FROM cards c LEFT JOIN notes n ON c.nid = n.id" if join_notes else "FROM cards c"
+            where_sql = " AND ".join(base_where + extra_where)
+            args = tuple(base_args + extra_args)
+
+            if count_only:
+                rows = col.db.all(f"SELECT count(*) {from_clause} WHERE {where_sql}", *args)
+                total = int(rows[0][0] or 0) if rows and rows[0] else 0
+                return total, []
+
+            if sort_order == "random":
+                rows = col.db.all(f"SELECT c.id {from_clause} WHERE {where_sql}", *args)
+                all_cids = [int(r[0]) for r in rows if r and r[0] is not None]
+                total = len(all_cids)
+                if total == 0:
+                    return 0, []
+                import random
+                rng = random.Random(int(time.time() * 1000) & 0xFFFFFFFF)
+                if limit is not None and limit < total:
+                    return total, rng.sample(all_cids, limit)
+                rng.shuffle(all_cids)
+                return total, all_cids
+
+            if sort_order == "lapses_desc":
+                order_sql = "ORDER BY c.lapses DESC, c.ivl ASC, c.id ASC"
+            elif sort_order == "ivl_asc":
+                order_sql = "ORDER BY c.ivl ASC, c.lapses DESC, c.id ASC"
+            elif sort_order == "due_asc":
+                order_sql = "ORDER BY c.due ASC, c.id ASC"
+            else:
+                order_sql = "ORDER BY c.id ASC"
+
+            if limit is not None:
+                count_rows = col.db.all(f"SELECT count(*) {from_clause} WHERE {where_sql}", *args)
+                total = int(count_rows[0][0] or 0) if count_rows and count_rows[0] else 0
+                if total == 0:
+                    return 0, []
+                rows = col.db.all(
+                    f"SELECT c.id {from_clause} WHERE {where_sql} {order_sql} LIMIT ?",
+                    *args,
+                    int(limit),
+                )
+                return total, [int(r[0]) for r in rows if r and r[0] is not None]
+
+            rows = col.db.all(
+                f"SELECT c.id {from_clause} WHERE {where_sql} {order_sql}",
+                *args,
+            )
+            cids = [int(r[0]) for r in rows if r and r[0] is not None]
+            return len(cids), cids
+
+        try:
+            if preset == "mistakes":
+                lookback_start_ms = (cutoff - days * 86400) * 1000
+                total, cids = _run_query(
+                    ["c.id IN (SELECT DISTINCT cid FROM revlog WHERE id >= ? AND type < 4 AND ease = 1)"],
+                    [lookback_start_ms],
+                    needs_notes_join,
+                )
+                if total > 0:
+                    return total, cids
+                # Fallback to lapsed or mistake-tagged cards only when recent revlog misses are empty
+                return _run_query(
+                    [
+                        "(c.lapses > 0 OR instr(coalesce(n.tags, ''), '错题') > 0 "
+                        "OR instr(coalesce(n.tags, ''), '易错') > 0 "
+                        "OR instr(coalesce(n.tags, ''), '易忘') > 0 "
+                        "OR instr(coalesce(n.tags, ''), 'leech') > 0)"
+                    ],
+                    [],
+                    True,
+                )
+
+            if preset == "flagged":
+                extra = ["(c.flags & 7) > 0"] if (flag_filter == "all" and tag_filter == "all") else []
+                return _run_query(extra, [], needs_notes_join)
+
+            if preset == "ahead":
+                return _run_query(
+                    ["(c.queue IN (2, 3) OR c.type = 2) AND c.due <= ?"],
+                    [today_sched + days],
+                    needs_notes_join,
+                )
+
+            if preset == "extra_new":
+                return _run_query(["(c.type = 0 OR c.queue = 0)"], [], needs_notes_join)
+
+            if card_scope == "due":
+                return _run_query(
+                    ["(c.queue IN (1, 3) OR (c.queue = 2 AND c.due <= ?))"],
+                    [today_sched],
+                    needs_notes_join,
+                )
+            if card_scope == "new":
+                return _run_query(["(c.type = 0 OR c.queue = 0)"], [], needs_notes_join)
+            if card_scope == "review":
+                return _run_query(["(c.type = 2 OR c.queue = 2)"], [], needs_notes_join)
+            return _run_query([], [], needs_notes_join)
+        except Exception:
+            return None
+
+    def _collect_custom_study_cids(self, col, data: Dict[str, Any]) -> Tuple[List[int], bool]:
+        """
+        Collects and sorts candidate card IDs for Custom Study / Mistake Drills / Flag & Tag Cram:
+        - preset: 'mistakes' | 'flagged' | 'ahead' | 'extra_new' | 'custom'
+        - deckId: 'all' or numeric deck ID
+        - days: lookback days for 'mistakes' (default 7) or lookahead days for 'ahead' (default 3)
+        - flag: 'all' | 'flagged' | '1'..'7'
+        - tag: 'all' or specific tag
+        - cardScope: 'all' | 'due' | 'review' | 'new'
+        - sortOrder: 'lapses_desc' | 'ivl_asc' | 'random' | 'due_asc'
+        - isPreviewOnly: bool (default True for cram/drills)
+        """
+        params = self._parse_custom_study_params(col, data)
+        is_preview_only = params["is_preview_only"]
+
+        sql_res = self._query_custom_study_sql(col, params, count_only=False)
+        if sql_res is not None:
+            return sql_res[1], is_preview_only
+
+        preset = params["preset"]
+        days = params["days"]
+        flag_filter = params["flag_filter"]
+        tag_filter = params["tag_filter"]
+        card_scope = params["card_scope"]
+        sort_order = params["sort_order"]
+        deck_clause = params["deck_clause"]
+        target_dids = params["target_dids"]
 
         base_cids = list(col.find_cards(deck_clause.strip())) if hasattr(col, "find_cards") else []
         if not base_cids:
@@ -461,6 +650,16 @@ class ReviewService:
         if col is None:
             return {"success": False, "totalMatched": 0, "count": 0}
         limit = max(1, min(200, int(data.get("limit") or 30)))
+        params = self._parse_custom_study_params(col, data)
+        sql_res = self._query_custom_study_sql(col, params, count_only=True)
+        if sql_res is not None:
+            total_matched = sql_res[0]
+            return {
+                "success": True,
+                "totalMatched": total_matched,
+                "count": min(limit, total_matched),
+                "isPreviewOnly": params["is_preview_only"],
+            }
         cids, is_preview = self._collect_custom_study_cids(col, data)
         return {
             "success": True,
@@ -486,8 +685,15 @@ class ReviewService:
             }
 
         limit = max(1, min(200, int(data.get("limit") or 30)))
-        cids, is_preview_only = self._collect_custom_study_cids(col, data)
-        selected_cids = cids[:limit]
+        params = self._parse_custom_study_params(col, data)
+        sql_res = self._query_custom_study_sql(col, params, count_only=False, limit=limit)
+        if sql_res is not None:
+            total_matched, selected_cids = sql_res
+            is_preview_only = params["is_preview_only"]
+        else:
+            cids, is_preview_only = self._collect_custom_study_cids(col, data)
+            total_matched = len(cids)
+            selected_cids = cids[:limit]
         cards_out = [
             c
             for c in (
@@ -500,7 +706,7 @@ class ReviewService:
             "success": True,
             "preset": str(data.get("preset", "mistakes") or "mistakes"),
             "deckId": str(data.get("deckId") or "all"),
-            "totalMatched": len(cids),
+            "totalMatched": total_matched,
             "count": len(cards_out),
             "isPreviewOnly": is_preview_only,
             "cardIds": [str(c["id"]) for c in cards_out],
@@ -699,11 +905,10 @@ class ReviewService:
 
     @staticmethod
     def _template_needs_script_shim(model) -> bool:
-        """模板脚本依赖配套插件注入的全局状态（目前已知为 gData）时返回 True。
+        """模板正文高度依赖前端脚本生成（gData 选择题、Image Occlusion Enhanced、Enhanced Cloze）时返回 True。
 
-        这类模板把选项/答案放在隐藏 div 里，再用脚本生成可点击选项与判分；
-        脚本还依赖作者插件注入的 ``gData``。默认渲染会剥掉脚本，只剩题干；
-        沙盒里补一个兼容 gData 后原模板即可完整工作，所以自动走沙盒。
+        这类模板把正文/选项/遮罩放在隐藏容器里，再用脚本渲染交互内容；默认渲染会剥掉
+        ``<script>`` 导致空白或只剩外壳，因此自动路由到安全沙盒执行。
         """
         try:
             parts = []
@@ -716,13 +921,19 @@ class ReviewService:
         lowered = blob.lower()
         if "<script" not in lowered:
             return False
-        # 选择题模板（gData 家族）与 Image Occlusion Enhanced：模板脚本负责生成
-        # 选项/遮罩；默认渲染剥掉脚本后只剩题干或隐藏 ID，必须走沙盒执行。
+        model_name_lower = str(model.get("name") or "").lower()
+        # 1. 选择题模板（gData 家族）
         if "gdata" in lowered:
             return True
+        # 2. Image Occlusion Enhanced
         if "image-occlusion" in lowered or "image_occlusion" in lowered:
             return True
-        if "image occlusion" in str(model.get("name") or "").lower():
+        if "image occlusion" in model_name_lower:
+            return True
+        # 3. Enhanced Cloze（2.1 v2 等点击逐空展开模板：正文藏在 #enhanced-cloze-content）
+        if "enhanced-cloze-content" in lowered or "enhanced-clozes" in lowered:
+            return True
+        if "enhanced cloze" in model_name_lower:
             return True
         return False
 
@@ -1050,6 +1261,11 @@ class ReviewService:
                     card, media_dir, http_base_url=http_base_url, raw_output=raw_output
                 )
             )
+            sandbox_preload_scripts = (
+                find_sandbox_preload_scripts(model, media_dir, http_base_url=http_base_url)
+                if (sandbox_render.question or sandbox_render.answer)
+                else []
+            )
             needs_sandbox = bool(
                 self._template_needs_script_shim(model)
                 and (sandbox_render.question or sandbox_render.answer)
@@ -1093,6 +1309,8 @@ class ReviewService:
                 "sandboxFrontHtml": sandbox_render.question,
                 "sandboxBackHtml": sandbox_render.answer,
                 "sandboxCss": sandbox_render.css,
+                "sandboxMediaBaseUrl": http_base_url,
+                "sandboxPreloadScripts": sandbox_preload_scripts,
                 "needsSandbox": needs_sandbox,
                 "audioFiles": all_audio,
                 "frontAudioFiles": front_audio_files,
@@ -1529,6 +1747,11 @@ class ReviewService:
                         "image-occlusion" in tmpl_blob
                         or "image_occlusion" in tmpl_blob
                         or "image occlusion" in str(model.get("name", "") or "").lower()
+                    ),
+                    "hasEnhancedClozeKeyword": (
+                        "enhanced-cloze-content" in tmpl_blob
+                        or "enhanced-clozes" in tmpl_blob
+                        or "enhanced cloze" in str(model.get("name", "") or "").lower()
                     ),
                 },
             },

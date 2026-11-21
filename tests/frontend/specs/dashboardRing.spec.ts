@@ -230,9 +230,10 @@ test('dashboard hero secondary actions and deck card actions render icon-only wi
     decks: sampleDecks,
   });
   ok(html.includes('<span>开始今日学习</span>'), 'primary CTA keeps visible text label');
-  ok(html.includes('aria-label="轻量复习"'), 'light session icon button must have aria-label');
+  ok(html.includes('aria-label="禅模式"'), 'zen mode icon button must have aria-label');
   ok(html.includes('aria-label="自定义学习"'), 'custom study icon button must have aria-label');
-  ok(!html.includes('<span>轻量复习</span>'), 'light session button must omit visible text label');
+  ok(!html.includes('aria-label="轻量复习"'), 'light session entry must be hidden');
+  ok(!html.includes('<span>禅模式</span>'), 'zen mode button must omit visible text label');
   ok(!html.includes('<span>自定义学习</span>'), 'custom study button must omit visible text label');
   ok(!html.includes('deck-view-label'), 'deck view button must omit visible text label');
   ok(!html.includes('<span>学习</span>'), 'deck study button must omit visible text label');

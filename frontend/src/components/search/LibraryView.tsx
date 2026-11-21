@@ -140,6 +140,8 @@ export const LibraryView: React.FC = () => {
     libraryFacetCounts,
     libraryHasMoreFromBackend,
     libraryAllTags,
+    libraryLoaded,
+    libraryStale,
     librarySearching,
     libraryViewMode,
     librarySelectionMode,
@@ -158,7 +160,18 @@ export const LibraryView: React.FC = () => {
     resolvedLang,
   } = useAppStore();
 
-  const isSyncPending = isInitialSyncing || syncing || isLoading;
+  useEffect(() => {
+    if (
+      isAnkiNativeEnv() &&
+      !isInitialSyncing &&
+      (!libraryLoaded || libraryStale) &&
+      !librarySearching
+    ) {
+      appActions.searchLibraryDebounced();
+    }
+  }, [isInitialSyncing, libraryLoaded, libraryStale, librarySearching]);
+
+  const isSyncPending = isInitialSyncing || syncing || isLoading || (!libraryLoaded && librarySearching);
 
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
@@ -329,6 +342,20 @@ export const LibraryView: React.FC = () => {
   }, [libraryFacetCounts, libraryCards]);
 
   const tagAllCount = libraryFacetCounts ? libraryFacetCounts.tagAllCount : libraryCards.length;
+
+  const deckCountsMap = useMemo<Record<string, number> | null>(() => {
+    if (libraryFacetCounts?.deckCounts) {
+      return libraryFacetCounts.deckCounts;
+    }
+    if (isAnkiNativeEnv()) return null;
+    const map: Record<string, number> = {};
+    for (const c of libraryCards) {
+      map[c.deckId] = (map[c.deckId] || 0) + 1;
+    }
+    return map;
+  }, [libraryFacetCounts, libraryCards]);
+
+  const deckAllCount = libraryFacetCounts?.deckAllCount;
 
   const allAvailableTags = useMemo(() => {
     const set = new Set<string>([...libraryAllTags, ...Object.keys(tagCountsMap)]);
@@ -1198,11 +1225,17 @@ export const LibraryView: React.FC = () => {
                       }`}
                     >
                       <span>{t('allDecksOption')}</span>
-                      {filterDeckId === 'all' && <CheckIcon className="w-3.5 h-3.5 text-[var(--brand-text)]" strokeWidth={2.4} />}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {deckAllCount !== undefined && (
+                          <span className="text-[11px] text-[#8E8E93]">{deckAllCount}</span>
+                        )}
+                        {filterDeckId === 'all' && <CheckIcon className="w-3.5 h-3.5 text-[var(--brand-text)]" strokeWidth={2.4} />}
+                      </div>
                     </button>
 
                     {filteredDropdownDecks.map((d) => {
                       const isSelected = filterDeckId === d.id;
+                      const deckCnt = deckCountsMap ? (deckCountsMap[d.id] ?? 0) : d.totalCards;
                       return (
                         <button
                           key={d.id}
@@ -1219,9 +1252,9 @@ export const LibraryView: React.FC = () => {
                               : 'hover:bg-[#F4F4F6]'
                           }`}
                         >
-                          <span className="truncate">{d.fullName || d.name}</span>
+                          <span className={`truncate ${deckCnt === 0 && !isSelected ? 'opacity-55' : ''}`}>{d.fullName || d.name}</span>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-[10px] text-[#8E8E93]">{d.totalCards}</span>
+                            <span className="px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/5 text-[10px] text-[#8E8E93]">{deckCnt}</span>
                             {isSelected && <CheckIcon className="w-3.5 h-3.5 text-[var(--brand-text)]" strokeWidth={2.4} />}
                           </div>
                         </button>

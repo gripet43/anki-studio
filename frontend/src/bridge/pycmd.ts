@@ -368,6 +368,8 @@ export interface UserPreferences {
   collapsedDeckIds: string[];
   /** 左侧主导航栏是否收起为紧凑图标栏（全局界面偏好）。 */
   sidebarCollapsed?: boolean;
+  /** 全局原生沙盒兼容模式开关（开启后所有复习卡片统一走沙盒兼容渲染）。 */
+  compatMode?: boolean;
   sandboxNoteTypeIds?: string[];
   debugMode?: boolean;
   showShortcutHints?: boolean;
@@ -391,6 +393,14 @@ export interface UserPreferences {
   reviewStageWidth?: ReviewStageWidth;
   /** 学习模式卡片内容流式缩放比例（%）。 */
   reviewContentScale?: ReviewContentScale;
+  /** 禅模式音效开关（默认开启）。 */
+  zenSoundEnabled?: boolean;
+  /** 禅模式音效音量（0–1，默认 0.5）。 */
+  zenSfxVolume?: number;
+  /** 禅模式背景声景音量（0–1，默认 0.5）。 */
+  zenAmbienceVolume?: number;
+  /** 禅模式背景声景（silent / rain / wind / warmth）。 */
+  zenAmbience?: 'silent' | 'rain' | 'wind' | 'warmth';
 }
 
 export interface SafetyWarning {
@@ -470,6 +480,7 @@ export interface DashboardData {
     longestSessionMinutes: number;
   };
   advancedStats?: AdvancedStatsData;
+  allTags?: string[];
   safetyWarning?: SafetyWarning | null;
   lastRescueReceipt?: RescueReceipt | null;
   vacationHistory?: VacationHistoryItem[];
@@ -509,7 +520,11 @@ export interface ReviewCardItem {
   sandboxFrontHtml?: string;
   sandboxBackHtml?: string;
   sandboxCss?: string;
-  /** 模板脚本依赖配套全局（如 gData）：后端自动标记，前端无需手动开兼容模式。 */
+  /** 本地 HTTP 媒体服务根地址（用于沙盒内动态相对脚本路径改写）。 */
+  sandboxMediaBaseUrl?: string;
+  /** 按需预载的本地媒体脚本 URL 列表（如 jQuery 模板使用的 _jquery.min.js）。 */
+  sandboxPreloadScripts?: string[];
+  /** 模板脚本依赖配套全局或纯脚本渲染（如 gData / Image Occlusion / Enhanced Cloze）：后端自动标记，前端无需手动开兼容模式。 */
   needsSandbox?: boolean;
   audioFiles?: string[];
   frontAudioFiles?: string[];
@@ -553,6 +568,8 @@ export interface LibraryFacetCounts {
   flagCounts: Record<string, number>;
   tagCounts: Record<string, number>;
   tagAllCount: number;
+  deckCounts?: Record<string, number>;
+  deckAllCount?: number;
 }
 
 export interface LibraryCardSibling {

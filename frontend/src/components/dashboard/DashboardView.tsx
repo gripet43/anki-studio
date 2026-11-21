@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { DashboardTipLine } from './DashboardTipLine';
 import { HoverCard } from '../common/HoverCard';
+import { ZenModeIcon } from '../common/Icons';
 import {
   ChartTooltipContent,
   ChartTooltipPortal,
@@ -292,6 +293,20 @@ export const DashboardView: React.FC = () => {
     };
   }, [dashboard.vacation?.startDate, dashboard.vacation?.endDate, resolvedLang]);
 
+  const renderZenModeIconBtn = (extraClass = '') => (
+    <Tooltip variant="compact" content={t('zenModeTooltip')} shortcut="Cmd Shift Z">
+      <button
+        type="button"
+        aria-label={t('zenModeBtn')}
+        data-zen-trigger="dashboard"
+        onClick={() => appActions.enterZenMode()}
+        className={`btn-secondary hero-icon-btn bg-[var(--bg-card)]/90 text-[var(--text-secondary)] hover:text-[var(--brand-text)] shadow-2xs ${extraClass}`}
+      >
+        <ZenModeIcon className="w-[19px] h-[19px] shrink-0" />
+      </button>
+    </Tooltip>
+  );
+
   const renderCustomStudyIconBtn = (extraClass = '') => (
     <Tooltip variant="compact" content={t('customStudyEntryBtn')}>
       <button
@@ -360,7 +375,7 @@ export const DashboardView: React.FC = () => {
           <GreetingVignette accentColor={accentColor} isDark={isDark} />
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-4 shrink-0 ms-auto">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0 ms-auto">
           {/* Inline Sync Status Indicator with Rich Flyout */}
           <SyncStatusPill />
 
@@ -966,8 +981,7 @@ export const DashboardView: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => appActions.openVacationModal('status')}
-                      style={{ backgroundColor: brandHex }}
-                      className="btn-primary !h-10 !px-5 !rounded-xl !text-[13px] flex items-center gap-1.5 whitespace-nowrap"
+                      className="btn-primary hero-study-cta !h-10 !px-5 !rounded-xl !text-[13px] flex items-center gap-1.5 whitespace-nowrap"
                     >
                       <span>{t('endVacationBtn')}</span>
                     </button>
@@ -984,37 +998,16 @@ export const DashboardView: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => appActions.startReview('all')}
-                      style={{ backgroundColor: brandHex }}
-                      className={`btn-primary !h-10 !px-5 !rounded-xl !text-[13px] font-semibold flex items-center gap-2 whitespace-nowrap shadow-[0_4px_12px_rgba(var(--brand-rgb),0.24)] ${
+                      className={`btn-primary hero-study-cta !h-10 !px-5 !rounded-xl !text-[13px] font-semibold flex items-center gap-2 whitespace-nowrap ${
                         syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : ''
                       }`}
                     >
-                      <svg className="w-3 h-3 fill-current shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                      <svg className="hero-study-cta-icon w-3 h-3 fill-current shrink-0 rtl:scale-x-[-1]" viewBox="0 0 24 24" aria-hidden="true">
                         <polygon points="6 4 20 12 6 20 6 4" />
                       </svg>
                       <span>{t('startTodayStudy')}</span>
                     </button>
-                    <Tooltip variant="compact" content={`${t('lowEnergyBtn')} · ${t('lowEnergySub')}`}>
-                      <button
-                        type="button"
-                        aria-label={t('lowEnergyBtn')}
-                        onClick={() => appActions.startLowEnergySession(decks[0]?.id)}
-                        className="btn-secondary hero-icon-btn bg-[var(--bg-card)]/90 text-[var(--text-secondary)] hover:text-[var(--brand-text)] shadow-2xs"
-                      >
-                        <svg
-                          className="w-4 h-4 shrink-0"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.85"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                        </svg>
-                      </button>
-                    </Tooltip>
+                    {renderZenModeIconBtn()}
                     {renderCustomStudyIconBtn()}
                   </>
                 ) : (
@@ -1030,6 +1023,7 @@ export const DashboardView: React.FC = () => {
                       </svg>
                       <span>{t('studyTomorrow')}</span>
                     </button>
+                    {renderZenModeIconBtn(syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : '')}
                     {renderCustomStudyIconBtn(syncJustFinished ? 'animate-sync-reveal delay-stagger-1' : '')}
                     <button
                       type="button"

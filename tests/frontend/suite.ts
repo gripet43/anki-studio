@@ -36,6 +36,8 @@ import './specs/editorClearFormat.spec';
 import './specs/avatarProfile.spec';
 import './specs/reviewUndo.spec';
 import './specs/reviewDisplayPopover.spec';
+import './specs/zenMode.spec';
+import './specs/sandboxCardFrame.spec';
 
 import { report } from './harness';
 

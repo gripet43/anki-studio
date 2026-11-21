@@ -45,6 +45,7 @@ export interface CardDebugClientState {
   theme: string;
   accentColor: string;
   resolvedLang: string;
+  compatMode?: boolean;
   sandboxNoteTypeIds: string[];
   autoPlayFrontAudio?: boolean;
   autoPlayBackAudio?: boolean;

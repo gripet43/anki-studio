@@ -54,15 +54,19 @@ function render(element: React.ReactElement): string {
 
 section('render · AnkiStudioLogo');
 
-test('default logo renders the split-prism SVG at 24px with the brand colours', () => {
+test('default logo renders the matte dual-tone titanium split-prism SVG at 24px across all themes', () => {
   const html = render(React.createElement(AnkiStudioLogo));
   ok(html.startsWith('<svg'), `expected an <svg> root, got ${html.slice(0, 30)}`);
   ok(html.includes('width="24"') && html.includes('height="24"'), 'default size is 24px');
   ok(html.includes('viewBox="0 0 24 24"'), 'logo viewBox is part of the brand asset contract');
   ok(html.includes('aria-label="Anki Studio Logo"'), 'logo needs an accessible name');
-  ok(html.includes('#A1C1E4'), 'left facet uses the soft studio blue');
-  ok(html.includes('#3076C3'), 'right facet uses the primary brand blue');
+  ok(html.includes('fill-[#B8BEC8]') && html.includes('dark:fill-[#787E8C]'), 'left facet uses solid matte titanium silver');
+  ok(html.includes('fill-[#474C56]') && html.includes('dark:fill-[#E4E7EE]'), 'right facet uses solid slate titanium');
   ok((html.match(/<path/g) || []).length >= 2, 'both prism facets must be present');
+
+  const brandHtml = render(React.createElement(AnkiStudioLogo, { variant: 'brand' }));
+  ok(brandHtml.includes('#A1C1E4'), 'brand variant left facet uses soft studio blue');
+  ok(brandHtml.includes('#3076C3'), 'brand variant right facet uses primary brand blue');
 });
 
 test('size and facet colours are overridable', () => {
@@ -264,6 +268,56 @@ test('SyncStatusPill renders full English label without overflow-hidden or leadi
       isInitialSyncing: prevState.isInitialSyncing,
       syncJustFinished: prevState.syncJustFinished,
       lastSyncedTimestamp: prevState.lastSyncedTimestamp,
+    });
+  }
+});
+
+test('SyncStatusPill renders single leading icon across unsynced, snapshot, syncing, justFinished, and shortcut hint states', () => {
+  const prevState = getAppState();
+  try {
+    // 1. Unsynced idle: single muted refresh icon + label
+    setAppState({
+      resolvedLang: 'zh-CN',
+      syncing: false,
+      isInitialSyncing: false,
+      syncJustFinished: false,
+      lastSyncedTimestamp: 0,
+      showShortcutHints: false,
+    });
+    const unsyncedHtml = render(React.createElement(SyncStatusPill));
+    equal((unsyncedHtml.match(/<svg\b/g) || []).length, 1, 'unsynced pill should render exactly one SVG icon');
+    ok(unsyncedHtml.includes('未同步') && unsyncedHtml.includes('group-hover:rotate-180'));
+    ok(!unsyncedHtml.includes('<kbd'), 'shortcut hint hidden when showShortcutHints is false');
+
+    // 2. Synced snapshot + shortcut hint: single refresh icon + <time> + Y keycap
+    setAppState({
+      lastSyncedTimestamp: Date.now() - 180_000,
+      showShortcutHints: true,
+    });
+    const snapshotHtml = render(React.createElement(SyncStatusPill));
+    equal((snapshotHtml.match(/<svg\b/g) || []).length, 1, 'snapshot pill should render exactly one SVG icon');
+    ok(snapshotHtml.includes('<time') && snapshotHtml.includes('>Y</kbd>'));
+
+    // 3. Syncing active: single spinning amber refresh icon + shimmer sweep, no ping dot
+    setAppState({ syncing: true, syncJustFinished: false });
+    const syncingHtml = render(React.createElement(SyncStatusPill));
+    equal((syncingHtml.match(/<svg\b/g) || []).length, 1, 'syncing pill should render exactly one SVG icon');
+    ok(syncingHtml.includes('motion-safe:animate-spin') && syncingHtml.includes('animate-shimmer-sweep'));
+    ok(!syncingHtml.includes('animate-ping'), 'syncing pill should not stack a separate ping dot alongside spinner');
+
+    // 4. Just finished: single green check icon + success label
+    setAppState({ syncing: false, syncJustFinished: true });
+    const finishedHtml = render(React.createElement(SyncStatusPill));
+    equal((finishedHtml.match(/<svg\b/g) || []).length, 1, 'justFinished pill should render exactly one SVG icon');
+    ok(finishedHtml.includes('animate-draw-check') && finishedHtml.includes('--status-success'));
+  } finally {
+    setAppState({
+      resolvedLang: prevState.resolvedLang,
+      syncing: prevState.syncing,
+      isInitialSyncing: prevState.isInitialSyncing,
+      syncJustFinished: prevState.syncJustFinished,
+      lastSyncedTimestamp: prevState.lastSyncedTimestamp,
+      showShortcutHints: prevState.showShortcutHints,
     });
   }
 });
@@ -631,6 +685,11 @@ test('SettingsModal enforces ARIA tablist semantics, de-noised tabs, schematics,
     doesNotMatch(appHtml, /明亮柔和纸感/, 'appearance theme cards must omit marketing prose');
     doesNotMatch(appHtml, /所有偏好自动持久化至本地插件配置/, 'appearance tab must omit top essay subtitle');
     doesNotMatch(appHtml, /\btitle="/, 'SettingsModal must never emit raw HTML title= attributes');
+    doesNotMatch(
+      appHtml,
+      /backdrop-blur/,
+      'SettingsModal should not mount live backdrop-blur layers over Windows QtWebEngine'
+    );
 
     // 2. Answer tab
     setAppState({ settingsInitialTab: 'answer' });

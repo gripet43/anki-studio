@@ -337,7 +337,7 @@ export const CommandPaletteModal: React.FC = () => {
   return (
     <div
       data-state={presence.state}
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 select-none ui-modal-backdrop modal-contain-scroll"
+      className="fixed inset-0 z-50 bg-black/48 flex items-center justify-center p-6 select-none ui-modal-backdrop modal-contain-scroll"
       role="dialog"
       aria-modal="true"
       aria-label={t('cmdPaletteAriaLabel')}

@@ -20,7 +20,7 @@ import {
 } from '../../hooks/useFloatingPosition';
 import { usePresence } from '../../hooks/usePresence';
 import { formatShortcut } from '../../i18n/translations';
-import { useAppStore } from '../../stores/useAppStore';
+import { useAppStoreSelector } from '../../stores/useAppStore';
 import { getClosestFromTarget } from '../../utils/domTarget';
 
 export type TooltipVariant = 'compact' | 'chart';
@@ -287,7 +287,8 @@ export function Tooltip({
   repositionKey,
 }: TooltipProps): React.JSX.Element {
   const tooltipId = useId();
-  const { showShortcutHints, envInfo } = useAppStore();
+  const showShortcutHints = useAppStoreSelector((s) => s.showShortcutHints);
+  const platform = useAppStoreSelector((s) => s.envInfo.platform);
 
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [triggerEl, setTriggerEl] = useState<Element | null>(null);
@@ -304,7 +305,7 @@ export function Tooltip({
 
   const formattedShortcut =
     variant === 'compact' && shortcut && showShortcutHints
-      ? formatShortcut(shortcut, envInfo.platform)
+      ? formatShortcut(shortcut, platform)
       : '';
   const hasVisibleShortcut = formattedShortcut.length > 0;
 
