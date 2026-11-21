@@ -230,7 +230,7 @@ export const SettingsModal: React.FC = () => {
 
   const supportsNativeSwitch =
     typeof HTMLInputElement !== 'undefined' && 'switch' in HTMLInputElement.prototype;
-  const studioVersion = envInfo.studioVersion || '1.7.0';
+  const studioVersion = envInfo.studioVersion || '1.7.1';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
 

@@ -1,10 +1,19 @@
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ANKI_FLAG_PALETTE,
   CardFlagColor,
   REVIEW_CONTENT_SCALES,
   ReviewContentScale,
   ReviewStageWidth,
+  triggerNativeHaptic,
 } from '../../bridge/pycmd';
 import { formatShortcut, translate } from '../../i18n/translations';
 import { usePresence } from '../../hooks/usePresence';
@@ -25,6 +34,19 @@ import {
   resolveManualPlayAudioFiles,
   resolveVisibleAudioFiles,
 } from '../../utils/reviewAudio';
+import {
+  createSwipeGestureState,
+  hasScrollableHorizontalAncestor,
+  type NativeWheelPhase,
+  resetSwipeForCardChange,
+  SPRING_BACK_DURATION_MS,
+  stepNativeWheelPhase,
+  stepSwipeRelease,
+  stepSwipeWheel,
+  type SwipeReleaseDecision,
+  type SwipeVisualPose,
+  WHEEL_SILENCE_RELEASE_MS,
+} from '../../utils/reviewSwipeGesture';
 import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
 import { CopyDebugInfoButton } from '../common/CopyDebugInfoButton';
 import { StudioSelect } from '../common/StudioSelect';
@@ -34,7 +56,7 @@ import {
   ReviewerCornerDecor,
 } from '../common/ThemeIllustrations';
 import { Tooltip } from '../common/Tooltip';
-import { CheckIcon, ChevronLeftIcon, CloseIcon } from '../common/Icons';
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, CloseIcon } from '../common/Icons';
 import { LightboxTarget, ReviewerImageLightbox } from './ReviewerImageLightbox';
 import { SandboxCardFrame } from './SandboxCardFrame';
 
@@ -173,7 +195,27 @@ export const ReviewerView: React.FC = () => {
   const [audioPopoverOpen, setAudioPopoverOpen] = useState(false);
   const [lightboxTarget, setLightboxTarget] = useState<LightboxTarget | null>(null);
   const [swipingDir, setSwipingDir] = useState<'left' | 'right' | null>(null);
+  const [swipeFromGesture, setSwipeFromGesture] = useState(false);
+  const [gestureFlyPose, setGestureFlyPose] = useState<SwipeVisualPose | null>(null);
+  const swipeMachineRef = useRef(createSwipeGestureState());
   const swipeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const springTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wheelSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragRafRef = useRef<number | null>(null);
+  const pendingPoseRef = useRef<SwipeVisualPose | null>(null);
+  const reducedMotionRef = useRef<boolean>(false);
+  const lastPinchTsRef = useRef<number>(0);
+  const prevLightboxOpenRef = useRef<boolean>(false);
+  const stageScrollRef = useRef<HTMLDivElement>(null);
+  const cardShellRef = useRef<HTMLDivElement>(null);
+  const cardGlowGoodRef = useRef<HTMLDivElement>(null);
+  const cardGlowAgainRef = useRef<HTMLDivElement>(null);
+  const stampGoodRef = useRef<HTMLDivElement>(null);
+  const stampAgainRef = useRef<HTMLDivElement>(null);
+  const cardHeaderMetaRef = useRef<HTMLDivElement>(null);
+  const pullPillRef = useRef<HTMLDivElement>(null);
+  const dockFooterRef = useRef<HTMLElement>(null);
+  const lastCardChangeReasonRef = useRef<'gesture' | 'other'>('other');
   const inspectorPresence = usePresence(inspectorOpen, 180);
   const lastLightboxTargetRef = useRef<LightboxTarget | null>(null);
   if (lightboxTarget) {
@@ -279,7 +321,38 @@ export const ReviewerView: React.FC = () => {
       clearTimeout(swipeTimerRef.current);
       swipeTimerRef.current = null;
     }
+    if (springTimerRef.current) {
+      clearTimeout(springTimerRef.current);
+      springTimerRef.current = null;
+    }
+    if (wheelSilenceTimerRef.current) {
+      clearTimeout(wheelSilenceTimerRef.current);
+      wheelSilenceTimerRef.current = null;
+    }
+    if (dragRafRef.current !== null) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    pendingPoseRef.current = null;
     setSwipingDir(null);
+    setSwipeFromGesture(false);
+    setGestureFlyPose(null);
+    resetSwipeForCardChange(swipeMachineRef.current, performance.now(), {
+      preserveCooldown: lastCardChangeReasonRef.current === 'gesture',
+    });
+    lastCardChangeReasonRef.current = 'other';
+    if (dockFooterRef.current) {
+      dockFooterRef.current.dataset.gestureActiveSide = 'none';
+    }
+    if (pullPillRef.current) {
+      pullPillRef.current.style.opacity = '0';
+      pullPillRef.current.style.visibility = 'hidden';
+      pullPillRef.current.dataset.visible = 'false';
+      pullPillRef.current.dataset.ready = 'false';
+    }
+    if (stageScrollRef.current) {
+      stageScrollRef.current.scrollTop = 0;
+    }
     if (currentCard) {
       const fMap: Record<string, string> =
         currentCard.fields && Object.keys(currentCard.fields).length > 0
@@ -332,27 +405,613 @@ export const ReviewerView: React.FC = () => {
     }
   }, [inlineEditing, activeFieldKey]);
 
+  const clearDragOverlaysDom = useCallback((keepStampsAndGlow: boolean) => {
+    if (dockFooterRef.current) {
+      dockFooterRef.current.dataset.gestureActiveSide = 'none';
+    }
+    const pill = pullPillRef.current;
+    if (pill) {
+      pill.style.opacity = '0';
+      pill.style.visibility = 'hidden';
+      pill.dataset.visible = 'false';
+      pill.dataset.ready = 'false';
+    }
+    if (!keepStampsAndGlow) {
+      if (cardGlowGoodRef.current) cardGlowGoodRef.current.style.opacity = '0';
+      if (cardGlowAgainRef.current) cardGlowAgainRef.current.style.opacity = '0';
+      const sg = stampGoodRef.current;
+      if (sg) {
+        sg.style.opacity = '0';
+        sg.style.visibility = 'hidden';
+        sg.dataset.visible = 'false';
+      }
+      const sa = stampAgainRef.current;
+      if (sa) {
+        sa.style.opacity = '0';
+        sa.style.visibility = 'hidden';
+        sa.dataset.visible = 'false';
+      }
+      if (cardHeaderMetaRef.current) {
+        cardHeaderMetaRef.current.style.opacity = '';
+      }
+    }
+  }, []);
+
+  const resetDragDomImmediate = useCallback(() => {
+    if (dragRafRef.current !== null) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    pendingPoseRef.current = null;
+    if (springTimerRef.current) {
+      clearTimeout(springTimerRef.current);
+      springTimerRef.current = null;
+    }
+    const shell = cardShellRef.current;
+    if (shell) {
+      shell.classList.remove('reviewer-card-dragging', 'reviewer-card-spring-back');
+      shell.style.transform = '';
+      shell.dataset.swipeAxis = 'idle';
+      shell.dataset.swipeDir = 'none';
+      shell.dataset.swipeThreshold = 'false';
+    }
+    clearDragOverlaysDom(false);
+  }, [clearDragOverlaysDom]);
+
+  const applyPoseToDom = useCallback(
+    (pose: SwipeVisualPose, flipped: boolean) => {
+      const shell = cardShellRef.current;
+      if (!shell) return;
+      if (!pose.isDragging) {
+        resetDragDomImmediate();
+        return;
+      }
+
+      shell.classList.remove('ui-card-enter', 'reviewer-card-spring-back');
+      shell.classList.add('reviewer-card-dragging');
+      shell.dataset.swipeAxis = pose.axis;
+      shell.dataset.swipeDir = pose.direction || 'none';
+      shell.dataset.swipeThreshold = pose.overThreshold ? 'true' : 'false';
+
+      if (!reducedMotionRef.current) {
+        shell.style.transform = `translate3d(${pose.visualX.toFixed(1)}px, ${pose.visualY.toFixed(1)}px, 0) rotate(${pose.rotationDeg.toFixed(2)}deg)`;
+      }
+
+      if (flipped && pose.axis === 'horizontal') {
+        const isRight = pose.direction === 'right';
+        const isLeft = pose.direction === 'left';
+        const stampAlpha = pose.progress > 0.08 ? Math.min(1, pose.progress * 1.15) : 0;
+        const stampScale = pose.overThreshold ? 1.04 : 0.94;
+
+        if (cardGlowGoodRef.current) {
+          cardGlowGoodRef.current.style.opacity = isRight ? pose.progress.toFixed(3) : '0';
+        }
+        if (cardGlowAgainRef.current) {
+          cardGlowAgainRef.current.style.opacity = isLeft ? pose.progress.toFixed(3) : '0';
+        }
+
+        const sg = stampGoodRef.current;
+        if (sg) {
+          const showGood = isRight && stampAlpha > 0;
+          sg.style.opacity = showGood ? stampAlpha.toFixed(3) : '0';
+          sg.style.visibility = showGood ? 'visible' : 'hidden';
+          sg.dataset.visible = showGood ? 'true' : 'false';
+          if (showGood) {
+            sg.style.transform = `rotate(-10deg) scale(${stampScale})`;
+          }
+        }
+
+        const sa = stampAgainRef.current;
+        if (sa) {
+          const showAgain = isLeft && stampAlpha > 0;
+          sa.style.opacity = showAgain ? stampAlpha.toFixed(3) : '0';
+          sa.style.visibility = showAgain ? 'visible' : 'hidden';
+          sa.dataset.visible = showAgain ? 'true' : 'false';
+          if (showAgain) {
+            sa.style.transform = `rotate(10deg) scale(${stampScale})`;
+          }
+        }
+
+        if (cardHeaderMetaRef.current) {
+          cardHeaderMetaRef.current.style.opacity =
+            pose.progress > 0.05 ? Math.max(0.06, 1 - pose.progress * 1.45).toFixed(3) : '';
+        }
+
+        if (dockFooterRef.current) {
+          dockFooterRef.current.dataset.gestureActiveSide =
+            pose.overThreshold && (isLeft || isRight) ? (pose.direction as string) : 'none';
+        }
+
+        const pill = pullPillRef.current;
+        if (pill && pill.dataset.visible === 'true') {
+          pill.style.opacity = '0';
+          pill.style.visibility = 'hidden';
+          pill.dataset.visible = 'false';
+          pill.dataset.ready = 'false';
+        }
+      } else if (!flipped && pose.axis === 'pull_flip') {
+        if (cardGlowGoodRef.current) cardGlowGoodRef.current.style.opacity = '0';
+        if (cardGlowAgainRef.current) cardGlowAgainRef.current.style.opacity = '0';
+        if (dockFooterRef.current) dockFooterRef.current.dataset.gestureActiveSide = 'none';
+        const pill = pullPillRef.current;
+        if (pill) {
+          const showPill = pose.progress > 0.08;
+          pill.style.opacity = showPill ? Math.min(1, pose.progress * 1.15).toFixed(3) : '0';
+          pill.style.visibility = showPill ? 'visible' : 'hidden';
+          pill.dataset.visible = showPill ? 'true' : 'false';
+          pill.dataset.ready = pose.pullFlipReady ? 'true' : 'false';
+          if (showPill) {
+            pill.style.transform = `translate3d(-50%, ${Math.round(
+              pose.visualY * 0.42 - 8
+            )}px, 0) scale(${pose.pullFlipReady ? 1.04 : 0.96})`;
+          }
+        }
+      } else {
+        // Unflipped horizontal rubber-band wobble: pure transform, zero overlays.
+        clearDragOverlaysDom(false);
+      }
+    },
+    [clearDragOverlaysDom, resetDragDomImmediate]
+  );
+
+  const startSpringBackDom = useCallback(() => {
+    if (dragRafRef.current !== null) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    pendingPoseRef.current = null;
+    const shell = cardShellRef.current;
+    if (shell) {
+      shell.classList.remove('reviewer-card-dragging', 'ui-card-enter');
+      shell.classList.add('reviewer-card-spring-back');
+      shell.dataset.swipeAxis = 'idle';
+      shell.dataset.swipeDir = 'none';
+      shell.dataset.swipeThreshold = 'false';
+      if (!reducedMotionRef.current) {
+        shell.style.transform = 'translate3d(0px, 0px, 0) rotate(0deg)';
+      } else {
+        shell.style.transform = '';
+      }
+    }
+    if (cardGlowGoodRef.current) cardGlowGoodRef.current.style.opacity = '0';
+    if (cardGlowAgainRef.current) cardGlowAgainRef.current.style.opacity = '0';
+    if (stampGoodRef.current) stampGoodRef.current.style.opacity = '0';
+    if (stampAgainRef.current) stampAgainRef.current.style.opacity = '0';
+    if (cardHeaderMetaRef.current) cardHeaderMetaRef.current.style.opacity = '';
+    if (dockFooterRef.current) dockFooterRef.current.dataset.gestureActiveSide = 'none';
+    const pill = pullPillRef.current;
+    if (pill) {
+      pill.style.opacity = '0';
+      pill.style.visibility = 'hidden';
+      pill.dataset.visible = 'false';
+      pill.dataset.ready = 'false';
+    }
+    if (springTimerRef.current) clearTimeout(springTimerRef.current);
+    springTimerRef.current = setTimeout(() => {
+      springTimerRef.current = null;
+      const s = cardShellRef.current;
+      if (s) {
+        s.classList.remove('reviewer-card-spring-back');
+        s.style.transform = '';
+      }
+      if (stampGoodRef.current) {
+        stampGoodRef.current.style.visibility = 'hidden';
+        stampGoodRef.current.dataset.visible = 'false';
+      }
+      if (stampAgainRef.current) {
+        stampAgainRef.current.style.visibility = 'hidden';
+        stampAgainRef.current.dataset.visible = 'false';
+      }
+    }, SPRING_BACK_DURATION_MS);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    reducedMotionRef.current = mq.matches;
+    const onChange = (ev: MediaQueryListEvent) => {
+      reducedMotionRef.current = ev.matches;
+    };
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    }
+    return undefined;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!swipingDir) return;
+    const shell = cardShellRef.current;
+    if (shell) {
+      shell.classList.remove('reviewer-card-dragging', 'reviewer-card-spring-back');
+      shell.style.transform = '';
+      shell.dataset.swipeAxis = 'idle';
+      shell.dataset.swipeDir = 'none';
+      shell.dataset.swipeThreshold = 'false';
+    }
+  }, [swipingDir]);
+
   const triggerRateWithSwipe = useCallback(
-    (ease: 1 | 2 | 3 | 4) => {
+    (ease: 1 | 2 | 3 | 4, gesturePose?: SwipeVisualPose | null) => {
       if (swipingDir) return;
-      const prefersReducedMotion =
-        typeof window !== 'undefined' &&
-        typeof window.matchMedia === 'function' &&
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (prefersReducedMotion) {
+      const fromGesture = Boolean(gesturePose);
+      if (reducedMotionRef.current) {
+        resetDragDomImmediate();
+        if (fromGesture) {
+          lastCardChangeReasonRef.current = 'gesture';
+        }
         appActions.answerCurrentCard(ease);
         return;
       }
-      const dir: 'left' | 'right' = ease <= 2 ? 'left' : 'right';
+      if (springTimerRef.current) {
+        clearTimeout(springTimerRef.current);
+        springTimerRef.current = null;
+      }
+      if (!fromGesture) {
+        resetDragDomImmediate();
+      } else if (dockFooterRef.current) {
+        dockFooterRef.current.dataset.gestureActiveSide = 'none';
+      }
+      lastCardChangeReasonRef.current = fromGesture ? 'gesture' : 'other';
+      setSwipeFromGesture(fromGesture);
+      setGestureFlyPose(fromGesture && gesturePose ? gesturePose : null);
+      const dir: 'left' | 'right' =
+        gesturePose?.direction === 'left' || gesturePose?.direction === 'right'
+          ? gesturePose.direction
+          : ease <= 2
+          ? 'left'
+          : 'right';
+      const flyDurationMs = fromGesture ? 175 : 260;
       setSwipingDir(dir);
       swipeTimerRef.current = setTimeout(() => {
         swipeTimerRef.current = null;
         setSwipingDir(null);
+        setSwipeFromGesture(false);
+        setGestureFlyPose(null);
         appActions.answerCurrentCard(ease);
-      }, 260);
+      }, flyDurationMs);
     },
-    [swipingDir]
+    [swipingDir, resetDragDomImmediate]
   );
+
+  const gestureGuardRef = useRef({
+    isSessionComplete,
+    currentCardId: currentCard?.id || '',
+    isCardFlipped,
+    inlineEditing,
+    lightboxOpen: Boolean(lightboxTarget),
+    popoverOpen: flagPopoverOpen || displayPopoverOpen || audioPopoverOpen,
+    swipingDir,
+  });
+  gestureGuardRef.current = {
+    isSessionComplete,
+    currentCardId: currentCard?.id || '',
+    isCardFlipped,
+    inlineEditing,
+    lightboxOpen: Boolean(lightboxTarget),
+    popoverOpen: flagPopoverOpen || displayPopoverOpen || audioPopoverOpen,
+    swipingDir,
+  };
+
+  const applySwipeReleaseDecision = useCallback(
+    (decision: SwipeReleaseDecision) => {
+      if (wheelSilenceTimerRef.current) {
+        clearTimeout(wheelSilenceTimerRef.current);
+        wheelSilenceTimerRef.current = null;
+      }
+      if (decision.kind === 'rate') {
+        if (dragRafRef.current !== null) {
+          cancelAnimationFrame(dragRafRef.current);
+          dragRafRef.current = null;
+        }
+        pendingPoseRef.current = null;
+        // Flush final pose stamps/glows cleanly so they stay visible during the 175ms fly-off.
+        applyPoseToDom(decision.pose, true);
+        triggerRateWithSwipe(decision.ease, decision.pose);
+        return;
+      }
+      if (decision.kind === 'flip') {
+        resetDragDomImmediate();
+        appActions.flipCard();
+        return;
+      }
+      if (decision.kind === 'spring') {
+        startSpringBackDom();
+      }
+    },
+    [applyPoseToDom, resetDragDomImmediate, startSpringBackDom, triggerRateWithSwipe]
+  );
+
+  const applySwipeReleaseRef = useRef(applySwipeReleaseDecision);
+  applySwipeReleaseRef.current = applySwipeReleaseDecision;
+  const applyPoseToDomRef = useRef(applyPoseToDom);
+  applyPoseToDomRef.current = applyPoseToDom;
+
+  useEffect(() => {
+    if (wheelSilenceTimerRef.current) {
+      clearTimeout(wheelSilenceTimerRef.current);
+      wheelSilenceTimerRef.current = null;
+    }
+    const machine = swipeMachineRef.current;
+    if (machine.axis !== 'idle') {
+      machine.axis = 'idle';
+      machine.rawX = 0;
+      machine.rawY = 0;
+      machine.velocityX = 0;
+      machine.hapticFiredForSide = null;
+    }
+    resetDragDomImmediate();
+  }, [isCardFlipped, resetDragDomImmediate]);
+
+  useEffect(() => {
+    const isOpen = Boolean(lightboxTarget);
+    if (!prevLightboxOpenRef.current && isOpen) {
+      appActions.trackFeature('image_lightbox');
+    } else if (prevLightboxOpenRef.current && !isOpen) {
+      // Closing image lightbox: latch brief cooldown so residual zoom/pan inertia never leaks to card.
+      resetSwipeForCardChange(swipeMachineRef.current, performance.now(), {
+        preserveCooldown: true,
+      });
+      resetDragDomImmediate();
+    }
+    prevLightboxOpenRef.current = isOpen;
+  }, [lightboxTarget, resetDragDomImmediate]);
+
+  useEffect(() => {
+    const isBlocked = (eventTarget?: EventTarget | null): boolean => {
+      const g = gestureGuardRef.current;
+      if (
+        g.isSessionComplete ||
+        !g.currentCardId ||
+        g.inlineEditing ||
+        g.lightboxOpen ||
+        g.popoverOpen ||
+        g.swipingDir !== null
+      ) {
+        return true;
+      }
+      // Suspend trackpad swipe/flip whenever the viewport is pinch-zoomed so two-finger panning works naturally.
+      if (
+        typeof window !== 'undefined' &&
+        window.visualViewport &&
+        window.visualViewport.scale > 1.01
+      ) {
+        return true;
+      }
+      if (performance.now() - lastPinchTsRef.current < 280) {
+        return true;
+      }
+      const appState = getAppState();
+      if (
+        !appState.inReviewMode ||
+        appState.zenMode ||
+        Boolean(appState.editingCardData) ||
+        appState.cmdKOpen ||
+        appState.quickAddOpen ||
+        appState.settingsOpen ||
+        appState.vacationModalOpen ||
+        appState.icuModalOpen ||
+        appState.rescueModalOpen ||
+        appState.receiptModalOpen ||
+        appState.customStudyModalOpen ||
+        appState.slashMenuOpen
+      ) {
+        return true;
+      }
+      if (eventTarget && isTypingTarget(eventTarget)) return true;
+      if (
+        eventTarget &&
+        getClosestFromTarget(
+          eventTarget,
+          '[role="dialog"], [role="alertdialog"], [popover], .studio-popover'
+        )
+      ) {
+        return true;
+      }
+      return false;
+    };
+
+    const scheduleSilenceRelease = () => {
+      if (wheelSilenceTimerRef.current) {
+        clearTimeout(wheelSilenceTimerRef.current);
+        wheelSilenceTimerRef.current = null;
+      }
+      const machine = swipeMachineRef.current;
+      if (machine.nativeWheelActive) return;
+      wheelSilenceTimerRef.current = setTimeout(() => {
+        wheelSilenceTimerRef.current = null;
+        const g = gestureGuardRef.current;
+        const decision = stepSwipeRelease(
+          swipeMachineRef.current,
+          g.isCardFlipped,
+          performance.now(),
+          true
+        );
+        applySwipeReleaseRef.current(decision);
+      }, WHEEL_SILENCE_RELEASE_MS);
+    };
+
+    const flushDragFrame = () => {
+      dragRafRef.current = null;
+      const pose = pendingPoseRef.current;
+      pendingPoseRef.current = null;
+      if (!pose) return;
+      applyPoseToDomRef.current(pose, gestureGuardRef.current.isCardFlipped);
+    };
+
+    const processWheelDelta = (
+      params: {
+        deltaX: number;
+        deltaY: number;
+        deltaMode: number;
+        hasHorizontalScrollableAncestor: boolean;
+      },
+      preventDefault?: () => void
+    ) => {
+      const g = gestureGuardRef.current;
+      const machine = swipeMachineRef.current;
+      const stageEl = stageScrollRef.current;
+      // Only read scrollTop before axis locks to avoid synchronous layout thrashing during drag.
+      const atScrollTop =
+        machine.axis === 'idle' ? (stageEl ? stageEl.scrollTop <= 1 : true) : true;
+      const res = stepSwipeWheel(machine, {
+        deltaX: params.deltaX,
+        deltaY: params.deltaY,
+        deltaMode: params.deltaMode,
+        timestampMs: performance.now(),
+        isCardFlipped: g.isCardFlipped,
+        atScrollTop,
+        hasHorizontalScrollableAncestor: params.hasHorizontalScrollableAncestor,
+      });
+      if (!res.handled) return;
+      preventDefault?.();
+      if (springTimerRef.current) {
+        clearTimeout(springTimerRef.current);
+        springTimerRef.current = null;
+      }
+      pendingPoseRef.current = res.pose;
+      if (dragRafRef.current === null) {
+        dragRafRef.current = requestAnimationFrame(flushDragFrame);
+      }
+      if (res.hapticPattern) {
+        triggerNativeHaptic(res.hapticPattern);
+      }
+      scheduleSilenceRelease();
+    };
+
+    const notePinchActivity = () => {
+      lastPinchTsRef.current = performance.now();
+      const machine = swipeMachineRef.current;
+      if (machine.axis !== 'idle') {
+        machine.axis = 'idle';
+        machine.rawX = 0;
+        machine.rawY = 0;
+        machine.velocityX = 0;
+        machine.hapticFiredForSide = null;
+        applySwipeReleaseRef.current({
+          kind: 'spring',
+          pose: {
+            visualX: 0,
+            visualY: 0,
+            rotationDeg: 0,
+            progress: 0,
+            direction: null,
+            overThreshold: false,
+            pullFlipReady: false,
+            axis: 'idle',
+            isDragging: false,
+          },
+        });
+      }
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        notePinchActivity();
+        return;
+      }
+      const machine = swipeMachineRef.current;
+      const alreadyLocked = machine.axis !== 'idle';
+      const targetEl =
+        e.target instanceof Element
+          ? e.target
+          : e.target instanceof Node
+          ? e.target.parentElement
+          : null;
+      if (isBlocked(alreadyLocked ? undefined : targetEl)) return;
+      const stageEl = stageScrollRef.current;
+      if (!stageEl) return;
+      if (!alreadyLocked && (!targetEl || !stageEl.contains(targetEl))) {
+        return;
+      }
+      // Measure horizontal scrollable ancestors only before gesture locks onto an axis.
+      const hasHScroll = alreadyLocked
+        ? false
+        : hasScrollableHorizontalAncestor(targetEl, stageEl, e.deltaX);
+      processWheelDelta(
+        {
+          deltaX: e.deltaX,
+          deltaY: e.deltaY,
+          deltaMode: e.deltaMode,
+          hasHorizontalScrollableAncestor: hasHScroll,
+        },
+        () => e.preventDefault()
+      );
+    };
+
+    const onSandboxPinch = (ev: Event) => {
+      const detail = (ev as CustomEvent)?.detail as { cardId?: string } | undefined;
+      if (!detail || detail.cardId !== gestureGuardRef.current.currentCardId) return;
+      notePinchActivity();
+    };
+
+    const onSandboxWheel = (ev: Event) => {
+      const detail = (ev as CustomEvent)?.detail as
+        | {
+            cardId?: string;
+            deltaX?: number;
+            deltaY?: number;
+            deltaMode?: number;
+            hasInnerHScroll?: boolean;
+          }
+        | undefined;
+      if (!detail || detail.cardId !== gestureGuardRef.current.currentCardId) return;
+      if (isBlocked()) return;
+      processWheelDelta({
+        deltaX: Number(detail.deltaX || 0),
+        deltaY: Number(detail.deltaY || 0),
+        deltaMode: Number(detail.deltaMode || 0),
+        hasHorizontalScrollableAncestor: Boolean(detail.hasInnerHScroll),
+      });
+    };
+
+    const onNativeWheelPhase = (ev: Event) => {
+      const detail = (ev as CustomEvent)?.detail as
+        | { phase?: NativeWheelPhase; inverted?: boolean }
+        | undefined;
+      if (!detail || !detail.phase) return;
+      const g = gestureGuardRef.current;
+      if (
+        isBlocked() &&
+        detail.phase !== 'begin' &&
+        detail.phase !== 'end' &&
+        detail.phase !== 'mouse'
+      ) {
+        return;
+      }
+      const decision = stepNativeWheelPhase(
+        swipeMachineRef.current,
+        detail.phase,
+        Boolean(detail.inverted),
+        g.isCardFlipped,
+        performance.now()
+      );
+      applySwipeReleaseRef.current(decision);
+    };
+
+    window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('anki:sandbox-wheel', onSandboxWheel as EventListener);
+    window.addEventListener('anki:sandbox-pinch', onSandboxPinch as EventListener);
+    window.addEventListener('anki:wheel-phase', onNativeWheelPhase as EventListener);
+    return () => {
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('anki:sandbox-wheel', onSandboxWheel as EventListener);
+      window.removeEventListener('anki:sandbox-pinch', onSandboxPinch as EventListener);
+      window.removeEventListener('anki:wheel-phase', onNativeWheelPhase as EventListener);
+      if (wheelSilenceTimerRef.current) {
+        clearTimeout(wheelSilenceTimerRef.current);
+        wheelSilenceTimerRef.current = null;
+      }
+      if (springTimerRef.current) {
+        clearTimeout(springTimerRef.current);
+        springTimerRef.current = null;
+      }
+      if (dragRafRef.current !== null) {
+        cancelAnimationFrame(dragRafRef.current);
+        dragRafRef.current = null;
+      }
+    };
+  }, []);
 
   const commitInlineChanges = (nextFields?: Record<string, string>) => {
     if (!currentCard) return;
@@ -1994,8 +2653,9 @@ export const ReviewerView: React.FC = () => {
           />
           {/* Scrollable Center Pane for Flashcard */}
           <div
+            ref={stageScrollRef}
             data-shifted={inspectorOpen ? 'true' : 'false'}
-            className={`reviewer-stage-shift relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 flex flex-col items-center ${
+            className={`reviewer-stage-shift reviewer-gesture-stage relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 flex flex-col items-center ${
               inspectorOpen ? 'ltr:-translate-x-28 rtl:translate-x-28' : ''
             }`}
           >
@@ -2006,12 +2666,29 @@ export const ReviewerView: React.FC = () => {
                   '--reviewer-io-max-h': `${inlineIoMaxHeightPx}px`,
                 } as React.CSSProperties
               }
-              className={`my-auto flex flex-col items-center w-full transition-[max-width] duration-200 ${stageMaxWidthClass}`}
+              className={`my-auto flex flex-col items-center w-full relative transition-[max-width] duration-200 ${stageMaxWidthClass}`}
             >
-              {/* Floating Flashcard — Strict Light/Dark Adaptation + Directional Swipe-Out */}
               <div
+                ref={pullPillRef}
+                role="status"
+                aria-hidden="true"
+                data-visible="false"
+                data-ready="false"
+                className="reviewer-pull-flip-pill"
+              >
+                <ChevronDownIcon className="w-3.5 h-3.5" />
+                <span>{t('showAnswerBtn')}</span>
+              </div>
+
+              {/* Floating Flashcard — Strict Light/Dark Adaptation + Trackpad Drag & Directional Swipe-Out */}
+              <div
+                ref={cardShellRef}
                 key={currentCard.id}
                 data-reviewer-swipe={swipingDir || 'none'}
+                data-swipe-from-gesture={swipeFromGesture ? 'true' : 'false'}
+                data-swipe-axis="idle"
+                data-swipe-dir="none"
+                data-swipe-threshold="false"
                 onClick={handleCardMediaClick}
                 onDoubleClick={(e) => {
                   const target = e.target as HTMLElement | null;
@@ -2023,6 +2700,16 @@ export const ReviewerView: React.FC = () => {
                   }
                   if (currentCard) appActions.openCardEditor(currentCard);
                 }}
+                style={
+                  swipingDir && swipeFromGesture && gestureFlyPose
+                    ? ({
+                        ['--swipe-from-x' as string]: `${gestureFlyPose.visualX.toFixed(1)}px`,
+                        ['--swipe-from-y' as string]: `${gestureFlyPose.visualY.toFixed(1)}px`,
+                        ['--swipe-from-rot' as string]: `${gestureFlyPose.rotationDeg.toFixed(2)}deg`,
+                        ['--swipe-fly-dur' as string]: '175ms',
+                      } as React.CSSProperties)
+                    : undefined
+                }
                 className={`reviewer-card-shell w-full rounded-[22px] border p-7 sm:p-8 relative transition-[background-color,border-color,box-shadow] duration-[var(--dur-base)] shadow-sm ${
                   swipingDir === 'left'
                     ? 'reviewer-card-swipe-left'
@@ -2031,6 +2718,34 @@ export const ReviewerView: React.FC = () => {
                     : 'ui-card-enter'
                 } ${cardContainerSurface}`}
               >
+                <div
+                  ref={cardGlowGoodRef}
+                  aria-hidden="true"
+                  className="reviewer-swipe-glow reviewer-swipe-glow--good"
+                />
+                <div
+                  ref={cardGlowAgainRef}
+                  aria-hidden="true"
+                  className="reviewer-swipe-glow reviewer-swipe-glow--again"
+                />
+                <div
+                  ref={stampGoodRef}
+                  aria-hidden="true"
+                  data-stamp-side="left"
+                  data-visible="false"
+                  className="reviewer-swipe-stamp reviewer-swipe-stamp--good"
+                >
+                  {t('rateGood')}
+                </div>
+                <div
+                  ref={stampAgainRef}
+                  aria-hidden="true"
+                  data-stamp-side="right"
+                  data-visible="false"
+                  className="reviewer-swipe-stamp reviewer-swipe-stamp--again"
+                >
+                  {t('rateAgain')}
+                </div>
             {inlineEditing ? (
               <div className="space-y-4">
                 {orderedFieldKeys.map((fieldKey, idx) => {
@@ -2172,7 +2887,10 @@ export const ReviewerView: React.FC = () => {
             ) : (
               <div>
                 {/* Top Card Meta */}
-                <div className="flex items-center justify-between mb-5">
+                <div
+                  ref={cardHeaderMetaRef}
+                  className="flex items-center justify-between mb-5 will-change-[opacity]"
+                >
                   <div className="flex items-center gap-2 flex-wrap">
                     <span
                       className={`reviewer-badge-trim px-2.5 py-0.5 rounded-md text-[11px] font-medium ${
@@ -2241,6 +2959,7 @@ export const ReviewerView: React.FC = () => {
                   <div className="my-2">
                     <SandboxCardFrame
                       cardId={currentCard.id}
+                      cardOrd={currentCard.cardOrd}
                       frontHtml={currentCard.sandboxFrontHtml || currentCard.frontHtml}
                       backHtml={currentCard.sandboxBackHtml || currentCard.backHtml}
                       cssText={currentCard.sandboxCss || ''}
@@ -2479,6 +3198,8 @@ export const ReviewerView: React.FC = () => {
       {/* Unified Bottom Decision Dock & Status Strip — Theme-Harmonized */}
       {!inlineEditing && (
         <footer
+          ref={dockFooterRef}
+          data-gesture-active-side="none"
           data-shifted={inspectorOpen ? 'true' : 'false'}
           className={`reviewer-bottom-dock reviewer-stage-shift shrink-0 pt-3 pb-2.5 px-6 flex flex-col items-center justify-center border-t backdrop-blur-md z-10 ${
             isDark ? 'border-white/[0.06]' : 'border-[var(--border-subtle)]'
@@ -2512,7 +3233,7 @@ export const ReviewerView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => triggerRateWithSwipe(1)}
-                  className={`reviewer-cta-btn h-[58px] px-4 rounded-2xl border flex items-center ${
+                  className={`reviewer-cta-btn reviewer-cta-again h-[58px] px-4 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger-text)]`}
                 >
@@ -2552,7 +3273,7 @@ export const ReviewerView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => triggerRateWithSwipe(3)}
-                  className={`reviewer-cta-btn h-[58px] px-4 rounded-2xl border flex items-center ${
+                  className={`reviewer-cta-btn reviewer-cta-good h-[58px] px-4 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success-text)]`}
                 >
@@ -2595,7 +3316,7 @@ export const ReviewerView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => triggerRateWithSwipe(1)}
-                  className={`reviewer-cta-btn reviewer-cta-binary-again w-[170px] h-[58px] px-5 rounded-2xl border flex items-center ${
+                  className={`reviewer-cta-btn reviewer-cta-again reviewer-cta-binary-again w-[170px] h-[58px] px-5 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger-text)]`}
                 >
@@ -2615,7 +3336,7 @@ export const ReviewerView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => triggerRateWithSwipe(3)}
-                  className={`reviewer-cta-btn reviewer-cta-binary-good w-[374px] h-[58px] px-6 rounded-2xl border flex items-center ${
+                  className={`reviewer-cta-btn reviewer-cta-good reviewer-cta-binary-good w-[374px] h-[58px] px-6 rounded-2xl border flex items-center ${
                     showShortcutHints ? 'justify-between' : 'justify-center text-center'
                   } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success)]`}
                 >

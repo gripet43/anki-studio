@@ -10,6 +10,7 @@ and instant undo.
 from __future__ import annotations
 
 import html
+from html.parser import HTMLParser
 import os
 import re
 import time
@@ -904,8 +905,103 @@ class ReviewService:
         return plain_text_of(raw_html)
 
     @staticmethod
+    def _question_hides_body_without_script(raw_q_html: str) -> bool:
+        """通用结构检测：正面含 ``<script>`` 且全部正文/媒体均藏在 ``hidden`` / ``display:none`` 容器内时返回 True。
+
+        当模板把源文本放进隐藏节点、等待前端脚本填充空容器时，普通模式剥离 ``<script>`` 会只剩
+        空白或外壳；此检测作为白名单之外的通用兜底，自动把这类卡型路由到安全沙盒。
+        """
+        if not raw_q_html or "<script" not in raw_q_html.lower():
+            return False
+
+        class _Probe(HTMLParser):
+            _VOID = frozenset(
+                {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+            )
+            _MEDIA = frozenset({"img", "svg", "canvas", "video", "audio", "iframe", "object", "math"})
+            _SKIP = frozenset({"script", "style", "noscript", "template"})
+
+            def __init__(self) -> None:
+                super().__init__(convert_charrefs=True)
+                self.hidden_depth = 0
+                self.skip_depth = 0
+                self.has_visible_content = False
+                self.has_hidden_content = False
+
+            @staticmethod
+            def _is_hidden_attrs(attrs) -> bool:
+                for k, v in attrs:
+                    kl = (k or "").lower()
+                    if kl == "hidden":
+                        return True
+                    if kl == "style" and v and re.search(r"(?:^|;)\s*display\s*:\s*none\b", v, flags=re.I):
+                        return True
+                return False
+
+            def handle_starttag(self, tag, attrs) -> None:
+                tl = tag.lower()
+                is_void = tl in self._VOID
+                if tl in self._SKIP:
+                    if not is_void:
+                        self.skip_depth += 1
+                    return
+                if self.skip_depth > 0:
+                    return
+                if self.hidden_depth > 0:
+                    if tl in self._MEDIA:
+                        self.has_hidden_content = True
+                    if not is_void:
+                        self.hidden_depth += 1
+                    return
+                if self._is_hidden_attrs(attrs):
+                    if tl in self._MEDIA:
+                        self.has_hidden_content = True
+                    if not is_void:
+                        self.hidden_depth += 1
+                    return
+                if tl in self._MEDIA:
+                    self.has_visible_content = True
+
+            def handle_startendtag(self, tag, attrs) -> None:
+                tl = tag.lower()
+                if self.skip_depth > 0:
+                    return
+                if self.hidden_depth > 0 or self._is_hidden_attrs(attrs):
+                    if tl in self._MEDIA:
+                        self.has_hidden_content = True
+                    return
+                if tl in self._MEDIA:
+                    self.has_visible_content = True
+
+            def handle_endtag(self, tag) -> None:
+                tl = tag.lower()
+                if tl in self._SKIP:
+                    if self.skip_depth > 0:
+                        self.skip_depth -= 1
+                    return
+                if self.skip_depth > 0:
+                    return
+                if self.hidden_depth > 0:
+                    self.hidden_depth -= 1
+
+            def handle_data(self, data) -> None:
+                if self.skip_depth > 0 or not data or not data.strip():
+                    return
+                if self.hidden_depth > 0:
+                    self.has_hidden_content = True
+                else:
+                    self.has_visible_content = True
+
+        try:
+            probe = _Probe()
+            probe.feed(raw_q_html)
+            return (not probe.has_visible_content) and probe.has_hidden_content
+        except Exception:
+            return False
+
+    @staticmethod
     def _template_needs_script_shim(model) -> bool:
-        """模板正文高度依赖前端脚本生成（gData 选择题、Image Occlusion Enhanced、Enhanced Cloze）时返回 True。
+        """模板正文高度依赖前端脚本生成（gData 选择题、Image Occlusion Enhanced、Enhanced Cloze、Cloze Overlapping 等）时返回 True。
 
         这类模板把正文/选项/遮罩放在隐藏容器里，再用脚本渲染交互内容；默认渲染会剥掉
         ``<script>`` 导致空白或只剩外壳，因此自动路由到安全沙盒执行。
@@ -934,6 +1030,11 @@ class ReviewService:
         if "enhanced-cloze-content" in lowered or "enhanced-clozes" in lowered:
             return True
         if "enhanced cloze" in model_name_lower:
+            return True
+        # 4. Cloze Overlapping（脚本渲染型重叠挖空：正文藏在 #cloze-original，运行时写入 #cloze-js-rendered）
+        if "cloze-js-rendered" in lowered or "cloze-overlapping-config" in lowered:
+            return True
+        if "cloze overlapping" in model_name_lower:
             return True
         return False
 
@@ -1266,8 +1367,18 @@ class ReviewService:
                 if (sandbox_render.question or sandbox_render.answer)
                 else []
             )
+            raw_q_text = ""
+            if raw_output is not None:
+                _rq = getattr(raw_output, "question_text", "") or ""
+                if callable(_rq):
+                    _rq = _rq()
+                raw_q_text = str(_rq or "")
+
             needs_sandbox = bool(
-                self._template_needs_script_shim(model)
+                (
+                    self._template_needs_script_shim(model)
+                    or self._question_hides_body_without_script(raw_q_text)
+                )
                 and (sandbox_render.question or sandbox_render.answer)
             )
 
@@ -1289,6 +1400,7 @@ class ReviewService:
                 "notetypeId": notetype_id,
                 "noteTypeName": str(model.get("name", "Basic")),
                 "isCloze": is_cloze,
+                "cardOrd": cloze_ord,
                 "clozeCardIndex": cloze_card_index,
                 "clozeSiblingCount": cloze_sibling_count,
                 "cardType": card_type_str,
@@ -1752,6 +1864,14 @@ class ReviewService:
                         "enhanced-cloze-content" in tmpl_blob
                         or "enhanced-clozes" in tmpl_blob
                         or "enhanced cloze" in str(model.get("name", "") or "").lower()
+                    ),
+                    "hasClozeOverlappingKeyword": (
+                        "cloze-js-rendered" in tmpl_blob
+                        or "cloze-overlapping-config" in tmpl_blob
+                        or "cloze overlapping" in str(model.get("name", "") or "").lower()
+                    ),
+                    "questionHidesBodyWithoutScript": self._question_hides_body_without_script(
+                        native_q
                     ),
                 },
             },

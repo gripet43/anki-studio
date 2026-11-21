@@ -6,6 +6,23 @@
 
 ---
 
+## [v1.7.1] - 2026-11-21
+
+- **[Antigravity] 普通复习卡片新增 macOS 触控板 Tinder 式跟手划卡、双指下拉翻面与 120fps 合成器引擎**（新增 [`frontend/src/utils/reviewSwipeGesture.ts`](frontend/src/utils/reviewSwipeGesture.ts)、[`tests/frontend/specs/reviewSwipeGesture.spec.ts`](tests/frontend/specs/reviewSwipeGesture.spec.ts)；改 [`__init__.py`](__init__.py)、[`bridge/router.py`](bridge/router.py)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/reviewer/SandboxCardFrame.tsx`](frontend/src/components/reviewer/SandboxCardFrame.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、[`docs/INTERACTION.md`](docs/INTERACTION.md)、[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) 与 [`tests/test_bridge.py`](tests/test_bridge.py)）：
+  - **混合原生相位与触觉反馈**：macOS Qt6 只读 `WheelPhaseFilter` 推送 `anki:wheel-phase`（`begin` / `end` / `momentum` / 外接鼠标 `mouse`，附 `inverted` 自然滚动标志）实现 0ms 松手判定与飞卡惯性隔离；新增 `trigger_haptic` Bridge Action 调用 Cocoa `NSHapticFeedbackManager` 越阈轻震；Windows/Linux/Web 自动降级为静默超时与冷却兜底。
+  - **正反面分级物理交互**：未翻面左/右轻滑仅高阻尼微晃回弹，在顶部双指轻快下拉（`72px` 或快甩）弹出「显示答案」胶囊并松手翻面；已翻面固定 `左 = 重来 (Again)`、`右 = 良好 (Good)`（与二键/四键模式无关），支持快甩提交、角标印章、顶栏自动淡隐防遮挡、底栏对应按钮高亮与从拖拽姿态无缝衔接飞出。
+  - **零 React 重渲染与多重防误触**：拖拽期全程由 `requestAnimationFrame` 直接驱动 GPU `transform` 与预光栅化光晕层 `opacity`（0 次 React 重渲染、0 次 `box-shadow` 重绘、0 次 `backdrop-filter` 回读）；原生硬件级识别外接鼠标滚轮与双指捏合/视口放大态（`visualViewport.scale > 1.01`）、灯箱关闭冷却与内部横向滚动容器避让，全面杜绝误触。
+
+- **[Antigravity] 增强脚本卡型（含 `Cloze Overlapping`）通用沙盒自动识别与原生样式兼容**（改 [`bridge/review_service.py`](bridge/review_service.py)、[`frontend/src/components/reviewer/SandboxCardFrame.tsx`](frontend/src/components/reviewer/SandboxCardFrame.tsx)、[`tests/test_enhanced_cloze_sandbox.py`](tests/test_enhanced_cloze_sandbox.py) 与 [`tests/frontend/specs/sandboxCardFrame.spec.ts`](tests/frontend/specs/sandboxCardFrame.spec.ts)）：
+  - 新增 `_question_hides_body_without_script` 通用结构探测，当模板将正文藏在隐藏节点并依赖脚本渲染时自动路由安全沙盒；沙盒 `<body>` 补齐原生 `cardN` 类名并尊重模板自定义画布背景与 `.cloze` 样式。
+
+- **[Antigravity] 禅模式书案燃香竖排旁批微调**（改 [`frontend/src/components/zen/ZenIncenseCanvas.tsx`](frontend/src/components/zen/ZenIncenseCanvas.tsx)、[`frontend/src/components/zen/ZenReviewView.tsx`](frontend/src/components/zen/ZenReviewView.tsx)、[`frontend/src/utils/zenMode.ts`](frontend/src/utils/zenMode.ts) 与中日繁简词典）：优化燃香悬停余时旁批的纵中纵横数字排版、锚点高度与柔和淡入淡出过渡。
+
+- **[Antigravity] 匿名功能埋点扩充至全站 35 项核心功能并同步更新统计看板**（改 [`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`bridge/analytics_service.py`](bridge/analytics_service.py) 与 [`scripts/analytics-worker/worker.js`](scripts/analytics-worker/worker.js)）：
+  - **全站功能埋点补齐**：在原有 5 项（卡片库搜索、快速制卡、休假模式、雪崩减负、专注模式）基础上，新增 30 项无隐私风险的纯计数功能埋点，覆盖轻量复习、自定义学习、数据统计页、牌组管理页、Cmd+K 全局搜索、AnkiWeb 同步、卡片编辑、粘贴图片制卡、卡片库批量操作、牌组增删改与学习设置、专注白噪音、卡片朗读与自动播音开关、撤销评分、旗标/暂停/搁置/重置进度/删除卡片、原生兼容沙盒、图片灯箱缩放、复习画幅/字号与答题模式、主题/配色与语言切换、自定义头像、侧边栏缩放、导入/导出、数据库维护及切回原生界面。
+  - **去重上限扩容**：[`analytics_service.py`](bridge/analytics_service.py) 每日去重标记上限由 50 提升至 100，避免重度用户在单日内跨功能过多时提前淘汰去重键。
+  - **看板升级**：[`worker.js`](scripts/analytics-worker/worker.js) 放宽功能排行返回条数上限（15 → 50），补齐全部 35 项中文功能名映射，并在「功能热度排行」卡片新增「展开全部 / 隐藏 0 次」一键切换。
+
 ## [v1.7.0] - 2026-11-21
 
 - **[Antigravity / Gemini] 全新「极简禅模式（Zen Mode）」正式上线（庭院、焚香入静、纯纸背诵、离线声景与全端打磨）**（新增 [`frontend/src/components/zen/ZenThresholdOverlay.tsx`](frontend/src/components/zen/ZenThresholdOverlay.tsx)、[`frontend/src/components/zen/ZenHomeView.tsx`](frontend/src/components/zen/ZenHomeView.tsx)、[`frontend/src/components/zen/ZenReviewView.tsx`](frontend/src/components/zen/ZenReviewView.tsx)、[`frontend/src/components/zen/ZenIncenseCanvas.tsx`](frontend/src/components/zen/ZenIncenseCanvas.tsx)、[`frontend/src/components/zen/ZenSoundControl.tsx`](frontend/src/components/zen/ZenSoundControl.tsx)、[`frontend/src/components/zen/ZenEnsoGlyph.tsx`](frontend/src/components/zen/ZenEnsoGlyph.tsx)、[`frontend/src/utils/zenMode.ts`](frontend/src/utils/zenMode.ts)、[`frontend/src/utils/zenAudio.ts`](frontend/src/utils/zenAudio.ts)、[`tests/frontend/specs/zenMode.spec.tsx`](tests/frontend/specs/zenMode.spec.tsx) 及和纸书法/圆相资源；改 [`__init__.py`](__init__.py)、[`bridge/router.py`](bridge/router.py)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`config.default.json`](config.default.json)、[`config.md`](config.md)、[`frontend/src/App.tsx`](frontend/src/App.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/utils/viewTransition.ts`](frontend/src/utils/viewTransition.ts)、[`frontend/src/index.css`](frontend/src/index.css)、16 语种词典与 [`docs/INTERACTION.md`](docs/INTERACTION.md)）：

@@ -500,6 +500,8 @@ export interface ReviewCardItem {
   notetypeId?: string;
   noteTypeName?: string;
   isCloze?: boolean;
+  /** 1-based 原生 Anki 卡序（card.ord + 1），供沙盒挂到 body 的 cardN 类名使用。 */
+  cardOrd?: number;
   clozeCardIndex?: number;
   clozeSiblingCount?: number;
   cardType?: 'new' | 'learning' | 'review';
@@ -775,5 +777,18 @@ export async function callAnki<T = any>(
     } else {
       resolve(null as unknown as T);
     }
+  });
+}
+
+export type NativeHapticPattern = 'alignment' | 'generic' | 'level_change';
+
+/**
+ * Fires a subtle native macOS Taptic Engine pulse (no-op on Web / Linux / Windows).
+ * Silently swallows bridge errors so gesture responsiveness is never impacted.
+ */
+export function triggerNativeHaptic(pattern: NativeHapticPattern = 'alignment'): void {
+  if (!isAnkiNativeEnv()) return;
+  callAnki('trigger_haptic', { pattern }).catch(() => {
+    // Graceful no-op when host bridge lacks haptic support
   });
 }

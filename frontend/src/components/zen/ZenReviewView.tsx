@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { translate } from '../../i18n/translations';
 import { appActions, setAppState, useAppStore } from '../../stores/useAppStore';
 import { getClosestFromTarget, isTypingTarget } from '../../utils/domTarget';
@@ -80,6 +80,11 @@ export const ZenReviewView: React.FC = () => {
   const [incenseExtinguished, setIncenseExtinguished] = useState(false);
   const [showIncenseSheet, setShowIncenseSheet] = useState(false);
   const [incenseHoverInfo, setIncenseHoverInfo] = useState<ZenIncenseHoverInfo | null>(null);
+  const [lastIncenseHover, setLastIncenseHover] = useState<ZenIncenseHoverInfo | null>(null);
+  const handleIncenseHoverChange = useCallback((info: ZenIncenseHoverInfo | null) => {
+    setIncenseHoverInfo(info);
+    if (info) setLastIncenseHover(info);
+  }, []);
   const idleCursorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dissolveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -213,6 +218,7 @@ export const ZenReviewView: React.FC = () => {
     setShowIncenseSheet(false);
     setIncenseExtinguished(false);
     setIncenseHoverInfo(null);
+    setLastIncenseHover(null);
     setIncenseKey((k) => k + 1);
     playZenIncenseIgnite(zenSoundEnabled);
   };
@@ -703,29 +709,65 @@ export const ZenReviewView: React.FC = () => {
         onBurnComplete={() => {
           burnCompletedPendingRef.current = true;
         }}
-        onHoverInfoChange={setIncenseHoverInfo}
+        onHoverInfoChange={handleIncenseHoverChange}
         stageClearanceKey={`${reviewStageWidth}:${isStageWidened ? 'w' : 'n'}:${currentCard.id}`}
         className="fixed inset-0 w-full h-full pointer-events-none z-[3]"
       />
 
-      {/* Subtle calligraphic hover whisper beside the incense stick (e.g. 「余 九分」) */}
-      {incenseHoverInfo && !showIncenseSheet && (() => {
+      {/* Song-dynasty vertical marginalia (CJK) / editorial whisper beside the incense stick */}
+      {lastIncenseHover && (() => {
+        const isHoverVisible =
+          Boolean(incenseHoverInfo) && !showIncenseSheet && !incenseExtinguished;
         const copy = resolveZenIncenseCopy(resolvedLang);
-        const timeText = formatZenIncenseRemaining(incenseHoverInfo.remainingMs, resolvedLang);
+        const timeText = formatZenIncenseRemaining(lastIncenseHover.remainingMs, resolvedLang);
+        const isVerticalCjk =
+          resolvedLang === 'zh-CN' || resolvedLang === 'zh-TW' || resolvedLang === 'ja';
         const isRtl =
           typeof document !== 'undefined' && document.documentElement.dir === 'rtl';
+        const renderedTimeText = isVerticalCjk
+          ? timeText.split(/(\d{1,2})/g).map((part, idx) =>
+              /^\d{1,2}$/.test(part) ? (
+                <span key={idx} className="zen-incense-tcy">
+                  {part}
+                </span>
+              ) : (
+                <React.Fragment key={idx}>{part}</React.Fragment>
+              )
+            )
+          : timeText;
+
         return (
           <div
-            aria-live="polite"
+            aria-hidden={!isHoverVisible}
             style={{
-              left: isRtl ? `${incenseHoverInfo.x + 22}px` : `${incenseHoverInfo.x - 22}px`,
-              top: `${incenseHoverInfo.y}px`,
+              left: isRtl ? `${lastIncenseHover.x + 22}px` : `${lastIncenseHover.x - 22}px`,
+              top: `${lastIncenseHover.y}px`,
+              transform: isRtl ? 'translate3d(0, -50%, 0)' : 'translate3d(-100%, -50%, 0)',
             }}
-            className={`zen-incense-hover-label zen-serif fixed z-20 pointer-events-none whitespace-nowrap ${
-              isRtl ? '-translate-y-1/2' : '-translate-x-full -translate-y-1/2'
-            }`}
+            className="zen-incense-hover-anchor"
           >
-            {incenseHoverInfo.paused ? `${copy.pausedLabel} · ${timeText}` : timeText}
+            <div
+              aria-live={isHoverVisible ? 'polite' : 'off'}
+              data-visible={isHoverVisible ? 'true' : 'false'}
+              data-orientation={isVerticalCjk ? 'vertical' : 'horizontal'}
+              data-paused={lastIncenseHover.paused ? 'true' : 'false'}
+              className="zen-incense-hover-label zen-serif"
+            >
+              <span className="zen-incense-hover-primary">
+                <span className="zen-incense-hover-dot" aria-hidden="true" />
+                <span className="zen-incense-hover-text">{renderedTimeText}</span>
+              </span>
+              {lastIncenseHover.paused && (
+                <>
+                  {!isVerticalCjk && (
+                    <span className="zen-incense-hover-sep" aria-hidden="true">
+                      ·
+                    </span>
+                  )}
+                  <span className="zen-incense-hover-paused">{copy.pausedLabel}</span>
+                </>
+              )}
+            </div>
           </div>
         );
       })()}
@@ -848,6 +890,7 @@ export const ZenReviewView: React.FC = () => {
               <div className="my-1">
                 <SandboxCardFrame
                   cardId={currentCard.id}
+                  cardOrd={currentCard.cardOrd}
                   frontHtml={currentCard.sandboxFrontHtml || currentCard.frontHtml}
                   backHtml={currentCard.sandboxBackHtml || currentCard.backHtml}
                   cssText={currentCard.sandboxCss || ''}

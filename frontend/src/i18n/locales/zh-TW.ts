@@ -812,7 +812,7 @@ export const dict: TranslationTable = {
   zenAllDoneSubNight: "夜色已深，放下書卷安歇吧，可以退出禪模式了。",
   zenIncenseFinished: "香已盡",
   zenIncenseUnderMin: "將盡",
-  zenIncenseMinsLeft: "餘 {n}分",
+  zenIncenseMinsLeft: "餘{n}分",
   zenIncenseDoneTitle: "一炷香盡",
   zenIncenseDoneSub: "這一炷清香已然燃盡，可再續一炷，或暫且歇息。",
   zenIncenseRelightBtn: "再續一炷",

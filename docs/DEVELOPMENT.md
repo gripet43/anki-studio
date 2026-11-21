@@ -77,7 +77,7 @@ anki_modern_os/
 
 ### 2.3 Python → JS 事件推送协议
 
-[`__init__.py`](../__init__.py) 通过 `webview.eval("window.dispatchEvent(new CustomEvent(...))")` 向前端广播以下 7 个标准事件（监听集中于 [`frontend/src/App.tsx`](../frontend/src/App.tsx)）：
+[`__init__.py`](../__init__.py) 通过 `webview.eval("window.dispatchEvent(new CustomEvent(...))")` 向前端广播以下 8 个标准事件（宿主生命周期监听位于 [`frontend/src/App.tsx`](../frontend/src/App.tsx)，复习触控板相位监听位于 [`ReviewerView.tsx`](../frontend/src/components/reviewer/ReviewerView.tsx)）：
 
 | 事件名 | 触发时机 | 前端响应 |
 |---|---|---|
@@ -88,6 +88,7 @@ anki_modern_os/
 | `anki:toast` | 原生拦截的提示消息 | 通过 `showToast` 展示顶部轻提示 |
 | `anki:open-settings` | 触发原生 Preferences 入口 | 打开 `SettingsModal` |
 | `anki:day-changed` | Anki 跨日钩子触发 | 执行 `handleDayChanged` 刷新今日进度与到期数 |
+| `anki:wheel-phase` | Qt6 `QWheelEvent.phase()` 状态切换（`begin` / `end` / `momentum` / macOS 外接鼠标 `mouse`，附带 `inverted` 自然滚动标志） | 实现 macOS 触控板 0ms 松手判定、锁死飞卡惯性余波，并原生区分外接鼠标滚轮防误触 |
 
 ---
 

@@ -16,6 +16,7 @@ import json
 import os
 import sys
 import time
+import weakref
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -135,6 +136,106 @@ def _get_native_ui_copy(lang: Optional[str]) -> Tuple[str, str, str]:
     return _NATIVE_UI_STRINGS.get(lang or "en", _NATIVE_UI_STRINGS["en"])
 
 
+def _normalize_qt_wheel_phase(phase_obj: Any) -> Optional[str]:
+    """Maps a Qt6 Qt.ScrollPhase enum or int value to 'begin' | 'update' | 'end' | 'momentum'."""
+    if phase_obj is None:
+        return None
+    name = getattr(phase_obj, "name", None)
+    if isinstance(name, str):
+        mapping = {
+            "ScrollBegin": "begin",
+            "ScrollUpdate": "update",
+            "ScrollEnd": "end",
+            "ScrollMomentum": "momentum",
+        }
+        if name in mapping:
+            return mapping[name]
+    try:
+        val = int(getattr(phase_obj, "value", phase_obj))
+        return {
+            1: "begin",
+            2: "update",
+            3: "end",
+            4: "momentum",
+        }.get(val)
+    except Exception:
+        text = str(phase_obj)
+        for key, normalized in (
+            ("ScrollBegin", "begin"),
+            ("ScrollUpdate", "update"),
+            ("ScrollEnd", "end"),
+            ("ScrollMomentum", "momentum"),
+        ):
+            if key in text:
+                return normalized
+        return None
+
+
+def _is_qt_no_scroll_phase(phase_obj: Any) -> bool:
+    """Returns True when a Qt6 QWheelEvent reports Qt.ScrollPhase.NoScrollPhase (discrete mouse wheel on macOS)."""
+    if phase_obj is None:
+        return False
+    name = getattr(phase_obj, "name", None)
+    if isinstance(name, str):
+        return name == "NoScrollPhase"
+    try:
+        return int(getattr(phase_obj, "value", phase_obj)) == 0
+    except Exception:
+        return "NoScrollPhase" in str(phase_obj)
+
+
+def _qt_point_is_nonzero(pt: Any) -> bool:
+    """Checks whether a Qt QPoint/tuple/object represents a non-zero (x, y) delta."""
+    if pt is None:
+        return False
+    is_null = getattr(pt, "isNull", None)
+    if callable(is_null):
+        try:
+            return not bool(is_null())
+        except Exception:
+            pass
+    if isinstance(pt, (tuple, list)) and len(pt) >= 2:
+        return bool(pt[0] or pt[1])
+    x_fn = getattr(pt, "x", None)
+    y_fn = getattr(pt, "y", None)
+    if callable(x_fn) and callable(y_fn):
+        try:
+            return bool(x_fn() or y_fn())
+        except Exception:
+            pass
+    return False
+
+
+def _is_qt_discrete_mouse_wheel(
+    raw_phase: Any,
+    pixel_delta: Any,
+    angle_delta: Any,
+    source: Any = None,
+) -> bool:
+    """Distinguishes a physical notched mouse wheel from macOS trackpad MayBegin/Cancelled zero-delta events.
+
+    A physical external mouse wheel on macOS reports:
+    - phase == NoScrollPhase
+    - pixelDelta == (0, 0) (no precision pixel deltas)
+    - angleDelta != (0, 0) (actual mechanical wheel step)
+    - source != MouseEventSynthesizedBySystem
+    """
+    if not _is_qt_no_scroll_phase(raw_phase):
+        return False
+    if source is not None:
+        src_name = getattr(source, "name", None)
+        if src_name == "MouseEventSynthesizedBySystem":
+            return False
+        try:
+            if int(getattr(source, "value", source)) == 1:
+                return False
+        except Exception:
+            pass
+    if _qt_point_is_nonzero(pixel_delta):
+        return False
+    return _qt_point_is_nonzero(angle_delta)
+
+
 class AnkiModernHost:
     """Manages the full-screen modern Anki WebEngine overlay, preferences persistence, and 3-layer native switch."""
 
@@ -149,6 +250,8 @@ class AnkiModernHost:
         self._rollover_guard_timer: Optional[Any] = None
         self._app_state_signal_connected: bool = False
         self._last_focus_rollover_check: float = 0.0
+        self._wheel_phase_filter: Optional[Any] = None
+        self._wheel_filter_targets: Any = weakref.WeakSet()
         self._did_initial_expand: bool = bool(
             self.get_config().get("windowInitialExpandDone", False)
         )
@@ -744,6 +847,7 @@ class AnkiModernHost:
             self._sync_webview_rect(self.webview, target)
             self.webview.show()
             self.webview.raise_()
+            self._attach_wheel_phase_filter(self.webview)
             if grab_focus:
                 self.webview.setFocus()
         except Exception:
@@ -1138,7 +1242,155 @@ class AnkiModernHost:
                 target_parent.installEventFilter(resize_filter)
             except Exception:
                 pass
+        self._attach_wheel_phase_filter(self.webview)
         return self.webview
+
+    def _attach_wheel_phase_filter(self, widget: Any) -> None:
+        """Installs a read-only QWheelEvent phase observer on WebView and its child widgets."""
+        if widget is None:
+            return
+        try:
+            from aqt.qt import QEvent, QObject, QWidget
+        except Exception:
+            return
+
+        host = self
+        if self._wheel_phase_filter is None:
+            state: Dict[str, Any] = {
+                "phase": None,
+                "begin_ts": None,
+                "begin_wall": 0.0,
+            }
+
+            class WheelPhaseFilter(QObject):
+                def eventFilter(self, obj, event):
+                    ev_type = event.type()
+                    if ev_type == QEvent.Type.ChildAdded and host.is_modern_visible:
+                        try:
+                            child = event.child() if hasattr(event, "child") else None
+                            if child is not None:
+                                host._attach_wheel_phase_filter(child)
+                        except Exception:
+                            pass
+                        return False
+
+                    if (
+                        ev_type == QEvent.Type.Wheel
+                        and host.webview is not None
+                        and host.is_modern_visible
+                    ):
+                        try:
+                            raw_phase = event.phase() if hasattr(event, "phase") else None
+                            phase = _normalize_qt_wheel_phase(raw_phase)
+                            if phase is None:
+                                # On macOS, only classify as an external physical mouse wheel when
+                                # phase == NoScrollPhase, pixelDelta is null, and angleDelta is non-zero
+                                # (never misclassify zero-delta trackpad MayBegin/Cancelled events).
+                                if sys.platform.startswith("darwin"):
+                                    px_delta = (
+                                        event.pixelDelta()
+                                        if hasattr(event, "pixelDelta")
+                                        else None
+                                    )
+                                    ang_delta = (
+                                        event.angleDelta()
+                                        if hasattr(event, "angleDelta")
+                                        else None
+                                    )
+                                    ev_source = (
+                                        event.source() if hasattr(event, "source") else None
+                                    )
+                                    if _is_qt_discrete_mouse_wheel(
+                                        raw_phase, px_delta, ang_delta, ev_source
+                                    ):
+                                        if state["phase"] != "mouse":
+                                            state["phase"] = "mouse"
+                                            inverted = (
+                                                bool(event.inverted())
+                                                if hasattr(event, "inverted")
+                                                else False
+                                            )
+                                            host._emit_js_event(
+                                                "anki:wheel-phase",
+                                                {"phase": "mouse", "inverted": inverted},
+                                            )
+                                return False
+                            if phase == "update":
+                                # If switching back from external mouse directly to ScrollUpdate,
+                                # unlock JS trackpad handling immediately.
+                                if state["phase"] == "mouse":
+                                    state["phase"] = "update"
+                                    inverted = (
+                                        bool(event.inverted())
+                                        if hasattr(event, "inverted")
+                                        else False
+                                    )
+                                    host._emit_js_event(
+                                        "anki:wheel-phase",
+                                        {"phase": "begin", "inverted": inverted},
+                                    )
+                                    return False
+                                state["phase"] = "update"
+                                return False
+
+                            ts = int(event.timestamp()) if hasattr(event, "timestamp") else 0
+                            now = time.monotonic()
+                            if phase == "begin":
+                                if ts and state["begin_ts"] == ts:
+                                    return False
+                                if not ts and state["phase"] == "begin" and (now - state["begin_wall"]) < 0.02:
+                                    return False
+                                state["begin_ts"] = ts if ts else None
+                                state["begin_wall"] = now
+                            elif state["phase"] == phase:
+                                return False
+
+                            state["phase"] = phase
+                            inverted = (
+                                bool(event.inverted()) if hasattr(event, "inverted") else False
+                            )
+                            host._emit_js_event(
+                                "anki:wheel-phase",
+                                {"phase": phase, "inverted": inverted},
+                            )
+                        except Exception:
+                            pass
+                    return False
+
+            parent_obj = self.webview or widget
+            self._wheel_phase_filter = WheelPhaseFilter(parent_obj)
+
+        stack: List[Any] = [widget]
+        try:
+            if hasattr(widget, "focusProxy") and callable(widget.focusProxy):
+                proxy = widget.focusProxy()
+                if proxy is not None:
+                    stack.append(proxy)
+        except Exception:
+            pass
+
+        while stack:
+            cur = stack.pop()
+            if cur is None:
+                continue
+            try:
+                if cur in self._wheel_filter_targets:
+                    continue
+                self._wheel_filter_targets.add(cur)
+                cur.installEventFilter(self._wheel_phase_filter)
+            except Exception:
+                continue
+            try:
+                if hasattr(cur, "findChildren"):
+                    for ch in cur.findChildren(QWidget):
+                        if ch not in self._wheel_filter_targets:
+                            stack.append(ch)
+                if hasattr(cur, "children"):
+                    for ch in cur.children():
+                        if ch not in self._wheel_filter_targets:
+                            stack.append(ch)
+            except Exception:
+                pass
 
     def _create_resize_filter(self, mw_obj):
         from aqt.qt import QEvent, QObject

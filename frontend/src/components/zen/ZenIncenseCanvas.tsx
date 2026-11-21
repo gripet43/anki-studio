@@ -1191,10 +1191,12 @@ export const ZenIncenseCanvas: React.FC<ZenIncenseCanvasProps> = ({
         if (key !== lastHoverEmittedKey) {
           lastHoverEmittedKey = key;
           if (isHoveringStick) {
+            const idealY = tipY + (baseY - tipY) * 0.44;
+            const anchorY = Math.min(baseY - 52, Math.max(tipY + 20, idealY));
             onHoverInfoChangeRef.current({
               hovered: true,
               x: cx,
-              y: Math.max(tipY + 12, Math.min(baseY - 24, (tipY + baseY) * 0.5)),
+              y: anchorY,
               remainingMs,
               paused: isPaused,
             });

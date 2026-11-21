@@ -32,7 +32,7 @@ export function formatChineseNumeral(n: number): string {
 
 /**
  * Formats remaining incense burn time in a poetic, low-pressure style across all 16 languages.
- * Chinese uses literary numerals ("余 九分", "将尽"), matching the Song-dynasty incense motif.
+ * Chinese uses literary numerals ("余九分", "将尽"), matching the Song-dynasty incense motif.
  */
 export function formatZenIncenseRemaining(remainingMs: number, lang: ResolvedLanguage): string {
   const clamped = Math.max(0, remainingMs);

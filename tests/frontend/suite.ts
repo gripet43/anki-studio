@@ -38,6 +38,7 @@ import './specs/reviewUndo.spec';
 import './specs/reviewDisplayPopover.spec';
 import './specs/zenMode.spec';
 import './specs/sandboxCardFrame.spec';
+import './specs/reviewSwipeGesture.spec';
 
 import { report } from './harness';
 

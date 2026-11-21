@@ -202,11 +202,12 @@ section('zenMode pure logic', () => {
     equal(resolveZenCompleteSubKey('evening'), 'zenAllDoneSubEvening');
     equal(resolveZenCompleteSubKey('night'), 'zenAllDoneSubNight');
 
-    equal(formatZenIncenseRemaining(15 * 60_000, 'zh-CN'), '余 十五分');
-    equal(formatZenIncenseRemaining(9 * 60_000, 'zh-CN'), '余 九分');
+    equal(formatZenIncenseRemaining(15 * 60_000, 'zh-CN'), '余十五分');
+    equal(formatZenIncenseRemaining(9 * 60_000, 'zh-CN'), '余九分');
     equal(formatZenIncenseRemaining(30_000, 'zh-CN'), '将尽');
     equal(formatZenIncenseRemaining(0, 'zh-CN'), '香已尽');
     equal(formatZenIncenseRemaining(9 * 60_000, 'en'), '9 min left');
+    equal(jaDict.zenIncenseMinsLeft, '残り{n}分');
     equal(resolveZenIncenseCopy('zh-CN').doneTitle, '一炷香尽');
     equal(resolveZenIncenseCopy('zh-CN').relightBtn, '再续一炷');
     equal(resolveZenIncenseCopy('zh-CN').restBtn, '歇息');

@@ -1289,11 +1289,30 @@ export const appActions = {
           await appActions.initFromAnki(false);
         }
         if (normalizedAvatar !== undefined) {
+          if (normalizedAvatar.kind !== 'initial') {
+            trackAnalytics('feature_use', { feature: 'avatar_custom' });
+          }
           showToast(
             tState(
               normalizedAvatar.kind === 'initial' ? 'avatarResetToast' : 'avatarSavedToast'
             )
           );
+        }
+        if (patch.theme !== undefined || patch.accentColor !== undefined) {
+          trackAnalytics('feature_use', { feature: 'theme_change' });
+        }
+        if (patch.language !== undefined) {
+          trackAnalytics('feature_use', { feature: 'language_change' });
+        }
+        if (
+          patch.reviewStageWidth !== undefined ||
+          patch.reviewContentScale !== undefined ||
+          patch.answerButtonMode !== undefined
+        ) {
+          trackAnalytics('feature_use', { feature: 'view_tuning' });
+        }
+        if (patch.autoPlayFrontAudio !== undefined || patch.autoPlayBackAudio !== undefined) {
+          trackAnalytics('feature_use', { feature: 'audio_autoplay' });
         }
         return true;
       } catch {
@@ -1571,6 +1590,7 @@ export const appActions = {
     }
 
     setAppState({ cmdKSearching: true });
+    trackAnalytics('feature_use', { feature: 'command_palette' });
 
     cmdKDebounceTimer = setTimeout(async () => {
       cmdKDebounceTimer = null;
@@ -1666,6 +1686,7 @@ export const appActions = {
 
   async syncCollection() {
     if (state.syncing) return;
+    trackAnalytics('feature_use', { feature: 'sync' });
     if (syncJustFinishedTimer) {
       clearTimeout(syncJustFinishedTimer);
       syncJustFinishedTimer = null;
@@ -1801,6 +1822,7 @@ export const appActions = {
 
   async triggerNativeImport() {
     if (isAnkiNativeEnv()) {
+      trackAnalytics('feature_use', { feature: 'import_export' });
       try {
         const res = await callAnki<{ success: boolean; message?: string }>('trigger_native_import', {});
         showToast(res?.message || tState('settingsImportApkgTitle'));
@@ -1815,6 +1837,7 @@ export const appActions = {
 
   async triggerNativeExport() {
     if (isAnkiNativeEnv()) {
+      trackAnalytics('feature_use', { feature: 'import_export' });
       try {
         const res = await callAnki<{ success: boolean; message?: string }>('trigger_native_export', {});
         showToast(res?.message || tState('settingsExportApkgTitle'));
@@ -1838,6 +1861,7 @@ export const appActions = {
     extraData?: Record<string, any>
   ) {
     if (isAnkiNativeEnv()) {
+      trackAnalytics('feature_use', { feature: 'maintenance' });
       try {
         const res = await callAnki<any>('run_maintenance', {
           toolType,
@@ -2020,6 +2044,7 @@ export const appActions = {
         });
 
         autoPlayCardSide(res.cards[0], 'front');
+        trackAnalytics('feature_use', { feature: 'custom_study' });
         showToast(`${tState('customStudyModalTitle')}: ${res.cards.length} ${tState('cardsUnit')}`);
         return { success: true, count: res.cards.length };
       }
@@ -2105,6 +2130,7 @@ export const appActions = {
           return res;
         }
         await appActions.initFromAnki(true);
+        trackAnalytics('feature_use', { feature: 'deck_options' });
       } catch (err: any) {
         showToast(err?.message || tState('deckOptionsTitle'));
         return { saved: false };
@@ -2264,6 +2290,7 @@ export const appActions = {
         cardIds: curatedIds && curatedIds.length > 0 ? curatedIds : undefined,
       });
       setAppState({ isLoading: false });
+      trackAnalytics('feature_use', { feature: 'low_energy' });
       showToast(`${tState('lowEnergyBtn')}: 15 ${tState('cardsUnit')}`);
     } catch (err: any) {
       setAppState({ isLoading: false });
@@ -2287,7 +2314,10 @@ export const appActions = {
         : {}),
     });
     if (tab === 'stats' && isAnkiNativeEnv()) {
+      trackAnalytics('feature_use', { feature: 'stats_view' });
       appActions.refreshStatistics();
+    } else if (tab === 'decks' && isAnkiNativeEnv()) {
+      trackAnalytics('feature_use', { feature: 'decks_view' });
     } else if (tab === 'library' && isAnkiNativeEnv() && (!state.libraryLoaded || state.libraryStale)) {
       appActions.searchLibraryDebounced();
     }
@@ -2315,6 +2345,7 @@ export const appActions = {
     const nextCollapsed =
       typeof forceCollapsed === 'boolean' ? forceCollapsed : !state.sidebarCollapsed;
     if (nextCollapsed === state.sidebarCollapsed) return;
+    trackAnalytics('feature_use', { feature: 'sidebar_toggle' });
     void appActions.updatePreferences({ sidebarCollapsed: nextCollapsed });
   },
 
@@ -2322,6 +2353,7 @@ export const appActions = {
     const nextEnabled =
       typeof forceEnabled === 'boolean' ? forceEnabled : !state.compatMode;
     if (nextEnabled === state.compatMode) return;
+    trackAnalytics('feature_use', { feature: 'sandbox_compat' });
     void appActions.updatePreferences({ compatMode: nextEnabled });
   },
 
@@ -2348,6 +2380,7 @@ export const appActions = {
             sandboxNoteTypeIds: res.sandboxNoteTypeIds.map((id) => String(id)),
           });
         }
+        trackAnalytics('feature_use', { feature: 'sandbox_compat' });
       } catch {}
     }
   },
@@ -2364,6 +2397,7 @@ export const appActions = {
         const res = await callAnki<{ id: string; name: string }>('create_deck', { name: fullName });
         if (res?.id) newId = res.id;
         await appActions.initFromAnki(false);
+        trackAnalytics('feature_use', { feature: 'deck_manage' });
         showToast(`${tState('newDeckBtn')}: ${fullName}`);
         return;
       } catch {}
@@ -2417,6 +2451,7 @@ export const appActions = {
       try {
         await callAnki('rename_deck', { deckId, name: fullNewName });
         await appActions.initFromAnki(false);
+        trackAnalytics('feature_use', { feature: 'deck_manage' });
         showToast(`${tState('deckActionRename')}: ${fullNewName}`);
         return;
       } catch {}
@@ -2458,6 +2493,7 @@ export const appActions = {
       try {
         await callAnki('delete_deck', { deckId });
         await appActions.initFromAnki(false);
+        trackAnalytics('feature_use', { feature: 'deck_manage' });
         showToast(`${tState('batchDelete')}: ${target.fullName}`);
         return;
       } catch {}
@@ -2881,6 +2917,7 @@ export const appActions = {
     setAppState({ zenAmbience: scene, zenAmbienceVolume: effectiveVol });
     setZenAmbienceScene(scene, true);
     persistZenAudioPrefs({ zenAmbience: scene, zenAmbienceVolume: effectiveVol });
+    trackAnalytics('feature_use', { feature: 'zen_ambience' });
   },
 
   exitZenMode() {
@@ -2997,6 +3034,9 @@ export const appActions = {
     if (isAnkiNativeEnv()) {
       try {
         await callAnki('play_audio', { filename: targetFile, filenames: files });
+        if (!silentToast) {
+          trackAnalytics('feature_use', { feature: 'audio_play' });
+        }
       } catch {}
     }
 
@@ -3340,6 +3380,7 @@ export const appActions = {
         callAnki('undo').catch(() => {});
       }
     }
+    trackAnalytics('feature_use', { feature: 'undo_review' });
 
     setAppState((prev) => ({
       undoStack: prev.undoStack.slice(0, -1),
@@ -3395,6 +3436,7 @@ export const appActions = {
           cardId: currentCard.id,
           noteId: currentCard.noteId,
         });
+        trackAnalytics('feature_use', { feature: 'card_delete' });
       } catch {}
     }
 
@@ -3448,6 +3490,7 @@ export const appActions = {
           cardId: currentCard.id,
           suspend: nextSuspended,
         });
+        trackAnalytics('feature_use', { feature: 'card_suspend' });
       } catch {}
     }
 
@@ -3503,6 +3546,7 @@ export const appActions = {
           cardId: currentCard.id,
           bury: true,
         });
+        trackAnalytics('feature_use', { feature: 'card_bury' });
       } catch {}
     }
 
@@ -3557,6 +3601,7 @@ export const appActions = {
           showToast(res.error || tState('forgetCardFailedToast'));
           return;
         }
+        trackAnalytics('feature_use', { feature: 'card_forget' });
       } catch (err) {
         showToast(err instanceof Error ? err.message : tState('forgetCardFailedToast'));
         return;
@@ -3623,6 +3668,7 @@ export const appActions = {
           cardId: currentCard.id,
           flag: nextFlag,
         });
+        trackAnalytics('feature_use', { feature: 'card_flag' });
       } catch {}
     }
 
@@ -3750,6 +3796,7 @@ export const appActions = {
           deckName: nextUpdatedCard.deckName,
         });
         applyInlineUpdateResponse(nextUpdatedCard.id, res);
+        trackAnalytics('feature_use', { feature: 'card_edit' });
       } catch {}
     }
     showToast(tState('autoSaved'));
@@ -3774,6 +3821,7 @@ export const appActions = {
               filename: `paste_${Date.now()}.${ext}`,
             });
             if (res?.fileUrl) {
+              trackAnalytics('feature_use', { feature: 'paste_image' });
               showToast(`${tState('autoSaved')}: ${res.filename}`);
               resolve(`<img src="${res.fileUrl}" data-anki-media="${res.filename}" />`);
               return;
@@ -3902,6 +3950,7 @@ export const appActions = {
           fields: payload.fields,
         });
         applyInlineUpdateResponse(payload.cardId, res);
+        trackAnalytics('feature_use', { feature: 'card_edit' });
         await appActions.initFromAnki(false);
       } catch {}
     }
@@ -4081,6 +4130,7 @@ export const appActions = {
           ignoreCase: payload?.ignoreCase,
           applyToNote: payload?.applyToNote ?? true,
         });
+        trackAnalytics('feature_use', { feature: 'library_batch' });
       } catch {}
     }
 
@@ -4247,10 +4297,15 @@ export const appActions = {
   async triggerNativeEscape() {
     setAppState({ settingsOpen: false });
     if (isAnkiNativeEnv()) {
+      trackAnalytics('feature_use', { feature: 'switch_native' });
       await callAnki('toggle_native_ui');
     } else {
       showToast(tState('switchToNative'));
     }
+  },
+
+  trackFeature(feature: string) {
+    trackAnalytics('feature_use', { feature });
   },
 
   setTheme(theme: ThemeMode) {

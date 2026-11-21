@@ -5,6 +5,7 @@ import { getSandboxPlayAudioFile } from '../../utils/reviewAudio';
 
 interface SandboxCardFrameProps {
   cardId: string;
+  cardOrd?: number;
   frontHtml: string;
   backHtml: string;
   cssText: string;
@@ -52,27 +53,185 @@ function escapeHtmlAttr(val: string): string {
 
 export interface BuildSandboxSrcDocParams {
   cardId: string;
+  cardOrd?: number;
   initialBody: string;
   cssText: string;
   isDark: boolean;
   initialZoom: number;
+  initialIsFlipped?: boolean;
   mediaHttpBaseUrl?: string;
   preloadScripts?: string[];
 }
 
 export function buildSandboxSrcDoc({
   cardId,
+  cardOrd,
   initialBody,
   cssText,
   isDark,
   initialZoom,
+  initialIsFlipped = false,
   mediaHttpBaseUrl,
   preloadScripts,
 }: BuildSandboxSrcDocParams): string {
+  const safeCardOrd =
+    typeof cardOrd === 'number' && Number.isFinite(cardOrd) && cardOrd >= 1
+      ? Math.floor(cardOrd)
+      : 1;
   const themeClass = isDark ? 'nightMode night_mode' : '';
+  const bodyClass = [`card`, `card${safeCardOrd}`, themeClass].filter(Boolean).join(' ');
   const textColor = isDark ? '#EFEFF5' : '#1D1D1F';
   const normalizedBase = normalizeSandboxHttpBaseUrl(mediaHttpBaseUrl);
   const safePreloadScripts = sanitizeSandboxPreloadScripts(preloadScripts);
+  const strippedCss = (cssText || '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const templateDefinesClozeStyle = /(?:^|[^a-zA-Z0-9_-])\.cloze(?![a-zA-Z0-9_-])/.test(strippedCss);
+  const needsDarkClozeRescue =
+    templateDefinesClozeStyle &&
+    !/\.night(?:Mode|_mode)[^{]*\.cloze(?![a-zA-Z0-9_-])/i.test(strippedCss) &&
+    /\.cloze\s*\{[^}]*(?:^|[;\s])color\s*:\s*(?:blue|black|#000(?:000)?|#0000ff|#00f)\b/i.test(
+      strippedCss
+    );
+  const clozeFallbackCss = templateDefinesClozeStyle
+    ? `:where(.cloze) {
+    font-weight: 600;
+  }${
+    needsDarkClozeRescue
+      ? `
+  .nightMode .cloze,
+  .night_mode .cloze {
+    color: #98CCFD;
+  }`
+      : ''
+  }`
+    : `:where(.cloze) {
+    font-weight: 600;
+    color: #235F9F;
+    background: #D9E8F6;
+    padding: 1px 6px;
+    border-radius: 5px;
+  }
+  :where(.cloze[data-cloze]) {
+    border: 1px solid #B0D0EF;
+  }
+  :where(.cloze:not([data-cloze])) {
+    color: #2F9461;
+    background: #EAF6F0;
+  }
+  :where(.nightMode .cloze, .night_mode .cloze) {
+    color: #98CCFD;
+    background: rgba(62, 138, 217, 0.24);
+  }
+  :where(.nightMode .cloze[data-cloze], .night_mode .cloze[data-cloze]) {
+    border-color: rgba(152, 204, 253, 0.38);
+  }
+  :where(.nightMode .cloze:not([data-cloze]), .night_mode .cloze:not([data-cloze])) {
+    color: #3FAE78;
+    background: rgba(63, 174, 120, 0.16);
+  }`;
+
+  const storageShimTag = `<script>
+// 沙盒 iframe 处于隔离源，直接读写 window.localStorage / sessionStorage 会抛 SecurityError。
+// 在保持隔离边界不变的前提下提供内存级 Storage 垫片（支持 Object.keys 与属性访问），
+// 让依赖存储的第三方模板（如 Cloze Overlapping 随机顺序、JLPT、Persistence 等）正常执行并在正反面间保持状态。
+(function () {
+  function createMemoryStorage() {
+    var store = Object.create(null);
+    var methods = {
+      getItem: function (key) {
+        var k = String(key);
+        return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null;
+      },
+      setItem: function (key, value) {
+        store[String(key)] = String(value);
+      },
+      removeItem: function (key) {
+        delete store[String(key)];
+      },
+      clear: function () {
+        Object.keys(store).forEach(function (k) {
+          delete store[k];
+        });
+      },
+      key: function (index) {
+        var keys = Object.keys(store);
+        var i = Number(index);
+        return i >= 0 && i < keys.length ? keys[i] : null;
+      }
+    };
+    if (typeof Proxy === 'function') {
+      return new Proxy({}, {
+        get: function (_target, prop) {
+          if (prop === 'length') return Object.keys(store).length;
+          if (typeof prop === 'string' && Object.prototype.hasOwnProperty.call(methods, prop)) {
+            return methods[prop];
+          }
+          if (typeof prop === 'string' && Object.prototype.hasOwnProperty.call(store, prop)) {
+            return store[prop];
+          }
+          return undefined;
+        },
+        set: function (_target, prop, value) {
+          if (typeof prop === 'string' && prop !== 'length' && !Object.prototype.hasOwnProperty.call(methods, prop)) {
+            store[prop] = String(value);
+            return true;
+          }
+          return false;
+        },
+        deleteProperty: function (_target, prop) {
+          if (typeof prop === 'string' && Object.prototype.hasOwnProperty.call(store, prop)) {
+            delete store[prop];
+          }
+          return true;
+        },
+        has: function (_target, prop) {
+          return (
+            prop === 'length' ||
+            (typeof prop === 'string' &&
+              (Object.prototype.hasOwnProperty.call(methods, prop) ||
+                Object.prototype.hasOwnProperty.call(store, prop)))
+          );
+        },
+        ownKeys: function () {
+          return Object.keys(store);
+        },
+        getOwnPropertyDescriptor: function (_target, prop) {
+          if (typeof prop === 'string' && Object.prototype.hasOwnProperty.call(store, prop)) {
+            return { enumerable: true, configurable: true, writable: true, value: store[prop] };
+          }
+          return undefined;
+        }
+      });
+    }
+    Object.defineProperty(methods, 'length', {
+      enumerable: false,
+      get: function () {
+        return Object.keys(store).length;
+      }
+    });
+    return methods;
+  }
+  ['localStorage', 'sessionStorage'].forEach(function (propName) {
+    try {
+      var nativeStore = window[propName];
+      if (nativeStore) {
+        nativeStore.setItem('__anki_studio_storage_probe__', '1');
+        nativeStore.removeItem('__anki_studio_storage_probe__');
+        return;
+      }
+    } catch (e) {}
+    try {
+      var memStore = createMemoryStorage();
+      Object.defineProperty(window, propName, {
+        configurable: true,
+        enumerable: true,
+        get: function () {
+          return memStore;
+        }
+      });
+    } catch (e) {}
+  });
+})();
+</script>`;
 
   const relativeScriptResolverTag = normalizedBase
     ? `<script>
@@ -122,20 +281,32 @@ export function buildSandboxSrcDoc({
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
-  html, body {
+  html {
     margin: 0;
     padding: 0;
-    background: transparent !important;
-    color: ${textColor};
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans", "Microsoft YaHei", sans-serif;
+    background: transparent;
     overflow-x: hidden;
     overflow-y: hidden;
+    overscroll-behavior-x: none;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color: ${textColor};
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans", "Microsoft YaHei", sans-serif;
+    overscroll-behavior-x: none;
   }
   .card {
-    background: transparent !important;
+    background: transparent;
     box-sizing: border-box;
-    width: 100%;
+    max-width: 100%;
     overflow-wrap: break-word;
+  }
+  .card.nightMode,
+  .card.night_mode {
+    background: transparent;
+    color: #EFEFF5;
   }
   #qa {
     zoom: ${initialZoom};
@@ -148,34 +319,7 @@ export function buildSandboxSrcDoc({
   a img, button img, [onclick] img {
     cursor: pointer;
   }
-  .cloze {
-    font-weight: 600;
-    color: #235F9F;
-    background: #D9E8F6;
-    padding: 1px 6px;
-    border-radius: 5px;
-  }
-  .cloze[data-cloze] {
-    border: 1px solid #B0D0EF;
-  }
-  .cloze:not([data-cloze]) {
-    color: #2F9461;
-    background: #EAF6F0;
-  }
-  .nightMode .cloze,
-  .night_mode .cloze {
-    color: #98CCFD;
-    background: rgba(62, 138, 217, 0.24);
-  }
-  .nightMode .cloze[data-cloze],
-  .night_mode .cloze[data-cloze] {
-    border-color: rgba(152, 204, 253, 0.38);
-  }
-  .nightMode .cloze:not([data-cloze]),
-  .night_mode .cloze:not([data-cloze]) {
-    color: #3FAE78;
-    background: rgba(63, 174, 120, 0.16);
-  }
+  ${clozeFallbackCss}
   .cloze-inactive {
     font-weight: inherit;
     color: inherit;
@@ -262,6 +406,7 @@ export function buildSandboxSrcDoc({
 <style id="anki-model-css">
 ${cssText || ''}
 </style>
+${storageShimTag}
 ${relativeScriptResolverTag}
 ${preloadScriptTags}
 <script>
@@ -318,18 +463,25 @@ ${preloadScriptTags}
     var body = document.body;
     var docEl = document.documentElement;
     if (!body || !docEl) return;
+    var bodyMarginY = 0;
+    try {
+      var bodyCs = window.getComputedStyle(body);
+      bodyMarginY =
+        Math.max(0, parseFloat(bodyCs.marginTop) || 0) +
+        Math.max(0, parseFloat(bodyCs.marginBottom) || 0);
+    } catch (e) {}
     var rawH = Math.max(
-      qa ? qa.scrollHeight : 0,
-      qa ? qa.offsetHeight : 0,
-      body.scrollHeight,
-      body.offsetHeight
+      qa ? qa.scrollHeight + bodyMarginY : 0,
+      qa ? qa.offsetHeight + bodyMarginY : 0,
+      body.scrollHeight + bodyMarginY,
+      body.offsetHeight + bodyMarginY
     );
     var currentZoom = parseFloat((qa && qa.style && qa.style.zoom) || '${initialZoom}') || 1;
     var h = rawH * (currentZoom > 1 ? 1 : 1);
     if (qa) {
       var rect = qa.getBoundingClientRect();
       if (rect && rect.height) {
-        h = Math.max(h, rect.height);
+        h = Math.max(h, rect.height + bodyMarginY);
       }
     }
     var clamped = Math.max(120, Math.min(4200, Math.ceil(h + 8)));
@@ -353,6 +505,8 @@ ${preloadScriptTags}
     });
   }
 
+  var sandboxIsFlipped = ${initialIsFlipped ? 'true' : 'false'};
+
   window.addEventListener('message', function(ev) {
     var data = ev.data;
     if (!data || data.cardId !== ${JSON.stringify(cardId)}) return;
@@ -368,6 +522,7 @@ ${preloadScriptTags}
       return;
     }
     if (data.type !== 'anki-sandbox-flip') return;
+    sandboxIsFlipped = Boolean(data.isFlipped);
     var qa = document.getElementById('qa');
     if (!qa) return;
     qa.innerHTML = data.html || '';
@@ -378,6 +533,56 @@ ${preloadScriptTags}
       setTimeout(reportHeight, 60);
     });
   });
+
+  function hasInnerHorizontalScroller(target, rawDeltaX) {
+    var node = target && target.nodeType === 1 ? target : (target && target.parentElement ? target.parentElement : null);
+    while (node && node !== document.documentElement) {
+      if (node.scrollWidth > node.clientWidth + 1) {
+        var ov = '';
+        try {
+          ov = window.getComputedStyle(node).overflowX || '';
+        } catch (err) {}
+        if (ov === 'auto' || ov === 'scroll' || ov === 'overlay') {
+          var maxLeft = node.scrollWidth - node.clientWidth;
+          if (rawDeltaX > 0 && node.scrollLeft < maxLeft - 1) return true;
+          if (rawDeltaX < 0 && node.scrollLeft > 1) return true;
+          if (node.scrollLeft > 1 && node.scrollLeft < maxLeft - 1) return true;
+        }
+      }
+      node = node.parentElement;
+    }
+    return false;
+  }
+
+  window.addEventListener('wheel', function(e) {
+    if (e.ctrlKey || e.metaKey) {
+      parent.postMessage({
+        type: 'anki-sandbox-pinch',
+        cardId: ${JSON.stringify(cardId)}
+      }, '*');
+      return;
+    }
+    if (e.deltaMode !== 0) return;
+    var t = e.target;
+    var isTyping = Boolean(
+      t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
+    );
+    if (isTyping) return;
+    var absX = Math.abs(e.deltaX || 0);
+    var absY = Math.abs(e.deltaY || 0);
+    var innerHScroll = absX >= 0.01 ? hasInnerHorizontalScroller(t, e.deltaX || 0) : false;
+    if (!innerHScroll && absX > absY * 1.1 && absX >= 0.4) {
+      e.preventDefault();
+    }
+    parent.postMessage({
+      type: 'anki-sandbox-wheel',
+      cardId: ${JSON.stringify(cardId)},
+      deltaX: Number(e.deltaX || 0),
+      deltaY: Number(e.deltaY || 0),
+      deltaMode: Number(e.deltaMode || 0),
+      hasInnerHScroll: innerHScroll
+    }, '*');
+  }, { passive: false });
 
   window.addEventListener('keydown', function(e) {
     var t = e.target;
@@ -477,7 +682,7 @@ ${preloadScriptTags}
 })();
 </script>
 </head>
-<body class="card ${themeClass}">
+<body class="${bodyClass}">
   <div id="qa">${renderLatexInSandboxHtml(initialBody)}</div>
 </body>
 </html>`;
@@ -485,6 +690,7 @@ ${preloadScriptTags}
 
 export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
   cardId,
+  cardOrd,
   frontHtml,
   backHtml,
   cssText,
@@ -504,12 +710,14 @@ export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
   const [frameHeight, setFrameHeight] = useState<number>(280);
   const initialSideHtmlRef = useRef<string>(isFlipped ? backHtml : frontHtml);
   const initialScaleRef = useRef<number>(contentScale);
+  const initialFlippedRef = useRef<boolean>(isFlipped);
   const prevCardIdRef = useRef<string>(cardId);
 
   if (prevCardIdRef.current !== cardId) {
     prevCardIdRef.current = cardId;
     initialSideHtmlRef.current = isFlipped ? backHtml : frontHtml;
     initialScaleRef.current = contentScale;
+    initialFlippedRef.current = isFlipped;
   }
 
   const preloadKey = (preloadScripts || []).join('\u0000');
@@ -518,15 +726,17 @@ export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
     () =>
       buildSandboxSrcDoc({
         cardId,
+        cardOrd,
         initialBody: initialSideHtmlRef.current || '',
         cssText,
         isDark,
         initialZoom: initialScaleRef.current || 1,
+        initialIsFlipped: initialFlippedRef.current,
         mediaHttpBaseUrl,
         preloadScripts,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cardId, cssText, isDark, mediaHttpBaseUrl, preloadKey]
+    [cardId, cardOrd, cssText, isDark, mediaHttpBaseUrl, preloadKey]
   );
 
   // Swap #qa in-place on flip without reloading the iframe (prevents white flash!)
@@ -604,6 +814,24 @@ export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
           cancelable: true,
         });
         window.dispatchEvent(synthetic);
+      } else if (data.type === 'anki-sandbox-pinch') {
+        window.dispatchEvent(
+          new CustomEvent('anki:sandbox-pinch', {
+            detail: { cardId: data.cardId },
+          })
+        );
+      } else if (data.type === 'anki-sandbox-wheel') {
+        window.dispatchEvent(
+          new CustomEvent('anki:sandbox-wheel', {
+            detail: {
+              cardId: data.cardId,
+              deltaX: Number(data.deltaX || 0),
+              deltaY: Number(data.deltaY || 0),
+              deltaMode: Number(data.deltaMode || 0),
+              hasInnerHScroll: Boolean(data.hasInnerHScroll),
+            },
+          })
+        );
       }
     };
 
@@ -627,7 +855,7 @@ export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
       sandbox="allow-scripts"
       srcDoc={srcDocHtml}
       style={{ height: `${frameHeight}px` }}
-      className="w-full border-0 bg-transparent transition-[height] duration-150 block"
+      className="w-full border-0 bg-transparent rounded-xl transition-[height] duration-150 block"
     />
   );
 };

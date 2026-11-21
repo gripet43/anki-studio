@@ -60,6 +60,83 @@ def set_cocoa_traffic_lights_hidden(win_id: int, hidden: bool) -> bool:
     except Exception:
         return False
 
+
+_COCOA_HAPTIC_CACHE: Optional[Any] = None
+
+
+def trigger_cocoa_haptic_feedback(pattern: str = "alignment") -> bool:
+    """Triggers a macOS Taptic Engine haptic pulse via NSHapticFeedbackManager.
+
+    Safe no-op on non-macOS platforms or machines without AppKit haptics.
+    Uses explicit ARM64-safe `ctypes.CFUNCTYPE` signatures for `objc_msgSend`.
+    """
+    global _COCOA_HAPTIC_CACHE
+    if not sys.platform.startswith("darwin"):
+        return False
+
+    pattern_map = {
+        "generic": 0,
+        "alignment": 1,
+        "level_change": 2,
+    }
+    pattern_code = pattern_map.get(str(pattern or "alignment").lower(), 1)
+
+    try:
+        import ctypes
+        import ctypes.util
+
+        if _COCOA_HAPTIC_CACHE is False:
+            return False
+
+        if _COCOA_HAPTIC_CACHE is None:
+            objc_path = ctypes.util.find_library("objc")
+            appkit_path = ctypes.util.find_library("AppKit")
+            if not objc_path or not appkit_path:
+                _COCOA_HAPTIC_CACHE = False
+                return False
+            objc = ctypes.cdll.LoadLibrary(objc_path)
+            ctypes.cdll.LoadLibrary(appkit_path)
+
+            sel_reg = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_char_p)(
+                ("sel_registerName", objc)
+            )
+            get_class = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_char_p)(
+                ("objc_getClass", objc)
+            )
+            msg_id = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(
+                ("objc_msgSend", objc)
+            )
+            msg_perform = ctypes.CFUNCTYPE(
+                None,
+                ctypes.c_void_p,
+                ctypes.c_void_p,
+                ctypes.c_long,
+                ctypes.c_ulong,
+            )(("objc_msgSend", objc))
+
+            mgr_cls = get_class(b"NSHapticFeedbackManager")
+            if not mgr_cls:
+                _COCOA_HAPTIC_CACHE = False
+                return False
+
+            _COCOA_HAPTIC_CACHE = {
+                "msg_id": msg_id,
+                "msg_perform": msg_perform,
+                "mgr_cls": mgr_cls,
+                "sel_default": sel_reg(b"defaultPerformer"),
+                "sel_perform": sel_reg(b"performFeedbackPattern:performanceTime:"),
+            }
+
+        cache = _COCOA_HAPTIC_CACHE
+        performer = cache["msg_id"](cache["mgr_cls"], cache["sel_default"])
+        if not performer:
+            return False
+        # NSHapticFeedbackPerformanceTimeDefault = 0
+        cache["msg_perform"](performer, cache["sel_perform"], pattern_code, 0)
+        return True
+    except Exception:
+        return False
+
 from .analytics_service import AnalyticsService
 from .day_rollover import DayRolloverTracker, read_day_timing, refresh_scheduler_if_needed
 from .deck_service import DeckService
@@ -1067,6 +1144,14 @@ class BridgeRouter:
             return {"hidden": hidden, "applied": bool(applied)}
         except Exception:
             return {"hidden": hidden, "applied": False}
+
+    def action_trigger_haptic(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Triggers a subtle macOS Taptic Engine feedback pulse when supported."""
+        raw_pattern = str(data.get("pattern", "alignment") or "alignment").strip().lower()
+        if raw_pattern not in {"alignment", "generic", "level_change"}:
+            raw_pattern = "alignment"
+        applied = trigger_cocoa_haptic_feedback(raw_pattern)
+        return {"pattern": raw_pattern, "applied": bool(applied)}
 
     # ---- Vacation Mode & Anti-Avalanche Rescue Actions ----
 

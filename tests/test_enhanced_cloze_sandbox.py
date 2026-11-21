@@ -46,6 +46,54 @@ class TestEnhancedClozeSandboxSupport(unittest.TestCase):
         plain_cloze = self._model("Cloze", "{{cloze:Text}}")
         self.assertFalse(self._service()._template_needs_script_shim(plain_cloze))
 
+    def test_cloze_overlapping_and_generic_hidden_script_templates_detected(self):
+        svc = self._service()
+        co_by_dom = self._model(
+            "My Custom Anatomy Cloze",
+            '<div id="cloze-original" hidden="">{{Text}}</div>'
+            '<div id="cloze-js-rendered"></div><script>render()</script>',
+        )
+        self.assertTrue(svc._template_needs_script_shim(co_by_dom))
+
+        co_by_name = self._model(
+            "Cloze Overlapping",
+            '<div id="body"></div><script>render()</script>',
+        )
+        self.assertTrue(svc._template_needs_script_shim(co_by_name))
+
+        # 通用结构检测：任意未知命名模板，若正文藏在 hidden / display:none 中且仅靠脚本渲染，应自动判 True
+        unknown_hidden_q = (
+            '<div class="slidecontainer"><input type="range" id="myRange"></div>'
+            '<div id="raw-src" hidden="">Organization Hierarchy of Anatomy</div>'
+            '<div id="target"></div><script>fill()</script>'
+        )
+        self.assertTrue(svc._question_hides_body_without_script(unknown_hidden_q))
+
+        unknown_display_none_q = (
+            '<span style="color:red; display: none;">Hidden prompt</span>'
+            '<div id="mount"></div><script>mount()</script>'
+        )
+        self.assertTrue(svc._question_hides_body_without_script(unknown_display_none_q))
+
+        # 有可见文字或可见图片的普通脚本模板不可误判
+        normal_with_script_q = (
+            '<div>Visible question text</div>'
+            '<div hidden="">Metadata</div><script>console.log(1)</script>'
+        )
+        self.assertFalse(svc._question_hides_body_without_script(normal_with_script_q))
+
+        visible_img_with_script_q = (
+            '<img src="diagram.png"><div hidden="">meta</div><script>init()</script>'
+        )
+        self.assertFalse(svc._question_hides_body_without_script(visible_img_with_script_q))
+
+        # 无脚本或隐藏容器也为空的空卡不可误判
+        no_script_q = '<div hidden="">Only hidden</div>'
+        self.assertFalse(svc._question_hides_body_without_script(no_script_q))
+
+        truly_blank_q = '<div hidden=""></div><script>noop()</script>'
+        self.assertFalse(svc._question_hides_body_without_script(truly_blank_q))
+
     def test_resolve_media_for_sandbox_rewrites_relative_script_src(self):
         base = "http://localhost:8765/"
         html_in = (

@@ -337,7 +337,7 @@ function aggregateStats(allRows, opts) {
   const features = Array.from(featureMap.entries())
     .map(([feature, info]) => ({ feature, installs: info.users.size, uses: info.count }))
     .sort((a, b) => b.uses - a.uses)
-    .slice(0, 15);
+    .slice(0, 50);
 
   return {
     generated_at: now,
@@ -661,9 +661,38 @@ const DASHBOARD_HTML = `<!doctype html>
       library_search: "卡片库搜索",
       quick_add: "快速制卡",
       vacation: "休假模式",
-      relief: "减负计划",
+      relief: "雪崩减负",
       zen_mode: "专注模式",
-      low_energy: "轻量复习"
+      low_energy: "轻量复习",
+      custom_study: "自定义学习",
+      stats_view: "数据统计页",
+      decks_view: "牌组管理页",
+      command_palette: "Cmd+K 全局搜索",
+      sync: "AnkiWeb 同步",
+      card_edit: "编辑卡片",
+      paste_image: "粘贴图片制卡",
+      library_batch: "卡片库批量操作",
+      deck_manage: "牌组增删改",
+      deck_options: "牌组学习设置",
+      zen_ambience: "专注白噪音",
+      audio_play: "卡片朗读播放",
+      audio_autoplay: "自动播音开关",
+      undo_review: "撤销评分",
+      card_flag: "旗标标记",
+      card_suspend: "暂停/恢复卡片",
+      card_bury: "搁置卡片",
+      card_forget: "重置卡片进度",
+      card_delete: "删除卡片",
+      sandbox_compat: "原生兼容沙盒",
+      image_lightbox: "图片灯箱缩放",
+      view_tuning: "复习画幅/字号",
+      theme_change: "切换主题/配色",
+      language_change: "切换界面语言",
+      avatar_custom: "自定义头像",
+      sidebar_toggle: "侧边栏缩放",
+      import_export: "导入 / 导出",
+      maintenance: "数据库维护",
+      switch_native: "切回原生界面"
     };
     const BUCKET_ORDER = ["1-20", "21-50", "51-100", "100+"];
 
@@ -671,6 +700,7 @@ const DASHBOARD_HTML = `<!doctype html>
       token: localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY) || "",
       range: "today",
       recentFilter: "all",
+      showZeroFeatures: false,
       error: "",
       data: null,
     };
@@ -751,7 +781,7 @@ const DASHBOARD_HTML = `<!doctype html>
       const total = items.reduce((acc, x) => acc + Number(x[countKey] || 0), 0);
       return items.map((item) => {
         const val = Number(item[countKey] || 0);
-        const pctWidth = Math.max(2, Math.round((val / max) * 100));
+        const pctWidth = val > 0 ? Math.max(2, Math.round((val / max) * 100)) : 0;
         const share = total > 0 ? Math.round((val / total) * 100) : 0;
         const extra = extraFn ? extraFn(item) : "";
         return \`<div class="bar-row">
@@ -839,6 +869,16 @@ const DASHBOARD_HTML = `<!doctype html>
         const ib = BUCKET_ORDER.indexOf(b.bucket);
         return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
       });
+
+      const featureList = (() => {
+        const used = d.features || [];
+        if (!state.showZeroFeatures) return used;
+        const usedSet = new Set(used.map((x) => x.feature));
+        const zeros = Object.keys(FEATURE_NAMES)
+          .filter((k) => !usedSet.has(k))
+          .map((feature) => ({ feature, installs: 0, uses: 0 }));
+        return [...used, ...zeros];
+      })();
 
       const recentFiltered = (d.recent || []).filter((r) => state.recentFilter === "all" || r.event === state.recentFilter);
 
@@ -928,8 +968,16 @@ const DASHBOARD_HTML = `<!doctype html>
             \${renderBars(sortedBuckets, (x) => x.bucket + " 张", "sessions", (x) => x.installs + " 人", "green")}
           </div>
           <div class="card">
-            <h3><span>功能热度排行</span><span class="kpi-sub">使用次数</span></h3>
-            \${renderBars(d.features, (x) => fmtFeature(x.feature), "uses", (x) => x.installs + " 人")}
+            <h3>
+              <span>功能热度排行</span>
+              <span style="display:inline-flex;align-items:center;gap:8px;">
+                <span class="kpi-sub">使用次数</span>
+                <button id="toggle-zero-feat" class="btn xs">\${state.showZeroFeatures ? "隐藏 0 次" : "展开全部"}</button>
+              </span>
+            </h3>
+            <div style="max-height:360px;overflow-y:auto;padding-right:2px;">
+              \${renderBars(featureList, (x) => fmtFeature(x.feature), "uses", (x) => x.installs + " 人")}
+            </div>
           </div>
           <div class="card">
             <h3><span>操作系统 & Anki 本体版本</span><span class="kpi-sub">独立设备</span></h3>
@@ -988,6 +1036,13 @@ const DASHBOARD_HTML = `<!doctype html>
           renderDashboard();
         });
       });
+      const toggleZeroBtn = document.getElementById("toggle-zero-feat");
+      if (toggleZeroBtn) {
+        toggleZeroBtn.addEventListener("click", () => {
+          state.showZeroFeatures = !state.showZeroFeatures;
+          renderDashboard();
+        });
+      }
       const retryBtn = document.getElementById("retry-btn");
       if (retryBtn) retryBtn.addEventListener("click", () => loadStats());
       document.getElementById("export-btn").addEventListener("click", () => {

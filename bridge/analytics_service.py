@@ -172,7 +172,7 @@ class AnalyticsService:
             day_marks = day_marks if isinstance(day_marks, list) else []
             if dedupe_key in day_marks:
                 return False
-            day_marks = (day_marks + [dedupe_key])[-50:]
+            day_marks = (day_marks + [dedupe_key])[-100:]
             marks = {today: day_marks}  # 只保留当天，避免配置膨胀
             try:
                 self._write_config({"analytics_marks": marks})

@@ -880,6 +880,62 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(res_zen_show["status"], "success")
         self.assertFalse(res_zen_show["data"]["hidden"])
 
+        with mock.patch(
+            "anki_modern_os.bridge.router.trigger_cocoa_haptic_feedback", return_value=True
+        ) as mocked_haptic:
+            res_hap = self._call("trigger_haptic", {"pattern": "alignment"})
+            self.assertEqual(res_hap["status"], "success")
+            self.assertEqual(res_hap["data"]["pattern"], "alignment")
+            self.assertTrue(res_hap["data"]["applied"])
+            mocked_haptic.assert_called_once_with("alignment")
+
+            res_hap_bad = self._call("trigger_haptic", {"pattern": "invalid_xyz"})
+            self.assertEqual(res_hap_bad["status"], "success")
+            self.assertEqual(res_hap_bad["data"]["pattern"], "alignment")
+
+        from anki_modern_os import (
+            _is_qt_discrete_mouse_wheel,
+            _is_qt_no_scroll_phase,
+            _normalize_qt_wheel_phase,
+        )
+
+        self.assertEqual(_normalize_qt_wheel_phase(SimpleNamespace(name="ScrollBegin", value=1)), "begin")
+        self.assertEqual(_normalize_qt_wheel_phase(SimpleNamespace(name="ScrollUpdate", value=2)), "update")
+        self.assertEqual(_normalize_qt_wheel_phase(SimpleNamespace(name="ScrollEnd", value=3)), "end")
+        self.assertEqual(_normalize_qt_wheel_phase(SimpleNamespace(name="ScrollMomentum", value=4)), "momentum")
+        self.assertEqual(_normalize_qt_wheel_phase(1), "begin")
+        self.assertEqual(_normalize_qt_wheel_phase(4), "momentum")
+        self.assertIsNone(_normalize_qt_wheel_phase(SimpleNamespace(name="NoScrollPhase", value=0)))
+        self.assertIsNone(_normalize_qt_wheel_phase(None))
+        self.assertTrue(_is_qt_no_scroll_phase(SimpleNamespace(name="NoScrollPhase", value=0)))
+        self.assertTrue(_is_qt_no_scroll_phase(0))
+        self.assertFalse(_is_qt_no_scroll_phase(SimpleNamespace(name="ScrollBegin", value=1)))
+        self.assertFalse(_is_qt_no_scroll_phase(None))
+        # Physical external mouse wheel: NoScrollPhase + pixelDelta=(0,0) + angleDelta=(0,-120)
+        self.assertTrue(
+            _is_qt_discrete_mouse_wheel(
+                SimpleNamespace(name="NoScrollPhase", value=0), (0, 0), (0, -120), 0
+            )
+        )
+        # macOS trackpad MayBegin / Cancelled: NoScrollPhase + zero angleDelta -> NOT mouse!
+        self.assertFalse(
+            _is_qt_discrete_mouse_wheel(
+                SimpleNamespace(name="NoScrollPhase", value=0), (0, 0), (0, 0), 0
+            )
+        )
+        # Trackpad with precision pixelDelta -> NOT mouse!
+        self.assertFalse(
+            _is_qt_discrete_mouse_wheel(
+                SimpleNamespace(name="NoScrollPhase", value=0), (0, -14), (0, -14), 0
+            )
+        )
+        # System-synthesized touch scroll -> NOT mouse!
+        self.assertFalse(
+            _is_qt_discrete_mouse_wheel(
+                SimpleNamespace(name="NoScrollPhase", value=0), (0, 0), (0, -120), 1
+            )
+        )
+
     def test_11_vacation_and_anti_avalanche_rescue(self):
         """Verify Vacation Mode, Streak Freeze, Backlog Amortization and Low Energy sessions."""
         # 1. Initial vacation status

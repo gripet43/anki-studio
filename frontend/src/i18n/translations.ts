@@ -1243,7 +1243,7 @@ const ZH_CN_DICT = {
   zenAllDoneSubNight: "夜色已深，放下书卷安歇吧，可以退出禅模式了。",
   zenIncenseFinished: "香已尽",
   zenIncenseUnderMin: "将尽",
-  zenIncenseMinsLeft: "余 {n}分",
+  zenIncenseMinsLeft: "余{n}分",
   zenIncenseDoneTitle: "一炷香尽",
   zenIncenseDoneSub: "这一炷清香已然燃尽，可再续一炷，或暂且歇息。",
   zenIncenseRelightBtn: "再续一炷",
