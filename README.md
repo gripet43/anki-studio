@@ -2,15 +2,19 @@
 
 ![Anki Studio](docs/assets/brand-banner.png)
 
-**[English](#english) · [简体中文](#简体中文)** · **[AnkiWeb Add-on (`1071937836`)](https://ankiweb.net/shared/info/1071937836)**
+**[English](#english) · [简体中文](#简体中文) · [AnkiWeb Add-on (`1071937836`)](https://ankiweb.net/shared/info/1071937836) · [Zen Mode Video Demo](https://youtu.be/g6Fx8M_FuNA)**
 
 ---
 
 <a id="english"></a>
 
-> A calm, Apple HIG–inspired desktop workspace for Anki — built for focused daily study with FSRS analytics, Vacation Mode, Schedule Relief, and **zero mini-games**. Completely compatible with official AnkiWeb sync and 16 interface languages.
+> A calm, Apple HIG–inspired desktop workspace for Anki — featuring **Zen Mode**, **macOS trackpad swipe review**, **FSRS analytics**, **Vacation Mode**, and **Schedule Relief**, with **zero mini-games**. Completely compatible with official AnkiWeb sync and 16 interface languages.
 
-![Anki Studio Preview](docs/assets/anki-studio-preview.gif)
+![Anki Studio Showcase — Indigo Minimal, Zen Mode & Sage Botanical](docs/assets/showcase-triptych.png)
+
+[![Watch Anki Studio Zen Mode Demo on YouTube](docs/assets/zen-demo-video-card.png)](https://youtu.be/g6Fx8M_FuNA)
+
+![Anki Studio Interactive Preview](docs/assets/anki-studio-preview.gif)
 
 ## Quick Install
 
@@ -23,32 +27,37 @@
 
 ---
 
-## Highlights
+## Highlights (v1.7)
 
-- **Distraction-Free Workspace** — Today Dashboard with daily goal ring, streak tracker, 26×7 learning heatmap, deck mastery bars derived harmoniously from your accent color, and weekly review rhythm.
-- **Calm Reviewer** — spacious centered card stage with FSRS interval previews (`Again / Hard / Good / Easy`), Cloze, MathJax/KaTeX, flags, tags, `Aa` stage width & scale controls, **75%–500% pan-and-zoom image/mind-map lightbox**, and independent front/back audio auto-play switches.
-- **System Auto, Light & Dark + 8 Accent Atmospheres** — auto-follows your OS appearance across 8 accent palettes; keep **Indigo** for 100% pure neutral minimalism, or pick 7 optional warm-paper & illustration themes (*Botanical Journal, Washi & Matcha, Cozy Café, Study Cat, Observatory, Pastel Sky, Bookplate Study*).
-- **FSRS Analytics & Memory Insights** — 30-day due workload forecast, card maturity lifecycle breakdown, 12-week historical retention trend, 24-hour focus breakdown, and strict FSRS True Retention.
-- **Burnout Shield (`Vacation Mode` & `Schedule Relief`)** — freeze new-card limits, snapshot & shift due dates without breaking intervals or streaks, spread overdue backlogs smoothly over *N* days, or trigger a curated 10–15 card **Light Session** on exhausted days.
-- **Fast Card Library** — filter by status, difficulty, flag, tag, or deck; multi-select to batch edit, suspend, bury, move, or delete.
-- **Safe Script & Image Occlusion Compatibility** — write Cloze notes, tables, and math natively; template-driven and native Image Occlusion cards render faithfully in isolated **Compatibility Mode** without flattening or altering your original notes.
-- **16 Interface Languages** — auto-matches your Anki locale across English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Français, Español, Italiano, Português (Brasil), Русский, Nederlands, Polski, Türkçe, Tiếng Việt, and العربية.
+- **Zen Mode (`Cmd/Ctrl+Shift+Z`)** — Step into a zero-number Washi study sanctuary. Light virtual sandalwood incense, hear a synthesized singing-bowl chime, and review calmly beside a 15-minute burning desk incense timer and pure offline ambient soundscapes (*Eaves rain, Pine wind, Warm stillness*).
+- **macOS Trackpad Swipe Review (`v1.7.1`)** — 120fps GPU-driven Tinder-style card swiping (`Left = Again`, `Right = Good`), two-finger pull-to-flip, and native Cocoa haptic feedback — engineered with zero-rerender compositing and smart safeguards against accidental triggers.
+- **Calm Workspace & Today Dashboard** — Collapsible spring-animated sidebar (`Cmd/Ctrl+\`), animated daily goal ring, streak tracker, soft-tile `26×7` activity heatmap, weekly rhythm with average baseline, custom circular avatar cropping/rotation, and harmonious deck mastery bars.
+- **Focused Reviewer** — Centered card stage with FSRS interval previews (`Again / Hard / Good / Easy`), Cloze, MathJax/KaTeX, flags, tags, `Aa` stage width & scale controls, **75%–500% pan-and-zoom image lightbox**, independent front/back audio auto-play switches, and a `2×3` card drawer with **Reset Progress** and unified undo (`Cmd/Ctrl+Z`).
+- **Auto, Light & Dark + 8 Themes** — Auto-follows your OS appearance across 8 accent palettes: keep **Indigo** for 100% pure neutral minimalism, or pick 7 optional warm-paper themes with hand-crafted watercolor-mask illustrations (*Botanical, Kyoto Washi, Café, Study Cat, Observatory, Cloudscape, Classic Library*).
+- **Redesigned FSRS Analytics** — 30-day workload forecast, 6-stage maturity lifecycle breakdown, 12-week retention curve with a 90% target baseline, 24-hour peak focus window, and strict FSRS True Retention.
+- **Burnout Protection (`Vacation Mode` & `Schedule Relief`)** — Freeze new-card limits and shift due dates without breaking intervals or streaks, spread overdue backlogs smoothly over *N* days, or trigger a curated 10–15 card **Light Session** on low-energy days.
+- **Instant Large-Collection Performance & Script Sandbox** — Read-only SQL fast paths keep filtering, sorting, and previews snappy on 10,000+ card collections. Global **Compatibility Mode** and automatic sandbox detection handle `Enhanced Cloze`, `Cloze Overlapping`, custom JS/CSS templates, and Image Occlusion seamlessly without touching your notes.
+- **16 Interface Languages** — Auto-matches your Anki locale across English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Français, Español, Italiano, Português (Brasil), Русский, Nederlands, Polski, Türkçe, Tiếng Việt, and العربية (including RTL).
 
 ---
 
 ## Screenshots
 
-| Today Dashboard (Light) | Calm Cloze Reviewer |
+| Today Dashboard (Classic Minimal · Indigo) | Sage Botanical Theme (Warm Paper + Watercolor) |
 |---|---|
-| ![Dashboard](docs/assets/screenshots/01-dashboard.png) | ![Reviewer](docs/assets/screenshots/02-reviewer.png) |
+| ![Dashboard Indigo](docs/assets/screenshots/01-dashboard.png) | ![Dashboard Sage Botanical](docs/assets/screenshots/08-dashboard-sage.png) |
 
-| Card Library (Grid + KaTeX) | FSRS Analytics (Dark Mode) |
+| Zen Mode Courtyard (Incense Ritual & Ensō) | Zen Mode Review (Washi Paper + 15-Min Incense Timer) |
 |---|---|
-| ![Card Library](docs/assets/screenshots/03-library.png) | ![FSRS Stats](docs/assets/screenshots/04-stats-dark.png) |
+| ![Zen Mode Courtyard](docs/assets/screenshots/06-zen-home.png) | ![Zen Mode Review](docs/assets/screenshots/07-zen-review.png) |
 
-| Schedule Relief | Vacation Mode |
+| Calm Cloze Reviewer | Card Library (Faceted Grid) |
 |---|---|
-| ![Schedule Relief](docs/assets/screenshots/05-relief.png) | ![Vacation Mode](docs/assets/screenshots/05-vacation.png) |
+| ![Reviewer](docs/assets/screenshots/02-reviewer.png) | ![Card Library](docs/assets/screenshots/03-library.png) |
+
+| FSRS Analytics (Dark Mode) | Schedule Relief | Vacation Mode |
+|---|---|---|
+| ![FSRS Stats](docs/assets/screenshots/04-stats-dark.png) | ![Schedule Relief](docs/assets/screenshots/05-relief.png) | ![Vacation Mode](docs/assets/screenshots/05-vacation.png) |
 
 ---
 
@@ -56,7 +65,8 @@
 
 - **Anki Requirement**: **Anki 26.09.4 or later** (`min_point_version: 260904`, Qt6 / Python 3.13) on macOS, Windows, and Linux.
 - **100% Native Anki Writes**: All writes go exclusively through Anki's official Python API (`col.update_card`, `col.sched.*`), letting Anki maintain `mod` / `usn` directly so **AnkiWeb sync remains untouched**.
-- **Privacy First**: Card contents, deck names, tags, and search queries **never leave your device**. Optional anonymous usage counters (launches, daily activity, session-size buckets, feature usage) can be disabled anytime in **Settings → About**, or pointed to a self-hosted endpoint (`scripts/analytics-worker/`).
+- **Per-Profile Isolation**: Custom avatars, nicknames, and workspace preferences are stored per Anki Profile cleanly.
+- **Privacy First**: Card contents, deck names, tags, and search queries **never leave your device**. Optional anonymous usage counters (launches, daily active days, session-size buckets, feature counts) can be disabled anytime in **Settings → About**, or pointed to a self-hosted endpoint (`scripts/analytics-worker/`).
 - **AI Disclosure**: Most of the code was written with AI under my direction, and verified jointly by me and AI through automated unit/smoke tests plus manual testing on real decks across macOS and Windows.
 
 ---
@@ -65,19 +75,19 @@
 
 ## 简体中文
 
-> 专为 Anki 打造的现代化、桌面级沉浸式记忆工作区。以 Apple 人机交互设计规范（HIG）为审美基准，界面支持 16 种语言，并沿用 Anki 原生同步链路（不介入其数据流），与 AnkiWeb 双向同步兼容。
+> 专为 Anki 打造的现代化、桌面级沉浸式学习工作区。以 Apple 人机交互设计规范（HIG）为审美基准，集成了**极简禅模式**、**macOS 触控板 120fps 跟手划卡**、**FSRS 深度记忆统计**与**防倦怠休假/积压减负**；支持 16 种语言，所有写操作均走 Anki 原生官方 API，与 AnkiWeb 双向同步完全兼容。
 
-### 🌟 核心特性
+### 🌟 核心特性（v1.7）
 
-- **macOS 沉浸式标题栏**：无缝延伸至原生红黄绿交通灯后方，支持无感拖拽与系统级窗口缩放。
-- **0 毫秒首帧启动**：Qt 底层背景颜色预注入 + HTML 预挂载骨架，彻底消除传统 Web 插件冷启动白屏。
-- **全局瀑布流级联同步**：顶部状态指示、环形进度雷达、牌组卡片、26×7 学习热力图与周节奏图表全屏协同呼吸。
-- **4 级统一按钮系统**：严谨的视觉层级（Primary、Secondary、Ghost、Icon Circle），提供细腻的物理触感反馈。
-- **🌴 休假守护与雪崩急救**：内建事前休假（新卡冻结 + 顺延 + 连胜冰冻 Streak Freeze）、事后削峰填谷（卡片均匀平摊消化）与低能量极简打卡模式。
-- **学习专注细节升级**：复习页支持 `Aa` 舞台宽度与字号调节、图片/思维导图 **75%–500% 无极缩放灯箱**，以及正面/背面独立的卡片音频自动播放双开关。
-- **三层防迷失安全网**：快捷键 `Ctrl+Opt+M` / `Ctrl+Alt+M`、工具菜单入口与原生工具栏常驻彩色胶囊，随时秒切原生。
-- **多主题与纸感氛围**：支持 `跟随系统 (System)`、`浅色 (Light)`、`深色 (Dark)` 三种显示模式与 8 套品牌强调色；默认经典蓝（`Indigo`）严格保持零插画纯白极简工作台，其余 7 款强调色各自绑定专属纸感与微插画氛围（植物手账、京都和纸、窗边咖啡馆、橘猫伴读、星夜天文台、云端纸飞机、古典藏书阁），首页牌组卡配色由所选强调色和谐派生。
-- **16 种界面语言**：简繁中文、英、日、韩、德、法、西、意、葡（巴西）、俄、荷、波、土、越、阿，可跟随 Anki 客户端语言自动切换。
+- **🕯️ 极简禅模式（`Cmd/Ctrl+Shift+Z`）**：步入无数字焦虑的纯纸背诵空间。亲手点亮案头檀香，伴随青铜颂钵混响与水墨圆相「开卷」；背诵时隐藏一切统计数字与 FSRS 间隔，书案一角静置 15 分钟流体燃香计时，支持纯离线 Web Audio 声景（檐雨 / 松风 / 暖寂）。
+- **👆 macOS 触控板跟手划卡与触觉反馈（`v1.7.1`）**：背面固定 `左滑重来 · 右滑良好`、顶部双指下拉翻面，基于原生滚轮相位事件实现 120fps 零重渲染跟手物理动效与 Cocoa Taptic 轻震反馈，并内置捏合/横滚/鼠标防误触保护。
+- **🗂️ 桌面级工作台与动态首页**：左侧边栏支持点击与 `Cmd/Ctrl+\` 弹簧缩放；首页集成动态目标圆环、连续打卡、柔角 26×7 热力图、周均虚线复习节奏、个人圆形头像交互裁切与旋转，以及由强调色和谐派生的牌组掌握度条。
+- **📖 沉浸复习与 `2×3` 操作抽屉**：支持 `Aa` 舞台宽度与字号调节、**75%–500% 图片/思维导图缩放灯箱**、正面/背面独立自动播音双开关、`2×3` 六宫格卡片操作抽屉（含**重置进度**与全局 `Cmd/Ctrl+Z` 统一撤销）。
+- **🎨 三态显示 × 8 套主题与淡墨插画**：支持 `跟随系统 / 浅色 / 深色` 三种显示模式；默认经典蓝（`Indigo`）严格保持零插画纯白极简，其余 7 款强调色各自搭配温润纸感底色与手绘水彩蒙版微插画（植物手账、京都和纸、窗边咖啡馆、橘猫伴读、星夜天文台、云端纸飞机、古典藏书阁）。
+- **📊 重制版 FSRS 深度统计**：未来 30 天复习负荷预测、6 阶段卡片生命周期分布、带 90% 目标线的近 12 周保持率平滑面积图、24 小时黄金时段分析，以及严格口径 FSRS True Retention。
+- **🌴 休假守护与雪崩急救**：事前休假支持冻结新卡、顺延到期日并冰冻连胜；事后积压减负支持将逾期卡片均匀平摊至 *N* 天（内置快照一键撤销）；低能量日可选 10–15 张轻量队列。
+- **⚡ 大卡库 SQL 快路径与通用兼容沙盒**：万张以上卡库的卡片库筛选/排序、自定义学习预览与批量动作全部重构为只读 SQL 快路径；全局兼容模式 + `Enhanced Cloze` / `Cloze Overlapping` / 图像遮挡通用沙盒开箱即用，不篡改原笔记。
+- **🛡️ 三重返回原生安全网 & 16 语种**：快捷键 `Ctrl+Opt+M` / `Ctrl+Alt+M`、工具菜单与顶栏入口一秒切回原版 Anki；支持含 RTL（阿拉伯语）在内的 16 种界面语言。
 
 ---
 
@@ -89,17 +99,9 @@
 | 运行环境 | Qt6 / Anki 内置 Python 3.13 |
 | 操作系统 | macOS、Windows、Linux（三端均已适配平台快捷键与路径） |
 | 数据安全 | 全部写操作走 Anki 官方 API（`col.update_card` / `col.sched.*`），由 Anki 维护 `mod` / `usn`，不直接改写合集数据库文件 |
-| 运行时自检 | 启动时校验 Anki 版本、4 个原生界面补丁与 8 个生命周期钩子；任一失效会在控制台打印 `patch health` 报告，也可通过 `get_patch_health` 读取 |
-| 网络 | 同步仍由 Anki 原生完成；可选的匿名使用统计只上报计数（不含卡片内容），可在设置中关闭 |
+| 档案隔离 | 个性化头像、昵称与偏好按 Anki Profile 隔离保存，绝不混入发布包 |
+| 网络与隐私 | 卡片内容、牌组名、标签与搜索词**永远不会离开你的设备**；可选匿名使用计数可在「设置 → 关于」关闭或自建统计服务端（`scripts/analytics-worker/`） |
 
-> 为什么下限写死在一个具体版本：Anki 的兼容判断是 `int_version() < min_point_version`，而 `int_version()` 是 `YYMMDD` 整数（26.9.4 → `260904`）。写一个小数字（例如 `26`）等于宣称兼容所有版本，会让旧版用户装上一个必然崩溃的插件。下限可以下探，但必须在对应 Anki 版本上实测通过后再改。
+### 📄 许可与源码
 
-### 📄 许可
-
-本项目以 [MIT License](LICENSE) 发布。
-
-### 隐私与匿名统计
-
-- 卡片内容、牌组名、标签、搜索词、学习记录**永远不会上传**；所有学习数据只存在你自己的 Anki 里。
-- 可选匿名统计（默认开启，设置 → 关于可关闭）：只上报启动、日活、复习会话张数区间、功能使用计数，以及版本 / 系统 / Anki 版本 / 界面语言 / 国家地区代码 / 时区偏移 / 随机安装 ID 的哈希。
-- 统计端点可自建（见 `scripts/analytics-worker/`）；`analytics_endpoint` 为空时插件完全不发请求。
+本项目以 [MIT License](LICENSE) 发布，欢迎前往 [GitHub Issues](https://github.com/gripet43/anki-studio/issues) 提交建议与问题反馈。
