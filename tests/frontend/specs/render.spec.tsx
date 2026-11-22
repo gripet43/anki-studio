@@ -614,6 +614,30 @@ test('ReviewerView respects showShortcutHints toggle for Show Answer Space, Flag
     const visibleHtml = renderToStaticMarkup(React.createElement(ReviewerView));
     ok(visibleHtml.includes('Space / Enter'), 'Show Answer reveals Space / Enter when showShortcutHints is true');
     ok(visibleHtml.includes('Cmd 1-7'), 'Flag panels reveal Cmd 1-7 when showShortcutHints is true');
+    ok(visibleHtml.includes('reviewer-dock-grid'), 'renders single-row three-column reviewer dock');
+    ok(visibleHtml.includes('reviewer-dock-wing--start'), 'renders session studied start wing');
+    ok(visibleHtml.includes('reviewer-dock-wing--end'), 'renders session accuracy end wing');
+    ok(!visibleHtml.includes('reviewer-meta-btn'), 'does not duplicate bottom Card Info button');
+    ok(visibleHtml.includes('data-hidden-by-inspector="true"'), 'fades end wing when inspector is open');
+
+    setAppState({ inspectorOpen: false, showShortcutHints: false });
+    const closedInspectorHtml = renderToStaticMarkup(React.createElement(ReviewerView));
+    ok(closedInspectorHtml.includes('data-hidden-by-inspector="false"'), 'shows end wing when inspector is closed');
+    ok(closedInspectorHtml.includes('py-4') && closedInspectorHtml.includes('px-6 py-5 sm:px-7 sm:py-6'), 'uses calm padding for standard cards');
+
+    setAppState({
+      reviewQueue: [
+        {
+          ...sampleCard,
+          needsSandbox: true,
+          sandboxFrontHtml: '<div>Complex Medical Card</div>',
+          sandboxBackHtml: '<div>Answer</div>',
+        },
+      ],
+    });
+    const sandboxHtml = renderToStaticMarkup(React.createElement(ReviewerView));
+    ok(sandboxHtml.includes('py-3'), 'tightens stage vertical padding on sandbox cards');
+    ok(sandboxHtml.includes('px-5 py-4 sm:px-6 sm:py-4'), 'tightens outer card shell padding on sandbox cards');
   } finally {
     setAppState({
       inReviewMode: prev.inReviewMode,

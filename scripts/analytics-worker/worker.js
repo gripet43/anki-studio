@@ -120,6 +120,7 @@ function sanitize(event, serverNow = Math.trunc(Date.now() / 1000)) {
 
 const CACHE_TTL_MS = 60_000;
 const MAX_SCAN_ROWS = 50000;
+const MAX_RECENT_ROWS = 500;
 let cachedEvents = null;
 
 function formatDayUTC(unixSec, tzOffsetSec) {
@@ -190,6 +191,7 @@ function aggregateStats(allRows, opts) {
   let eventsToday = 0;
   let totalEvents = 0;
   let reviewsInRange = 0;
+  let recentTotal = 0;
 
   const bumpMap = (map, key, installId) => {
     let entry = map.get(key);
@@ -213,22 +215,6 @@ function aggregateStats(allRows, opts) {
     const ev = String(r.event || "");
     const dayKey = formatDayUTC(ts, tzOffsetSec);
     totalEvents += 1;
-
-    if (recent.length < 30) {
-      recent.push({
-        ts,
-        id_prefix: id.slice(0, 8),
-        event: ev,
-        version: r.version || "",
-        os: r.os || "",
-        anki_version: r.anki_version || "",
-        locale: r.locale || "",
-        tz_offset: r.tz_offset ?? null,
-        country: r.country || "",
-        colo: r.colo || "",
-        props: r.props ?? null,
-      });
-    }
 
     const prevFirst = firstSeenTs.get(id);
     if (prevFirst === undefined || ts < prevFirst) firstSeenTs.set(id, ts);
@@ -262,6 +248,22 @@ function aggregateStats(allRows, opts) {
     }
 
     if (ts >= rangeSince && ts < rangeUntil) {
+      recentTotal += 1;
+      if (recent.length < MAX_RECENT_ROWS) {
+        recent.push({
+          ts,
+          id_prefix: id.slice(0, 8),
+          event: ev,
+          version: r.version || "",
+          os: r.os || "",
+          anki_version: r.anki_version || "",
+          locale: r.locale || "",
+          tz_offset: r.tz_offset ?? null,
+          country: r.country || "",
+          colo: r.colo || "",
+          props: r.props ?? null,
+        });
+      }
       const hour = new Date((ts + tzOffsetSec) * 1000).getUTCHours();
       bumpMap(hourlyMap, hour, id);
       bumpMap(countryMap, r.country ? String(r.country) : "??", id);
@@ -373,6 +375,7 @@ function aggregateStats(allRows, opts) {
     timezones: sortByInstalls(tzMap, "tz_offset", false, 12),
     review_buckets,
     features,
+    recent_total: recentTotal,
     recent,
   };
 }
@@ -568,6 +571,12 @@ const DASHBOARD_HTML = `<!doctype html>
     th, td { text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
     th { color: var(--muted); font-weight: 600; }
     tbody tr:hover { background: var(--accent-soft); }
+    .pager {
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;
+      margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted);
+    }
+    .pager-group { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .pager-info { font-variant-numeric: tabular-nums; }
     .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
     @media (max-width: 980px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
@@ -577,6 +586,21 @@ const DASHBOARD_HTML = `<!doctype html>
       background: var(--accent-soft); color: var(--accent);
     }
     .pill.green { background: var(--green-soft); color: var(--green); }
+    .mute-btn {
+      margin-left: 6px; padding: 1px 5px; font-size: 10.5px; border-radius: 5px;
+      border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer;
+      opacity: 0.55; transition: opacity .15s, border-color .15s, color .15s;
+    }
+    tbody tr:hover .mute-btn { opacity: 1; border-color: var(--border); }
+    .mute-btn:hover { color: var(--danger); border-color: rgba(239,68,68,.4); }
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 99px;
+      font-size: 11px; background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+    }
+    .chip button {
+      border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 0 2px; font-size: 12px; line-height: 1;
+    }
+    .chip button:hover { color: var(--danger); }
     .auth-box {
       max-width: 400px; margin: 10vh auto; background: var(--card); border: 1px solid var(--border);
       border-radius: 16px; padding: 24px;
@@ -698,8 +722,11 @@ const DASHBOARD_HTML = `<!doctype html>
 
     const state = {
       token: localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY) || "",
+      excludedIds: (localStorage.getItem(EXCLUDE_KEY) || "").split(/[\s,]+/).map((x) => x.trim().toLowerCase()).filter(Boolean),
       range: "today",
       recentFilter: "all",
+      recentPage: 1,
+      recentPageSize: 30,
       showZeroFeatures: false,
       error: "",
       data: null,
@@ -715,6 +742,15 @@ const DASHBOARD_HTML = `<!doctype html>
       if (diff < 3600) return Math.floor(diff / 60) + " 分钟前";
       if (diff < 86400) return Math.floor(diff / 3600) + " 小时前";
       return Math.floor(diff / 86400) + " 天前";
+    }
+    function fmtTime(ts, tzHours) {
+      const d = new Date((Number(ts || 0) + Number(tzHours || 0) * 3600) * 1000);
+      const md = pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate());
+      const hm = pad2(d.getUTCHours()) + ":" + pad2(d.getUTCMinutes());
+      const full = d.getUTCFullYear() + "-" + md + " " + hm + ":" + pad2(d.getUTCSeconds());
+      const diff = Math.max(0, Math.floor(Date.now() / 1000) - Number(ts || 0));
+      const label = diff < 3600 ? hm + " · " + fmtRel(ts) : md + " " + hm;
+      return { label, full };
     }
     function fmtTz(v) {
       if (v === null || v === undefined || v === "") return "未知";
@@ -881,6 +917,17 @@ const DASHBOARD_HTML = `<!doctype html>
       })();
 
       const recentFiltered = (d.recent || []).filter((r) => state.recentFilter === "all" || r.event === state.recentFilter);
+      const totalFiltered = recentFiltered.length;
+      const totalPages = Math.max(1, Math.ceil(totalFiltered / state.recentPageSize));
+      const safePage = Math.min(Math.max(1, state.recentPage), totalPages);
+      state.recentPage = safePage;
+      const pageStart = (safePage - 1) * state.recentPageSize;
+      const pageItems = recentFiltered.slice(pageStart, pageStart + state.recentPageSize);
+      const shownFrom = totalFiltered ? pageStart + 1 : 0;
+      const shownTo = Math.min(totalFiltered, pageStart + pageItems.length);
+      const cappedNote = (d.recent_total || 0) > (d.recent || []).length
+        ? \`（所选时段共 \${d.recent_total} 条，保留最新 \${(d.recent || []).length} 条）\`
+        : "";
 
       app.innerHTML = \`
         <div class="topbar">
@@ -993,24 +1040,31 @@ const DASHBOARD_HTML = `<!doctype html>
           </div>
         </div>
 
-        <div class="card" style="margin-top:12px;">
+        <div id="recent-card" class="card" style="margin-top:12px;">
           <h3>
-            <span>最近 30 条实时上报</span>
+            <span>上报明细 <span class="kpi-sub">共 \${totalFiltered} 条\${cappedNote}</span></span>
             <span class="seg">
               \${[["all","全部"],["app_open","启动"],["daily_active","日活"],["review_session","复习"],["feature_use","功能"]].map(([k, lbl]) =>
                 \`<button data-ev="\${k}" class="\${state.recentFilter === k ? "active" : ""}">\${lbl}</button>\`
               ).join("")}
             </span>
           </h3>
+          \${state.excludedIds.length ? \`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-4px 0 10px;">
+            <span class="kpi-sub">已屏蔽设备：</span>
+            \${state.excludedIds.map((id) => \`<span class="chip"><code>\${esc(id)}</code><button data-unhide-id="\${esc(id)}" title="恢复显示">×</button></span>\`).join("")}
+            <button id="unhide-all" class="btn xs">全部恢复</button>
+          </div>\` : ""}
           <div class="table-scroll">
             <table>
               <thead>
                 <tr><th>时间</th><th>设备</th><th>事件</th><th>插件版本</th><th>系统 / Anki</th><th>语言</th><th>地区 / 时区</th><th>机房</th><th>附加</th></tr>
               </thead>
               <tbody>
-                \${recentFiltered.length ? recentFiltered.map((r) => \`<tr>
-                  <td>\${esc(fmtRel(r.ts))}</td>
-                  <td><code>\${esc(r.id_prefix)}</code></td>
+                \${pageItems.length ? pageItems.map((r) => {
+                  const tm = fmtTime(r.ts, d.tz_hours);
+                  return \`<tr>
+                  <td title="\${esc(tm.full)}">\${esc(tm.label)}</td>
+                  <td><code>\${esc(r.id_prefix)}</code><button class="mute-btn" data-hide-id="\${esc(r.id_prefix)}" title="屏蔽此测试设备（全盘统计同步剔除）">屏蔽</button></td>
                   <td><span class="pill \${r.event === "review_session" ? "green" : ""}">\${esc(fmtEvent(r.event))}</span></td>
                   <td>\${esc(r.version ? "v" + r.version : "-")}</td>
                   <td>\${esc(fmtOs(r.os))}\${r.anki_version ? " · " + esc(r.anki_version) : ""}</td>
@@ -1018,24 +1072,90 @@ const DASHBOARD_HTML = `<!doctype html>
                   <td>\${esc(fmtCountry(r.country))} (\${esc(fmtTz(r.tz_offset))})</td>
                   <td>\${esc(r.colo || "-")}</td>
                   <td><code>\${esc(fmtProps(r.props))}</code></td>
-                </tr>\`).join("") : '<tr><td colspan="9" class="empty">当前筛选条件下暂无记录</td></tr>'}
+                </tr>\`;
+                }).join("") : '<tr><td colspan="9" class="empty">当前筛选条件下暂无记录</td></tr>'}
               </tbody>
             </table>
+          </div>
+          <div class="pager">
+            <span class="pager-info">第 \${shownFrom}–\${shownTo} 条 / 共 \${totalFiltered} 条</span>
+            <div class="pager-group">
+              <span class="seg">
+                \${[30, 50, 100].map((sz) =>
+                  \`<button data-ps="\${sz}" class="\${state.recentPageSize === sz ? "active" : ""}">\${sz}条</button>\`
+                ).join("")}
+              </span>
+              <button class="btn xs" data-pg="1" \${safePage <= 1 ? "disabled" : ""}>首页</button>
+              <button class="btn xs" data-pg="\${safePage - 1}" \${safePage <= 1 ? "disabled" : ""}>上一页</button>
+              <span class="pager-info">\${safePage} / \${totalPages}</span>
+              <button class="btn xs" data-pg="\${safePage + 1}" \${safePage >= totalPages ? "disabled" : ""}>下一页</button>
+              <button class="btn xs" data-pg="\${totalPages}" \${safePage >= totalPages ? "disabled" : ""}>末页</button>
+            </div>
           </div>
         </div>\`;
 
       document.querySelectorAll("[data-range]").forEach((btn) => {
         btn.addEventListener("click", () => {
           state.range = btn.getAttribute("data-range");
+          state.recentPage = 1;
           loadStats();
         });
       });
       document.querySelectorAll("[data-ev]").forEach((btn) => {
         btn.addEventListener("click", () => {
           state.recentFilter = btn.getAttribute("data-ev");
+          state.recentPage = 1;
           renderDashboard();
         });
       });
+      document.querySelectorAll("[data-ps]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.recentPageSize = Number(btn.getAttribute("data-ps")) || 30;
+          state.recentPage = 1;
+          renderDashboard();
+        });
+      });
+      document.querySelectorAll("[data-pg]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const next = Number(btn.getAttribute("data-pg")) || 1;
+          if (next !== state.recentPage) {
+            state.recentPage = next;
+            renderDashboard();
+            const el = document.getElementById("recent-card");
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        });
+      });
+      document.querySelectorAll("[data-hide-id]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = String(btn.getAttribute("data-hide-id") || "").trim().toLowerCase();
+          if (id && !state.excludedIds.includes(id)) {
+            state.excludedIds = [...state.excludedIds, id];
+            localStorage.setItem(EXCLUDE_KEY, state.excludedIds.join(","));
+            state.recentPage = 1;
+            loadStats();
+          }
+        });
+      });
+      document.querySelectorAll("[data-unhide-id]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = String(btn.getAttribute("data-unhide-id") || "").trim().toLowerCase();
+          state.excludedIds = state.excludedIds.filter((x) => x !== id);
+          if (state.excludedIds.length) localStorage.setItem(EXCLUDE_KEY, state.excludedIds.join(","));
+          else localStorage.removeItem(EXCLUDE_KEY);
+          state.recentPage = 1;
+          loadStats();
+        });
+      });
+      const unhideAllBtn = document.getElementById("unhide-all");
+      if (unhideAllBtn) {
+        unhideAllBtn.addEventListener("click", () => {
+          state.excludedIds = [];
+          localStorage.removeItem(EXCLUDE_KEY);
+          state.recentPage = 1;
+          loadStats();
+        });
+      }
       const toggleZeroBtn = document.getElementById("toggle-zero-feat");
       if (toggleZeroBtn) {
         toggleZeroBtn.addEventListener("click", () => {
@@ -1067,6 +1187,7 @@ const DASHBOARD_HTML = `<!doctype html>
       try {
         const tz = Math.round(-new Date().getTimezoneOffset() / 60);
         const params = new URLSearchParams({ range: state.range, tz: String(tz) });
+        if (state.excludedIds.length) params.set("exclude", state.excludedIds.join(","));
         const res = await fetch("/v1/stats?" + params.toString(), {
           headers: { Authorization: "Bearer " + state.token },
         });

@@ -936,6 +936,29 @@ class BridgeRouterAuditTest(unittest.TestCase):
             )
         )
 
+        # Native top toolbar return pill uses inline Anki Studio dual-facet SVG logo instead of emoji
+        from anki_modern_os import AnkiModernHost
+
+        captured_links = []
+
+        class _FakeToolbar:
+            def create_link(self, cmd, label, func, tip, id):
+                return {"cmd": cmd, "label": label, "tip": tip, "id": id}
+
+        fake_host = AnkiModernHost.__new__(AnkiModernHost)
+        fake_host._resolve_host_language = lambda: "zh-CN"
+        fake_host.show_modern_ui = lambda: None
+        fake_host._on_top_toolbar_init_links(captured_links, _FakeToolbar())
+        self.assertEqual(len(captured_links), 1)
+        pill_label = captured_links[0]["label"]
+        self.assertIn("<svg", pill_label)
+        self.assertIn("M 3 7.53 L 10.85 4.27 L 10.85 19.85 L 3 16.47 Z", pill_label)
+        self.assertIn("M 13.15 4.15 L 21 7.53 L 21 16.47 L 13.15 19.85 Z", pill_label)
+        self.assertIn("<span>进入 Anki Studio</span>", pill_label)
+        self.assertNotIn("🌟", pill_label)
+        self.assertNotIn("Ctrl+", pill_label)
+        self.assertIn("Ctrl+", captured_links[0]["tip"])
+
     def test_11_vacation_and_anti_avalanche_rescue(self):
         """Verify Vacation Mode, Streak Freeze, Backlog Amortization and Low Energy sessions."""
         # 1. Initial vacation status

@@ -7,14 +7,16 @@ connects the <2ms pycmd IPC bridge, listens to Anki native lifecycle hooks
 and provides a 3-Layer Anti-Lost Safety Net to switch seamlessly between Anki Studio and native Anki:
   1. Global Hotkey: `Ctrl+Opt+M` (macOS) / `Ctrl+Alt+M` (Windows/Linux) with ApplicationShortcut context
   2. Native Menu Bar & Tools Menu Actions: Top-level `🌟 Anki Studio` menu bar action + `切换 Anki Studio / 原生界面`
-  3. Native Top Toolbar Permanent Button: `[ 🌟 进入 Anki Studio (Ctrl+Opt+M) ]` injected via `top_toolbar_did_init_links`
+  3. Native Top Toolbar Permanent Button: `[ Anki Studio Logo 进入 Anki Studio (Ctrl+Opt+M) ]` injected via `top_toolbar_did_init_links`
 """
 
 from __future__ import annotations
 
 import json
 import os
+import secrets
 import sys
+import threading
 import time
 import weakref
 from pathlib import Path
@@ -236,10 +238,48 @@ def _is_qt_discrete_mouse_wheel(
     return _qt_point_is_nonzero(angle_delta)
 
 
+# Official Anki Studio dual-facet open knowledge prism SVG (mirrors AnkiStudioLogo.tsx)
+# styled in crisp dual-tone white for the native toolbar blue pill button.
+_NATIVE_TOOLBAR_LOGO_SVG = (
+    "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' "
+    "xmlns='http://www.w3.org/2000/svg' aria-hidden='true' "
+    "style='display:block;flex-shrink:0;'>"
+    "<path d='M 3 7.53 L 10.85 4.27 L 10.85 19.85 L 3 16.47 Z' "
+    "fill='#FFFFFF' fill-opacity='0.6'/>"
+    "<path d='M 13.15 4.15 L 21 7.53 L 21 16.47 L 13.15 19.85 Z' "
+    "fill='#FFFFFF'/>"
+    "</svg>"
+)
+
+
+def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
+    """Atomically writes a JSON file via temp sibling + os.replace so readers never see truncated JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.parent / f".{path.name}.{secrets.token_hex(4)}.tmp"
+    raw_text = json.dumps(payload, ensure_ascii=False)
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as handle:
+            handle.write(raw_text)
+            handle.flush()
+            try:
+                os.fsync(handle.fileno())
+            except OSError:
+                pass
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            pass
+        raise
+
+
 class AnkiModernHost:
     """Manages the full-screen modern Anki WebEngine overlay, preferences persistence, and 3-layer native switch."""
 
     def __init__(self):
+        self._config_lock = threading.RLock()
         self.webview: Optional[Any] = None
         self.is_modern_visible: bool = False
         self._webview_profile_key: Optional[str] = None
@@ -274,59 +314,80 @@ class AnkiModernHost:
             return None
 
     def _read_raw_config(self) -> Dict[str, Any]:
-        mw = self._get_active_mw()
-        try:
-            if mw and getattr(mw, "addonManager", None):
-                cfg = mw.addonManager.getConfig(__name__)
-                if isinstance(cfg, dict):
-                    return cfg
-        except Exception:
-            pass
-        if CONFIG_FILE.exists():
+        with self._config_lock:
+            mw = self._get_active_mw()
             try:
-                return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+                if mw and getattr(mw, "addonManager", None):
+                    cfg = mw.addonManager.getConfig(__name__)
+                    if isinstance(cfg, dict):
+                        return cfg
             except Exception:
                 pass
-        return {}
+            if CONFIG_FILE.exists():
+                try:
+                    return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+            return {}
 
     def _write_raw_config(self, raw_cfg: Dict[str, Any]) -> None:
-        mw = self._get_active_mw()
-        try:
-            if mw and getattr(mw, "addonManager", None):
-                mw.addonManager.writeConfig(__name__, raw_cfg)
-                # config.json is the add-on's default/schema template. Runtime
-                # state (receipts, real card text, vacation snapshots) belongs in
-                # meta.json only, otherwise it ships inside the .ankiaddon.
-                return
-        except Exception as e:
-            print(f"[Anki Studio] writeConfig failed: {e}")
-        # Outside the Anki runtime (unit tests / tooling) there is no
-        # addonManager, so keep a local fallback for preferences round-tripping.
-        try:
-            CONFIG_FILE.write_text(
-                json.dumps(raw_cfg, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-        except Exception:
-            pass
+        with self._config_lock:
+            mw = self._get_active_mw()
+            try:
+                mgr = getattr(mw, "addonManager", None) if mw else None
+                if mgr is not None:
+                    # Prefer atomic temp-file + os.replace write to meta.json so Anki's
+                    # non-atomic open("w") truncation can never corrupt user preferences.
+                    if (
+                        hasattr(mgr, "_addonMetaPath")
+                        and hasattr(mgr, "addonMeta")
+                        and hasattr(mgr, "addonFromModule")
+                    ):
+                        addon_id = mgr.addonFromModule(__name__)
+                        raw_meta_path = mgr._addonMetaPath(addon_id)
+                        if raw_meta_path:
+                            meta_path = Path(raw_meta_path)
+                            if meta_path.parent.exists():
+                                meta = mgr.addonMeta(addon_id)
+                                if not isinstance(meta, dict):
+                                    meta = {}
+                                meta["config"] = raw_cfg
+                                _atomic_write_json(meta_path, meta)
+                                return
+                    mgr.writeConfig(__name__, raw_cfg)
+                    # config.json is the add-on's default/schema template. Runtime
+                    # state (receipts, real card text, vacation snapshots) belongs in
+                    # meta.json only, otherwise it ships inside the .ankiaddon.
+                    return
+            except Exception as e:
+                print(f"[Anki Studio] writeConfig failed: {e}")
+            # Outside the Anki runtime (unit tests / tooling) there is no
+            # addonManager, so keep a local fallback for preferences round-tripping.
+            try:
+                _atomic_write_json(CONFIG_FILE, raw_cfg)
+            except Exception:
+                pass
 
     def get_config(self) -> Dict[str, Any]:
-        mw = self._get_active_mw()
-        raw_cfg = self._read_raw_config()
-        return read_profile_scoped_config(
-            raw_cfg,
-            mw=mw,
-            raw_writer=self._write_raw_config,
-        )
+        with self._config_lock:
+            mw = self._get_active_mw()
+            raw_cfg = self._read_raw_config()
+            return read_profile_scoped_config(
+                raw_cfg,
+                mw=mw,
+                raw_writer=self._write_raw_config,
+            )
 
     def write_config(self, new_cfg: Dict[str, Any]) -> Dict[str, Any]:
-        mw = self._get_active_mw()
-        raw_cfg = self._read_raw_config()
-        return write_profile_scoped_config(
-            raw_cfg,
-            new_cfg,
-            mw=mw,
-            raw_writer=self._write_raw_config,
-        )
+        with self._config_lock:
+            mw = self._get_active_mw()
+            raw_cfg = self._read_raw_config()
+            return write_profile_scoped_config(
+                raw_cfg,
+                new_cfg,
+                mw=mw,
+                raw_writer=self._write_raw_config,
+            )
 
     def _resolve_host_language(self) -> str:
         """Resolve the active UI language via DeckService (config preference or Anki locale)."""
@@ -696,16 +757,17 @@ class AnkiModernHost:
                 "<span style='"
                 "background:linear-gradient(135deg,#3076C3,#4D92DE);"
                 "color:#FFFFFF;"
-                "padding:4px 12px;"
+                "padding:4px 12px 4px 10px;"
                 "border-radius:999px;"
                 "font-weight:600;"
                 "font-size:12px;"
                 "box-shadow:0 2px 8px rgba(48,118,195,0.35);"
                 "display:inline-flex;"
                 "align-items:center;"
-                "gap:4px;"
+                "gap:6px;"
                 "'>"
-                f"🌟 {return_label} ({shortcut_hint})"
+                f"{_NATIVE_TOOLBAR_LOGO_SVG}"
+                f"<span>{return_label}</span>"
                 "</span>"
             )
             link = toolbar.create_link(

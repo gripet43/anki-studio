@@ -11,7 +11,7 @@
  *   2. Dashboard header: redundant bell icon button removed
  *   3. Dashboard floating tooltips: `hoveredHeatmapCell` (date + weekday + count + accuracy) & `hoveredRhythmIdx` (count + minutes)
  *   4. Cmd+K Search (`CommandPaletteModal.tsx`): `col-span-5` left list, `col-span-7` right preview, click-to-select (no `onMouseEnter` index switch), and one-click copy (`handleCopyText`)
- *   5. Reviewer ergonomics (`ReviewerView.tsx`): fixed `w-[560px] h-[58px]` bar, `w-[560px]` unflipped button, `w-[170px]` Again + `w-[374px]` Good asymmetric binary buttons
+ *   5. Reviewer ergonomics (`ReviewerView.tsx`): single-row `reviewer-dock-grid` (`h-[48px]` / `32.5rem` center bar, `.reviewer-cta-binary-again` + `.reviewer-cta-binary-good` asymmetric binary buttons)
  *   6. Dual-Mode (Light / Dark / OLED) support in `ReviewerView.tsx` and all views
  *   7. `DesignSystemView` removed from main `Sidebar.tsx` nav, gated behind `debugModeUnlocked` (triple-click version badge or `Ctrl+Shift+D`)
  *   8. Custom `TagSelectDropdown` (`tagDropdownOpen`, `tagSearchInput`, `tagCountsMap`) in `LibraryView.tsx`
@@ -106,20 +106,22 @@ assert(
   'Item #4: CommandPaletteModal must use 5:7 split ratio, click-to-select (no hover jump), and one-click copy'
 );
 
-// Item #5 & #6: Reviewer 560px ergonomic alignment & Light/Dark/System adaptation
+// Item #5 & #6: Reviewer single-row 3-column dock (`48px` tall, `32.5rem` shell) & Light/Dark/System adaptation
 assert(
-  reviewerSrc.includes('w-[560px] h-[58px]') &&
-    reviewerSrc.includes('w-[170px] h-[58px]') &&
-    reviewerSrc.includes('w-[374px] h-[58px]') &&
+  reviewerSrc.includes('reviewer-dock-grid') &&
+    reviewerSrc.includes('reviewer-cta-shell w-full h-[48px]') &&
+    reviewerSrc.includes('reviewer-cta-binary-again h-[48px]') &&
+    reviewerSrc.includes('reviewer-cta-binary-good h-[48px]') &&
+    !reviewerSrc.includes('reviewer-meta-btn') &&
     reviewerSrc.includes('resolveThemeMode') &&
     reviewerSrc.includes("resolvedTheme === 'dark'"),
-  'Items #5 & #6: ReviewerView must align bottom buttons to 560px (170px Again + 374px Good) and adapt to Light/Dark themes'
+  'Items #5 & #6: ReviewerView must use single-row reviewer-dock-grid (48px CTA height, asymmetric binary buttons, no duplicate reviewer-meta-btn) and adapt to Light/Dark themes'
 );
 
 // Guardrail: Binary mode "Good / 记得" rating button must keep fixed semantic success color
 // (`--status-success`), never `--brand-*`, otherwise Rose/Amber themes make Good look like Again.
 const binaryGoodBlockMatch = reviewerSrc.match(
-  /w-\[374px\]\s+h-\[58px\][\s\S]{0,650}?rateGood/
+  /reviewer-cta-binary-good[\s\S]{0,650}?rateGood/
 );
 assert(
   binaryGoodBlockMatch &&
@@ -733,8 +735,10 @@ assert(
     cssBundle.length > 10000 &&
     cssBundle.includes('library-card-snippet-body') &&
     cssBundle.includes('library-card-footer-meta') &&
+    cssBundle.includes('.reviewer-dock-grid') &&
+    cssBundle.includes('.reviewer-cta-binary-good') &&
     fs.existsSync(ANKIADDON_FILE),
-  'Compiled production bundle and anki_modern_os.ankiaddon must exist with Library card CSS rules'
+  'Compiled production bundle and anki_modern_os.ankiaddon must exist with Library card & Reviewer dock CSS rules'
 );
 
 const addonZipEntries = listZipEntries(ANKIADDON_FILE);

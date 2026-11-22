@@ -93,14 +93,22 @@ class AnalyticsService:
         cfg = self._cfg()
         return bool(cfg.get("analytics_enabled", True)) and bool(self.endpoint())
 
-    def _install_id_hash(self) -> str:
-        install_id = str(self._cfg().get("analytics_install_id") or "").strip()
+    def _install_id_hash(
+        self,
+        cfg: Optional[Dict[str, Any]] = None,
+        pending_patch: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        source_cfg = cfg if isinstance(cfg, dict) else self._cfg()
+        install_id = str(source_cfg.get("analytics_install_id") or "").strip()
         if not install_id:
             install_id = uuid.uuid4().hex
-            try:
-                self._write_config({"analytics_install_id": install_id})
-            except Exception:
-                pass
+            if pending_patch is not None:
+                pending_patch["analytics_install_id"] = install_id
+            else:
+                try:
+                    self._write_config({"analytics_install_id": install_id})
+                except Exception:
+                    pass
         return hashlib.sha256(install_id.encode("utf-8")).hexdigest()[:32]
 
     def _context(self) -> Dict[str, str]:
@@ -159,11 +167,14 @@ class AnalyticsService:
         event: str,
         props: Optional[Dict[str, Any]] = None,
         dedupe_key: Optional[str] = None,
+        *,
+        defer_flush: bool = False,
     ) -> bool:
-        """Queues one event. Returns True when it was enqueued."""
+        """Queues one event on the calling (main) thread with a single config write."""
         if event not in ALLOWED_EVENTS or not self.enabled():
             return False
         cfg = self._cfg()
+        patch: Dict[str, Any] = {}
         today = time.strftime("%Y-%m-%d")
         if dedupe_key:
             marks = cfg.get("analytics_marks")
@@ -173,16 +184,12 @@ class AnalyticsService:
             if dedupe_key in day_marks:
                 return False
             day_marks = (day_marks + [dedupe_key])[-100:]
-            marks = {today: day_marks}  # 只保留当天，避免配置膨胀
-            try:
-                self._write_config({"analytics_marks": marks})
-            except Exception:
-                pass
+            patch["analytics_marks"] = {today: day_marks}  # 只保留当天，避免配置膨胀
 
         payload = {
             "event": event,
             "ts": int(time.time()),
-            "install_id": self._install_id_hash(),
+            "install_id": self._install_id_hash(cfg=cfg, pending_patch=patch),
             **self._context(),
         }
         props = self._sanitize_props(props)
@@ -191,12 +198,13 @@ class AnalyticsService:
 
         queue = cfg.get("analytics_queue")
         queue = queue if isinstance(queue, list) else []
-        queue = (queue + [payload])[-MAX_QUEUE:]
+        patch["analytics_queue"] = (queue + [payload])[-MAX_QUEUE:]
         try:
-            self._write_config({"analytics_queue": queue})
+            self._write_config(patch)
         except Exception:
             return False
-        self.flush_async()
+        if not defer_flush:
+            self.flush_async()
         return True
 
     def start(self) -> Dict[str, Any]:
@@ -204,8 +212,10 @@ class AnalyticsService:
         if self._started:
             return {"started": False}
         self._started = True
-        self.track("app_open", dedupe_key="app_open")
-        self.track("daily_active", dedupe_key="daily_active")
+        enqueued_open = self.track("app_open", dedupe_key="app_open", defer_flush=True)
+        enqueued_dau = self.track("daily_active", dedupe_key="daily_active", defer_flush=True)
+        if enqueued_open or enqueued_dau:
+            self.flush_async()
         return {"started": True}
 
     def track_review_session(self, cards_reviewed: int) -> bool:
@@ -226,27 +236,109 @@ class AnalyticsService:
 
     # ---- delivery -------------------------------------------------------
 
-    def flush_async(self) -> None:
-        if not self.enabled():
+    def _schedule_on_main(self, mw: Any, callback: Callable[[], None]) -> None:
+        """Marshals config mutations back onto the Qt main thread to avoid meta.json races."""
+        try:
+            taskman = getattr(mw, "taskman", None) if mw is not None else None
+            if taskman is not None and hasattr(taskman, "run_on_main"):
+                taskman.run_on_main(callback)
+                return
+        except Exception:
+            pass
+        if mw is not None:
+            try:
+                from aqt.qt import QTimer
+
+                QTimer.singleShot(0, callback)
+                return
+            except Exception:
+                pass
+        # Headless unit tests (mw is None) run without a Qt event loop.
+        callback()
+
+    def flush_async(self, _round: int = 0) -> None:
+        """Snapshots queued events on the main thread and posts over HTTP on a daemon thread.
+
+        The background thread performs pure network I/O only and NEVER reads or writes
+        `meta.json` or touches `mw.addonManager`, preventing non-atomic config corruption.
+        """
+        if _round >= 3 or not self.enabled():
             return
+        cfg = self._cfg()
+        queue = cfg.get("analytics_queue")
+        if not isinstance(queue, list) or not queue:
+            return
+        endpoint = self.endpoint()
+        if not endpoint:
+            return
+
+        snapshot = list(queue[:MAX_QUEUE])
+        body = json.dumps({"schema": 1, "events": snapshot}).encode("utf-8")
+        user_agent = f"AnkiStudio/{self._context().get('version') or '0'}"
+        mw = self._get_mw()
+
         with self._lock:
             if self._flushing:
                 return
             self._flushing = True
+
         try:
-            thread = threading.Thread(target=self._flush_worker, daemon=True)
+            thread = threading.Thread(
+                target=self._send_http_worker,
+                args=(endpoint, user_agent, body, snapshot, mw, _round),
+                daemon=True,
+            )
             thread.start()
         except Exception:
             with self._lock:
                 self._flushing = False
 
-    def _flush_worker(self) -> None:
+    def _send_http_worker(
+        self,
+        endpoint: str,
+        user_agent: str,
+        body: bytes,
+        sent_snapshot: List[Dict[str, Any]],
+        mw: Any,
+        round_idx: int,
+    ) -> None:
+        ok = False
         try:
-            # 两三个事件可能在第一次 flush 期间入队，循环几轮发完再退出。
-            for _ in range(3):
-                if not self._flush_sync():
-                    break
-        finally:
+            request = urllib.request.Request(
+                endpoint,
+                data=body,
+                method="POST",
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": user_agent,
+                },
+            )
+            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
+                ok = 200 <= int(getattr(response, "status", 200)) < 300
+        except Exception:
+            ok = False
+
+        def _finish_on_main() -> None:
+            has_more = False
+            try:
+                if ok:
+                    latest = self._cfg()
+                    current = latest.get("analytics_queue")
+                    current = current if isinstance(current, list) else []
+                    remaining = [event for event in current if event not in sent_snapshot]
+                    self._write_config({"analytics_queue": remaining[-MAX_QUEUE:]})
+                    has_more = bool(remaining)
+            except Exception:
+                has_more = False
+            finally:
+                with self._lock:
+                    self._flushing = False
+            if has_more and round_idx + 1 < 3:
+                self.flush_async(_round=round_idx + 1)
+
+        try:
+            self._schedule_on_main(mw, _finish_on_main)
+        except Exception:
             with self._lock:
                 self._flushing = False
 

@@ -6,6 +6,15 @@
 
 ---
 
+## [v1.7.2] - 2026-11-22
+
+- **[Antigravity] 修复匿名统计后台线程并发读写 `meta.json` 导致主题色、头像等用户配置偶发重置的竞态 Bug**（改 [`__init__.py`](__init__.py)、[`bridge/analytics_service.py`](bridge/analytics_service.py) 与 [`tests/test_analytics_service.py`](tests/test_analytics_service.py)）：
+  - **进程内锁 + 原子替换写盘**：`AnkiModernHost` 新增 `threading.RLock()` 串行保护全部配置读-改-写闭环，并新增 `_atomic_write_json`（写入同目录临时文件 + `fsync` + `os.replace` 原子替换 `meta.json`），消除 Anki 原生非原子 `open("meta.json", "w")` 截断期读到空文件回落默认配置的风险。
+  - **后台网络线程彻底剥离配置 I/O**：`AnalyticsService.track()` 合并为单次配置写入，`start()` 批量入队后再单次触发 `flush_async()`；后台线程仅执行纯 HTTP 上报，严禁访问 `mw` 或读写 `meta.json`，上报成功后通过 `mw.taskman.run_on_main` 回到主线程清理队列；新增 3 项多线程压测与线程亲和性回归守卫。
+
+- **[Antigravity] 原生 Anki 顶栏返回按钮替换为官方双面棱镜 Logo 并精简文案**（改 [`__init__.py`](__init__.py) 与 [`tests/test_bridge.py`](tests/test_bridge.py)）：
+  - 使用与 [`AnkiStudioLogo.tsx`](frontend/src/components/common/AnkiStudioLogo.tsx) 几何一致的双阶纯白内联 SVG 替换原 `🌟` emoji，并移除按钮胶囊内的快捷键文字（保留鼠标悬停 `tip` 快捷键提示）。
+
 ## [v1.7.1] - 2026-11-21
 
 - **[Antigravity] 普通复习卡片新增 macOS 触控板 Tinder 式跟手划卡、双指下拉翻面与 120fps 合成器引擎**（新增 [`frontend/src/utils/reviewSwipeGesture.ts`](frontend/src/utils/reviewSwipeGesture.ts)、[`tests/frontend/specs/reviewSwipeGesture.spec.ts`](tests/frontend/specs/reviewSwipeGesture.spec.ts)；改 [`__init__.py`](__init__.py)、[`bridge/router.py`](bridge/router.py)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/reviewer/SandboxCardFrame.tsx`](frontend/src/components/reviewer/SandboxCardFrame.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、[`docs/INTERACTION.md`](docs/INTERACTION.md)、[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) 与 [`tests/test_bridge.py`](tests/test_bridge.py)）：

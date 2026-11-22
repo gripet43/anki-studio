@@ -3509,16 +3509,9 @@ html.zen-vt-exiting::view-transition-new(root) {
   padding-block: 0.25rem;
 }
 
-.reviewer-meta-btn {
-  min-block-size: 1.75rem;
-  padding-inline: 0.625rem;
-  padding-block: 0.25rem;
-}
-
 @media (pointer: coarse) {
   .reviewer-toolbar-btn,
   .reviewer-toolbar-split,
-  .reviewer-meta-btn,
   .reviewer-popover-item {
     min-block-size: 2.75rem;
   }
@@ -3531,7 +3524,7 @@ html.zen-vt-exiting::view-transition-new(root) {
   }
 }
 
-:is(.reviewer-toolbar-btn, .reviewer-meta-btn, .reviewer-cta-btn, .reviewer-popover-item):focus-visible {
+:is(.reviewer-toolbar-btn, .reviewer-cta-btn, .reviewer-popover-item):focus-visible {
   outline: 2px solid var(--brand-text);
   outline-offset: 2px;
 }
@@ -3551,28 +3544,63 @@ html.zen-vt-exiting::view-transition-new(root) {
   background-color: rgba(18, 19, 24, 0.9);
 }
 
+.reviewer-dock-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 32.5rem) minmax(0, 1fr);
+}
+
+.reviewer-dock-wing {
+  transition: opacity var(--dur-base) var(--ease-std);
+}
+
+.reviewer-dock-wing--end[data-hidden-by-inspector="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 1120px) {
+  .reviewer-bottom-dock[data-shifted="true"] .reviewer-dock-wing--start {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+.reviewer-dock-stat {
+  max-inline-size: 100%;
+}
+
+@media (max-width: 780px) {
+  .reviewer-dock-grid {
+    grid-template-columns: minmax(0, 32.5rem);
+    justify-content: center;
+  }
+
+  .reviewer-dock-wing {
+    display: none;
+  }
+}
+
 .reviewer-cta-shell {
-  inline-size: min(100%, 35rem);
+  inline-size: min(100%, 32.5rem);
   block-size: auto;
-  min-block-size: 3.625rem;
+  min-block-size: 3rem;
 }
 
 .reviewer-cta-btn {
   block-size: auto;
-  min-block-size: 3.625rem;
-  padding-block: 0.5rem;
+  min-block-size: 3rem;
+  padding-block: 0.375rem;
 }
 
 .reviewer-cta-binary-again {
   inline-size: auto;
-  flex: 170 1 0%;
-  min-inline-size: 7.5rem;
+  flex: 165 1 0%;
+  min-inline-size: 7rem;
 }
 
 .reviewer-cta-binary-good {
   inline-size: auto;
-  flex: 374 1 0%;
-  min-inline-size: 10.5rem;
+  flex: 343 1 0%;
+  min-inline-size: 10rem;
   color: var(--status-success-text);
 }
 
@@ -3883,7 +3911,6 @@ html.zen-vt-exiting::view-transition-new(root) {
   .reviewer-card-shell,
   .reviewer-toolbar-btn,
   .reviewer-toolbar-split,
-  .reviewer-meta-btn,
   .reviewer-cta-btn,
   .reviewer-popover[popover],
   .reviewer-scale-stepper,
@@ -3914,7 +3941,7 @@ html.zen-vt-exiting::view-transition-new(root) {
     color: HighlightText;
     border-color: ButtonText;
   }
-  :is(.reviewer-toolbar-btn, .reviewer-meta-btn, .reviewer-cta-btn, .reviewer-popover-item, .reviewer-scale-segment, .reviewer-complete-btn):focus-visible {
+  :is(.reviewer-toolbar-btn, .reviewer-cta-btn, .reviewer-popover-item, .reviewer-scale-segment, .reviewer-complete-btn):focus-visible {
     outline: 2px solid Highlight;
   }
 }

@@ -2655,7 +2655,9 @@ export const ReviewerView: React.FC = () => {
           <div
             ref={stageScrollRef}
             data-shifted={inspectorOpen ? 'true' : 'false'}
-            className={`reviewer-stage-shift reviewer-gesture-stage relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 flex flex-col items-center ${
+            className={`reviewer-stage-shift reviewer-gesture-stage relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-6 ${
+              isSandboxCard || isStageWidened ? 'py-3' : 'py-4'
+            } flex flex-col items-center ${
               inspectorOpen ? 'ltr:-translate-x-28 rtl:translate-x-28' : ''
             }`}
           >
@@ -2710,7 +2712,13 @@ export const ReviewerView: React.FC = () => {
                       } as React.CSSProperties)
                     : undefined
                 }
-                className={`reviewer-card-shell w-full rounded-[22px] border p-7 sm:p-8 relative transition-[background-color,border-color,box-shadow] duration-[var(--dur-base)] shadow-sm ${
+                className={`reviewer-card-shell w-full rounded-[22px] border ${
+                  isSandboxCard
+                    ? 'px-5 py-4 sm:px-6 sm:py-4'
+                    : isStageWidened
+                    ? 'px-6 py-5 sm:px-7 sm:py-5'
+                    : 'px-6 py-5 sm:px-7 sm:py-6'
+                } relative transition-[background-color,border-color,box-shadow] duration-[var(--dur-base)] shadow-sm ${
                   swipingDir === 'left'
                     ? 'reviewer-card-swipe-left'
                     : swipingDir === 'right'
@@ -2889,7 +2897,9 @@ export const ReviewerView: React.FC = () => {
                 {/* Top Card Meta */}
                 <div
                   ref={cardHeaderMetaRef}
-                  className="flex items-center justify-between mb-5 will-change-[opacity]"
+                  className={`flex items-center justify-between ${
+                    isSandboxCard ? 'mb-2.5' : isStageWidened ? 'mb-3.5' : 'mb-4'
+                  } will-change-[opacity]`}
                 >
                   <div className="flex items-center gap-2 flex-wrap">
                     <span
@@ -2956,7 +2966,7 @@ export const ReviewerView: React.FC = () => {
                 </div>
 
                 {isSandboxCard ? (
-                  <div className="my-2">
+                  <div className="my-1">
                     <SandboxCardFrame
                       cardId={currentCard.id}
                       cardOrd={currentCard.cardOrd}
@@ -3195,227 +3205,214 @@ export const ReviewerView: React.FC = () => {
         </div>
         </main>
 
-      {/* Unified Bottom Decision Dock & Status Strip — Theme-Harmonized */}
+      {/* Unified Single-Row Decision Dock — Theme-Harmonized */}
       {!inlineEditing && (
         <footer
           ref={dockFooterRef}
           data-gesture-active-side="none"
           data-shifted={inspectorOpen ? 'true' : 'false'}
-          className={`reviewer-bottom-dock reviewer-stage-shift shrink-0 pt-3 pb-2.5 px-6 flex flex-col items-center justify-center border-t backdrop-blur-md z-10 ${
+          className={`reviewer-bottom-dock reviewer-stage-shift shrink-0 px-6 py-2.5 flex items-center justify-center border-t backdrop-blur-md z-10 ${
             isDark ? 'border-white/[0.06]' : 'border-[var(--border-subtle)]'
           } ${inspectorOpen ? 'ltr:-translate-x-28 rtl:translate-x-28' : ''}`}
         >
-          <div className="reviewer-cta-shell w-[560px] max-w-full h-[58px]">
-            {!isCardFlipped ? (
-              /* Unflipped: Full 560px width so clicking center or center-right lands directly on "Good" after flip! */
-              <button
-                type="button"
-                onClick={() => appActions.flipCard()}
-                style={{ backgroundColor: brandHex }}
-                className={`reviewer-cta-btn reviewer-cta-btn--solid w-[560px] max-w-full h-[58px] px-6 rounded-2xl text-white font-semibold text-[15px] shadow-xl flex items-center ${
-                  showShortcutHints ? 'justify-between' : 'justify-center'
-                } cursor-pointer transition-[transform,opacity,filter] duration-[var(--dur-fast)]`}
+          <div className="reviewer-dock-grid w-full max-w-[960px] mx-auto grid items-center gap-4">
+            {/* Start Wing: Session Studied */}
+            <div className="reviewer-dock-wing reviewer-dock-wing--start flex items-center justify-start min-w-0">
+              <Tooltip
+                variant="compact"
+                content={`${t('sessionStudiedLabel')}: ${sessionStudiedCount}`}
+                side="top"
               >
-                {showShortcutHints ? (
-                  <>
-                    <span>{t('showAnswerBtn')}</span>
-                    <kbd className="reviewer-badge-trim px-2.5 py-1 rounded-lg bg-white/20 text-[12px] font-mono">
-                      Space / Enter
-                    </kbd>
-                  </>
-                ) : (
-                  <span>{t('showAnswerBtn')}</span>
-                )}
-              </button>
-            ) : optionKeyHeld || answerButtonMode === 'four' ? (
-              /* 4-Level FSRS Mode: 560px 4-column grid */
-              <div className="reviewer-cta-shell grid grid-cols-4 gap-3 w-[560px] max-w-full h-[58px]">
-                <button
-                  type="button"
-                  onClick={() => triggerRateWithSwipe(1)}
-                  className={`reviewer-cta-btn reviewer-cta-again h-[58px] px-4 rounded-2xl border flex items-center ${
-                    showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger-text)]`}
+                <div
+                  aria-label={`${t('sessionStudiedLabel')}: ${sessionStudiedCount}`}
+                  className="reviewer-dock-stat inline-flex items-center gap-1.5 min-w-0 text-[11.5px] text-[var(--text-secondary)] tabular-nums"
                 >
-                  <div className={showShortcutHints ? 'text-start' : 'text-center'}>
-                    <div className="text-[13px] font-semibold">{t('rateAgain')}</div>
-                    <div className="text-[11px] opacity-80">
-                      {currentCard.predictions.again}
-                    </div>
-                  </div>
-                  {showShortcutHints && (
-                    <kbd className="px-2 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[11px] font-mono">
-                      1
-                    </kbd>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => triggerRateWithSwipe(2)}
-                  className={`reviewer-cta-btn h-[58px] px-4 rounded-2xl border flex items-center ${
-                    showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-warning-soft)] border-[var(--status-warning)]/35 hover:border-[var(--status-warning)] text-[var(--status-warning-text)]`}
-                >
-                  <div className={showShortcutHints ? 'text-start' : 'text-center'}>
-                    <div className="text-[13px] font-semibold">{t('rateHard')}</div>
-                    <div className="text-[11px] opacity-80">
-                      {currentCard.predictions.hard}
-                    </div>
-                  </div>
-                  {showShortcutHints && (
-                    <kbd className="px-2 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[11px] font-mono">
-                      2
-                    </kbd>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => triggerRateWithSwipe(3)}
-                  className={`reviewer-cta-btn reviewer-cta-good h-[58px] px-4 rounded-2xl border flex items-center ${
-                    showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success-text)]`}
-                >
-                  <div className={showShortcutHints ? 'text-start' : 'text-center'}>
-                    <div className="text-[13px] font-semibold">{t('rateGood')}</div>
-                    <div className="text-[11px] opacity-80">
-                      {currentCard.predictions.good}
-                    </div>
-                  </div>
-                  {showShortcutHints && (
-                    <kbd className="px-2 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[11px] font-mono">
-                      3
-                    </kbd>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => triggerRateWithSwipe(4)}
-                  className={`reviewer-cta-btn h-[58px] px-4 rounded-2xl border flex items-center ${
-                    showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-info-soft)] border-[var(--status-info)]/35 hover:border-[var(--status-info)] text-[var(--status-info-text)]`}
-                >
-                  <div className={showShortcutHints ? 'text-start' : 'text-center'}>
-                    <div className="text-[13px] font-semibold">{t('rateEasy')}</div>
-                    <div className="text-[11px] opacity-80">
-                      {currentCard.predictions.easy}
-                    </div>
-                  </div>
-                  {showShortcutHints && (
-                    <kbd className="px-2 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[11px] font-mono">
-                      4
-                    </kbd>
-                  )}
-                </button>
-              </div>
-            ) : (
-              /* Item #5: Asymmetric Ergonomic Binary Mode (`w-[170px]` Again + `w-[374px]` Good = 560px with 16px gap) */
-              <div className="reviewer-cta-shell w-[560px] h-[58px] flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => triggerRateWithSwipe(1)}
-                  className={`reviewer-cta-btn reviewer-cta-again reviewer-cta-binary-again w-[170px] h-[58px] px-5 rounded-2xl border flex items-center ${
-                    showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger-text)]`}
-                >
-                  <div className={showShortcutHints ? 'text-start' : 'text-center'}>
-                    <div className="text-[14px] font-semibold">{t('rateAgain')}</div>
-                    <div className="text-[11px] opacity-80 mt-0.5">
-                      {currentCard.predictions.again}
-                    </div>
-                  </div>
-                  {showShortcutHints && (
-                    <kbd className="w-6 h-6 rounded-md bg-black/10 dark:bg-white/[0.06] flex items-center justify-center text-[11px] font-mono">
-                      1
-                    </kbd>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => triggerRateWithSwipe(3)}
-                  className={`reviewer-cta-btn reviewer-cta-good reviewer-cta-binary-good w-[374px] h-[58px] px-6 rounded-2xl border flex items-center ${
-                    showShortcutHints ? 'justify-between' : 'justify-center text-center'
-                  } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success)]`}
-                >
-                  <div className={showShortcutHints ? 'text-start' : 'text-center'}>
-                    <div className="text-[15px] font-bold">{t('rateGood')}</div>
-                    <div className="text-[11px] opacity-85 mt-0.5">
-                      {currentCard.predictions.good}
-                    </div>
-                  </div>
-                  {showShortcutHints && (
-                    <kbd className="px-2.5 h-6 rounded-md bg-black/10 dark:bg-white/[0.08] flex items-center justify-center text-[11px] font-mono">
-                      2 / Enter
-                    </kbd>
-                  )}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {showShortcutHints && (
-            <button
-              type="button"
-              onClick={() => setAppState((prev) => ({ optionKeyHeld: !prev.optionKeyHeld }))}
-              className="mt-2.5 text-[11px] text-[var(--text-secondary)] hover:text-[var(--brand-text)] cursor-pointer"
-            >
-              {formatShortcut(
-                isCardFlipped
-                  ? answerButtonMode === 'four'
-                    ? `1 ${t('rateAgain')} · 2 ${t('rateHard')} · 3 ${t('rateGood')} · 4 ${t('rateEasy')} · Space/Enter ${t('rateGood')} · Backspace ${t('undoBtnShort')} · Cmd+1~7`
-                    : `1 ${t('rateAgain')} · 2/3/Enter/Space ${t('rateGood')} · Opt 1~4 · Backspace ${t('undoBtnShort')} · Cmd+1~7`
-                  : `Space / Enter ${t('showAnswerBtn')} · Backspace ${t('undoBtnShort')} · Cmd+1~7 · R`,
-                platform
-              )}
-            </button>
-          )}
-
-          {/* Compact Session Meta Strip inside Unified Dock */}
-          <div className="w-full max-w-[920px] mt-2.5 pt-2 border-t border-black/[0.05] dark:border-white/[0.06] flex items-center justify-between gap-4 text-[11px] text-[var(--text-secondary)] tabular-nums">
-            <span>
-              {t('sessionStudiedLabel')}: {sessionStudiedCount}
-            </span>
-
-            <div className="flex items-center gap-3">
-              {showShortcutHints && (
-                <div className="hidden sm:flex items-center gap-2 opacity-80 font-mono text-[10px]">
-                  <kbd className="px-1.5 py-0.5 rounded border border-black/10 dark:border-white/10">Space</kbd>
-                  <kbd className="px-1.5 py-0.5 rounded border border-black/10 dark:border-white/10">R</kbd>
-                  <kbd className="px-1.5 py-0.5 rounded border border-black/10 dark:border-white/10">Tab</kbd>
+                  <span className="reviewer-dock-stat-label truncate">
+                    {t('sessionStudiedLabel')}
+                  </span>
+                  <span className="reviewer-dock-stat-value font-medium text-[var(--text-primary)]/85 shrink-0">
+                    {sessionStudiedCount}
+                  </span>
                 </div>
-              )}
-              <button
-                type="button"
-                onClick={() => setAppState((prev) => ({ inspectorOpen: !prev.inspectorOpen }))}
-                aria-expanded={inspectorOpen}
-                className={`reviewer-meta-btn inline-flex items-center gap-1.5 rounded-lg border text-[11px] font-medium cursor-pointer transition-colors ${
-                  inspectorOpen
-                    ? 'bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand-text)]'
-                    : isDark
-                    ? 'bg-white/[0.04] border-white/[0.08] text-[var(--text-secondary)] hover:text-white hover:border-white/[0.2]'
-                    : 'bg-[var(--bg-subtle)]/80 border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[#1D1D1F] hover:border-black/15'
-                }`}
-              >
-                <svg className="w-3 h-3 shrink-0 opacity-85" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="16" x2="12" y2="12" />
-                  <line x1="12" y1="8" x2="12.01" y2="8" />
-                </svg>
-                <span>{t('cardInfoTitle')}</span>
-                {showShortcutHints && (
-                  <kbd className="text-[10px] font-mono opacity-75">
-                    {formatShortcut('Cmd I', platform)}
-                  </kbd>
-                )}
-              </button>
+              </Tooltip>
             </div>
 
-            <span>
-              {t('sessionAccuracyLabel')}: {accuracyPct}%
-            </span>
+            {/* Center: Primary Flip / Rating Controls (48px tall) */}
+            <div className="reviewer-cta-shell w-full h-[48px]">
+              {!isCardFlipped ? (
+                /* Unflipped: Full width so clicking center or center-right lands cleanly on "Good" after flip */
+                <button
+                  type="button"
+                  onClick={() => appActions.flipCard()}
+                  style={{ backgroundColor: brandHex }}
+                  className={`reviewer-cta-btn reviewer-cta-btn--solid w-full h-[48px] px-5 rounded-xl text-white font-semibold text-[14px] shadow-md flex items-center ${
+                    showShortcutHints ? 'justify-between' : 'justify-center'
+                  } cursor-pointer transition-[transform,opacity,filter] duration-[var(--dur-fast)]`}
+                >
+                  {showShortcutHints ? (
+                    <>
+                      <span>{t('showAnswerBtn')}</span>
+                      <kbd className="reviewer-badge-trim px-2 py-0.5 rounded-md bg-white/20 text-[11px] font-mono">
+                        Space / Enter
+                      </kbd>
+                    </>
+                  ) : (
+                    <span>{t('showAnswerBtn')}</span>
+                  )}
+                </button>
+              ) : optionKeyHeld || answerButtonMode === 'four' ? (
+                /* 4-Level FSRS Mode: 4-column grid inside 520px shell */
+                <div className="reviewer-cta-shell grid grid-cols-4 gap-2.5 w-full h-[48px]">
+                  <button
+                    type="button"
+                    onClick={() => triggerRateWithSwipe(1)}
+                    className={`reviewer-cta-btn reviewer-cta-again h-[48px] px-3 rounded-xl border flex items-center ${
+                      showShortcutHints ? 'justify-between' : 'justify-center text-center'
+                    } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger-text)]`}
+                  >
+                    <div className={showShortcutHints ? 'text-start' : 'text-center'}>
+                      <div className="text-[13px] font-semibold leading-tight">{t('rateAgain')}</div>
+                      <div className="text-[10.5px] leading-tight opacity-80 mt-0.5">
+                        {currentCard.predictions.again}
+                      </div>
+                    </div>
+                    {showShortcutHints && (
+                      <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[10.5px] font-mono">
+                        1
+                      </kbd>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => triggerRateWithSwipe(2)}
+                    className={`reviewer-cta-btn h-[48px] px-3 rounded-xl border flex items-center ${
+                      showShortcutHints ? 'justify-between' : 'justify-center text-center'
+                    } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-warning-soft)] border-[var(--status-warning)]/35 hover:border-[var(--status-warning)] text-[var(--status-warning-text)]`}
+                  >
+                    <div className={showShortcutHints ? 'text-start' : 'text-center'}>
+                      <div className="text-[13px] font-semibold leading-tight">{t('rateHard')}</div>
+                      <div className="text-[10.5px] leading-tight opacity-80 mt-0.5">
+                        {currentCard.predictions.hard}
+                      </div>
+                    </div>
+                    {showShortcutHints && (
+                      <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[10.5px] font-mono">
+                        2
+                      </kbd>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => triggerRateWithSwipe(3)}
+                    className={`reviewer-cta-btn reviewer-cta-good h-[48px] px-3 rounded-xl border flex items-center ${
+                      showShortcutHints ? 'justify-between' : 'justify-center text-center'
+                    } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success-text)]`}
+                  >
+                    <div className={showShortcutHints ? 'text-start' : 'text-center'}>
+                      <div className="text-[13px] font-semibold leading-tight">{t('rateGood')}</div>
+                      <div className="text-[10.5px] leading-tight opacity-80 mt-0.5">
+                        {currentCard.predictions.good}
+                      </div>
+                    </div>
+                    {showShortcutHints && (
+                      <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[10.5px] font-mono">
+                        3
+                      </kbd>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => triggerRateWithSwipe(4)}
+                    className={`reviewer-cta-btn h-[48px] px-3 rounded-xl border flex items-center ${
+                      showShortcutHints ? 'justify-between' : 'justify-center text-center'
+                    } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-info-soft)] border-[var(--status-info)]/35 hover:border-[var(--status-info)] text-[var(--status-info-text)]`}
+                  >
+                    <div className={showShortcutHints ? 'text-start' : 'text-center'}>
+                      <div className="text-[13px] font-semibold leading-tight">{t('rateEasy')}</div>
+                      <div className="text-[10.5px] leading-tight opacity-80 mt-0.5">
+                        {currentCard.predictions.easy}
+                      </div>
+                    </div>
+                    {showShortcutHints && (
+                      <kbd className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-black/30 text-[10.5px] font-mono">
+                        4
+                      </kbd>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                /* Asymmetric Ergonomic Binary Mode inside 520px shell */
+                <div className="reviewer-cta-shell w-full h-[48px] flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => triggerRateWithSwipe(1)}
+                    className={`reviewer-cta-btn reviewer-cta-again reviewer-cta-binary-again h-[48px] px-4 rounded-xl border flex items-center ${
+                      showShortcutHints ? 'justify-between' : 'justify-center text-center'
+                    } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-danger-soft)] border-[var(--status-danger)]/35 hover:border-[var(--status-danger)] text-[var(--status-danger-text)]`}
+                  >
+                    <div className={showShortcutHints ? 'text-start' : 'text-center'}>
+                      <div className="text-[13.5px] font-semibold leading-tight">{t('rateAgain')}</div>
+                      <div className="text-[10.5px] leading-tight opacity-80 mt-0.5">
+                        {currentCard.predictions.again}
+                      </div>
+                    </div>
+                    {showShortcutHints && (
+                      <kbd className="w-5 h-5 rounded-md bg-black/10 dark:bg-white/[0.06] flex items-center justify-center text-[10.5px] font-mono">
+                        1
+                      </kbd>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => triggerRateWithSwipe(3)}
+                    className={`reviewer-cta-btn reviewer-cta-good reviewer-cta-binary-good h-[48px] px-5 rounded-xl border flex items-center ${
+                      showShortcutHints ? 'justify-between' : 'justify-center text-center'
+                    } cursor-pointer transition-[transform,border-color,background-color] duration-[var(--dur-fast)] bg-[var(--status-success-soft)] border-[var(--status-success)]/35 hover:border-[var(--status-success)] text-[var(--status-success)]`}
+                  >
+                    <div className={showShortcutHints ? 'text-start' : 'text-center'}>
+                      <div className="text-[14px] font-bold leading-tight">{t('rateGood')}</div>
+                      <div className="text-[10.5px] leading-tight opacity-85 mt-0.5">
+                        {currentCard.predictions.good}
+                      </div>
+                    </div>
+                    {showShortcutHints && (
+                      <kbd className="px-2 h-5 rounded-md bg-black/10 dark:bg-white/[0.08] flex items-center justify-center text-[10.5px] font-mono">
+                        2 / Enter
+                      </kbd>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* End Wing: Session Accuracy (softly fades when right inspector drawer opens) */}
+            <div
+              data-hidden-by-inspector={inspectorOpen ? 'true' : 'false'}
+              aria-hidden={inspectorOpen || undefined}
+              className="reviewer-dock-wing reviewer-dock-wing--end flex items-center justify-end min-w-0"
+            >
+              <Tooltip
+                variant="compact"
+                content={`${t('sessionAccuracyLabel')}: ${accuracyPct}%`}
+                side="top"
+              >
+                <div
+                  aria-label={`${t('sessionAccuracyLabel')}: ${accuracyPct}%`}
+                  className="reviewer-dock-stat inline-flex items-center gap-1.5 min-w-0 text-[11.5px] text-[var(--text-secondary)] tabular-nums"
+                >
+                  <span className="reviewer-dock-stat-label truncate">
+                    {t('sessionAccuracyLabel')}
+                  </span>
+                  <span className="reviewer-dock-stat-value font-medium text-[var(--text-primary)]/85 shrink-0">
+                    {accuracyPct}%
+                  </span>
+                </div>
+              </Tooltip>
+            </div>
           </div>
         </footer>
       )}
