@@ -354,6 +354,12 @@ class DeckService:
         return review_stage_width, review_content_scale
 
     @staticmethod
+    def _normalize_review_dock_position(cfg: Dict[str, Any]) -> str:
+        """Normalizes reviewer dock position preference to 'bottom' or 'side'."""
+        raw = str(cfg.get("review_dock_position") or "bottom").strip().lower()
+        return "side" if raw == "side" else "bottom"
+
+    @staticmethod
     def _studio_version() -> str:
         """Reads the add-on version from manifest.json (single source of truth)."""
         try:
@@ -537,6 +543,7 @@ class DeckService:
                     except Exception:
                         pass
             review_stage_width, review_content_scale = self._normalize_review_display_prefs(cfg)
+            review_dock_position = self._normalize_review_dock_position(cfg)
             auto_play_front_audio, auto_play_back_audio = self._normalize_review_audio_prefs(cfg)
             zen_sound_enabled, zen_sfx_volume, zen_ambience_volume, zen_ambience = (
                 self._normalize_zen_audio_prefs(cfg)
@@ -571,6 +578,7 @@ class DeckService:
                     "autoPlayBackAudio": auto_play_back_audio,
                     "reviewStageWidth": review_stage_width,
                     "reviewContentScale": review_content_scale,
+                    "reviewDockPosition": review_dock_position,
                     "zenSoundEnabled": zen_sound_enabled,
                     "zenSfxVolume": zen_sfx_volume,
                     "zenAmbienceVolume": zen_ambience_volume,

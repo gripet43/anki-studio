@@ -7,12 +7,13 @@ import {
   LibrarySortOption,
 } from '../../bridge/pycmd';
 import { translate } from '../../i18n/translations';
-import { CheckIcon, CloseIcon } from '../common/Icons';
+import { CheckIcon, ChevronDownIcon, CloseIcon, SpinnerIcon } from '../common/Icons';
 import {
   appActions,
   AppState,
   DEFAULT_LIBRARY_SORT,
   FlagFilterValue,
+  LIBRARY_VISIBLE_STEP,
   setAppState,
   showToast,
   useAppStore,
@@ -143,6 +144,7 @@ export const LibraryView: React.FC = () => {
     libraryLoaded,
     libraryStale,
     librarySearching,
+    libraryLoadingMore,
     libraryViewMode,
     librarySelectionMode,
     librarySearchQuery,
@@ -550,6 +552,43 @@ export const LibraryView: React.FC = () => {
     nonStatusScopeParts.push(`"${librarySearchQuery.trim()}"`);
   }
   const hasNonStatusFilter = nonStatusScopeParts.length > 0;
+  const loadedVisibleCount = Math.min(visibleCards.length, totalMatchedCount);
+  const loadMoreFooter = canLoadMore ? (
+    <div className="pt-5 flex justify-center">
+      <button
+        type="button"
+        disabled={libraryLoadingMore}
+        aria-busy={libraryLoadingMore}
+        onClick={() => appActions.loadMoreLibraryCards()}
+        className={`group min-h-9 min-w-[248px] px-5 py-2 rounded-xl border text-[12px] font-medium tabular-nums inline-flex items-center justify-center gap-2 transition-[transform,background-color,border-color,color,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)] focus-visible:outline-2 focus-visible:outline-[var(--brand)] focus-visible:outline-offset-2 ${
+          libraryLoadingMore
+            ? 'bg-[var(--brand-soft)] border-[var(--brand-border)] text-[var(--brand-text)] cursor-wait shadow-none'
+            : `cursor-pointer shadow-2xs hover:border-[var(--brand-border)] hover:text-[var(--brand-text)] hover:shadow-xs motion-safe:active:scale-[0.98] ${
+                isDark
+                  ? 'bg-[#1A1B21] border-[#2A2C36] text-white hover:bg-white/[0.04]'
+                  : 'bg-[var(--bg-card)] border-[var(--border-subtle)] text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]'
+              }`
+        }`}
+      >
+        {libraryLoadingMore ? (
+          <>
+            <SpinnerIcon className="w-3.5 h-3.5 motion-safe:animate-spin text-[var(--brand-text)]" />
+            <span>{t('loadingMoreCards')}</span>
+          </>
+        ) : (
+          <>
+            <ChevronDownIcon className="w-3.5 h-3.5 opacity-65 transition-transform duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-safe:group-hover:translate-y-0.5" />
+            <span>
+              {t('loadMoreCards', {
+                loaded: loadedVisibleCount,
+                total: totalMatchedCount,
+              })}
+            </span>
+          </>
+        )}
+      </button>
+    </div>
+  ) : null;
 
   return (
     <div className="flex-1 h-screen overflow-y-auto px-8 py-6 flex flex-col justify-between relative select-none">
@@ -1517,7 +1556,7 @@ export const LibraryView: React.FC = () => {
                       }
                     }}
                     onMouseLeave={() => setCardMenuId(null)}
-                    style={{ animationDelay: `${Math.min(cardIndex, 12) * 28}ms` }}
+                    style={{ animationDelay: `${Math.min(cardIndex % LIBRARY_VISIBLE_STEP, 8) * 24}ms` }}
                     className={`library-card library-card-enter group relative transition-transform duration-200 select-none ${
                       librarySelectionMode ? 'cursor-pointer' : 'cursor-default'
                     } ${
@@ -1978,19 +2017,7 @@ export const LibraryView: React.FC = () => {
               })}
             </div>
 
-            {canLoadMore && (
-              <div className="pt-4 flex justify-center">
-                <button
-                  onClick={() => appActions.loadMoreLibraryCards()}
-                  className={`px-6 py-2 rounded-xl border text-[12px] font-medium cursor-pointer hover:border-[var(--brand-border)] ${cardSurface}`}
-                >
-                  {t('loadMoreCards', {
-                    loaded: Math.min(visibleCards.length, totalMatchedCount),
-                    total: totalMatchedCount,
-                  })}
-                </button>
-              </div>
-            )}
+            {loadMoreFooter}
           </>
         ) : (
           <>
@@ -2300,19 +2327,7 @@ export const LibraryView: React.FC = () => {
               </table>
             </div>
 
-            {canLoadMore && (
-              <div className="pt-4 flex justify-center">
-                <button
-                  onClick={() => appActions.loadMoreLibraryCards()}
-                  className={`px-6 py-2 rounded-xl border text-[12px] font-medium cursor-pointer hover:border-[var(--brand-border)] ${cardSurface}`}
-                >
-                  {t('loadMoreCards', {
-                    loaded: Math.min(visibleCards.length, totalMatchedCount),
-                    total: totalMatchedCount,
-                  })}
-                </button>
-              </div>
-            )}
+            {loadMoreFooter}
           </>
         )}
       </div>

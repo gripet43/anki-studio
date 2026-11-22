@@ -71,6 +71,7 @@ test('renders semantic width fieldset radio cards, keycap scale stepper, anki-sw
     systemDark: false,
     reviewContentScale: 100,
     reviewStageWidth: 'auto',
+    reviewDockPosition: 'bottom',
     compatMode: true,
     sandboxNoteTypeIds: [],
     reviewQueue: [makeReviewCard({ notetypeId: 'nt-other-template' })],
@@ -108,6 +109,13 @@ test('renders semantic width fieldset radio cards, keycap scale stepper, anki-sw
         `expected native radio option for ${widthVal}`
       );
     }
+    ok(pop.includes('>操作栏位置<'), 'expected dock position legend in Display popover');
+    for (const dockPos of ['bottom', 'side']) {
+      ok(
+        pop.includes(`name="reviewer-dock-position"`) && pop.includes(`value="${dockPos}"`),
+        `expected native dock position radio option for ${dockPos}`
+      );
+    }
     ok(pop.includes('reviewer-width-card'), 'expected choice card styling');
 
     // Pixel developer strings and bottom image-zoom wall of text removed
@@ -131,6 +139,7 @@ test('renders semantic width fieldset radio cards, keycap scale stepper, anki-sw
       systemDark: prev.systemDark,
       reviewContentScale: prev.reviewContentScale,
       reviewStageWidth: prev.reviewStageWidth,
+      reviewDockPosition: prev.reviewDockPosition,
       compatMode: prev.compatMode,
       sandboxNoteTypeIds: prev.sandboxNoteTypeIds,
       reviewQueue: prev.reviewQueue,
@@ -179,6 +188,7 @@ test('activates header reset & scale reset affordances when scale/width customiz
       systemDark: prev.systemDark,
       reviewContentScale: prev.reviewContentScale,
       reviewStageWidth: prev.reviewStageWidth,
+      reviewDockPosition: prev.reviewDockPosition,
       compatMode: prev.compatMode,
       sandboxNoteTypeIds: prev.sandboxNoteTypeIds,
       reviewQueue: prev.reviewQueue,

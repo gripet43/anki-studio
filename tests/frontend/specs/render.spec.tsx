@@ -652,6 +652,84 @@ test('ReviewerView respects showShortcutHints toggle for Show Answer Space, Flag
   }
 });
 
+test('ReviewerView side dock renders full-height reading stage, right control rail with two-line spacious actions, and non-shifting inspector', () => {
+  const prev = getAppState();
+  const sampleCard = {
+    id: '202',
+    noteId: 'n-202',
+    notetypeId: 'nt-basic',
+    noteTypeName: 'Basic',
+    deckId: '1',
+    deckName: 'Salivary Pathology',
+    front: 'Pleomorphic adenoma',
+    back: 'Mixed tumor',
+    meaning: 'Mixed tumor',
+    frontHtml: 'Pleomorphic adenoma',
+    backHtml: 'Mixed tumor',
+    tags: [],
+    flags: 0,
+    audioFiles: [],
+    frontAudioFiles: [],
+    backAudioFiles: [],
+    history: [],
+    fields: { Front: 'Pleomorphic adenoma', Back: 'Mixed tumor' },
+    predictions: { again: '<10m', hard: '4d', good: '5d', easy: '7d' },
+  } as any;
+  try {
+    setAppState({
+      inReviewMode: true,
+      isSessionComplete: false,
+      inlineEditing: false,
+      inspectorOpen: false,
+      isCardFlipped: false,
+      answerButtonMode: 'binary',
+      reviewDockPosition: 'side',
+      resolvedLang: 'zh-CN',
+      reviewQueue: [sampleCard],
+      currentCardIndex: 0,
+    });
+    const unflippedHtml = renderToStaticMarkup(React.createElement(ReviewerView));
+    ok(unflippedHtml.includes('data-dock-position="side"'), 'expected data-dock-position="side" on root');
+    ok(unflippedHtml.includes('reviewer-side-rail'), 'expected right-side control rail');
+    ok(unflippedHtml.includes('reviewer-side-stage'), 'expected full-height left reading stage');
+    ok(unflippedHtml.includes('reviewer-side-cta-flip'), 'expected full-width Show Answer action in rail');
+    ok(!unflippedHtml.includes('reviewer-bottom-dock'), 'side mode must not render bottom dock');
+    ok(!unflippedHtml.includes('reviewer-header'), 'side mode must not render top header bar');
+
+    setAppState({ isCardFlipped: true, answerButtonMode: 'binary' });
+    const binaryHtml = renderToStaticMarkup(React.createElement(ReviewerView));
+    ok(
+      binaryHtml.includes('bg-[var(--status-success-soft)]') &&
+        binaryHtml.includes('text-[var(--status-success)]'),
+      'side binary Good button must keep fixed semantic success colors'
+    );
+    ok(binaryHtml.includes('本轮完成卡片') && binaryHtml.includes('记忆正确率'), 'expected session stats footer inside rail');
+
+    setAppState({ isCardFlipped: true, answerButtonMode: 'four', inspectorOpen: true });
+    const fourInspectorHtml = renderToStaticMarkup(React.createElement(ReviewerView));
+    ok(fourInspectorHtml.includes('reviewer-side-cta-btn'), 'expected two-line spacious 4-button actions in rail');
+    ok(
+      fourInspectorHtml.includes('data-shifted="false"') &&
+        !fourInspectorHtml.includes('-translate-x-28'),
+      'side mode stage must not shift horizontally when inspector opens'
+    );
+    ok(fourInspectorHtml.includes('reviewer-inspector'), 'inspector drawer must still mount in side mode');
+  } finally {
+    setAppState({
+      inReviewMode: prev.inReviewMode,
+      isSessionComplete: prev.isSessionComplete,
+      inlineEditing: prev.inlineEditing,
+      inspectorOpen: prev.inspectorOpen,
+      isCardFlipped: prev.isCardFlipped,
+      answerButtonMode: prev.answerButtonMode,
+      reviewDockPosition: prev.reviewDockPosition,
+      resolvedLang: prev.resolvedLang,
+      reviewQueue: prev.reviewQueue,
+      currentCardIndex: prev.currentCardIndex,
+    });
+  }
+});
+
 test('DecksView create deck CTA renders single leading plus without duplicate prefix', () => {
   const prev = getAppState();
   setAppState({ resolvedLang: 'zh-CN', theme: 'light', systemDark: false });
@@ -723,6 +801,7 @@ test('SettingsModal enforces ARIA tablist semantics, de-noised tabs, schematics,
     ok(ansHtml.includes('name="settings-review-scale"'), 'expected native radio inputs for scale track');
     ok(ansHtml.includes('settings-segmented-bar'), 'expected full-width unified segmented bar for scale options');
     ok(ansHtml.includes('name="settings-stage-width"'), 'expected native radio inputs for stage width');
+    ok(ansHtml.includes('name="settings-dock-position"'), 'expected native radio inputs for dock position');
     ok(ansHtml.includes('divide-y'), 'expected clean hairline divider separating scale and width sections');
     ok(ansHtml.includes('<svg'), 'expected AnswerModeGlyph & ReviewerWidthGlyph schematics in settings answer tab');
     doesNotMatch(ansHtml, /max-w-md|1 · 2/, 'answer mode cards should span full width with schematics instead of 1 · 2 text');

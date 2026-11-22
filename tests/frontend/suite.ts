@@ -32,6 +32,7 @@ import './specs/cmdkReset.spec';
 import './specs/libraryFacetSync.spec';
 import './specs/dashboardRing.spec';
 import './specs/libraryDefaultSort.spec';
+import './specs/libraryLoadMore.spec';
 import './specs/editorClearFormat.spec';
 import './specs/avatarProfile.spec';
 import './specs/reviewUndo.spec';

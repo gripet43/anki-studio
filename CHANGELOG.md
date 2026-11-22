@@ -6,6 +6,20 @@
 
 ---
 
+## [v1.7.3] - 2026-11-22
+
+- **[Antigravity] 学习页底栏单行三栏瘦身与外层边距自适应收紧**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、[`tests/frontend/specs/render.spec.tsx`](tests/frontend/specs/render.spec.tsx) 与 [`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - **底栏高度大幅精简**：将原多行底栏收敛为单行三栏 `.reviewer-dock-grid`（`69px` / 主按钮 `48px`），左翼展示「本轮完成卡片」，中段保留核心翻面/评分按钮，右翼展示「记忆正确率」并在 `···` 详情抽屉打开时柔和淡隐；移除底部重复的「卡片信息」按钮及第三行独立快捷键提示条（保留按钮内 `<kbd>` 角标）。
+  - **外层阅读舞台边距自适应**：为沙盒卡片与宽幅长卡片适度收紧外层纵向内边距（`py-3` / `px-5 py-4`），释放更多纵向有效阅读空间。
+
+- **[Antigravity] 学习页新增「右侧全高控制栏」布局模式（`review_dock_position: 'bottom' | 'side'`）**（改 [`config.default.json`](config.default.json)、[`config.md`](config.md)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`bridge/router.py`](bridge/router.py)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/utils/cardDebugInfo.ts`](frontend/src/utils/cardDebugInfo.ts)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、全量 16 语种词典及对应前后端单测）：
+  - **左侧近全屏纵向阅读区**：移除顶部栏与底部栏占高，短卡片保持垂直居中，医学/图文长卡片从顶到底接近 100% 视口高度自由滚动；在 `macOS` 超宽画幅及窄窗口（`<= 1240px`）自动预留 `40px` 顶部安全边距避让左上角红绿灯。
+  - **右侧全高控制栏与「双行宽适」评分按钮**：`224px`（窄窗 `204px`）右侧栏集成可拖拽顶区（支持双击最大化）、紧凑 5 键工具栏与进度条、双行宽适纵向评分按钮（复用全部键盘快捷键与 macOS 触控板滑卡高亮）及底部学习统计；打开 `···` 详情抽屉时原地覆盖右侧栏，左侧阅读舞台零跳动；在 `Aa`「视图与字号」浮层与「设置 → 答题设置」提供「底部 / 右侧」带示意图切换，完整覆盖 16 种界面语言与阿拉伯语 RTL 镜像。
+
+- **[Antigravity] 卡片库大卡库分页缓存与「加载更多」交互优化 + 首页滚动容器修正**（新增 [`tests/frontend/specs/libraryLoadMore.spec.ts`](tests/frontend/specs/libraryLoadMore.spec.ts)；改 [`bridge/search_service.py`](bridge/search_service.py)、[`frontend/src/components/search/LibraryView.tsx`](frontend/src/components/search/LibraryView.tsx)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`tests/frontend/suite.ts`](tests/frontend/suite.ts)、[`tests/test_bridge.py`](tests/test_bridge.py) 与中日英文案）：
+  - **SQLite 指纹感知分页缓存**：[`bridge/search_service.py`](bridge/search_service.py) 为 `search_cards` 新增带集合指纹校验与写操作即时失效的短时候选集缓存，翻页与仅分页请求跳过 5 万+ 卡片全量重扫描和无效摘要解析（新增 `test_54_search_cards_pagination_cache_and_invalidation`）。
+  - **「加载更多」防重入与加载态体验 + 首页外层滚动修正**：补齐 `libraryLoadingMore` 加载指示、防连点重入保护与错误提示，同步修正 [`DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx) 外层滚动高度壳层。
+
 ## [v1.7.2] - 2026-11-22
 
 - **[Antigravity] 修复匿名统计后台线程并发读写 `meta.json` 导致主题色、头像等用户配置偶发重置的竞态 Bug**（改 [`__init__.py`](__init__.py)、[`bridge/analytics_service.py`](bridge/analytics_service.py) 与 [`tests/test_analytics_service.py`](tests/test_analytics_service.py)）：

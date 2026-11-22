@@ -30,6 +30,7 @@ import {
   REVIEW_CONTENT_SCALES,
   ReviewCardItem,
   ReviewContentScale,
+  ReviewDockPosition,
   ReviewStageWidth,
   UserPreferences,
 } from '../bridge/pycmd';
@@ -47,6 +48,7 @@ export type {
   RescueReceipt,
   ReviewCardItem,
   ReviewContentScale,
+  ReviewDockPosition,
   ReviewStageWidth,
 };
 import {
@@ -213,6 +215,8 @@ export interface AppState {
   reviewStageWidth: ReviewStageWidth;
   /** 学习模式卡片内容流式缩放比例（%）。 */
   reviewContentScale: ReviewContentScale;
+  /** 学习模式操作栏位置（bottom | side）。 */
+  reviewDockPosition: ReviewDockPosition;
   envInfo: EnvInfo;
 
   // Dashboard, Decks & Statistics
@@ -273,6 +277,7 @@ export interface AppState {
   libraryLoaded: boolean;
   libraryStale: boolean;
   librarySearching: boolean;
+  libraryLoadingMore: boolean;
   libraryViewMode: LibraryViewMode;
   librarySearchQuery: string;
   libraryVisibleCount: number;
@@ -294,6 +299,8 @@ const initialPlatform = detectOSPlatform();
 const initialLang = detectBrowserLanguage();
 
 export const DEFAULT_LIBRARY_SORT: LibrarySortOption = 'newest';
+export const LIBRARY_VISIBLE_STEP = 24;
+export const LIBRARY_PAGE_SIZE = 48;
 
 /** Build a fresh default Library state slice (used for initial load & profile switches). */
 export function createEmptyLibraryState() {
@@ -309,8 +316,9 @@ export function createEmptyLibraryState() {
     libraryLoaded: false,
     libraryStale: false,
     librarySearching: false,
+    libraryLoadingMore: false,
     librarySearchQuery: '',
-    libraryVisibleCount: 24,
+    libraryVisibleCount: LIBRARY_VISIBLE_STEP,
     filterStatus: 'all' as AppState['filterStatus'],
     filterDifficulty: 'all' as AppState['filterDifficulty'],
     filterFlag: 'all' as FlagFilterValue,
@@ -382,6 +390,7 @@ const initialState: AppState = {
   autoPlayBackAudio: true,
   reviewStageWidth: 'auto',
   reviewContentScale: 100,
+  reviewDockPosition: 'bottom',
   envInfo: {
     platform: initialPlatform,
     osName: initialPlatform === 'mac' ? 'macOS' : initialPlatform === 'win' ? 'Windows' : 'Linux',
@@ -458,9 +467,34 @@ const EMPTY_CMDK_STATE: Pick<
 };
 
 let libraryDebounceTimer: any = null;
+let libraryRequestSeq = 0;
 let cmdKDebounceTimer: any = null;
 let cmdKRequestSeq = 0;
 let zenAudioSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function cancelPendingLibraryRequests() {
+  libraryRequestSeq += 1;
+  if (libraryDebounceTimer) {
+    clearTimeout(libraryDebounceTimer);
+    libraryDebounceTimer = null;
+  }
+}
+
+/**
+ * Yield one browser paint frame before calling synchronous Qt WebEngine `pycmd`
+ * IPC, so immediate button loading feedback (spinner / disabled state) visibly
+ * renders before Python runs on the Qt main thread.
+ */
+function yieldForPaint(): Promise<void> {
+  if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      setTimeout(resolve, 0);
+    });
+  });
+}
 
 function persistZenAudioPrefs(
   patch: {
@@ -532,8 +566,6 @@ export function showToast(message: string) {
 
 const tState = (key: any, params?: Record<string, string | number>) =>
   translate(state.resolvedLang, key, params);
-
-const LIBRARY_PAGE_SIZE = 48;
 
 let coldStartInProgress = false;
 let coldStartStartTs = 0;
@@ -971,6 +1003,10 @@ export const appActions = {
           REVIEW_CONTENT_SCALES.includes(prefs.reviewContentScale as ReviewContentScale)
             ? (prefs.reviewContentScale as ReviewContentScale)
             : state.reviewContentScale,
+        reviewDockPosition:
+          prefs?.reviewDockPosition === 'side' || prefs?.reviewDockPosition === 'bottom'
+            ? prefs.reviewDockPosition
+            : state.reviewDockPosition,
         zenSoundEnabled:
           prefs?.zenSoundEnabled !== undefined
             ? Boolean(prefs.zenSoundEnabled)
@@ -1017,6 +1053,7 @@ export const appActions = {
               libraryAllTags: searchRes.allTags || dash?.allTags || state.libraryAllTags,
               libraryLoaded: true,
               libraryStale: false,
+              libraryLoadingMore: false,
             }
           : {
               libraryStale: true,
@@ -1219,6 +1256,7 @@ export const appActions = {
     autoPlayBackAudio?: boolean;
     reviewStageWidth?: ReviewStageWidth;
     reviewContentScale?: ReviewContentScale;
+    reviewDockPosition?: ReviewDockPosition;
   }): Promise<boolean> {
     const normalizedTheme = patch.theme !== undefined ? normalizeThemeMode(patch.theme) : undefined;
     const nextLangPref = patch.language !== undefined ? patch.language : state.languagePref;
@@ -1268,6 +1306,7 @@ export const appActions = {
         : {}),
       ...(patch.reviewStageWidth !== undefined ? { reviewStageWidth: patch.reviewStageWidth } : {}),
       ...(patch.reviewContentScale !== undefined ? { reviewContentScale: patch.reviewContentScale } : {}),
+      ...(patch.reviewDockPosition !== undefined ? { reviewDockPosition: patch.reviewDockPosition } : {}),
     });
 
     if (isAnkiNativeEnv()) {
@@ -1307,6 +1346,7 @@ export const appActions = {
         if (
           patch.reviewStageWidth !== undefined ||
           patch.reviewContentScale !== undefined ||
+          patch.reviewDockPosition !== undefined ||
           patch.answerButtonMode !== undefined
         ) {
           trackAnalytics('feature_use', { feature: 'view_tuning' });
@@ -1425,6 +1465,10 @@ export const appActions = {
     const nextDeckId = overrides?.deckId !== undefined ? overrides.deckId : state.filterDeckId;
     const nextSortBy = overrides?.sortBy !== undefined ? overrides.sortBy : state.librarySortBy;
 
+    cancelPendingLibraryRequests();
+    const reqSeq = libraryRequestSeq;
+    const reqGen = state.profileGeneration;
+
     setAppState({
       librarySearchQuery: nextQuery,
       filterStatus: nextStatus,
@@ -1433,15 +1477,17 @@ export const appActions = {
       filterTag: nextTag,
       filterDeckId: nextDeckId,
       librarySortBy: nextSortBy,
-      libraryVisibleCount: 24,
+      libraryVisibleCount: LIBRARY_VISIBLE_STEP,
+      libraryLoadingMore: false,
     });
 
     if (!isAnkiNativeEnv()) return;
 
-    if (libraryDebounceTimer) clearTimeout(libraryDebounceTimer);
     setAppState({ librarySearching: true });
 
     libraryDebounceTimer = setTimeout(async () => {
+      libraryDebounceTimer = null;
+      if (reqSeq !== libraryRequestSeq || reqGen !== state.profileGeneration) return;
       try {
         const res = await callAnki<{
           total: number;
@@ -1465,6 +1511,7 @@ export const appActions = {
           limit: LIBRARY_PAGE_SIZE,
           includeFacets: true,
         });
+        if (reqSeq !== libraryRequestSeq || reqGen !== state.profileGeneration) return;
         if (res && Array.isArray(res.cards)) {
           setAppState((prev) => ({
             libraryCards: res.cards,
@@ -1484,12 +1531,14 @@ export const appActions = {
             libraryLoaded: true,
             libraryStale: false,
             librarySearching: false,
+            libraryLoadingMore: false,
           }));
         } else {
-          setAppState({ librarySearching: false });
+          setAppState({ librarySearching: false, libraryLoadingMore: false });
         }
       } catch {
-        setAppState({ librarySearching: false });
+        if (reqSeq !== libraryRequestSeq || reqGen !== state.profileGeneration) return;
+        setAppState({ librarySearching: false, libraryLoadingMore: false });
       }
     }, 200);
   },
@@ -1507,58 +1556,80 @@ export const appActions = {
   },
 
   async loadMoreLibraryCards() {
-    const nextVisible = state.libraryVisibleCount + 24;
-    setAppState({ libraryVisibleCount: nextVisible });
+    if (state.libraryLoadingMore) return;
 
-    if (
+    const nextVisible = state.libraryVisibleCount + LIBRARY_VISIBLE_STEP;
+    const needsBackendFetch =
       isAnkiNativeEnv() &&
       state.libraryHasMoreFromBackend &&
-      nextVisible + 24 >= state.libraryCards.length
-    ) {
-      setAppState({ librarySearching: true });
-      try {
-        const res = await callAnki<{
-          total: number;
-          filteredCount: number;
-          hasMore: boolean;
-          cards: LibraryCardItem[];
-          cardStyles?: Record<string, string>;
-          cardFrontStyles?: Record<string, string>;
-        }>('search_cards', {
-          query: state.librarySearchQuery,
-          status: state.filterStatus,
-          difficulty: state.filterDifficulty,
-          flag: state.filterFlag,
-          tag: state.filterTag,
-          deckId: state.filterDeckId,
-          sortBy: state.librarySortBy,
-          offset: state.libraryCards.length,
-          limit: LIBRARY_PAGE_SIZE,
-          includeFacets: false,
-        });
-        if (res && Array.isArray(res.cards)) {
-          const existingIds = new Set(state.libraryCards.map((c) => c.id));
-          const existingNotes = new Set(state.libraryCards.map((c) => c.noteId || c.id));
+      nextVisible > state.libraryCards.length;
+
+    if (!needsBackendFetch) {
+      setAppState({ libraryVisibleCount: nextVisible });
+      return;
+    }
+
+    const reqSeq = ++libraryRequestSeq;
+    const reqGen = state.profileGeneration;
+    const currentOffset = state.libraryCards.length;
+    setAppState({ libraryLoadingMore: true });
+
+    await yieldForPaint();
+    if (reqSeq !== libraryRequestSeq || reqGen !== state.profileGeneration) return;
+
+    try {
+      const res = await callAnki<{
+        total: number;
+        filteredCount: number;
+        hasMore: boolean;
+        cards: LibraryCardItem[];
+        cardStyles?: Record<string, string>;
+        cardFrontStyles?: Record<string, string>;
+      }>('search_cards', {
+        query: state.librarySearchQuery,
+        status: state.filterStatus,
+        difficulty: state.filterDifficulty,
+        flag: state.filterFlag,
+        tag: state.filterTag,
+        deckId: state.filterDeckId,
+        sortBy: state.librarySortBy,
+        offset: currentOffset,
+        limit: LIBRARY_PAGE_SIZE,
+        includeFacets: false,
+      });
+      if (reqSeq !== libraryRequestSeq || reqGen !== state.profileGeneration) return;
+
+      if (res && Array.isArray(res.cards)) {
+        setAppState((prev) => {
+          const existingIds = new Set(prev.libraryCards.map((c) => c.id));
+          const existingNotes = new Set(prev.libraryCards.map((c) => c.noteId || c.id));
           const appended = res.cards.filter(
             (c) => !existingIds.has(c.id) && !existingNotes.has(c.noteId || c.id)
           );
-          setAppState((prev) => ({
-            libraryCards: [...prev.libraryCards, ...appended],
+          const mergedCards = [...prev.libraryCards, ...appended];
+          const hasMoreBackend = Boolean(res.hasMore) && appended.length > 0;
+          return {
+            libraryCards: mergedCards,
+            libraryVisibleCount: hasMoreBackend
+              ? nextVisible
+              : Math.min(nextVisible, mergedCards.length),
             libraryFilteredCount: res.filteredCount ?? prev.libraryFilteredCount,
-            libraryHasMoreFromBackend: Boolean(res.hasMore),
+            libraryHasMoreFromBackend: hasMoreBackend,
             libraryCardStyles: { ...prev.libraryCardStyles, ...(res.cardStyles || {}) },
             libraryFrontCardStyles: {
               ...prev.libraryFrontCardStyles,
               ...(res.cardFrontStyles || {}),
             },
-            librarySearching: false,
-          }));
-        } else {
-          setAppState({ librarySearching: false });
-        }
-      } catch {
-        setAppState({ librarySearching: false });
+            libraryLoadingMore: false,
+          };
+        });
+      } else {
+        setAppState({ libraryLoadingMore: false });
       }
+    } catch {
+      if (reqSeq !== libraryRequestSeq || reqGen !== state.profileGeneration) return;
+      setAppState({ libraryLoadingMore: false });
+      showToast(tState('loadMoreCardsFailedToast'));
     }
   },
 
@@ -4342,6 +4413,7 @@ export const appActions = {
     sessionVerifiedSyncTs = 0;
     coldStartInProgress = false;
     cancelPendingCmdKSearch();
+    cancelPendingLibraryRequests();
     if (zenAudioSaveTimer) {
       clearTimeout(zenAudioSaveTimer);
       zenAudioSaveTimer = null;

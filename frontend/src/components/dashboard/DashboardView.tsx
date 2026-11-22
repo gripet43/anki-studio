@@ -337,7 +337,8 @@ export const DashboardView: React.FC = () => {
   );
 
   return (
-    <div className="dashboard-shell flex-1 h-screen overflow-y-auto px-6 sm:px-8 lg:px-10 py-6 sm:py-8 space-y-7 sm:space-y-8">
+    <div className="flex-1 h-full overflow-y-auto">
+      <div className="dashboard-shell px-6 sm:px-8 lg:px-10 py-6 sm:py-8 space-y-7 sm:space-y-8">
       {/* Top Header Row — Synced Status Capsule & Cmd+K Search */}
       <header
         onMouseDown={startWindowDrag}
@@ -1876,6 +1877,7 @@ export const DashboardView: React.FC = () => {
           </section>
         </>
       )}
+      </div>
     </div>
   );
 };

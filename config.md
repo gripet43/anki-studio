@@ -39,6 +39,8 @@
 - `compat_mode`：`true` / `false`（默认 `false`）
   全局原生沙盒兼容模式开关。开启后所有复习卡片统一在隔离 iframe 沙盒中以原生模板渲染，不再按卡型单独切换；若历史配置中曾为任意卡型开启过 `sandbox_notetype_ids`，升级后会自动继承开启。
 - `sandbox_notetype_ids`：历史按卡型记录的兼容模式 ID 数组（保留用于向后兼容与升级迁移，一般不需要手动修改）。
+- `review_dock_position`：`"bottom"` | `"side"`（默认 `"bottom"`）
+  学习页面操作栏位置。设为 `"side"` 时，控制区与评分按钮会固定在右侧栏，让左侧卡片阅读区域获得接近全屏高度的纵向阅读空间。
 - `zen_sound_enabled`：`true` / `false`（默认 `true`）
   禅模式仪式与触感音效开关（燃香、颂钵、法鼓、和纸翻面与落卡声），与环境声景独立控制。
 - `zen_sfx_volume` / `zen_ambience_volume`：`0.0` ~ `1.0`（默认 `0.5`）

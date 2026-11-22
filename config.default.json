@@ -16,5 +16,6 @@
   "zen_sound_enabled": true,
   "zen_sfx_volume": 0.5,
   "zen_ambience_volume": 0.5,
-  "zen_ambience": "silent"
+  "zen_ambience": "silent",
+  "review_dock_position": "bottom"
 }

@@ -5,7 +5,7 @@ import { SyncStateIcon, SyncVisualState } from '../common/SyncStateIcon';
 import { CheckIcon, DownloadIcon, SyncArrowsIcon, UploadIcon } from '../common/Icons';
 import { UserAvatar } from '../common/UserAvatar';
 import { AvatarCropModal } from './AvatarCropModal';
-import { ReviewerWidthGlyph } from '../reviewer/ReviewerView';
+import { ReviewerDockPositionGlyph, ReviewerWidthGlyph } from '../reviewer/ReviewerView';
 import { usePresence } from '../../hooks/usePresence';
 import { runThemeViewTransition } from '../../utils/viewTransition';
 import {
@@ -30,6 +30,7 @@ import {
   callAnki,
   isAnkiNativeEnv,
   REVIEW_CONTENT_SCALES,
+  ReviewDockPosition,
   ReviewStageWidth,
 } from '../../bridge/pycmd';
 import {
@@ -191,6 +192,7 @@ export const SettingsModal: React.FC = () => {
     autoPlayBackAudio,
     reviewStageWidth,
     reviewContentScale,
+    reviewDockPosition,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(settingsInitialTab || 'appearance');
@@ -1276,6 +1278,49 @@ export const SettingsModal: React.FC = () => {
                               />
                               <ReviewerWidthGlyph mode={opt.value} active={active} />
                               <span className="text-[12px] leading-tight truncate">
+                                {t(opt.labelKey)}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  </div>
+
+                  <div className="pt-3.5">
+                    <fieldset className="reviewer-width-fieldset space-y-2">
+                      <legend className="text-[13px] font-semibold p-0 settings-heading">
+                        {t('reviewDockPositionTitle')}
+                      </legend>
+                      <p className={`text-[11.5px] ${subText} leading-snug settings-helper-copy`}>
+                        {t('reviewDockPositionSub')}
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {(
+                          [
+                            { value: 'bottom', labelKey: 'reviewDockPositionBottom' },
+                            { value: 'side', labelKey: 'reviewDockPositionSide' },
+                          ] as Array<{ value: ReviewDockPosition; labelKey: any }>
+                        ).map((opt) => {
+                          const active = reviewDockPosition === opt.value;
+                          return (
+                            <label
+                              key={opt.value}
+                              data-selected={active ? 'true' : 'false'}
+                              className="reviewer-width-card settings-choice-card px-3 py-2.5 rounded-xl border text-start cursor-pointer flex items-center gap-2.5 select-none"
+                            >
+                              <input
+                                type="radio"
+                                name="settings-dock-position"
+                                value={opt.value}
+                                checked={active}
+                                onChange={() =>
+                                  appActions.updatePreferences({ reviewDockPosition: opt.value })
+                                }
+                                className="sr-only"
+                              />
+                              <ReviewerDockPositionGlyph mode={opt.value} active={active} />
+                              <span className="text-[12.5px] leading-tight truncate">
                                 {t(opt.labelKey)}
                               </span>
                             </label>

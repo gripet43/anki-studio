@@ -737,8 +737,13 @@ assert(
     cssBundle.includes('library-card-footer-meta') &&
     cssBundle.includes('.reviewer-dock-grid') &&
     cssBundle.includes('.reviewer-cta-binary-good') &&
+    cssBundle.includes('.reviewer-side-rail') &&
+    cssBundle.includes('.reviewer-side-stage') &&
+    reviewerSrc.includes('reviewer-side-rail') &&
+    reviewerSrc.includes('reviewer-side-stage') &&
+    reviewerSrc.includes('reviewDockPosition') &&
     fs.existsSync(ANKIADDON_FILE),
-  'Compiled production bundle and anki_modern_os.ankiaddon must exist with Library card & Reviewer dock CSS rules'
+  'Compiled production bundle and anki_modern_os.ankiaddon must exist with Library card, Reviewer dock, and Side Rail CSS/TSX rules'
 );
 
 const addonZipEntries = listZipEntries(ANKIADDON_FILE);
@@ -808,6 +813,14 @@ for (const cls of usedAnimateClasses) {
     `Item #35: TSX references class "${cls}" but ".${cls}" (or ".motion-safe:${cls}") is missing from compiled web/assets/index.css`
   );
 }
+
+// Guardrail: DashboardView must keep overflow-y-auto on the full-width outer scroll container,
+// never on the max-w-[1440px] centered `.dashboard-shell`, otherwise fullscreen monitors show a floating mid-screen scrollbar.
+assert(
+  !/className="[^"]*\bdashboard-shell\b[^"]*\boverflow-y-auto\b/.test(dashboardSrc) &&
+    !/className="[^"]*\boverflow-y-auto\b[^"]*\bdashboard-shell\b/.test(dashboardSrc),
+  'DashboardView must not combine .dashboard-shell (max-width: 1440px) with overflow-y-auto on the same element'
+);
 
 // Item #36: Dashboard visual hierarchy — semantic surfaces, content-aware grids, and reduced visual noise
 const dashboardCssSrc = readText(
@@ -1906,6 +1919,17 @@ assert(
     cssBundle.includes('.zen-rate-btn--success') &&
     !/\.zen-(?:incense-complete-veil|sound-popover|deck-popover)\s*\{[^}]*backdrop-filter/i.test(cssBundle),
   'Item #69: Minimalist Zen Mode must expose its entry in the hero action bar (with low-energy entry hidden), include Roji threshold, Ensō ritual, SSR-safe Zen audio, isolate ZenHomeView/ZenReviewView without FSRS intervals or raw .closest(), guard Cmd+Z against Shift, avoid backdrop-filter on Zen overlays/popovers for Windows ANGLE stability, and emit compiled CSS'
+);
+
+assert(
+  librarySrc.includes('libraryLoadingMore') &&
+    librarySrc.includes('aria-busy={libraryLoadingMore}') &&
+    librarySrc.includes('SpinnerIcon') &&
+    librarySrc.includes("t('loadingMoreCards')") &&
+    storeSrc.includes('libraryLoadingMore') &&
+    storeSrc.includes('yieldForPaint') &&
+    jsBundle.includes('loadingMoreCards'),
+  'Card Library Load More button must provide immediate disabled/aria-busy/SpinnerIcon loading feedback and yield a paint frame before synchronous Qt search_cards pagination'
 );
 
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

@@ -6,6 +6,7 @@ import {
   isAnkiNativeEnv,
   ReviewCardItem,
   ReviewContentScale,
+  ReviewDockPosition,
   ReviewStageWidth,
 } from '../bridge/pycmd';
 import { copyTextToClipboard } from './clipboard';
@@ -51,6 +52,7 @@ export interface CardDebugClientState {
   autoPlayBackAudio?: boolean;
   reviewStageWidth?: ReviewStageWidth;
   reviewContentScale?: ReviewContentScale;
+  reviewDockPosition?: ReviewDockPosition;
   isPreviewSession?: boolean;
   isCardFlipped?: boolean;
   isSandboxCard?: boolean;
@@ -293,6 +295,7 @@ function buildCardDebugReportWithAnomalies(input: BuildCardDebugReportInput): {
       language: client.resolvedLang,
       reviewStageWidth: client.reviewStageWidth ?? 'auto',
       reviewContentScale: client.reviewContentScale ?? 100,
+      reviewDockPosition: client.reviewDockPosition ?? 'bottom',
       autoPlayFrontAudio: Boolean(client.autoPlayFrontAudio),
       autoPlayBackAudio: client.autoPlayBackAudio ?? true,
       isPreviewSession: Boolean(client.isPreviewSession),
@@ -393,7 +396,7 @@ function buildCardDebugReportWithAnomalies(input: BuildCardDebugReportInput): {
     '[Summary]',
     `- Studio: v${client.envInfo?.studioVersion || '?'} | Anki: ${client.envInfo?.ankiVersion || '?'} | OS: ${client.envInfo?.osName || client.envInfo?.platform || '?'}`,
     `- SourceView: ${client.sourceView} | RenderMode: ${renderMode} | Theme: ${client.theme} | Lang: ${client.resolvedLang}`,
-    `- Display: width=${client.reviewStageWidth ?? 'auto'} | scale=${client.reviewContentScale ?? 100}% | flipped=${Boolean(client.isCardFlipped)}`,
+    `- Display: width=${client.reviewStageWidth ?? 'auto'} | scale=${client.reviewContentScale ?? 100}% | dock=${client.reviewDockPosition ?? 'bottom'} | flipped=${Boolean(client.isCardFlipped)}`,
     `- Card: id=${card.id || '(draft)'} | noteId=${card.noteId || '(draft)'} | deck=${card.fullDeckName || card.deckName || '-'}`,
     `- NoteType: ${card.noteTypeName || backend?.noteTypeInfo?.name || '-'} (id=${ntId || '-'}, ${modelTypeStr}, ord=${tmplOrd ?? '-'}, tmpl=${tmplName})`,
     `- Flags: serialized.isCloze=${Boolean(card.isCloze)} | needsSandbox=${Boolean(card.needsSandbox)} | userCompatEnabled=${compatEnabledForNoteType}`,

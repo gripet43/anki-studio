@@ -464,6 +464,7 @@ class BridgeRouter:
     def action_get_preferences(self, data: Dict[str, Any]) -> Dict[str, Any]:
         cfg = self._get_config()
         review_stage_width, review_content_scale = self.deck_service._normalize_review_display_prefs(cfg)
+        review_dock_position = self.deck_service._normalize_review_dock_position(cfg)
         auto_play_front_audio, auto_play_back_audio = self.deck_service._normalize_review_audio_prefs(cfg)
         zen_sound_enabled, zen_sfx_volume, zen_ambience_volume, zen_ambience = (
             self.deck_service._normalize_zen_audio_prefs(cfg)
@@ -489,6 +490,7 @@ class BridgeRouter:
             "autoPlayBackAudio": auto_play_back_audio,
             "reviewStageWidth": review_stage_width,
             "reviewContentScale": review_content_scale,
+            "reviewDockPosition": review_dock_position,
             "zenSoundEnabled": zen_sound_enabled,
             "zenSfxVolume": zen_sfx_volume,
             "zenAmbienceVolume": zen_ambience_volume,
@@ -555,6 +557,9 @@ class BridgeRouter:
             patch["review_content_scale"] = (
                 scale_val if scale_val in (90, 100, 115, 130, 150) else 100
             )
+        if "reviewDockPosition" in data:
+            dock_pos = str(data["reviewDockPosition"] or "bottom").strip().lower()
+            patch["review_dock_position"] = "side" if dock_pos == "side" else "bottom"
         if "showDashboardTips" in data:
             show_tips = self.deck_service._coerce_bool(data["showDashboardTips"], True)
             patch["show_dashboard_tips"] = show_tips
@@ -654,6 +659,7 @@ class BridgeRouter:
                 "autoPlayBackAudio": auto_play_back_audio,
                 "reviewStageWidth": review_stage_width,
                 "reviewContentScale": review_content_scale,
+                "reviewDockPosition": self.deck_service._normalize_review_dock_position(saved),
                 "zenSoundEnabled": zen_sound_enabled,
                 "zenSfxVolume": zen_sfx_volume,
                 "zenAmbienceVolume": zen_ambience_volume,
@@ -839,6 +845,7 @@ class BridgeRouter:
         cfg = self._get_config() or {}
         sandbox_ids = [str(x) for x in (cfg.get("sandbox_notetype_ids") or []) if str(x).strip()]
         review_stage_width, review_content_scale = self.deck_service._normalize_review_display_prefs(cfg)
+        review_dock_position = self.deck_service._normalize_review_dock_position(cfg)
         auto_play_front_audio, auto_play_back_audio = self.deck_service._normalize_review_audio_prefs(cfg)
 
         qt_version = "unknown"
@@ -876,6 +883,7 @@ class BridgeRouter:
                 "autoPlayBackAudio": auto_play_back_audio,
                 "reviewStageWidth": review_stage_width,
                 "reviewContentScale": review_content_scale,
+                "reviewDockPosition": review_dock_position,
                 "compatMode": self.deck_service._resolve_compat_mode(cfg),
                 "sandboxNoteTypeIds": sandbox_ids,
                 "showIllustrations": self.deck_service._coerce_bool(cfg.get("show_illustrations"), True),

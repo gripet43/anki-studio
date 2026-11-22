@@ -71,6 +71,54 @@ class SearchService:
     def __init__(self, col_getter, lang_getter: Optional[Callable[[], str]] = None):
         self._get_col = col_getter
         self._get_lang = lang_getter or (lambda: "zh-CN")
+        # Short-lived candidate list cache keyed by collection fingerprint + query params,
+        # so pagination (offset > 0) skips rescanning/resorting 50k+ card collections.
+        self._candidate_cache: Dict[
+            Tuple[Any, ...], Tuple[float, int, int, List[Tuple[int, List[int]]]]
+        ] = {}
+        self._candidate_cache_ttl = 60.0
+        self._candidate_cache_max = 2
+
+    def invalidate_cache(self) -> None:
+        self._candidate_cache.clear()
+
+    @staticmethod
+    def _get_collection_cache_signature(col) -> Optional[Tuple[Any, ...]]:
+        """Fast SQLite fingerprint that changes on any card/note/col mutation or day rollover."""
+        if col is None or hasattr(col, "_cards"):
+            return None
+        db = getattr(col, "db", None)
+        if db is None or not hasattr(db, "first"):
+            return None
+        try:
+            card_sig = db.first(
+                "SELECT count(*), coalesce(max(id), 0), coalesce(max(mod), 0), "
+                "coalesce(sum(mod), 0), coalesce(sum(queue), 0), coalesce(sum(flags), 0) "
+                "FROM cards"
+            )
+            note_sig = db.first(
+                "SELECT count(*), coalesce(max(mod), 0), coalesce(sum(mod), 0) FROM notes"
+            )
+            col_mod = db.scalar("SELECT mod FROM col") if hasattr(db, "scalar") else 0
+            today = int(getattr(getattr(col, "sched", None), "today", 0) or 0)
+            if card_sig is None or note_sig is None:
+                return None
+            return (
+                id(col),
+                today,
+                int(col_mod or 0),
+                int(card_sig[0] or 0),
+                int(card_sig[1] or 0),
+                int(card_sig[2] or 0),
+                int(card_sig[3] or 0),
+                int(card_sig[4] or 0),
+                int(card_sig[5] or 0),
+                int(note_sig[0] or 0),
+                int(note_sig[1] or 0),
+                int(note_sig[2] or 0),
+            )
+        except Exception:
+            return None
 
     @property
     def col(self):
@@ -112,7 +160,6 @@ class SearchService:
         include_facets = bool(data.get("includeFacets", True))
         group_by_note = bool(data.get("groupByNote", True))
 
-        collection_total = self._get_collection_total(col, group_by_note=group_by_note)
         anki_query = self._build_anki_search_query(
             col,
             raw_q=raw_q,
@@ -124,26 +171,7 @@ class SearchService:
         offset = max(0, int(data.get("offset") or 0))
         limit = max(1, int(data.get("limit") or 200))
 
-        try:
-            cids = list(col.find_cards(anki_query))
-        except Exception as e:
-            # A malformed query must never silently return the whole collection
-            # as if it were a filtered result set.
-            return {
-                "total": 0,
-                "collectionTotal": collection_total,
-                "filteredCount": 0,
-                "facetCounts": None,
-                "offset": offset,
-                "limit": limit,
-                "hasMore": False,
-                "cards": [],
-                "allTags": [],
-                "error": str(e),
-            }
-
         media_dir = get_media_dir(col)
-
         cards_out: List[Dict[str, Any]] = []
         # 每个卡型只留一份作用域化模板 CSS（Cmd+K 右侧预览要拿它还原卡包样式）。
         # 按卡带会把 200 条的搜索响应撑到几百 KB，而同一副牌里卡型通常只有一两种。
@@ -152,99 +180,180 @@ class SearchService:
         # 背面揭开。Cmd+K 同时预览两面，因此必须按卡型各下发一份。
         card_front_styles: Dict[str, str] = {}
         is_completed_query = (status == "completed")
-        needs_meta_filter_or_sort = (
-            difficulty_filter in ("high", "medium", "low")
-            or flag_filter_raw != "all"
-            or sort_by not in ("default", "newest")
+
+        col_sig = self._get_collection_cache_signature(col)
+        cache_key: Optional[Tuple[Any, ...]] = (
+            (
+                col_sig,
+                anki_query,
+                status,
+                difficulty_filter,
+                flag_filter_raw,
+                sort_by,
+                group_by_note,
+                lang if sort_by == "front_asc" else "",
+            )
+            if col_sig is not None
+            else None
         )
 
-        # Compute facets cleanly with note-level deduplication when group_by_note=True
-        # and reuse its SQL card index scan so zero redundant queries run.
-        meta_index: Optional[Dict[str, Dict[int, Any]]] = None
-        if include_facets:
-            facet_counts, meta_index = self._compute_facet_counts(
-                col=col,
-                cids=cids,
-                raw_q=raw_q,
-                status=status,
-                difficulty_filter=difficulty_filter,
-                flag_filter_raw=flag_filter_raw,
-                tag=tag,
-                deck_id=deck_id,
-                group_by_note=group_by_note,
-                return_index=True,
-                lang=lang,
-            )
-        else:
+        now_mono = time.monotonic()
+        cached_hit = None
+        if not include_facets and cache_key is not None:
+            cached = self._candidate_cache.get(cache_key)
+            if cached is not None and (now_mono - cached[0]) <= self._candidate_cache_ttl:
+                cached_hit = cached
+            elif cached is not None:
+                self._candidate_cache.pop(cache_key, None)
+
+        if cached_hit is not None:
+            _, total_cids_count, collection_total, candidate_entries = cached_hit
             facet_counts = None
-
-        if (group_by_note or needs_meta_filter_or_sort) and meta_index is None:
-            meta_index = self._load_card_index_meta(col, cids, lang=lang)
-
-        if group_by_note:
-            candidate_groups = self._group_cids_by_note(cids, meta_index)
-            candidate_entries = [
-                (self._pick_representative_cid(grp, meta_index), grp)
-                for _, grp in candidate_groups
-            ]
         else:
-            candidate_entries = [(int(cid), [int(cid)]) for cid in cids]
+            collection_total = self._get_collection_total(col, group_by_note=group_by_note)
+            try:
+                cids = list(col.find_cards(anki_query))
+            except Exception as e:
+                # A malformed query must never silently return the whole collection
+                # as if it were a filtered result set.
+                return {
+                    "total": 0,
+                    "collectionTotal": collection_total,
+                    "filteredCount": 0,
+                    "facetCounts": None,
+                    "offset": offset,
+                    "limit": limit,
+                    "hasMore": False,
+                    "cards": [],
+                    "allTags": [],
+                    "error": str(e),
+                }
 
-        # Pre-filter difficulty & flag purely from the lightweight SQL index before
-        # slicing/serializing, so large collections never serialize non-page cards.
-        if meta_index is not None and (
-            difficulty_filter in ("high", "medium", "low") or flag_filter_raw != "all"
-        ):
-            diff_map = meta_index["diff"]
-            flags_map = meta_index["flags"]
-            filtered_entries: List[Tuple[int, List[int]]] = []
-            target_flag = int(flag_filter_raw) if flag_filter_raw in ("0", "1", "2", "3", "4", "5", "6", "7") else None
-            for rep_cid, grp in candidate_entries:
-                if group_by_note and len(grp) > 1:
-                    entry_diff, entry_flag, _ = self._note_group_facets(grp, meta_index)
-                else:
-                    entry_diff = diff_map.get(rep_cid, "medium")
-                    entry_flag = flags_map.get(rep_cid, 0) & 7
-                if difficulty_filter in ("high", "medium", "low") and entry_diff != difficulty_filter:
-                    continue
-                if flag_filter_raw == "flagged" and entry_flag <= 0:
-                    continue
-                if target_flag is not None and entry_flag != target_flag:
-                    continue
-                filtered_entries.append((rep_cid, grp))
-            candidate_entries = filtered_entries
-
-        # Pre-sort all sort modes from the SQL index before slicing to `limit`.
-        if sort_by == "newest":
-            candidate_entries.sort(key=lambda entry: -int(entry[0]))
-        elif sort_by != "default" and meta_index is not None:
-            if sort_by == "front_asc":
-                sfld_map = meta_index.get("sfld")
-                if sfld_map is not None:
-                    empty_title = "未命名" if lang == "zh-CN" else "Untitled"
-                    for rep_cid, _ in candidate_entries:
-                        if not sfld_map.get(rep_cid):
-                            try:
-                                c_obj = col.get_card(int(rep_cid))
-                                native_q = render_native_card_sides(c_obj, media_dir).question
-                                resolved_q = plain_text_of(
-                                    re.sub(
-                                        r'<div\b[^>]*\bclass\s*=\s*["\']?header["\']?[^>]*>[\s\S]*?</div\s*>',
-                                        "",
-                                        native_q or "",
-                                        flags=re.I,
-                                    )
-                                )
-                                if resolved_q:
-                                    sfld_map[rep_cid] = resolved_q
-                                else:
-                                    n_obj = col.get_note(c_obj.nid) if hasattr(col, "get_note") else c_obj.note()
-                                    sfld_map[rep_cid] = plain_text_of(str(getattr(n_obj, "sfld", "") or "")) or empty_title
-                            except Exception:
-                                sfld_map[rep_cid] = empty_title
-            candidate_entries = self._sort_candidate_entries_from_meta(
-                candidate_entries, meta_index, sort_by, group_by_note=group_by_note
+            total_cids_count = len(cids)
+            needs_meta_filter_or_sort = (
+                difficulty_filter in ("high", "medium", "low")
+                or flag_filter_raw != "all"
+                or sort_by not in ("default", "newest")
             )
+            need_front_summary = (sort_by == "front_asc")
+            need_metrics = (
+                difficulty_filter in ("high", "medium", "low")
+                or sort_by in ("lapses_desc", "ivl_asc", "ivl_desc", "stability_asc")
+            )
+
+            # Compute facets cleanly with note-level deduplication when group_by_note=True
+            # and reuse its SQL card index scan so zero redundant queries run.
+            meta_index: Optional[Dict[str, Dict[int, Any]]] = None
+            if include_facets:
+                facet_counts, meta_index = self._compute_facet_counts(
+                    col=col,
+                    cids=cids,
+                    raw_q=raw_q,
+                    status=status,
+                    difficulty_filter=difficulty_filter,
+                    flag_filter_raw=flag_filter_raw,
+                    tag=tag,
+                    deck_id=deck_id,
+                    group_by_note=group_by_note,
+                    return_index=True,
+                    lang=lang,
+                    include_front_summary=need_front_summary,
+                )
+            else:
+                facet_counts = None
+
+            if (group_by_note or needs_meta_filter_or_sort) and meta_index is None:
+                meta_index = self._load_card_index_meta(
+                    col,
+                    cids,
+                    lang=lang,
+                    include_front_summary=need_front_summary,
+                    include_tags=False,
+                    include_metrics=need_metrics,
+                )
+
+            if group_by_note:
+                candidate_groups = self._group_cids_by_note(cids, meta_index)
+                candidate_entries = [
+                    (self._pick_representative_cid(grp, meta_index), grp)
+                    for _, grp in candidate_groups
+                ]
+            else:
+                candidate_entries = [(int(cid), [int(cid)]) for cid in cids]
+
+            # Pre-filter difficulty & flag purely from the lightweight SQL index before
+            # slicing/serializing, so large collections never serialize non-page cards.
+            if meta_index is not None and (
+                difficulty_filter in ("high", "medium", "low") or flag_filter_raw != "all"
+            ):
+                diff_map = meta_index["diff"]
+                flags_map = meta_index["flags"]
+                filtered_entries: List[Tuple[int, List[int]]] = []
+                target_flag = int(flag_filter_raw) if flag_filter_raw in ("0", "1", "2", "3", "4", "5", "6", "7") else None
+                for rep_cid, grp in candidate_entries:
+                    if group_by_note and len(grp) > 1:
+                        entry_diff, entry_flag, _ = self._note_group_facets(grp, meta_index)
+                    else:
+                        entry_diff = diff_map.get(rep_cid, "medium")
+                        entry_flag = flags_map.get(rep_cid, 0) & 7
+                    if difficulty_filter in ("high", "medium", "low") and entry_diff != difficulty_filter:
+                        continue
+                    if flag_filter_raw == "flagged" and entry_flag <= 0:
+                        continue
+                    if target_flag is not None and entry_flag != target_flag:
+                        continue
+                    filtered_entries.append((rep_cid, grp))
+                candidate_entries = filtered_entries
+
+            # Pre-sort all sort modes from the SQL index before slicing to `limit`.
+            if sort_by == "newest":
+                candidate_entries.sort(key=lambda entry: -int(entry[0]))
+            elif sort_by != "default" and meta_index is not None:
+                if sort_by == "front_asc":
+                    sfld_map = meta_index.get("sfld")
+                    if sfld_map is not None:
+                        empty_title = "未命名" if lang == "zh-CN" else "Untitled"
+                        for rep_cid, _ in candidate_entries:
+                            if not sfld_map.get(rep_cid):
+                                try:
+                                    c_obj = col.get_card(int(rep_cid))
+                                    native_q = render_native_card_sides(c_obj, media_dir).question
+                                    resolved_q = plain_text_of(
+                                        re.sub(
+                                            r'<div\b[^>]*\bclass\s*=\s*["\']?header["\']?[^>]*>[\s\S]*?</div\s*>',
+                                            "",
+                                            native_q or "",
+                                            flags=re.I,
+                                        )
+                                    )
+                                    if resolved_q:
+                                        sfld_map[rep_cid] = resolved_q
+                                    else:
+                                        n_obj = col.get_note(c_obj.nid) if hasattr(col, "get_note") else c_obj.note()
+                                        sfld_map[rep_cid] = plain_text_of(str(getattr(n_obj, "sfld", "") or "")) or empty_title
+                                except Exception:
+                                    sfld_map[rep_cid] = empty_title
+                candidate_entries = self._sort_candidate_entries_from_meta(
+                    candidate_entries, meta_index, sort_by, group_by_note=group_by_note
+                )
+
+            if cache_key is not None:
+                # Drop entries for older collection signatures immediately so RAM stays bounded.
+                stale_keys = [
+                    k for k, v in self._candidate_cache.items()
+                    if k[0] != col_sig or (now_mono - v[0]) > self._candidate_cache_ttl
+                ]
+                for k in stale_keys:
+                    self._candidate_cache.pop(k, None)
+                if len(self._candidate_cache) >= self._candidate_cache_max and cache_key not in self._candidate_cache:
+                    oldest_key = min(self._candidate_cache.items(), key=lambda kv: kv[1][0])[0]
+                    self._candidate_cache.pop(oldest_key, None)
+                self._candidate_cache[cache_key] = (
+                    now_mono,
+                    total_cids_count,
+                    collection_total,
+                    candidate_entries,
+                )
 
         total_filtered = len(candidate_entries)
         page_entries = candidate_entries[offset : offset + limit]
@@ -267,10 +376,14 @@ class SearchService:
                 item["dueText"] = "今日已完成" if lang == "zh-CN" else "Completed Today"
             cards_out.append(item)
 
-        all_tags = list(col.tags.all()) if hasattr(col, "tags") else []
+        all_tags = (
+            []
+            if (offset > 0 and not include_facets)
+            else (list(col.tags.all()) if hasattr(col, "tags") else [])
+        )
 
         return {
-            "total": len(cids),
+            "total": total_cids_count,
             "collectionTotal": collection_total,
             "filteredCount": total_filtered,
             "facetCounts": facet_counts,
@@ -529,7 +642,13 @@ class SearchService:
         return meta_by_mid
 
     def _load_card_index_meta(
-        self, col, fallback_cids: List[int], lang: str = "zh-CN"
+        self,
+        col,
+        fallback_cids: List[int],
+        lang: str = "zh-CN",
+        include_front_summary: bool = True,
+        include_tags: bool = True,
+        include_metrics: bool = True,
     ) -> Dict[str, Dict[int, Any]]:
         """Loads per-card index/facet/sort metadata in a single SQL scan."""
         nid_by_cid: Dict[int, int] = {}
@@ -552,12 +671,81 @@ class SearchService:
 
         if not hasattr(col, "_cards") and hasattr(col, "db") and hasattr(col.db, "all"):
             try:
-                rows = col.db.all(
-                    "SELECT c.id, c.nid, c.ord, c.type, c.queue, c.due, c.ivl, c.reps, "
-                    "c.lapses, c.flags, c.data, n.tags, n.sfld, c.did, n.flds, n.mid "
-                    "FROM cards c LEFT JOIN notes n ON c.nid = n.id"
-                )
-                model_front_meta = self._build_model_front_meta(col)
+                if not include_front_summary and not include_tags and not include_metrics:
+                    rows = col.db.all(
+                        "SELECT id, nid, ord, type, queue, due, flags, did FROM cards"
+                    )
+                    for row in rows:
+                        cid = int(row[0])
+                        nid = int(row[1] or cid)
+                        ord_val = int(row[2] or 0)
+                        ctype_val = int(row[3] or 0)
+                        queue_val = int(row[4] or 0)
+                        due_val = int(row[5] or 0)
+                        if due_val > 2147483647 or due_val < -2147483648:
+                            due_val = 0
+                        flags_val = int(row[6] or 0) & 7
+                        did_val = int(row[7] or 1)
+                        nid_by_cid[cid] = nid
+                        did_by_cid[cid] = did_val
+                        ord_by_cid[cid] = ord_val
+                        due_by_cid[cid] = due_val
+                        flags_by_cid[cid] = flags_val
+                        bucket = note_cids_by_nid.get(nid)
+                        if bucket is None:
+                            note_cids_by_nid[nid] = [cid]
+                        else:
+                            bucket.append(cid)
+                        if queue_val == -1:
+                            st_val = "suspended"
+                        elif queue_val == -2 or queue_val == -3:
+                            st_val = "buried"
+                        elif ctype_val == 0 or queue_val == 0:
+                            st_val = "new"
+                        elif queue_val == 1 or queue_val == 3 or (queue_val == 2 and due_val <= today):
+                            st_val = "due"
+                        else:
+                            st_val = "review"
+                        status_by_cid[cid] = st_val
+                    return {
+                        "nid": nid_by_cid,
+                        "did": did_by_cid,
+                        "ord": ord_by_cid,
+                        "due": due_by_cid,
+                        "ivl": ivl_by_cid,
+                        "lapses": lapses_by_cid,
+                        "stability": stability_by_cid,
+                        "mastery": mastery_by_cid,
+                        "status": status_by_cid,
+                        "diff": diff_by_cid,
+                        "flags": flags_by_cid,
+                        "tags": tags_by_cid,
+                        "sfld": sfld_by_cid,
+                        "note_cids": note_cids_by_nid,
+                    }
+
+                if include_front_summary:
+                    rows = col.db.all(
+                        "SELECT c.id, c.nid, c.ord, c.type, c.queue, c.due, c.ivl, c.reps, "
+                        "c.lapses, c.flags, c.data, n.tags, n.sfld, c.did, n.flds, n.mid "
+                        "FROM cards c LEFT JOIN notes n ON c.nid = n.id"
+                    )
+                    model_front_meta = self._build_model_front_meta(col)
+                elif include_tags:
+                    rows = col.db.all(
+                        "SELECT c.id, c.nid, c.ord, c.type, c.queue, c.due, c.ivl, c.reps, "
+                        "c.lapses, c.flags, c.data, n.tags, NULL, c.did "
+                        "FROM cards c LEFT JOIN notes n ON c.nid = n.id"
+                    )
+                    model_front_meta = {}
+                else:
+                    rows = col.db.all(
+                        "SELECT id, nid, ord, type, queue, due, ivl, reps, "
+                        "lapses, flags, data, NULL, NULL, did "
+                        "FROM cards"
+                    )
+                    model_front_meta = {}
+
                 fsrs_d_search = _FSRS_D_RE.search
                 fsrs_s_search = _FSRS_S_RE.search
                 cloze_search = CLOZE_RE.search
@@ -635,42 +823,44 @@ class SearchService:
                     else:
                         diff_by_cid[cid] = "low"
                     flags_by_cid[cid] = flags_val
-                    tags_by_cid[cid] = tags_raw.split() if tags_raw else empty_tags
+                    if include_tags:
+                        tags_by_cid[cid] = tags_raw.split() if tags_raw else empty_tags
 
-                    front_summary = ""
-                    if flds_raw is not None:
-                        parts = str(flds_raw).split("\x1f")
-                        m_info = model_front_meta.get(mid_val)
-                        if (
-                            m_info
-                            and m_info["is_io"]
-                            and m_info["img_idx"] < len(parts)
-                            and m_info["occ_idx"] < len(parts)
-                            and parts[m_info["img_idx"]].strip()
-                            and parts[m_info["occ_idx"]]
-                        ):
-                            hdr_idx = m_info["hdr_idx"]
-                            hdr_raw = parts[hdr_idx] if hdr_idx is not None and hdr_idx < len(parts) else ""
-                            front_summary = plain_text_of(hdr_raw) if hdr_raw else ""
-                            if not front_summary:
-                                front_summary = empty_io_title
-                        else:
-                            pick_idx = (
-                                m_info["ord_front_idx"].get(ord_val, m_info["front_idx"])
-                                if m_info
-                                else 0
-                            )
-                            raw_front = parts[pick_idx] if pick_idx < len(parts) else ""
-                            if m_info and m_info["is_cloze"] and not cloze_search(raw_front):
-                                for part_val in parts:
-                                    if cloze_search(part_val):
-                                        raw_front = part_val
-                                        break
-                            if raw_front:
-                                front_summary = plain_text_of(raw_front)
-                    elif sfld_raw:
-                        front_summary = plain_text_of(str(sfld_raw))
-                    sfld_by_cid[cid] = front_summary
+                    if include_front_summary:
+                        front_summary = ""
+                        if flds_raw is not None:
+                            parts = str(flds_raw).split("\x1f")
+                            m_info = model_front_meta.get(mid_val)
+                            if (
+                                m_info
+                                and m_info["is_io"]
+                                and m_info["img_idx"] < len(parts)
+                                and m_info["occ_idx"] < len(parts)
+                                and parts[m_info["img_idx"]].strip()
+                                and parts[m_info["occ_idx"]]
+                            ):
+                                hdr_idx = m_info["hdr_idx"]
+                                hdr_raw = parts[hdr_idx] if hdr_idx is not None and hdr_idx < len(parts) else ""
+                                front_summary = plain_text_of(hdr_raw) if hdr_raw else ""
+                                if not front_summary:
+                                    front_summary = empty_io_title
+                            else:
+                                pick_idx = (
+                                    m_info["ord_front_idx"].get(ord_val, m_info["front_idx"])
+                                    if m_info
+                                    else 0
+                                )
+                                raw_front = parts[pick_idx] if pick_idx < len(parts) else ""
+                                if m_info and m_info["is_cloze"] and not cloze_search(raw_front):
+                                    for part_val in parts:
+                                        if cloze_search(part_val):
+                                            raw_front = part_val
+                                            break
+                                if raw_front:
+                                    front_summary = plain_text_of(raw_front)
+                        elif sfld_raw:
+                            front_summary = plain_text_of(str(sfld_raw))
+                        sfld_by_cid[cid] = front_summary
                 return {
                     "nid": nid_by_cid,
                     "did": did_by_cid,
@@ -813,6 +1003,7 @@ class SearchService:
         group_by_note: bool = True,
         return_index: bool = False,
         lang: str = "zh-CN",
+        include_front_summary: bool = True,
     ) -> Any:
         """
         Computes cross-faceted dropdown counts across the entire matching Anki collection
@@ -827,7 +1018,9 @@ class SearchService:
         )
 
         if is_unfiltered_base and not hasattr(col, "_cards"):
-            meta = self._load_card_index_meta(col, cids, lang=lang)
+            meta = self._load_card_index_meta(
+                col, cids, lang=lang, include_front_summary=include_front_summary
+            )
             status_map = meta["status"]
             status_cids_by_key: Dict[str, List[int]] = {
                 "all": cids,
@@ -893,7 +1086,9 @@ class SearchService:
                 for st_cids in status_cids_by_key.values():
                     fallback_pool.extend(st_cids)
 
-            meta = self._load_card_index_meta(col, fallback_pool, lang=lang)
+            meta = self._load_card_index_meta(
+                col, fallback_pool, lang=lang, include_front_summary=include_front_summary
+            )
         diff_by_cid = meta["diff"]
         flags_by_cid = meta["flags"]
         tags_by_cid = meta["tags"]
@@ -1290,6 +1485,7 @@ class SearchService:
                     col.update_notes(notes_to_update)
                 except Exception:
                     pass
+            self.invalidate_cache()
             return {
                 "success": True,
                 "affected": len(card_ids),
@@ -1333,6 +1529,7 @@ class SearchService:
                 "error": f"Unknown actionType: {action_type}",
             }
 
+        self.invalidate_cache()
         return {
             "success": True,
             "affected": len(card_ids),

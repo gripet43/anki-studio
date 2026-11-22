@@ -716,6 +716,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 "autoPlayBackAudio": False,
                 "reviewStageWidth": "wide",
                 "reviewContentScale": 130,
+                "reviewDockPosition": "side",
                 "zenSoundEnabled": False,
                 "zenSfxVolume": 0.35,
                 "zenAmbienceVolume": 0.65,
@@ -735,6 +736,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertFalse(prefs_res["data"]["preferences"]["autoPlayBackAudio"])
         self.assertEqual(prefs_res["data"]["preferences"]["reviewStageWidth"], "wide")
         self.assertEqual(prefs_res["data"]["preferences"]["reviewContentScale"], 130)
+        self.assertEqual(prefs_res["data"]["preferences"]["reviewDockPosition"], "side")
         self.assertFalse(prefs_res["data"]["preferences"]["zenSoundEnabled"])
         self.assertEqual(prefs_res["data"]["preferences"]["zenSfxVolume"], 0.35)
         self.assertEqual(prefs_res["data"]["preferences"]["zenAmbienceVolume"], 0.65)
@@ -752,6 +754,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertFalse(get_prefs["data"]["autoPlayBackAudio"])
         self.assertEqual(get_prefs["data"]["reviewStageWidth"], "wide")
         self.assertEqual(get_prefs["data"]["reviewContentScale"], 130)
+        self.assertEqual(get_prefs["data"]["reviewDockPosition"], "side")
         self.assertFalse(get_prefs["data"]["zenSoundEnabled"])
         self.assertEqual(get_prefs["data"]["zenSfxVolume"], 0.35)
         self.assertEqual(get_prefs["data"]["zenAmbienceVolume"], 0.65)
@@ -765,6 +768,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertTrue(dash_prefs["autoPlayFrontAudio"])
         self.assertFalse(dash_prefs["autoPlayBackAudio"])
         self.assertTrue(dash_prefs["continuousCardCreation"])
+        self.assertEqual(dash_prefs["reviewDockPosition"], "side")
         self.assertFalse(dash_prefs["zenSoundEnabled"])
         self.assertEqual(dash_prefs["zenSfxVolume"], 0.35)
         self.assertEqual(dash_prefs["zenAmbienceVolume"], 0.65)
@@ -785,6 +789,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 "autoPlayBackAudio": "1",
                 "reviewStageWidth": "invalid-width",
                 "reviewContentScale": 999,
+                "reviewDockPosition": "invalid-pos",
             },
         )
         self.assertEqual(fallback_res["data"]["preferences"]["theme"], "auto")
@@ -792,6 +797,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertTrue(fallback_res["data"]["preferences"]["autoPlayBackAudio"])
         self.assertEqual(fallback_res["data"]["preferences"]["reviewStageWidth"], "auto")
         self.assertEqual(fallback_res["data"]["preferences"]["reviewContentScale"], 100)
+        self.assertEqual(fallback_res["data"]["preferences"]["reviewDockPosition"], "bottom")
 
         batch_unsuspend = self._call("batch_action", {"actionType": "unsuspend", "cardIds": ["201"]})
         self.assertEqual(batch_unsuspend["status"], "success")
@@ -4715,6 +4721,141 @@ class BridgeRouterAuditTest(unittest.TestCase):
             self.assertEqual(facets_all["deckCounts"].get("21"), 2)
         finally:
             db.conn.close()
+
+    def test_54_search_cards_pagination_cache_and_invalidation(self):
+        """Pagination (offset>0, includeFacets=False) must reuse cached sorted candidates and invalidate cleanly on mutation."""
+        import sqlite3
+        from anki_modern_os.bridge.search_service import SearchService
+
+        conn = sqlite3.connect(":memory:")
+        conn.execute("CREATE TABLE col (id INTEGER PRIMARY KEY, mod INTEGER)")
+        conn.execute("INSERT INTO col VALUES (1, 1000)")
+        conn.execute(
+            "CREATE TABLE notes (id INTEGER PRIMARY KEY, mid INTEGER, mod INTEGER, tags TEXT, flds TEXT, sfld TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE cards (id INTEGER PRIMARY KEY, nid INTEGER, did INTEGER, ord INTEGER, mod INTEGER, "
+            "type INTEGER, queue INTEGER, due INTEGER, ivl INTEGER, reps INTEGER, lapses INTEGER, flags INTEGER, data TEXT)"
+        )
+        for i in range(1, 7):
+            nid = 100 + i
+            cid = 500 + i
+            conn.execute(
+                "INSERT INTO notes VALUES (?, 1, ?, ' vocab ', ?, ?)",
+                (nid, 2000 + i, f"Front {i}\x1fBack {i}", f"Front {i}"),
+            )
+            conn.execute(
+                "INSERT INTO cards VALUES (?, ?, 1, 0, ?, 2, 2, ?, 10, 2, 0, 0, '')",
+                (cid, nid, 2000 + i, 10 + i),
+            )
+        conn.commit()
+
+        find_calls = []
+        index_sql_calls = []
+
+        class _Db:
+            def all(self, sql, *args):
+                if "FROM cards" in sql and "SELECT" in sql and "WHERE" not in sql:
+                    index_sql_calls.append(sql)
+                return conn.execute(sql, args).fetchall()
+
+            def first(self, sql, *args):
+                return conn.execute(sql, args).fetchone()
+
+            def scalar(self, sql, *args):
+                r = conn.execute(sql, args).fetchone()
+                return r[0] if r else None
+
+        class _Col:
+            def __init__(self):
+                self.db = _Db()
+                self.sched = SimpleNamespace(today=20)
+                self.decks = SimpleNamespace(
+                    get=lambda did, default=False: {"id": int(did), "name": "Default"},
+                    all=lambda: [{"id": 1, "name": "Default"}],
+                )
+                self.models = SimpleNamespace(
+                    all=lambda: [
+                        {
+                            "id": 1,
+                            "name": "Basic",
+                            "type": 0,
+                            "flds": [{"name": "Front"}, {"name": "Back"}],
+                            "tmpls": [{"name": "Card 1", "qfmt": "{{Front}}", "afmt": "{{Back}}"}],
+                        }
+                    ],
+                    get=lambda mid: {
+                        "id": 1,
+                        "name": "Basic",
+                        "type": 0,
+                        "flds": [{"name": "Front"}, {"name": "Back"}],
+                        "tmpls": [{"name": "Card 1", "qfmt": "{{Front}}", "afmt": "{{Back}}"}],
+                    },
+                )
+                self.tags = SimpleNamespace(all=lambda: ["vocab"])
+
+            def find_cards(self, query):
+                find_calls.append(query)
+                if query == "rated:1":
+                    return []
+                return [r[0] for r in conn.execute("SELECT id FROM cards ORDER BY id ASC").fetchall()]
+
+            def get_card(self, cid):
+                r = conn.execute(
+                    "SELECT id, nid, did, ord, type, queue, due, ivl, reps, lapses, flags FROM cards WHERE id = ?",
+                    (int(cid),),
+                ).fetchone()
+                nr = conn.execute("SELECT flds, tags, sfld FROM notes WHERE id = ?", (r[1],)).fetchone()
+                flds = nr[0].split("\x1f")
+                note = MockNote(r[1], {"Front": flds[0], "Back": flds[1]}, nr[1].split(), cids=[r[0]])
+                note.sfld = nr[2]
+                c = MockCard(r[0], note, queue=r[5], ctype=r[4], due=r[6], ivl=r[7])
+                c.did = r[2]
+                c.flags = r[10]
+                return c
+
+        col = _Col()
+        svc = SearchService(col_getter=lambda: col)
+        try:
+            # Page 1 populates candidate cache and skips reading n.flds for default newest sort
+            p1 = svc.search_cards({"query": "", "offset": 0, "limit": 2, "includeFacets": True})
+            self.assertEqual([c["id"] for c in p1["cards"]], ["506", "505"])
+            self.assertEqual(p1["filteredCount"], 6)
+            self.assertTrue(p1["hasMore"])
+            self.assertTrue(index_sql_calls)
+            self.assertTrue(all("n.flds" not in sql for sql in index_sql_calls))
+
+            # Page 2 hits candidate cache: 0 find_cards calls & 0 full index scans
+            find_calls.clear()
+            index_sql_calls.clear()
+            p2 = svc.search_cards({"query": "", "offset": 2, "limit": 2, "includeFacets": False})
+            self.assertEqual([c["id"] for c in p2["cards"]], ["504", "503"])
+            self.assertEqual(p2["filteredCount"], 6)
+            self.assertTrue(p2["hasMore"])
+            self.assertEqual(find_calls, [])
+            self.assertEqual(index_sql_calls, [])
+
+            # Mutating the collection (inserting a newer card) invalidates cache automatically
+            conn.execute(
+                "INSERT INTO notes VALUES (107, 1, 3000, ' vocab ', 'Front 7\x1fBack 7', 'Front 7')"
+            )
+            conn.execute(
+                "INSERT INTO cards VALUES (507, 107, 1, 0, 3000, 2, 2, 17, 10, 2, 0, 0, '')"
+            )
+            conn.commit()
+            p2_after = svc.search_cards({"query": "", "offset": 2, "limit": 2, "includeFacets": False})
+            self.assertEqual([c["id"] for c in p2_after["cards"]], ["505", "504"])
+            self.assertEqual(p2_after["filteredCount"], 7)
+            self.assertTrue(len(find_calls) >= 1)
+            self.assertTrue(len(index_sql_calls) >= 1)
+            # Cold newest pagination uses ultra-lean cards-only SQL (no notes join, no n.flds)
+            self.assertNotIn("notes", index_sql_calls[-1].lower())
+
+            # front_asc sort still loads front summary and sorts alphabetically
+            p_front = svc.search_cards({"query": "", "sortBy": "front_asc", "offset": 0, "limit": 3, "includeFacets": False})
+            self.assertEqual([c["id"] for c in p_front["cards"]], ["501", "502", "503"])
+        finally:
+            conn.close()
 
 
 if __name__ == "__main__":
