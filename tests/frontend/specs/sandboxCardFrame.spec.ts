@@ -259,3 +259,210 @@ test('buildSandboxSrcDoc forwards inner vertical scroller detection and sticky h
     'sandbox wheel handler must guard mid-swipe wobble with sticky horizPreventUntil'
   );
 });
+
+test('buildSandboxSrcDoc provides anki.imageOcclusion shim supporting rect/ellipse/polygon and toggle', () => {
+  const doc = buildSandboxSrcDoc({
+    cardId: 'io-sandbox-1',
+    initialBody:
+      '<div style="display:none">' +
+      '<div class="cloze" data-ordinal="1" data-shape="rect" data-left=".0000" data-top="0.3297" data-width=".0339" data-height="0.3028" data-occludeInactive="1"></div>' +
+      '<div class="cloze-inactive" data-ordinal="2" data-shape="ellipse" data-left="0.2" data-top="0.2" data-rx="0.1" data-ry="0.05" data-occludeInactive="1"></div>' +
+      '<div class="cloze-highlight" data-ordinal="1" data-shape="polygon" data-left="0.5" data-top="0.5" data-points="0.1,0.1 0.3,0.1 0.2,0.3" data-occludeInactive="1"></div>' +
+      '</div>' +
+      '<div id="err"></div>' +
+      '<div id="image-occlusion-container"><img src="http://127.0.0.1:8975/test.jpg"><canvas id="image-occlusion-canvas"></canvas></div>' +
+      '<div><button id="toggle">切换遮罩</button></div>',
+    cssText:
+      '#image-occlusion-canvas { --active-shape-color: #ff8e8e; --inactive-shape-color: #ffeba2; --active-shape-border: 1px #212121; }',
+    isDark: false,
+    initialZoom: 1,
+  });
+
+  assert.ok(doc.includes('#image-occlusion-container'), 'sandbox must include IO container layout CSS');
+  assert.ok(doc.includes('#image-occlusion-canvas'), 'sandbox must include IO canvas overlay CSS');
+  assert.ok(doc.includes('window.anki.imageOcclusion'), 'sandbox must expose window.anki.imageOcclusion shim');
+
+  // Extract and execute the main runtime script in node:vm to guard against syntax/escape regressions
+  const scripts = Array.from(doc.matchAll(/<script>([\s\S]*?)<\/script>/g)).map((m) => m[1]);
+  const mainScript = scripts.find((s) => s.includes('window.anki.imageOcclusion'));
+  assert.ok(mainScript, 'must find main sandbox runtime script containing imageOcclusion shim');
+
+  const drawCalls: Array<{ op: string; args: unknown[]; fillStyle?: string; strokeStyle?: string }> = [];
+  const fakeCtx = {
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    font: '',
+    textBaseline: '',
+    setTransform: () => {},
+    clearRect: (...args: unknown[]) => drawCalls.push({ op: 'clearRect', args }),
+    save: () => {},
+    restore: () => {},
+    translate: () => {},
+    rotate: () => {},
+    scale: () => {},
+    fillRect: (...args: unknown[]) =>
+      drawCalls.push({ op: 'fillRect', args, fillStyle: fakeCtx.fillStyle }),
+    strokeRect: (...args: unknown[]) =>
+      drawCalls.push({ op: 'strokeRect', args, strokeStyle: fakeCtx.strokeStyle }),
+    beginPath: () => {},
+    ellipse: (...args: unknown[]) => drawCalls.push({ op: 'ellipse', args }),
+    moveTo: () => {},
+    lineTo: (...args: unknown[]) => drawCalls.push({ op: 'lineTo', args }),
+    closePath: () => {},
+    fill: () => drawCalls.push({ op: 'fill', args: [], fillStyle: fakeCtx.fillStyle }),
+    stroke: () => drawCalls.push({ op: 'stroke', args: [], strokeStyle: fakeCtx.strokeStyle }),
+    measureText: () => ({ width: 20 }),
+    fillText: () => {},
+  };
+
+  const fakeImg = {
+    complete: true,
+    naturalWidth: 1000,
+    naturalHeight: 500,
+    clientWidth: 1000,
+    clientHeight: 500,
+    addEventListener: () => {},
+  };
+  const fakeCanvas = {
+    width: 0,
+    height: 0,
+    clientWidth: 1000,
+    clientHeight: 500,
+    getContext: () => fakeCtx,
+  };
+  const toggleListeners: Array<() => void> = [];
+  const toggleAttrs: Record<string, string> = {};
+  const fakeToggle = {
+    style: { display: '' },
+    getAttribute: (k: string) => toggleAttrs[k] || null,
+    setAttribute: (k: string, v: string) => {
+      toggleAttrs[k] = v;
+    },
+    addEventListener: (ev: string, fn: () => void) => {
+      if (ev === 'click') toggleListeners.push(fn);
+    },
+  };
+  const fakeErr = { innerHTML: 'stale error' };
+  const shapeNodes: Record<string, Array<{ dataset: Record<string, string> }>> = {
+    '.cloze': [
+      {
+        dataset: {
+          ordinal: '1',
+          shape: 'rect',
+          left: '.0000',
+          top: '0.3297',
+          width: '.0339',
+          height: '0.3028',
+          occludeinactive: '1',
+        },
+      },
+    ],
+    '.cloze-inactive': [
+      {
+        dataset: {
+          ordinal: '2',
+          shape: 'ellipse',
+          left: '0.2',
+          top: '0.2',
+          rx: '0.1',
+          ry: '0.05',
+          occludeinactive: '1',
+        },
+      },
+    ],
+    '.cloze-highlight': [
+      {
+        dataset: {
+          ordinal: '1',
+          shape: 'polygon',
+          left: '0.5',
+          top: '0.5',
+          points: '0.1,0.1 0.3,0.1 0.2,0.3',
+          occludeinactive: '1',
+        },
+      },
+    ],
+  };
+
+  const fakeWindow: Record<string, unknown> = {
+    devicePixelRatio: 1,
+    addEventListener: () => {},
+    getComputedStyle: () => ({
+      getPropertyValue: (prop: string) => {
+        const map: Record<string, string> = {
+          '--active-shape-color': '#ff8e8e',
+          '--inactive-shape-color': '#ffeba2',
+          '--highlight-shape-color': '#ff8e8e00',
+          '--active-shape-border': '1px #212121',
+          '--inactive-shape-border': '1px #212121',
+          '--highlight-shape-border': '1px #ff8e8e',
+        };
+        return map[prop] || '';
+      },
+    }),
+  };
+  const fakeDocument = {
+    body: { scrollHeight: 500, offsetHeight: 500 },
+    documentElement: { scrollHeight: 500 },
+    getElementById: (id: string) => {
+      if (id === 'image-occlusion-canvas') return fakeCanvas;
+      if (id === 'image-occlusion-container') return { querySelector: () => fakeImg };
+      if (id === 'toggle') return fakeToggle;
+      if (id === 'err') return fakeErr;
+      if (id === 'qa') return { scrollHeight: 500, offsetHeight: 500, style: {}, getBoundingClientRect: () => ({ height: 500 }) };
+      return null;
+    },
+    querySelector: (sel: string) => (sel === '[data-occludeinactive="1"]' ? shapeNodes['.cloze'][0] : null),
+    querySelectorAll: (sel: string) => shapeNodes[sel] || [],
+    addEventListener: () => {},
+  };
+
+  const ctx = vm.createContext({
+    window: fakeWindow,
+    document: fakeDocument,
+    parent: { postMessage: () => {} },
+    requestAnimationFrame: (fn: () => void) => fn(),
+    setTimeout: () => 0,
+    Array,
+    Object,
+    String,
+    Number,
+    Math,
+    Boolean,
+    Date,
+    RegExp,
+    parseFloat,
+    parseInt,
+    isNaN,
+  });
+  vm.runInContext(mainScript, ctx);
+
+  const ankiObj = fakeWindow.anki as { imageOcclusion: { setup: () => void } };
+  assert.ok(ankiObj && ankiObj.imageOcclusion && typeof ankiObj.imageOcclusion.setup === 'function');
+  ankiObj.imageOcclusion.setup();
+
+  assert.equal(fakeErr.innerHTML, '', 'setup() must clear any #err content');
+  assert.equal(fakeCanvas.width, 1000);
+  assert.equal(fakeCanvas.height, 500);
+  const fillRect = drawCalls.find((c) => c.op === 'fillRect');
+  assert.ok(fillRect, 'must draw active rect mask');
+  assert.equal(fillRect.fillStyle, '#ff8e8e');
+  assert.equal(Number((fillRect.args[0] as number).toFixed(2)), 0);
+  assert.equal(Number((fillRect.args[1] as number).toFixed(2)), 164.85);
+  assert.equal(Number((fillRect.args[2] as number).toFixed(2)), 33.9);
+  assert.equal(Number((fillRect.args[3] as number).toFixed(2)), 151.4);
+  assert.ok(drawCalls.some((c) => c.op === 'ellipse'), 'must draw inactive ellipse mask');
+  assert.ok(drawCalls.some((c) => c.op === 'lineTo'), 'must draw highlight polygon mask');
+
+  // Clicking #toggle hides masks and clears canvas; clicking again restores masks
+  assert.equal(toggleListeners.length, 1);
+  drawCalls.length = 0;
+  toggleListeners[0]();
+  assert.ok(drawCalls.some((c) => c.op === 'clearRect'));
+  assert.equal(drawCalls.some((c) => c.op === 'fillRect'), false, 'toggle off must hide rect masks');
+
+  drawCalls.length = 0;
+  toggleListeners[0]();
+  assert.ok(drawCalls.some((c) => c.op === 'fillRect'), 'toggle back on must redraw rect masks');
+});

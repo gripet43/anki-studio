@@ -506,6 +506,8 @@ def write_profile_scoped_config(
         next_raw.pop(key, None)
 
     updates = new_cfg or {}
+    if "support_prompt" in updates:
+        next_raw.pop("support_prompt_status", None)
     profile_updates: Dict[str, Any] = {}
     for k, v in updates.items():
         if k in (PROFILE_STATES_KEY, LEGACY_UNSCOPED_KEY):

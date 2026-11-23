@@ -49,8 +49,8 @@
   禅模式仪式音效与背景环境声景的独立音量。
 - `zen_ambience`：`"silent"` | `"rain"` | `"wind"` | `"warmth"`（默认 `"silent"`）
   禅模式可选离线环境声景（静默 / 檐雨 / 松风 / 暖寂），退出禅模式时淡出、再次进入时自动恢复。
-- `support_prompt_status`：`"idle"` | `"liked"` | `"feedback"` | `"dismissed"`（默认 `"idle"`）
-  复习完成页支持提示的一次性状态（全局生效、跨账号共享）；交互或关闭后自动写入，不再重复打扰。
+- `support_prompt`：`{"status": "idle", "prompt_count": 0, "last_prompted_at": 0, "last_version": ""}`
+  AnkiWeb 支持引导弹窗的全局状态（跨所有 Anki 用户档案共享，含 `status` / `prompt_count` / `last_prompted_at` / `last_version`）；记录用户确认已赞、不再提醒、冷却重提（最多 3 次）或问题反馈迁移版本触发条件。
 
 ## 匿名使用统计（可选）
 

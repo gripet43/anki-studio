@@ -844,12 +844,15 @@ class ReviewService:
                 )
                 style_m = STYLE_ATTR_RE.search(attrs_str or "")
                 pos_style = style_m.group(2).strip().rstrip(";") if style_m else "position:absolute"
+                is_ellipse = 'data-io-shape="ellipse"' in (attrs_str or "")
+                radius_css = "50%" if is_ellipse else "6px"
                 if is_question_side:
                     if c_num == target_idx:
                         return (
                             f'<span class="anki-io-rect-resolved anki-io-target" data-io-rect="{c_num}" '
-                            f'style="{pos_style};background:#F59E0B;border:2px solid #FFFFFF;'
-                            f'box-shadow:0 4px 14px rgba(245,158,11,0.45);border-radius:6px;'
+                            f'style="{pos_style};box-sizing:border-box;overflow:hidden;white-space:nowrap;'
+                            f'background:#F59E0B;border:2px solid #FFFFFF;'
+                            f'box-shadow:0 4px 14px rgba(245,158,11,0.45);border-radius:{radius_css};'
                             f'display:flex;align-items:center;justify-content:center;color:#FFFFFF;'
                             f'font-size:11px;font-weight:800;line-height:1;user-select:none;z-index:3;">'
                             f'? #{c_num}</span>'
@@ -857,29 +860,31 @@ class ReviewService:
                     if io_mode == "hide-all":
                         return (
                             f'<span class="anki-io-rect-resolved anki-io-masked" data-io-rect="{c_num}" '
-                            f'style="{pos_style};background:#334155;border:1.5px solid rgba(255,255,255,0.65);'
-                            f'border-radius:6px;display:flex;align-items:center;justify-content:center;'
+                            f'style="{pos_style};box-sizing:border-box;overflow:hidden;white-space:nowrap;'
+                            f'background:#334155;border:1.5px solid rgba(255,255,255,0.65);'
+                            f'border-radius:{radius_css};display:flex;align-items:center;justify-content:center;'
                             f'color:rgba(255,255,255,0.78);font-size:10px;font-weight:700;line-height:1;'
                             f'user-select:none;z-index:2;">#{c_num}</span>'
                         )
                     return (
                         f'<span class="anki-io-rect-resolved anki-io-hidden" data-io-rect="{c_num}" '
-                        f'style="{pos_style};opacity:0;pointer-events:none;"></span>'
+                        f'style="{pos_style};box-sizing:border-box;opacity:0;pointer-events:none;"></span>'
                     )
                 else:
                     if c_num == target_idx:
                         return (
                             f'<span class="anki-io-rect-resolved anki-io-revealed" data-io-rect="{c_num}" '
-                            f'style="{pos_style};background:rgba(16,185,129,0.16);border:2px solid #10B981;'
-                            f'box-shadow:0 0 0 2px rgba(16,185,129,0.22);border-radius:6px;pointer-events:none;z-index:3;">'
+                            f'style="{pos_style};box-sizing:border-box;overflow:hidden;'
+                            f'background:rgba(16,185,129,0.16);border:2px solid #10B981;'
+                            f'box-shadow:0 0 0 2px rgba(16,185,129,0.22);border-radius:{radius_css};pointer-events:none;z-index:3;">'
                             f'<span style="position:absolute;top:-1px;left:-1px;background:#10B981;color:#FFFFFF;'
                             f'font-size:9px;font-weight:700;padding:1px 4px;border-radius:4px 0 4px 0;line-height:1.1;">'
                             f'#{c_num}</span></span>'
                         )
                     return (
                         f'<span class="anki-io-rect-resolved anki-io-other" data-io-rect="{c_num}" '
-                        f'style="{pos_style};background:transparent;border:1px dashed rgba(148,163,184,0.55);'
-                        f'border-radius:6px;pointer-events:none;z-index:1;"></span>'
+                        f'style="{pos_style};box-sizing:border-box;background:transparent;border:1px dashed rgba(148,163,184,0.55);'
+                        f'border-radius:{radius_css};pointer-events:none;z-index:1;"></span>'
                     )
 
             processed = IO_RECT_SPAN_RE.sub(_io_rect_replacer, processed)
@@ -1478,6 +1483,8 @@ class ReviewService:
             fields_dict.get("提示")
             or fields_dict.get("Hint")
             or fields_dict.get("Back Extra")
+            or fields_dict.get("背面额外")
+            or fields_dict.get("背面額外")
             or ""
         )
         reading_raw = (

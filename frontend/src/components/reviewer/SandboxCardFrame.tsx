@@ -319,6 +319,26 @@ export function buildSandboxSrcDoc({
   a img, button img, [onclick] img {
     cursor: pointer;
   }
+  #image-occlusion-container {
+    position: relative;
+    display: inline-block;
+    margin: 0 auto;
+    max-width: 100%;
+    line-height: 0;
+  }
+  #image-occlusion-container img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+  #image-occlusion-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
   ${clozeFallbackCss}
   .cloze-inactive {
     font-weight: inherit;
@@ -441,6 +461,355 @@ ${preloadScriptTags}
     } catch (e) {}
   };
   window.ankiPlatform = 'desktop';
+
+  // Anki 原生「图片遮盖（Image Occlusion）」模板会调用 anki.imageOcclusion.setup()，
+  // 缺失时会在 #err 报错「加载图片遮盖时候出错」且不绘制任何遮罩。
+  // 这里在沙盒中提供与 Anki 26 reviewer.js 同口径的轻量 canvas 垫片，
+  // 覆盖 rect / ellipse / polygon / text、CSS 变量配色与 #toggle / M 键切换遮罩。
+  (function () {
+    var ioMasksHidden = false;
+    var ioLastOpts = null;
+    var ioKeyBound = false;
+    var ioResizeObserver = null;
+
+    function parseBorderSpec(raw, fallbackWidth, fallbackColor) {
+      var parts = String(raw || '').trim().split(/\\s+/).filter(Boolean);
+      var w = parts.length > 0 ? parseFloat(parts[0]) : NaN;
+      var c = parts.length > 1 ? parts.slice(1).join(' ') : '';
+      return {
+        width: isNaN(w) ? fallbackWidth : w,
+        color: c || fallbackColor
+      };
+    }
+
+    function readIoProperties(canvas) {
+      var fallback = {
+        activeShapeColor: '#ff8e8e',
+        inActiveShapeColor: '#ffeba2',
+        highlightShapeColor: '#ff8e8e00',
+        activeBorder: { width: 1, color: '#212121' },
+        inActiveBorder: { width: 1, color: '#212121' },
+        highlightShapeBorder: { width: 1, color: '#ff8e8e' }
+      };
+      if (!canvas) return fallback;
+      try {
+        var cs = window.getComputedStyle(canvas);
+        var activeColor = (cs.getPropertyValue('--active-shape-color') || '').trim();
+        var inactiveColor = (cs.getPropertyValue('--inactive-shape-color') || '').trim();
+        var highlightColor = (cs.getPropertyValue('--highlight-shape-color') || '').trim();
+        return {
+          activeShapeColor: activeColor || fallback.activeShapeColor,
+          inActiveShapeColor: inactiveColor || fallback.inActiveShapeColor,
+          highlightShapeColor: highlightColor || fallback.highlightShapeColor,
+          activeBorder: parseBorderSpec(cs.getPropertyValue('--active-shape-border'), 1, '#212121'),
+          inActiveBorder: parseBorderSpec(cs.getPropertyValue('--inactive-shape-border'), 1, '#212121'),
+          highlightShapeBorder: parseBorderSpec(cs.getPropertyValue('--highlight-shape-border'), 1, '#ff8e8e')
+        };
+      } catch (e) {
+        return fallback;
+      }
+    }
+
+    function parseIoShape(el) {
+      if (!el || !el.dataset) return null;
+      var kind = String(el.dataset.shape || '').toLowerCase();
+      if (kind !== 'rect' && kind !== 'ellipse' && kind !== 'polygon' && kind !== 'text') {
+        return null;
+      }
+      var left = parseFloat(el.dataset.left);
+      var top = parseFloat(el.dataset.top);
+      var angle = parseFloat(el.dataset.angle);
+      var base = {
+        kind: kind,
+        occludeInactive: el.dataset.occludeinactive === '1',
+        ordinal: parseInt(el.dataset.ordinal || '1', 10) || 1,
+        left: isNaN(left) ? 0 : left,
+        top: isNaN(top) ? 0 : top,
+        angle: isNaN(angle) ? 0 : angle,
+        fill: el.dataset.fill || ''
+      };
+      if (kind === 'rect') {
+        base.width = parseFloat(el.dataset.width) || 0;
+        base.height = parseFloat(el.dataset.height) || 0;
+        return base.width > 0 && base.height > 0 ? base : null;
+      }
+      if (kind === 'ellipse') {
+        base.rx = parseFloat(el.dataset.rx) || 0;
+        base.ry = parseFloat(el.dataset.ry) || 0;
+        return base.rx > 0 && base.ry > 0 ? base : null;
+      }
+      if (kind === 'polygon') {
+        var pts = String(el.dataset.points || '')
+          .trim()
+          .split(/\\s+/)
+          .map(function (pair) {
+            var seg = pair.split(',');
+            return { x: parseFloat(seg[0]), y: parseFloat(seg[1]) };
+          })
+          .filter(function (pt) {
+            return !isNaN(pt.x) && !isNaN(pt.y);
+          });
+        if (pts.length < 3) return null;
+        base.points = pts;
+        return base;
+      }
+      base.text = String(el.dataset.text || '');
+      base.scaleX = parseFloat(el.dataset.scale) || 1;
+      base.scaleY = base.scaleX;
+      base.fontSize = parseFloat(el.dataset.fontSize) || 0;
+      return base;
+    }
+
+    function collectIoShapes(selector) {
+      var nodes = Array.prototype.slice.call(document.querySelectorAll(selector));
+      var out = [];
+      for (var i = 0; i < nodes.length; i++) {
+        var parsed = parseIoShape(nodes[i]);
+        if (parsed) out.push(parsed);
+      }
+      return out;
+    }
+
+    function drawIoShape(params) {
+      var ctx = params.context;
+      var size = params.size;
+      var shape = params.shape;
+      var fill = params.fill;
+      var stroke = params.stroke;
+      var strokeWidth = params.strokeWidth || 0;
+      if (!ctx || !size || !shape) return;
+      var left = shape.left * size.width;
+      var top = shape.top * size.height;
+      var rad = (shape.angle || 0) * Math.PI / 180;
+      ctx.save();
+      ctx.fillStyle = fill;
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = strokeWidth;
+      if (shape.kind === 'rect') {
+        var w = shape.width * size.width;
+        var h = shape.height * size.height;
+        if (rad) {
+          ctx.translate(left, top);
+          ctx.rotate(rad);
+          ctx.translate(-left, -top);
+        }
+        ctx.fillRect(left, top, w, h);
+        if (strokeWidth > 0) ctx.strokeRect(left, top, w, h);
+      } else if (shape.kind === 'ellipse') {
+        var rx = shape.rx * size.width;
+        var ry = shape.ry * size.height;
+        if (rad) {
+          ctx.translate(left, top);
+          ctx.rotate(rad);
+          ctx.translate(-left, -top);
+        }
+        ctx.beginPath();
+        ctx.ellipse(left + rx, top + ry, rx, ry, 0, 0, Math.PI * 2, false);
+        ctx.closePath();
+        ctx.fill();
+        if (strokeWidth > 0) ctx.stroke();
+      } else if (shape.kind === 'polygon' && shape.points && shape.points.length >= 3) {
+        var minX = shape.points[0].x * size.width;
+        var minY = shape.points[0].y * size.height;
+        for (var p = 1; p < shape.points.length; p++) {
+          var sx = shape.points[p].x * size.width;
+          var sy = shape.points[p].y * size.height;
+          if (sx < minX) minX = sx;
+          if (sy < minY) minY = sy;
+        }
+        ctx.translate(left - minX, top - minY);
+        ctx.beginPath();
+        ctx.moveTo(shape.points[0].x * size.width, shape.points[0].y * size.height);
+        for (var q = 1; q < shape.points.length; q++) {
+          ctx.lineTo(shape.points[q].x * size.width, shape.points[q].y * size.height);
+        }
+        ctx.closePath();
+        ctx.fill();
+        if (strokeWidth > 0) ctx.stroke();
+      } else if (shape.kind === 'text' && shape.text) {
+        var fontPx = shape.fontSize ? shape.fontSize * size.height : 16;
+        ctx.font = fontPx + 'px sans-serif';
+        ctx.textBaseline = 'top';
+        ctx.scale(shape.scaleX || 1, shape.scaleY || 1);
+        var tx = left / (shape.scaleX || 1);
+        var ty = top / (shape.scaleY || 1);
+        if (rad) {
+          ctx.translate(tx, ty);
+          ctx.rotate(rad);
+          ctx.translate(-tx, -ty);
+        }
+        var lines = shape.text.split('\\n');
+        var lineH = fontPx * 1.3;
+        var maxW = 0;
+        for (var li = 0; li < lines.length; li++) {
+          var mW = ctx.measureText(lines[li]).width;
+          if (mW > maxW) maxW = mW;
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(tx, ty, maxW + 6, lines.length * lineH + 4);
+        ctx.fillStyle = shape.fill || '#000000';
+        for (var lj = 0; lj < lines.length; lj++) {
+          ctx.fillText(lines[lj], tx + 3, ty + 2 + lj * lineH);
+        }
+      }
+      ctx.restore();
+    }
+
+    function renderIoCanvas(opts) {
+      var canvas = document.getElementById('image-occlusion-canvas');
+      var container = document.getElementById('image-occlusion-container');
+      var img = container ? container.querySelector('img') : null;
+      if (!canvas || !container || !img) return;
+      var cssW = Math.round(img.clientWidth || canvas.clientWidth || img.naturalWidth || 0);
+      var cssH = Math.round(img.clientHeight || canvas.clientHeight || img.naturalHeight || 0);
+      if (cssW <= 0 || cssH <= 0) return;
+      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      var targetW = Math.max(1, Math.round(cssW * dpr));
+      var targetH = Math.max(1, Math.round(cssH * dpr));
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+      }
+      var ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      var filterFn = function (shape) {
+        return ioMasksHidden ? shape.kind === 'text' : true;
+      };
+      var activeShapes = collectIoShapes('.cloze').filter(filterFn);
+      var inactiveShapes = collectIoShapes('.cloze-inactive').filter(filterFn);
+      var highlightShapes = collectIoShapes('.cloze-highlight').filter(filterFn);
+      var props = readIoProperties(canvas);
+      if (opts && typeof opts.onWillDrawShapes === 'function') {
+        try {
+          var patched = opts.onWillDrawShapes(
+            { activeShapes: activeShapes, inactiveShapes: inactiveShapes, highlightShapes: highlightShapes, properties: props },
+            ctx
+          );
+          if (patched) {
+            activeShapes = patched.activeShapes || activeShapes;
+            inactiveShapes = patched.inactiveShapes || inactiveShapes;
+            highlightShapes = patched.highlightShapes || highlightShapes;
+            props = patched.properties || props;
+          }
+        } catch (e) {}
+      }
+      var drawSize = { width: cssW, height: cssH };
+      for (var i = 0; i < activeShapes.length; i++) {
+        drawIoShape({
+          context: ctx,
+          size: drawSize,
+          shape: activeShapes[i],
+          fill: props.activeShapeColor,
+          stroke: props.activeBorder.color,
+          strokeWidth: props.activeBorder.width
+        });
+      }
+      for (var j = 0; j < inactiveShapes.length; j++) {
+        if (!inactiveShapes[j].occludeInactive) continue;
+        drawIoShape({
+          context: ctx,
+          size: drawSize,
+          shape: inactiveShapes[j],
+          fill: inactiveShapes[j].fill || props.inActiveShapeColor,
+          stroke: props.inActiveBorder.color,
+          strokeWidth: props.inActiveBorder.width
+        });
+      }
+      for (var k = 0; k < highlightShapes.length; k++) {
+        drawIoShape({
+          context: ctx,
+          size: drawSize,
+          shape: highlightShapes[k],
+          fill: props.highlightShapeColor,
+          stroke: props.highlightShapeBorder.color,
+          strokeWidth: props.highlightShapeBorder.width
+        });
+      }
+      if (opts && typeof opts.onDidDrawShapes === 'function') {
+        try {
+          opts.onDidDrawShapes(
+            { activeShapes: activeShapes, inactiveShapes: inactiveShapes, highlightShapes: highlightShapes, properties: props },
+            ctx
+          );
+        } catch (e) {}
+      }
+      reportHeight();
+    }
+
+    function toggleIoMasks() {
+      ioMasksHidden = !ioMasksHidden;
+      renderIoCanvas(ioLastOpts);
+    }
+
+    function setupImageOcclusion(opts) {
+      ioMasksHidden = false;
+      ioLastOpts = opts || null;
+      var errEl = document.getElementById('err');
+      if (errEl) errEl.innerHTML = '';
+
+      var toggleBtn = document.getElementById('toggle');
+      if (toggleBtn) {
+        if (document.querySelector('[data-occludeinactive="1"]')) {
+          toggleBtn.style.display = '';
+          if (!toggleBtn.getAttribute('data-anki-io-bound')) {
+            toggleBtn.setAttribute('data-anki-io-bound', '1');
+            toggleBtn.addEventListener('click', toggleIoMasks);
+          }
+        } else {
+          toggleBtn.style.display = 'none';
+        }
+      }
+      if (!ioKeyBound) {
+        ioKeyBound = true;
+        window.addEventListener('keydown', function (ev) {
+          var btn = document.getElementById('toggle');
+          if (btn && btn.style.display !== 'none' && ev.key === 'M') {
+            toggleIoMasks();
+          }
+        });
+      }
+
+      var container = document.getElementById('image-occlusion-container');
+      var img = container ? container.querySelector('img') : null;
+      if (!img) return;
+
+      var drawNow = function () {
+        requestAnimationFrame(function () {
+          renderIoCanvas(ioLastOpts);
+        });
+      };
+
+      if (typeof ResizeObserver !== 'undefined') {
+        try {
+          if (ioResizeObserver) ioResizeObserver.disconnect();
+          ioResizeObserver = new ResizeObserver(function () {
+            renderIoCanvas(ioLastOpts);
+          });
+          ioResizeObserver.observe(img);
+        } catch (e) {}
+      }
+
+      if (img.complete && img.naturalWidth > 0) {
+        drawNow();
+      } else {
+        img.addEventListener('load', drawNow, { once: true });
+        img.addEventListener('error', drawNow, { once: true });
+      }
+    }
+
+    if (!window.anki || typeof window.anki !== 'object') {
+      window.anki = {};
+    }
+    if (!window.anki.imageOcclusion) {
+      window.anki.imageOcclusion = {
+        setup: setupImageOcclusion,
+        drawShape: drawIoShape
+      };
+    }
+  })();
 
   function runScriptsIn(container) {
     if (!container) return;
@@ -684,8 +1053,12 @@ ${preloadScriptTags}
     document.addEventListener('click', function(e) {
       var clickedEl = e.target;
       var interactiveAncestor = null;
+      var inIoContainer = false;
       var walk = clickedEl;
       while (walk && walk.nodeType === 1) {
+        if (walk.id === 'image-occlusion-container') {
+          inIoContainer = true;
+        }
         var walkTag = walk.tagName;
         if (walkTag === 'A' || walkTag === 'BUTTON' || (walk.hasAttribute && walk.hasAttribute('onclick'))) {
           interactiveAncestor = walk;
@@ -693,7 +1066,7 @@ ${preloadScriptTags}
         }
         walk = walk.parentElement;
       }
-      if (clickedEl && clickedEl.tagName === 'IMG' && !interactiveAncestor) {
+      if (clickedEl && clickedEl.tagName === 'IMG' && !interactiveAncestor && !(inIoContainer && !sandboxIsFlipped)) {
         var imgSrc = clickedEl.currentSrc || clickedEl.src || '';
         if (imgSrc) {
           e.preventDefault();

@@ -520,7 +520,7 @@ class BridgeRouter:
             "zenSfxVolume": zen_sfx_volume,
             "zenAmbienceVolume": zen_ambience_volume,
             "zenAmbience": zen_ambience,
-            "supportPromptStatus": self.deck_service._normalize_support_prompt_status(cfg),
+            "supportPrompt": self.deck_service._normalize_support_prompt(cfg),
             "envInfo": self.deck_service._resolve_platform_and_version(),
         }
 
@@ -625,11 +625,19 @@ class BridgeRouter:
             patch["zen_ambience"] = (
                 scene_val if scene_val in ("silent", "rain", "wind", "warmth") else "silent"
             )
-        if "supportPromptStatus" in data:
-            status_val = str(data["supportPromptStatus"] or "idle").strip().lower()
-            patch["support_prompt_status"] = (
-                status_val if status_val in ("idle", "liked", "feedback", "dismissed") else "idle"
+        if "supportPrompt" in data:
+            norm = self.deck_service._normalize_support_prompt(
+                {"support_prompt": data["supportPrompt"] if isinstance(data["supportPrompt"], dict) else {}}
             )
+            patch["support_prompt"] = {
+                "status": norm["status"],
+                "prompt_count": norm["promptCount"],
+                "last_prompted_at": norm["lastPromptedAt"],
+                "last_version": norm["lastVersion"],
+            }
+            cur_cfg = self._get_config()
+            if isinstance(cur_cfg, dict):
+                cur_cfg.pop("support_prompt_status", None)
 
         has_avatar_update = "customAvatar" in data
         prev_avatar: Any = None
@@ -702,7 +710,7 @@ class BridgeRouter:
                 "zenSfxVolume": zen_sfx_volume,
                 "zenAmbienceVolume": zen_ambience_volume,
                 "zenAmbience": zen_ambience,
-                "supportPromptStatus": self.deck_service._normalize_support_prompt_status(saved),
+                "supportPrompt": self.deck_service._normalize_support_prompt(saved),
             },
         }
 

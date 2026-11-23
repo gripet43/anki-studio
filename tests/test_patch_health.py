@@ -342,6 +342,27 @@ class TestHostIntegrationOutsideAnki(unittest.TestCase):
         self.assertIn(report["state"], {"degraded", "unknown"})
         self.assertEqual(host.patch_health, report)
 
+    def test_anki26_non_iterable_hook_objects_report_ok(self):
+        """Anki 26 的 Hook 对象不可迭代，回调保存在 ``_hooks`` 列表中。"""
+
+        class NonIterableHook:
+            def __init__(self, callbacks):
+                self._hooks = list(callbacks)
+
+        host = FakeHost(webview=object(), visible=True)
+
+        class Anki26Hooks:
+            pass
+
+        hooks = Anki26Hooks()
+        for spec in HOOK_SPECS:
+            setattr(hooks, spec["attr"], NonIterableHook([getattr(host, spec["method"])]))
+
+        report = healthy_health(host=host, hooks=hooks, version_raw="26.09.4")
+        self.assertEqual(report["state"], "ok")
+        self.assertEqual(report["warnings"], [])
+        self.assertTrue(all(item["ok"] for item in report["hooks"]))
+
 
 if __name__ == "__main__":
     unittest.main()

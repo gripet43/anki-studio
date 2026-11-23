@@ -407,6 +407,9 @@ class MockCol:
 
     def get_note(self, nid):
         nid_int = int(nid)
+        for card in self._cards.values():
+            if int(getattr(card, "nid", -1)) == nid_int:
+                return card.note()
         if nid_int == 105:
             return self._cloze_note
         if nid_int == 102:
@@ -1993,6 +1996,161 @@ class BridgeRouterAuditTest(unittest.TestCase):
         front_hide_one = render_native_image_occlusion(hide_one)[0]
         self.assertIn('data-io-mode="hide-one"', front_hide_one)
         self.assertNotIn("oi=", front_hide_one)
+
+    def test_22b_localized_native_image_occlusion_review_search_and_edit(self):
+        """非英文界面（中文/日文/德文等）创建的 Anki 原生「图片遮盖」卡必须全链路正常渲染与识别。
+
+        真实用户回归：Anki 26 中文版创建的原生图片遮盖卡型叫「图片遮盖」，字段为
+        ``遮盖 / 图片 / 标题 / 背面额外 / 注释``，而非英文 ``Occlusion / Image / Header``。
+        """
+        from bridge.edit_service import EditService, _is_image_occlusion_model
+        from bridge.media_utils import is_image_occlusion_model, render_native_image_occlusion
+
+        # 1. 复现用户真实中文「图片遮盖」卡片（含前导小数点 .0000 / .0339 与窄遮罩）
+        zh_note = {
+            "遮盖": "{{c1::image-occlusion:rect:left=.0000:top=0.3297:width=.0339:height=0.3028:oi=1}}<br>",
+            "图片": '<img src="HCIE-PanDuan (33).jpg">',
+            "标题": "H12-891 判断题",
+            "背面额外": "正确答案为对",
+            "注释": "",
+        }
+        front, back, title = render_native_image_occlusion(zh_note)
+        self.assertIn("anki-io-wrap", front)
+        self.assertIn('data-io-mode="hide-all"', front)
+        self.assertIn('src="HCIE-PanDuan (33).jpg"', front)
+        self.assertIn("left:0.00%", front)
+        self.assertIn("top:32.97%", front)
+        self.assertIn("width:3.39%", front)
+        self.assertIn("height:30.28%", front)
+        self.assertNotIn("image-occlusion:", front)
+        self.assertEqual(back, '<img src="HCIE-PanDuan (33).jpg">')
+        self.assertEqual(title, "H12-891 判断题")
+
+        # 2. 日文 / 德文等任意本地化字段名 + 椭圆与多边形 + 旋转角支持
+        de_note = {
+            "Masken": (
+                "{{c1::image-occlusion:ellipse:left=0.2:top=0.3:rx=0.1:ry=0.08:angle=15:oi=1}}"
+                "{{c2::image-occlusion:polygon:left=0.5:top=0.4:points=0.1,0.1 0.3,0.1 0.2,0.3:oi=1}}"
+            ),
+            "Bild": '<img src="anatomy.png">',
+            "Kopfzeile": "Anatomie",
+        }
+        de_front, de_back, de_title = render_native_image_occlusion(de_note)
+        self.assertIn('data-io-shape="ellipse"', de_front)
+        self.assertIn("width:20.00%;height:16.00%", de_front)
+        self.assertIn("transform:rotate(15.00deg)", de_front)
+        self.assertIn('data-io-shape="polygon"', de_front)
+        self.assertIn("clip-path:polygon(", de_front)
+        self.assertEqual(de_back, '<img src="anatomy.png">')
+        self.assertEqual(de_title, "Anatomie")
+
+        # 3. 卡型识别与快速制卡卡型解析：支持中文「图片遮盖」（含仅凭模板特征，无 originalStockKind）
+        zh_model = {
+            "id": 1781932729568,
+            "name": "图片遮盖",
+            "type": 1,
+            "originalStockKind": 5,
+            "flds": [{"name": n} for n in ("遮盖", "图片", "标题", "背面额外", "注释")],
+            "tmpls": [{
+                "name": "图片遮盖",
+                "qfmt": '<div style="display:none">{{cloze:遮盖}}</div><div id="image-occlusion-container">{{图片}}<canvas id="image-occlusion-canvas"></canvas></div><script>anki.imageOcclusion.setup();</script>',
+                "afmt": '<div style="display:none">{{cloze:遮盖}}</div><div id="image-occlusion-container">{{图片}}<canvas id="image-occlusion-canvas"></canvas></div><script>anki.imageOcclusion.setup();</script><div><button id="toggle">切换遮罩</button></div>',
+            }],
+            "css": ".card { font-size: 20px; }",
+        }
+        zh_model_cloned = {**zh_model, "name": "我的自定义遮罩", "originalStockKind": 0}
+        self.assertTrue(is_image_occlusion_model(zh_model))
+        self.assertTrue(_is_image_occlusion_model(zh_model))
+        self.assertTrue(is_image_occlusion_model(zh_model_cloned))
+
+        class _MockModels:
+            def __init__(self, items):
+                self._items = items
+
+            def all(self):
+                return list(self._items)
+
+        class _MockCol:
+            def __init__(self, items):
+                self.models = _MockModels(items)
+
+        resolved = EditService._resolve_image_occlusion_model(_MockCol([zh_model]))
+        self.assertIsNotNone(resolved)
+        self.assertEqual(resolved["name"], "图片遮盖")
+
+        # 4. 端到端复习与卡片库序列化：中文图片遮盖卡直出静态遮罩且绝不掉入沙盒，窄遮罩带 box-sizing/overflow 护栏
+        zh_card_id = 998801
+        mock_note = MockNote(
+            zh_card_id,
+            {
+                "遮盖": zh_note["遮盖"],
+                "图片": zh_note["图片"],
+                "标题": zh_note["标题"],
+                "背面额外": zh_note["背面额外"],
+                "注释": "",
+            },
+            tags=[],
+            is_cloze=True,
+            cids=[zh_card_id],
+            type_name="图片遮盖",
+        )
+        mock_note._model = zh_model
+        mock_card = MockCard(zh_card_id, mock_note, queue=0, ctype=0, due=1, ivl=0)
+
+        class _RenderOut:
+            question_text = (
+                '<div style="display:none"><div class="cloze" data-ordinal="1" data-shape="rect" '
+                'data-left=".0000" data-top="0.3297" data-width=".0339" data-height="0.3028" '
+                'data-occludeInactive="1"></div></div>'
+                '<div id="image-occlusion-container"><img src="HCIE-PanDuan (33).jpg">'
+                '<canvas id="image-occlusion-canvas"></canvas></div>'
+                '<script>anki.imageOcclusion.setup();</script>'
+            )
+            answer_text = (
+                '<div style="display:none"><div class="cloze-highlight" data-ordinal="1" data-shape="rect" '
+                'data-left=".0000" data-top="0.3297" data-width=".0339" data-height="0.3028" '
+                'data-occludeInactive="1"></div></div>'
+                '<div id="image-occlusion-container"><img src="HCIE-PanDuan (33).jpg">'
+                '<canvas id="image-occlusion-canvas"></canvas></div>'
+                '<script>anki.imageOcclusion.setup();</script>'
+            )
+            css = ".card { font-size: 20px; }"
+            question_av_tags = []
+            answer_av_tags = []
+
+        mock_card.render_output = lambda: _RenderOut()
+        self.mock_col._cards[zh_card_id] = mock_card
+        try:
+            serialized = self.router.review_service._serialize_review_card(
+                self.mock_col, zh_card_id, lang="zh-CN"
+            )
+            self.assertIsNotNone(serialized)
+            self.assertFalse(serialized["needsSandbox"])
+            self.assertEqual(serialized["sandboxFrontHtml"], "")
+            self.assertIn("anki-io-wrap", serialized["frontHtml"])
+            self.assertIn("anki-io-target", serialized["frontHtml"])
+            self.assertIn("box-sizing:border-box;overflow:hidden", serialized["frontHtml"])
+            self.assertIn("anki-io-revealed", serialized["frontAnswerHtml"])
+            self.assertEqual(serialized["front"], "H12-891 判断题")
+            self.assertIn("正确答案为对", serialized["extraHint"])
+            self.assertNotIn("image-occlusion:", serialized["frontHtml"])
+            self.assertNotIn("image-occlusion:", serialized["front"])
+
+            # 椭圆遮罩经过复习序列化应输出圆角 50%
+            ellipse_resolved, _ = self.router.review_service._resolve_rich_html_and_audio(
+                de_front, "", cloze_ord=1, is_question_side=True
+            )
+            self.assertIn("border-radius:50%", ellipse_resolved)
+
+            # 卡片库序列化同样识别中文图片遮盖卡
+            lib_item = self.router.search_service._serialize_library_card(
+                self.mock_col, zh_card_id, lang="zh-CN"
+            )
+            self.assertIsNotNone(lib_item)
+            self.assertIn("anki-io-wrap", lib_item["frontHtml"])
+            self.assertEqual(lib_item["front"], "H12-891 判断题")
+        finally:
+            self.mock_col._cards.pop(zh_card_id, None)
 
 
     def test_23_sync_no_changes_checked_timestamp_and_requires_login(self):
@@ -4878,26 +5036,81 @@ class BridgeRouterAuditTest(unittest.TestCase):
         finally:
             conn.close()
 
-    def test_55_support_prompt_status_global_persistence(self):
-        """support_prompt_status must persist globally across profiles and sanitize invalid values to idle."""
+    def test_55_support_prompt_global_persistence(self):
+        """support_prompt must persist structured global state, migrate legacy values, and sanitize invalid inputs."""
         from anki_modern_os.bridge.profile_config import PROFILE_SCOPED_KEYS
 
-        self.assertNotIn("support_prompt_status", PROFILE_SCOPED_KEYS)
-        self.assertEqual(self._call("get_preferences")["data"]["supportPromptStatus"], "idle")
-        self.assertEqual(self._call("get_dashboard")["data"]["preferences"]["supportPromptStatus"], "idle")
+        self.assertNotIn("support_prompt", PROFILE_SCOPED_KEYS)
+        default_prompt = {
+            "status": "idle",
+            "promptCount": 0,
+            "lastPromptedAt": 0,
+            "lastVersion": "",
+        }
+        self.assertEqual(self._call("get_preferences")["data"]["supportPrompt"], default_prompt)
+        self.assertEqual(self._call("get_dashboard")["data"]["preferences"]["supportPrompt"], default_prompt)
 
-        for valid_status in ("liked", "feedback", "dismissed"):
-            saved = self._call("save_preferences", {"supportPromptStatus": valid_status})
-            self.assertEqual(saved["status"], "success")
-            self.assertEqual(saved["data"]["preferences"]["supportPromptStatus"], valid_status)
-            self.assertEqual(self._call("get_preferences")["data"]["supportPromptStatus"], valid_status)
-            self.assertEqual(self._call("get_dashboard")["data"]["preferences"]["supportPromptStatus"], valid_status)
-            self.assertEqual(self.config_store.get("support_prompt_status"), valid_status)
+        # Legacy flat `support_prompt_status` migration
+        self.config_store["support_prompt_status"] = "liked"
+        self.assertEqual(
+            self._call("get_preferences")["data"]["supportPrompt"],
+            {"status": "liked", "promptCount": 1, "lastPromptedAt": 0, "lastVersion": ""},
+        )
+        self.config_store["support_prompt_status"] = "dismissed"
+        self.assertEqual(
+            self._call("get_dashboard")["data"]["preferences"]["supportPrompt"],
+            {"status": "snoozed", "promptCount": 1, "lastPromptedAt": 0, "lastVersion": ""},
+        )
 
-        bad = self._call("save_preferences", {"supportPromptStatus": "not-valid"})
-        self.assertEqual(bad["status"], "success")
-        self.assertEqual(bad["data"]["preferences"]["supportPromptStatus"], "idle")
-        self.assertEqual(self.config_store.get("support_prompt_status"), "idle")
+        # Structured write clears legacy key, stores snake_case, and sanitizes invalid values
+        saved = self._call(
+            "save_preferences",
+            {
+                "supportPrompt": {
+                    "status": "opened_unconfirmed",
+                    "promptCount": 2,
+                    "lastPromptedAt": 1795395000,
+                    "lastVersion": "1.7.3",
+                }
+            },
+        )
+        self.assertEqual(saved["status"], "success")
+        self.assertNotIn("support_prompt_status", self.config_store)
+        expected = {
+            "status": "opened_unconfirmed",
+            "promptCount": 2,
+            "lastPromptedAt": 1795395000,
+            "lastVersion": "1.7.3",
+        }
+        self.assertEqual(saved["data"]["preferences"]["supportPrompt"], expected)
+        self.assertEqual(self._call("get_preferences")["data"]["supportPrompt"], expected)
+        self.assertEqual(self._call("get_dashboard")["data"]["preferences"]["supportPrompt"], expected)
+        self.assertEqual(
+            self.config_store.get("support_prompt"),
+            {
+                "status": "opened_unconfirmed",
+                "prompt_count": 2,
+                "last_prompted_at": 1795395000,
+                "last_version": "1.7.3",
+            },
+        )
+
+        # Invalid status and out-of-range promptCount are clamped/sanitized safely
+        bad = self._call(
+            "save_preferences",
+            {
+                "supportPrompt": {
+                    "status": "bogus",
+                    "promptCount": 99,
+                    "lastPromptedAt": -50,
+                    "lastVersion": " 1.8.0 ",
+                }
+            },
+        )
+        self.assertEqual(
+            bad["data"]["preferences"]["supportPrompt"],
+            {"status": "idle", "promptCount": 3, "lastPromptedAt": 0, "lastVersion": "1.8.0"},
+        )
 
 
 if __name__ == "__main__":

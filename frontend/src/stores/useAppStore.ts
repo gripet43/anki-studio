@@ -32,6 +32,7 @@ import {
   ReviewContentScale,
   ReviewDockPosition,
   ReviewStageWidth,
+  SupportPromptState,
   SupportPromptStatus,
   UserPreferences,
 } from '../bridge/pycmd';
@@ -51,6 +52,7 @@ export type {
   ReviewContentScale,
   ReviewDockPosition,
   ReviewStageWidth,
+  SupportPromptState,
   SupportPromptStatus,
 };
 import {
@@ -60,7 +62,12 @@ import {
   DEFAULT_CUSTOM_AVATAR,
   normalizeCustomAvatarConfig,
 } from '../utils/avatarImage';
-import { normalizeSupportPromptStatus } from '../utils/supportPrompt';
+import {
+  applySupportPromptOutcome,
+  DEFAULT_SUPPORT_PROMPT_STATE,
+  normalizeSupportPromptState,
+  type SupportPromptOutcome,
+} from '../utils/supportPrompt';
 import { EMPTY_ADVANCED_STATS, EMPTY_DASHBOARD } from '../data/mockData';
 import {
   detectBrowserLanguage,
@@ -164,6 +171,8 @@ export interface AppState {
   customStudyModalOpen: boolean;
   customStudyInitialPreset: CustomStudyParams['preset'];
   customStudyInitialDeckId: string | null;
+  supportPromptModalOpen: boolean;
+  supportPromptModalTestMode: boolean;
   inspectorOpen: boolean;
   debugModeUnlocked: boolean;
   /** 会话级极简禅模式（不持久化跨重启）：仅保留极简首页与纯净学习页。 */
@@ -223,8 +232,8 @@ export interface AppState {
   reviewDockPosition: ReviewDockPosition;
   /** 学习页面双指滑动快捷手势开关（默认开启）。 */
   reviewSwipeGestures: boolean;
-  /** 复习完成页支持提示状态（全局一次性持久化）。 */
-  supportPromptStatus: SupportPromptStatus;
+  /** AnkiWeb 支持引导弹窗全局持久化状态。 */
+  supportPrompt: SupportPromptState;
   envInfo: EnvInfo;
 
   // Dashboard, Decks & Statistics
@@ -363,6 +372,8 @@ const initialState: AppState = {
   customStudyModalOpen: false,
   customStudyInitialPreset: 'mistakes',
   customStudyInitialDeckId: null,
+  supportPromptModalOpen: false,
+  supportPromptModalTestMode: false,
   inspectorOpen: false,
   debugModeUnlocked: false,
   zenMode: false,
@@ -400,7 +411,7 @@ const initialState: AppState = {
   reviewContentScale: 100,
   reviewDockPosition: 'bottom',
   reviewSwipeGestures: true,
-  supportPromptStatus: 'idle',
+  supportPrompt: { ...DEFAULT_SUPPORT_PROMPT_STATE },
   envInfo: {
     platform: initialPlatform,
     osName: initialPlatform === 'mac' ? 'macOS' : initialPlatform === 'win' ? 'Windows' : 'Linux',
@@ -1038,10 +1049,10 @@ export const appActions = {
           prefs?.zenAmbience && ['silent', 'rain', 'wind', 'warmth'].includes(prefs.zenAmbience)
             ? prefs.zenAmbience
             : state.zenAmbience,
-        supportPromptStatus:
-          prefs?.supportPromptStatus !== undefined
-            ? normalizeSupportPromptStatus(prefs.supportPromptStatus)
-            : state.supportPromptStatus,
+        supportPrompt:
+          prefs?.supportPrompt !== undefined
+            ? normalizeSupportPromptState(prefs.supportPrompt)
+            : state.supportPrompt,
         debugModeUnlocked: Boolean(prefs?.debugMode) || state.debugModeUnlocked,
         envInfo: dash?.envInfo || state.envInfo,
         lastSyncedTimestamp: genuineSyncTs,
@@ -1277,7 +1288,7 @@ export const appActions = {
     reviewContentScale?: ReviewContentScale;
     reviewDockPosition?: ReviewDockPosition;
     reviewSwipeGestures?: boolean;
-    supportPromptStatus?: SupportPromptStatus;
+    supportPrompt?: SupportPromptState;
   }): Promise<boolean> {
     const normalizedTheme = patch.theme !== undefined ? normalizeThemeMode(patch.theme) : undefined;
     const nextLangPref = patch.language !== undefined ? patch.language : state.languagePref;
@@ -1331,8 +1342,8 @@ export const appActions = {
       ...(patch.reviewSwipeGestures !== undefined
         ? { reviewSwipeGestures: Boolean(patch.reviewSwipeGestures) }
         : {}),
-      ...(patch.supportPromptStatus !== undefined
-        ? { supportPromptStatus: normalizeSupportPromptStatus(patch.supportPromptStatus) }
+      ...(patch.supportPrompt !== undefined
+        ? { supportPrompt: normalizeSupportPromptState(patch.supportPrompt) }
         : {}),
     });
 
@@ -2028,6 +2039,32 @@ export const appActions = {
 
   closeVacationModal() {
     setAppState({ vacationModalOpen: false });
+  },
+
+  openSupportPromptModal(testMode = false) {
+    setAppState({
+      supportPromptModalOpen: true,
+      supportPromptModalTestMode: Boolean(testMode),
+    });
+  },
+
+  closeSupportPromptModal() {
+    setAppState({
+      supportPromptModalOpen: false,
+      supportPromptModalTestMode: false,
+    });
+  },
+
+  recordSupportPromptOutcome(outcome: SupportPromptOutcome) {
+    if (state.supportPromptModalTestMode) {
+      return;
+    }
+    const next = applySupportPromptOutcome(
+      state.supportPrompt,
+      outcome,
+      state.envInfo.studioVersion || ''
+    );
+    void appActions.updatePreferences({ supportPrompt: next });
   },
 
   setVacationTab(tab: 'status' | 'history') {
@@ -4484,6 +4521,8 @@ export const appActions = {
       receiptModalOpen: false,
       currentRescueReceipt: null,
       customStudyModalOpen: false,
+      supportPromptModalOpen: false,
+      supportPromptModalTestMode: false,
       inspectorOpen: false,
       zenMode: false,
       zenReturnTab: 'dashboard',

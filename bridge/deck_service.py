@@ -360,10 +360,65 @@ class DeckService:
         return "side" if raw == "side" else "bottom"
 
     @staticmethod
-    def _normalize_support_prompt_status(cfg: Dict[str, Any]) -> str:
-        """Normalizes one-time AnkiWeb support prompt status to a safe enum value."""
-        raw = str((cfg or {}).get("support_prompt_status") or "idle").strip().lower()
-        return raw if raw in ("idle", "liked", "feedback", "dismissed") else "idle"
+    def _normalize_support_prompt(cfg: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalizes global AnkiWeb support prompt state with legacy migration."""
+        valid_statuses = (
+            "idle",
+            "snoozed",
+            "opened_unconfirmed",
+            "feedback",
+            "liked",
+            "opted_out",
+            "exhausted",
+        )
+        raw_obj = (cfg or {}).get("support_prompt")
+        if isinstance(raw_obj, dict):
+            raw_status = str(raw_obj.get("status") or "idle").strip().lower()
+            status = raw_status if raw_status in valid_statuses else "idle"
+            try:
+                raw_count = int(
+                    raw_obj.get("promptCount")
+                    if raw_obj.get("promptCount") is not None
+                    else raw_obj.get("prompt_count", 0)
+                )
+            except (TypeError, ValueError):
+                raw_count = 0
+            prompt_count = max(0, min(3, raw_count))
+            try:
+                raw_ts = int(
+                    raw_obj.get("lastPromptedAt")
+                    if raw_obj.get("lastPromptedAt") is not None
+                    else raw_obj.get("last_prompted_at", 0)
+                )
+            except (TypeError, ValueError):
+                raw_ts = 0
+            last_prompted_at = max(0, raw_ts)
+            raw_ver = (
+                raw_obj.get("lastVersion")
+                if raw_obj.get("lastVersion") is not None
+                else raw_obj.get("last_version", "")
+            )
+            last_version = str(raw_ver or "").strip()[:32]
+            return {
+                "status": status,
+                "promptCount": prompt_count,
+                "lastPromptedAt": last_prompted_at,
+                "lastVersion": last_version,
+            }
+
+        legacy = str((cfg or {}).get("support_prompt_status") or "idle").strip().lower()
+        legacy_map = {
+            "liked": ("liked", 1),
+            "feedback": ("feedback", 1),
+            "dismissed": ("snoozed", 1),
+        }
+        mapped_status, mapped_count = legacy_map.get(legacy, ("idle", 0))
+        return {
+            "status": mapped_status,
+            "promptCount": mapped_count,
+            "lastPromptedAt": 0,
+            "lastVersion": "",
+        }
 
     @staticmethod
     def _studio_version() -> str:
@@ -590,7 +645,7 @@ class DeckService:
                     "zenSfxVolume": zen_sfx_volume,
                     "zenAmbienceVolume": zen_ambience_volume,
                     "zenAmbience": zen_ambience,
-                    "supportPromptStatus": self._normalize_support_prompt_status(cfg),
+                    "supportPrompt": self._normalize_support_prompt(cfg),
                     "debugMode": bool(cfg.get("debug_mode", False)),
                 },
                 "vacation": {
@@ -2082,7 +2137,7 @@ class DeckService:
                 "zenSfxVolume": cls._normalize_zen_audio_prefs(cfg)[1],
                 "zenAmbienceVolume": cls._normalize_zen_audio_prefs(cfg)[2],
                 "zenAmbience": cls._normalize_zen_audio_prefs(cfg)[3],
-                "supportPromptStatus": cls._normalize_support_prompt_status(cfg),
+                "supportPrompt": cls._normalize_support_prompt(cfg),
                 "debugMode": bool(cfg.get("debug_mode", False)),
             },
             "vacation": {

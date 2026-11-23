@@ -31,12 +31,7 @@ import {
   collectAndCopyCardDebugInfo,
 } from '../../utils/cardDebugInfo';
 import { getClosestFromTarget, isTypingTarget } from '../../utils/domTarget';
-import {
-  ANKIWEB_ADDON_URL,
-  openExternalUrl,
-  resolveFeedbackChannel,
-  shouldShowSupportPrompt,
-} from '../../utils/supportPrompt';
+import { shouldTriggerSupportPromptModal } from '../../utils/supportPrompt';
 import {
   resolveManualPlayAudioFiles,
   resolveVisibleAudioFiles,
@@ -259,7 +254,8 @@ export const ReviewerView: React.FC = () => {
     reviewContentScale,
     reviewDockPosition,
     reviewSwipeGestures,
-    supportPromptStatus,
+    supportPrompt,
+    zenMode,
     dashboard,
     undoStack,
     dayBoundary,
@@ -295,7 +291,6 @@ export const ReviewerView: React.FC = () => {
   const [lightboxTarget, setLightboxTarget] = useState<LightboxTarget | null>(null);
   const [swipingDir, setSwipingDir] = useState<'left' | 'right' | null>(null);
   const [swipeFromGesture, setSwipeFromGesture] = useState(false);
-  const [supportPromptStage, setSupportPromptStage] = useState<'ask' | 'like' | 'feedback'>('ask');
   const [gestureFlyPose, setGestureFlyPose] = useState<SwipeVisualPose | null>(null);
   const [gestureFlyDurMs, setGestureFlyDurMs] = useState<number>(175);
   const swipeMachineRef = useRef(createSwipeGestureState());
@@ -318,6 +313,7 @@ export const ReviewerView: React.FC = () => {
   const pullPillRef = useRef<HTMLDivElement>(null);
   const dockFooterRef = useRef<HTMLElement>(null);
   const lastCardChangeReasonRef = useRef<'gesture' | 'already_reset' | 'other'>('other');
+  const supportModalTriggeredRef = useRef(false);
   const inspectorPresence = usePresence(inspectorOpen, 180);
   const lastLightboxTargetRef = useRef<LightboxTarget | null>(null);
   if (lightboxTarget) {
@@ -417,12 +413,6 @@ export const ReviewerView: React.FC = () => {
     }
     return false;
   }, [fieldsDraft, originalFieldsDraft]);
-
-  useEffect(() => {
-    if (!isSessionComplete) {
-      setSupportPromptStage('ask');
-    }
-  }, [isSessionComplete]);
 
   useEffect(() => {
     setConfirmingDelete(false);
@@ -1420,8 +1410,8 @@ export const ReviewerView: React.FC = () => {
         setAppState({ optionKeyHeld: true });
       }
 
-      const { settingsOpen, cmdKOpen, quickAddOpen } = getAppState();
-      if (settingsOpen || cmdKOpen || quickAddOpen) {
+      const { settingsOpen, cmdKOpen, quickAddOpen, supportPromptModalOpen } = getAppState();
+      if (settingsOpen || cmdKOpen || quickAddOpen || supportPromptModalOpen) {
         return;
       }
 
@@ -1742,19 +1732,54 @@ export const ReviewerView: React.FC = () => {
     ? effectiveTargetDeck.dueNew + effectiveTargetDeck.dueReview
     : dashboard?.todayStats?.totalPending ?? 0;
   const isNewDayReady = sessionCrossedDay && newDayPendingCount > 0;
+  const streakDaysForPrompt = dashboard.streak?.current ?? 0;
+
+  // Option B: After lingering on Session Complete for 800ms, smoothly open the celebratory
+  // support modal when the scientific cadence & peak-end quality gates pass.
+  useEffect(() => {
+    if (!isSessionComplete) {
+      supportModalTriggeredRef.current = false;
+      return;
+    }
+    if (supportModalTriggeredRef.current) {
+      return;
+    }
+    const eligible = shouldTriggerSupportPromptModal({
+      state: supportPrompt,
+      streakDays: streakDaysForPrompt,
+      sessionStudiedCount,
+      sessionAccuracyPct: accuracyPct,
+      isPreviewSession,
+      isNewDayReady,
+      zenMode,
+      studioVersion: envInfo.studioVersion || '',
+    });
+    if (!eligible) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const { settingsOpen, cmdKOpen, quickAddOpen, zenMode: liveZen } = getAppState();
+      if (settingsOpen || cmdKOpen || quickAddOpen || liveZen) {
+        return;
+      }
+      supportModalTriggeredRef.current = true;
+      appActions.openSupportPromptModal(false);
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [
+    isSessionComplete,
+    supportPrompt,
+    streakDaysForPrompt,
+    sessionStudiedCount,
+    accuracyPct,
+    isPreviewSession,
+    isNewDayReady,
+    zenMode,
+    envInfo.studioVersion,
+  ]);
 
   // ============== SESSION COMPLETE CELEBRATION SCREEN (Light & Dark Adapted) ==============
   if (isSessionComplete || !currentCard) {
-    const streakDays = dashboard.streak?.current ?? 0;
-    const showSupportPrompt = shouldShowSupportPrompt({
-      status: supportPromptStatus,
-      streakDays,
-      sessionStudiedCount,
-      isPreviewSession,
-      isNewDayReady,
-    });
-    const feedbackTarget = resolveFeedbackChannel(resolvedLang);
-
     return (
       <div className={`fixed inset-0 z-30 flex flex-col justify-between select-none overflow-hidden ui-view-enter ${screenBg}`}>
         <header
@@ -1909,150 +1934,6 @@ export const ReviewerView: React.FC = () => {
               )}
             </footer>
           </article>
-
-          {showSupportPrompt && (
-            <aside
-              aria-label={t('aboutAnkiwebLike')}
-              className="reviewer-support-note text-start"
-            >
-              {supportPromptStage === 'ask' && (
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="w-7 h-7 rounded-lg bg-[var(--brand-soft)] text-[var(--status-danger-text)] flex items-center justify-center shrink-0">
-                      <svg
-                        className="w-3.5 h-3.5 shrink-0"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-                      </svg>
-                    </span>
-                    <span className="text-[12px] font-medium text-[var(--text-primary)] text-pretty">
-                      {t('supportPromptAskTitle', { days: streakDays })}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-wrap ms-auto">
-                    <button
-                      type="button"
-                      onClick={() => setSupportPromptStage('like')}
-                      className="reviewer-support-btn reviewer-support-btn--tinted"
-                    >
-                      {t('supportPromptPositiveBtn')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSupportPromptStage('feedback')}
-                      className="reviewer-support-btn reviewer-support-btn--ghost"
-                    >
-                      {t('supportPromptNegativeBtn')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => appActions.updatePreferences({ supportPromptStatus: 'dismissed' })}
-                      className="reviewer-support-btn reviewer-support-btn--ghost reviewer-support-btn--muted"
-                    >
-                      {t('supportPromptDismissBtn')}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {supportPromptStage === 'like' && (
-                <div className="space-y-2.5">
-                  <p className="text-[12px] leading-relaxed text-[var(--text-primary)] text-pretty">
-                    {t('supportPromptLikeBody')}
-                  </p>
-                  <p className="text-[11.5px] leading-relaxed text-[var(--text-secondary)] text-pretty">
-                    {t('supportPromptLikeHint')}
-                  </p>
-                  <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        openExternalUrl(ANKIWEB_ADDON_URL);
-                        appActions.updatePreferences({ supportPromptStatus: 'liked' });
-                        showToast(t('supportPromptThanksToast'));
-                      }}
-                      className="reviewer-support-btn reviewer-support-btn--primary"
-                    >
-                      <span>{t('supportPromptLikeBtn')}</span>
-                      <svg
-                        className="w-3.5 h-3.5 shrink-0 opacity-85 rtl:scale-x-[-1]"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M7 17 17 7" />
-                        <path d="M7 7h10v10" />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => appActions.updatePreferences({ supportPromptStatus: 'dismissed' })}
-                      className="reviewer-support-btn reviewer-support-btn--ghost reviewer-support-btn--muted"
-                    >
-                      {t('supportPromptLaterBtn')}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {supportPromptStage === 'feedback' && (
-                <div className="space-y-2.5">
-                  <p className="text-[12px] leading-relaxed text-[var(--text-primary)] text-pretty">
-                    {feedbackTarget.channel === 'xiaohongshu'
-                      ? t('supportPromptFeedbackBodyXhs')
-                      : t('supportPromptFeedbackBodyGithub')}
-                  </p>
-                  <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        openExternalUrl(feedbackTarget.url);
-                        appActions.updatePreferences({ supportPromptStatus: 'feedback' });
-                      }}
-                      className="reviewer-support-btn reviewer-support-btn--tinted"
-                    >
-                      <span>
-                        {feedbackTarget.channel === 'xiaohongshu'
-                          ? t('supportPromptFeedbackBtnXhs')
-                          : t('supportPromptFeedbackBtnGithub')}
-                      </span>
-                      <svg
-                        className="w-3.5 h-3.5 shrink-0 opacity-85 rtl:scale-x-[-1]"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M7 17 17 7" />
-                        <path d="M7 7h10v10" />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => appActions.updatePreferences({ supportPromptStatus: 'dismissed' })}
-                      className="reviewer-support-btn reviewer-support-btn--ghost reviewer-support-btn--muted"
-                    >
-                      {t('supportPromptDismissBtn')}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </aside>
-          )}
         </main>
 
         <footer

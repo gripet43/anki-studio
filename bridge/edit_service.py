@@ -23,6 +23,7 @@ from .media_utils import (
     HR_ANSWER_RE,
     IO_SHAPE_RE,
     get_media_dir,
+    is_image_occlusion_model,
     normalize_media_html_for_storage,
 )
 
@@ -58,17 +59,7 @@ def _find_cloze_field_names(field_items: Any) -> List[str]:
 
 
 def _is_image_occlusion_model(model: Optional[Dict[str, Any]]) -> bool:
-    if not isinstance(model, dict):
-        return False
-    name = str(model.get("name", "") or "").strip().lower()
-    if "image occlusion" in name:
-        return True
-    fld_names = {
-        str(f.get("name", "") or "").strip().lower()
-        for f in (model.get("flds") or [])
-        if isinstance(f, dict)
-    }
-    return "occlusion" in fld_names and "image" in fld_names
+    return is_image_occlusion_model(model)
 
 
 def _convert_field_tokens_to_cloze(tmpl_str: str, target_fields: List[str]) -> str:
@@ -845,10 +836,23 @@ class EditService:
 
     @staticmethod
     def _resolve_image_occlusion_model(col):
-        """找到（必要时创建）Anki 原生 Image Occlusion 卡型。"""
+        """找到（必要时创建）Anki 原生 Image Occlusion 卡型（兼容非英文界面本地化卡型名）。"""
         def _find():
-            for m in col.models.all() or []:
-                if str(m.get("name", "")).strip().lower() == "image occlusion":
+            models = col.models.all() or []
+            # 1. 优先精确匹配 Anki 原生 stock kind == 5（中文为「图片遮盖」、日文为「画像穴埋め」等）
+            for m in models:
+                if isinstance(m, dict):
+                    try:
+                        if int(m.get("originalStockKind", 0) or 0) == 5:
+                            return m
+                    except (TypeError, ValueError):
+                        pass
+            # 2. 其次按英文标准名或任意语言模板/字段特征识别
+            for m in models:
+                if isinstance(m, dict) and str(m.get("name", "")).strip().lower() == "image occlusion":
+                    return m
+            for m in models:
+                if _is_image_occlusion_model(m):
                     return m
             return None
 

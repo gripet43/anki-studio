@@ -329,7 +329,21 @@ export interface EnvInfo {
 
 export type ReviewStageWidth = 'standard' | 'auto' | 'wide' | 'full';
 export type ReviewDockPosition = 'bottom' | 'side';
-export type SupportPromptStatus = 'idle' | 'liked' | 'feedback' | 'dismissed';
+export type SupportPromptStatus =
+  | 'idle'
+  | 'snoozed'
+  | 'opened_unconfirmed'
+  | 'feedback'
+  | 'liked'
+  | 'opted_out'
+  | 'exhausted';
+
+export interface SupportPromptState {
+  status: SupportPromptStatus;
+  promptCount: number;
+  lastPromptedAt: number;
+  lastVersion: string;
+}
 export type ReviewContentScale = 90 | 100 | 115 | 130 | 150;
 export const REVIEW_CONTENT_SCALES: readonly ReviewContentScale[] = [90, 100, 115, 130, 150] as const;
 
@@ -407,8 +421,8 @@ export interface UserPreferences {
   zenAmbienceVolume?: number;
   /** 禅模式背景声景（silent / rain / wind / warmth）。 */
   zenAmbience?: 'silent' | 'rain' | 'wind' | 'warmth';
-  /** 复习完成页支持提示状态（全局生效、一次性）。 */
-  supportPromptStatus?: SupportPromptStatus;
+  /** AnkiWeb 支持引导弹窗全局持久化状态。 */
+  supportPrompt?: SupportPromptState;
 }
 
 export interface SafetyWarning {

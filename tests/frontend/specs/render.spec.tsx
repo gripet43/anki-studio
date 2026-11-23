@@ -512,7 +512,7 @@ test('about tab renders only version info, creator info, and accessible anonymou
         html.includes('https://ankiweb.net/shared/info/1071937836') &&
         !html.includes('?cb=1794962974753') &&
         html.includes(translate('zh-CN', 'aboutAnkiwebLikeHint')),
-      'expected secure external links including clean AnkiWeb upvote link and login/bottom hint'
+      'expected secure external links including clean AnkiWeb upvote link and top-right Rate This hint'
     );
     ok(
       html.includes('type="checkbox"') && html.includes('switch=""') && html.includes('aria-describedby='),

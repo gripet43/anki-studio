@@ -201,7 +201,11 @@ def _hook_status(gui_hooks: Any, attr: str, callback: Any) -> Dict[str, Any]:
     if registered is None:
         return {"ok": False, "detail": "Anki 未提供 %s" % attr}
     try:
-        present = callback in list(registered)
+        internal_hooks = getattr(registered, "_hooks", None)
+        if isinstance(internal_hooks, (list, tuple, set)):
+            present = callback in internal_hooks
+        else:
+            present = callback in list(registered)
     except Exception:  # pragma: no cover - defensive
         return {"ok": False, "detail": "检查钩子注册失败"}
     if present:

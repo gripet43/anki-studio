@@ -48,6 +48,7 @@ import {
 } from '../../utils/themeTokens';
 import {
   ANKIWEB_ADDON_URL,
+  applySupportPromptOutcome,
   GITHUB_REPO_URL,
   openExternalUrl,
   XIAOHONGSHU_PROFILE_URL,
@@ -194,7 +195,7 @@ export const SettingsModal: React.FC = () => {
     reviewContentScale,
     reviewDockPosition,
     reviewSwipeGestures,
-    supportPromptStatus,
+    supportPrompt,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(settingsInitialTab || 'appearance');
@@ -2041,8 +2042,14 @@ export const SettingsModal: React.FC = () => {
                       url: ANKIWEB_ADDON_URL,
                       variant: 'primary' as const,
                       onOpen: () => {
-                        if (supportPromptStatus === 'idle') {
-                          appActions.updatePreferences({ supportPromptStatus: 'liked' });
+                        if (supportPrompt.status !== 'liked' && supportPrompt.status !== 'opted_out') {
+                          appActions.updatePreferences({
+                            supportPrompt: applySupportPromptOutcome(
+                              supportPrompt,
+                              'liked',
+                              envInfo.studioVersion || ''
+                            ),
+                          });
                         }
                       },
                       icon: (

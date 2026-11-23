@@ -1946,6 +1946,9 @@ assert(
 const supportUtilSrc = readText(
   path.resolve(ADDON_ROOT, 'frontend/src/utils/supportPrompt.ts')
 );
+const supportModalSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/common/SupportPromptModal.tsx')
+);
 const settingsModalSrc = readText(
   path.resolve(ADDON_ROOT, 'frontend/src/components/settings/SettingsModal.tsx')
 );
@@ -1953,13 +1956,44 @@ assert(
   supportUtilSrc.includes('https://ankiweb.net/shared/info/1071937836') &&
     !supportUtilSrc.includes('?cb=') &&
     !settingsModalSrc.includes('?cb=') &&
-    reviewerSrc.includes('reviewer-support-note') &&
+    appSrc.includes('SupportPromptModal') &&
+    supportModalSrc.includes('<dialog') &&
+    supportModalSrc.includes("closedby: 'closerequest'") &&
+    !supportModalSrc.includes("closedby: 'any'") &&
+    !supportModalSrc.includes('supportPromptLaterBtn') &&
+    !supportModalSrc.includes('supportPromptStep1Login') &&
+    !supportModalSrc.includes('role="dialog"') &&
+    !supportModalSrc.includes('aria-modal') &&
+    supportModalSrc.includes('support-dialog') &&
+    supportModalSrc.includes('support-like-hero-badge') &&
+    supportModalSrc.includes('support-like-hero-emoji') &&
+    supportModalSrc.includes('support-heart-svg') &&
+    supportModalSrc.includes('support-rate-inline-badge') &&
+    supportModalSrc.includes('Rate This') &&
+    !supportModalSrc.includes('support-rate-tip') &&
+    !supportModalSrc.includes('support-ankiweb-guide') &&
+    !reviewerSrc.includes('reviewer-support-note') &&
+    !dashboardSrc.includes('data-support-prompt-test') &&
+    !jsBundle.includes('data-support-prompt-test') &&
     settingsModalSrc.includes('aboutAnkiwebLikeHint') &&
-    storeSrc.includes('supportPromptStatus') &&
-    cssBundle.includes('.reviewer-support-note') &&
-    jsBundle.includes('reviewer-support-note') &&
+    storeSrc.includes('openSupportPromptModal') &&
+    indexCssSrc.includes('dialog.support-dialog:modal') &&
+    indexCssSrc.includes('dialog.support-dialog::backdrop') &&
+    indexCssSrc.includes('transition-behavior: allow-discrete;') &&
+    cssBundle.includes('support-dialog') &&
+    cssBundle.includes('support-like-hero-badge') &&
+    cssBundle.includes('support-like-hero-emoji') &&
+    cssBundle.includes('support-heart-svg') &&
+    cssBundle.includes('support-rate-inline-badge') &&
+    !cssBundle.includes('support-rate-tip') &&
+    !cssBundle.includes('support-ankiweb-guide') &&
+    !cssBundle.includes('.reviewer-support-note') &&
+    jsBundle.includes('support-dialog') &&
+    jsBundle.includes('support-like-hero-badge') &&
+    jsBundle.includes('support-heart-svg') &&
+    jsBundle.includes('support-rate-inline-badge') &&
     jsBundle.includes('aboutAnkiwebLikeHint'),
-  'Support prompt and About AnkiWeb like guide must be wired end-to-end with clean AnkiWeb URL in both source and compiled web/'
+  'SupportPromptModal must use native <dialog closedby="closerequest"> with emoji thumbs-up hero, merged Rate This CTA button, no redundant Maybe Later or dev Dashboard test button, and clean AnkiWeb URL in both source and compiled web/'
 );
 
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

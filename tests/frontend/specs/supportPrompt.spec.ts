@@ -1,104 +1,227 @@
 // ============================================================================
-// One-Time Earned Support Prompt & About AnkiWeb Guide Tests
+// Celebratory Support Modal, Scientific Cadence & About AnkiWeb Guide Tests
 // ============================================================================
 
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { eq, equal, ok, section, test } from '../harness';
-import { ReviewerView } from '../../../frontend/src/components/reviewer/ReviewerView';
-import type { ReviewCardItem } from '../../../frontend/src/bridge/pycmd';
+import { SupportPromptModal } from '../../../frontend/src/components/common/SupportPromptModal';
+import { DashboardView } from '../../../frontend/src/components/dashboard/DashboardView';
+import type { ReviewCardItem, SupportPromptState } from '../../../frontend/src/bridge/pycmd';
 import { translate } from '../../../frontend/src/i18n/translations';
 import { appActions, getAppState, setAppState } from '../../../frontend/src/stores/useAppStore';
 import {
   ANKIWEB_ADDON_URL,
+  applySupportPromptOutcome,
+  DEFAULT_SUPPORT_PROMPT_STATE,
   GITHUB_ISSUES_URL,
-  normalizeSupportPromptStatus,
+  normalizeSupportPromptState,
   resolveFeedbackChannel,
-  shouldShowSupportPrompt,
+  shouldTriggerSupportPromptModal,
+  SUPPORT_PROMPT_COOLDOWN_FEEDBACK_SEC,
+  SUPPORT_PROMPT_COOLDOWN_FINAL_SEC,
+  SUPPORT_PROMPT_COOLDOWN_SECOND_SEC,
+  SUPPORT_PROMPT_COOLDOWN_VERSION_BUMP_SEC,
+  SUPPORT_PROMPT_MIN_SESSION_ACCURACY,
   SUPPORT_PROMPT_MIN_STREAK_DAYS,
   XIAOHONGSHU_PROFILE_URL,
 } from '../../../frontend/src/utils/supportPrompt';
 
-section('support prompt · eligibility, feedback routing & SSR');
+section('support prompt · scientific reminder cadence, transitions & SSR');
 
-test('shouldShowSupportPrompt enforces streak >= 3, idle status, studied > 0, and non-preview/non-rollover', () => {
+const NOW = 1_795_400_000;
+
+test('normalizeSupportPromptState handles structured dicts, invalid values, and legacy strings', () => {
+  eq(normalizeSupportPromptState(undefined), DEFAULT_SUPPORT_PROMPT_STATE);
+  eq(normalizeSupportPromptState('liked'), {
+    status: 'liked',
+    promptCount: 1,
+    lastPromptedAt: 0,
+    lastVersion: '',
+  });
+  eq(normalizeSupportPromptState('dismissed'), {
+    status: 'snoozed',
+    promptCount: 1,
+    lastPromptedAt: 0,
+    lastVersion: '',
+  });
+  eq(
+    normalizeSupportPromptState({
+      status: 'INVALID',
+      prompt_count: 10,
+      last_prompted_at: -10,
+      last_version: ' 1.7.3 ',
+    }),
+    { status: 'idle', promptCount: 3, lastPromptedAt: 0, lastVersion: '1.7.3' }
+  );
+});
+
+test('shouldTriggerSupportPromptModal enforces streak, Peak-End quality, cooldowns, and hard cap', () => {
   equal(SUPPORT_PROMPT_MIN_STREAK_DAYS, 3);
-  equal(normalizeSupportPromptStatus('LIKED'), 'liked');
-  equal(normalizeSupportPromptStatus('invalid-junk'), 'idle');
+  equal(SUPPORT_PROMPT_MIN_SESSION_ACCURACY, 60);
 
+  const base = {
+    state: { ...DEFAULT_SUPPORT_PROMPT_STATE },
+    streakDays: 3,
+    sessionStudiedCount: 12,
+    sessionAccuracyPct: 85,
+    isPreviewSession: false,
+    isNewDayReady: false,
+    zenMode: false,
+    studioVersion: '1.7.3',
+    nowSec: NOW,
+  };
+
+  equal(shouldTriggerSupportPromptModal(base), true, 'Day 3 smooth session must trigger prompt #1');
   equal(
-    shouldShowSupportPrompt({
-      status: 'idle',
-      streakDays: 2,
-      sessionStudiedCount: 15,
-      isPreviewSession: false,
-      isNewDayReady: false,
-    }),
+    shouldTriggerSupportPromptModal({ ...base, streakDays: 2 }),
     false,
-    'streak < 3 must not show support prompt'
+    'streak < 3 must not trigger prompt'
   );
-
   equal(
-    shouldShowSupportPrompt({
-      status: 'idle',
-      streakDays: 3,
-      sessionStudiedCount: 15,
-      isPreviewSession: false,
-      isNewDayReady: false,
-    }),
-    true,
-    'streak >= 3 with idle status and studied cards must show support prompt'
+    shouldTriggerSupportPromptModal({ ...base, sessionAccuracyPct: 59 }),
+    false,
+    'frustrated session (< 60% accuracy) must suppress prompt under Peak-End rule'
+  );
+  equal(
+    shouldTriggerSupportPromptModal({ ...base, zenMode: true }),
+    false,
+    'Zen Mode must never show support modal'
+  );
+  equal(
+    shouldTriggerSupportPromptModal({ ...base, isPreviewSession: true }),
+    false,
+    'preview session must suppress modal'
+  );
+  equal(
+    shouldTriggerSupportPromptModal({ ...base, isNewDayReady: true }),
+    false,
+    'new-day rollover screen must suppress modal'
+  );
+  equal(
+    shouldTriggerSupportPromptModal({ ...base, sessionStudiedCount: 0 }),
+    false,
+    'zero studied cards must suppress modal'
   );
 
-  for (const status of ['liked', 'feedback', 'dismissed'] as const) {
+  for (const terminal of ['liked', 'opted_out', 'exhausted'] as const) {
     equal(
-      shouldShowSupportPrompt({
-        status,
-        streakDays: 10,
-        sessionStudiedCount: 20,
-        isPreviewSession: false,
-        isNewDayReady: false,
+      shouldTriggerSupportPromptModal({
+        ...base,
+        streakDays: 30,
+        state: { status: terminal, promptCount: 1, lastPromptedAt: 1, lastVersion: '1.7.0' },
       }),
       false,
-      `non-idle status ${status} must permanently suppress prompt`
+      `terminal status ${terminal} must stay permanently silent`
     );
   }
 
+  // Attempt #2 cooldown: 14 days for snoozed / opened_unconfirmed
+  for (const pendingStatus of ['snoozed', 'opened_unconfirmed'] as const) {
+    const attempt1: SupportPromptState = {
+      status: pendingStatus,
+      promptCount: 1,
+      lastPromptedAt: NOW - SUPPORT_PROMPT_COOLDOWN_SECOND_SEC + 60,
+      lastVersion: '1.7.3',
+    };
+    equal(
+      shouldTriggerSupportPromptModal({ ...base, state: attempt1 }),
+      false,
+      `${pendingStatus} count=1 must wait full 14 days`
+    );
+    equal(
+      shouldTriggerSupportPromptModal({
+        ...base,
+        state: { ...attempt1, lastPromptedAt: NOW - SUPPORT_PROMPT_COOLDOWN_SECOND_SEC },
+      }),
+      true,
+      `${pendingStatus} count=1 triggers at 14 days`
+    );
+  }
+
+  // Attempt #3 cooldown: 30 days same version OR 14 days after version upgrade
+  const attempt2SameVer: SupportPromptState = {
+    status: 'snoozed',
+    promptCount: 2,
+    lastPromptedAt: NOW - SUPPORT_PROMPT_COOLDOWN_VERSION_BUMP_SEC,
+    lastVersion: '1.7.3',
+  };
   equal(
-    shouldShowSupportPrompt({
-      status: 'idle',
-      streakDays: 5,
-      sessionStudiedCount: 5,
-      isPreviewSession: true,
-      isNewDayReady: false,
-    }),
+    shouldTriggerSupportPromptModal({ ...base, state: attempt2SameVer, studioVersion: '1.7.3' }),
     false,
-    'preview sessions must not show support prompt'
+    'count=2 on same version must wait full 30 days'
+  );
+  equal(
+    shouldTriggerSupportPromptModal({ ...base, state: attempt2SameVer, studioVersion: '1.7.4' }),
+    true,
+    'count=2 triggers after 14 days when studioVersion bumped'
+  );
+  equal(
+    shouldTriggerSupportPromptModal({
+      ...base,
+      state: { ...attempt2SameVer, lastPromptedAt: NOW - SUPPORT_PROMPT_COOLDOWN_FINAL_SEC },
+      studioVersion: '1.7.3',
+    }),
+    true,
+    'count=2 triggers at 30 days even without version bump'
   );
 
+  // Hard cap: promptCount >= 3 never triggers again
   equal(
-    shouldShowSupportPrompt({
-      status: 'idle',
-      streakDays: 5,
-      sessionStudiedCount: 5,
-      isPreviewSession: false,
-      isNewDayReady: true,
+    shouldTriggerSupportPromptModal({
+      ...base,
+      state: { status: 'snoozed', promptCount: 3, lastPromptedAt: 0, lastVersion: '1.0.0' },
     }),
     false,
-    'new-day rollover screen must not show support prompt'
+    'promptCount >= 3 must hit hard cap'
   );
 
+  // Feedback recovery gate: 21+ days AND version bump required
+  const fbState: SupportPromptState = {
+    status: 'feedback',
+    promptCount: 1,
+    lastPromptedAt: NOW - SUPPORT_PROMPT_COOLDOWN_FEEDBACK_SEC,
+    lastVersion: '1.7.3',
+  };
   equal(
-    shouldShowSupportPrompt({
-      status: 'idle',
-      streakDays: 5,
-      sessionStudiedCount: 0,
-      isPreviewSession: false,
-      isNewDayReady: false,
+    shouldTriggerSupportPromptModal({ ...base, state: fbState, studioVersion: '1.7.3' }),
+    false,
+    'feedback state must not re-prompt until user upgrades version'
+  );
+  equal(
+    shouldTriggerSupportPromptModal({
+      ...base,
+      state: { ...fbState, lastPromptedAt: NOW - SUPPORT_PROMPT_COOLDOWN_FEEDBACK_SEC + 10 },
+      studioVersion: '1.8.0',
     }),
     false,
-    'zero studied cards in session must not show support prompt'
+    'feedback state with version bump must still wait 21 days'
   );
+  equal(
+    shouldTriggerSupportPromptModal({ ...base, state: fbState, studioVersion: '1.8.0' }),
+    true,
+    'feedback state triggers gentle check-in after 21 days + version bump'
+  );
+});
+
+test('applySupportPromptOutcome transitions counts and promotes 3rd defer to exhausted', () => {
+  const s1 = applySupportPromptOutcome(DEFAULT_SUPPORT_PROMPT_STATE, 'opened_unconfirmed', '1.7.3', NOW);
+  eq(s1, { status: 'opened_unconfirmed', promptCount: 1, lastPromptedAt: NOW, lastVersion: '1.7.3' });
+
+  const s2 = applySupportPromptOutcome(s1, 'snoozed', '1.7.3', NOW + 100);
+  eq(s2, { status: 'snoozed', promptCount: 2, lastPromptedAt: NOW + 100, lastVersion: '1.7.3' });
+
+  const s3 = applySupportPromptOutcome(s2, 'opened_unconfirmed', '1.7.4', NOW + 200);
+  eq(s3, { status: 'exhausted', promptCount: 3, lastPromptedAt: NOW + 200, lastVersion: '1.7.4' });
+
+  const liked = applySupportPromptOutcome(s2, 'liked', '1.7.3', NOW + 300);
+  eq(liked, { status: 'liked', promptCount: 2, lastPromptedAt: NOW + 300, lastVersion: '1.7.3' });
+
+  const optedOut = applySupportPromptOutcome(s1, 'opted_out', '1.7.3', NOW + 400);
+  eq(optedOut, { status: 'opted_out', promptCount: 1, lastPromptedAt: NOW + 400, lastVersion: '1.7.3' });
+
+  const fb = applySupportPromptOutcome(DEFAULT_SUPPORT_PROMPT_STATE, 'feedback', '1.7.3', NOW + 500);
+  eq(fb, { status: 'feedback', promptCount: 1, lastPromptedAt: NOW + 500, lastVersion: '1.7.3' });
 });
 
 test('resolveFeedbackChannel routes zh-CN/zh-TW to Xiaohongshu and all other locales to GitHub', () => {
@@ -114,74 +237,88 @@ test('resolveFeedbackChannel routes zh-CN/zh-TW to Xiaohongshu and all other loc
   ok(!ANKIWEB_ADDON_URL.includes('?cb='), 'ANKIWEB_ADDON_URL should be canonical without cb query');
 });
 
-test('ReviewerView session-complete renders .reviewer-support-note only when eligible', () => {
+test('SupportPromptModal renders cleanly via SSR and Dashboard omits dev test trigger', () => {
   const prev = getAppState();
   const snapshot = {
-    inReviewMode: prev.inReviewMode,
-    isSessionComplete: prev.isSessionComplete,
-    isPreviewSession: prev.isPreviewSession,
+    supportPromptModalOpen: prev.supportPromptModalOpen,
+    supportPromptModalTestMode: prev.supportPromptModalTestMode,
+    supportPrompt: prev.supportPrompt,
+    customNickname: prev.customNickname,
     resolvedLang: prev.resolvedLang,
-    sessionStudiedCount: prev.sessionStudiedCount,
-    sessionCorrectCount: prev.sessionCorrectCount,
-    sessionTotalTimeMs: prev.sessionTotalTimeMs,
-    reviewScopeDeckId: prev.reviewScopeDeckId,
-    pendingDayRollover: prev.pendingDayRollover,
-    supportPromptStatus: prev.supportPromptStatus,
     dashboard: prev.dashboard,
+    decks: prev.decks,
+    isInitialSyncing: prev.isInitialSyncing,
+    syncing: prev.syncing,
   };
 
   try {
     setAppState({
-      inReviewMode: true,
-      isSessionComplete: true,
-      isPreviewSession: false,
       resolvedLang: 'zh-CN',
-      sessionStudiedCount: 12,
-      sessionCorrectCount: 11,
-      sessionTotalTimeMs: 120000,
-      reviewScopeDeckId: 'all',
-      pendingDayRollover: null,
-      supportPromptStatus: 'idle',
+      isInitialSyncing: false,
+      syncing: false,
+      supportPromptModalOpen: false,
+      customNickname: '耀',
+      supportPrompt: { status: 'idle', promptCount: 0, lastPromptedAt: 0, lastVersion: '1.7.3' },
       dashboard: {
         ...prev.dashboard,
-        streak: { ...prev.dashboard.streak, current: 3 },
+        userName: '测试账号',
+        streak: { ...prev.dashboard.streak, current: 5 },
       },
     });
 
-    const eligibleHtml = renderToStaticMarkup(React.createElement(ReviewerView));
-    ok(eligibleHtml.includes('reviewer-support-note'), 'streak === 3 & idle must render support note');
+    const dashHtml = renderToStaticMarkup(React.createElement(DashboardView));
     ok(
-      eligibleHtml.includes(translate('zh-CN', 'supportPromptAskTitle', { days: 3 })),
-      'ask headline renders dynamic streak count'
+      !dashHtml.includes('data-support-prompt-test="dashboard"'),
+      'production DashboardView must NOT expose temporary support-prompt test button'
     );
-    const completeBtns = Array.from(
-      eligibleHtml.matchAll(/class="reviewer-complete-btn reviewer-complete-btn--(primary|secondary)"/g)
+
+    const closedModalHtml = renderToStaticMarkup(React.createElement(SupportPromptModal));
+    equal(closedModalHtml, '', 'closed SupportPromptModal must render nothing');
+
+    setAppState({ supportPromptModalOpen: true, supportPromptModalTestMode: false });
+    const askHtml = renderToStaticMarkup(React.createElement(SupportPromptModal));
+    ok(
+      askHtml.includes('<dialog') &&
+        askHtml.includes('class="support-dialog"') &&
+        askHtml.includes('closedby="closerequest"') &&
+        !askHtml.includes('role="dialog"') &&
+        !askHtml.includes('aria-modal'),
+      'open modal renders native <dialog class="support-dialog" closedby="closerequest"> without backdrop light-dismiss or redundant ARIA'
     );
-    equal(completeBtns.length, 2, 'celebration card still has exactly 2 .reviewer-complete-btn buttons');
+    ok(askHtml.includes('./creator-avatar.jpg'), 'ask stage renders creator avatar');
+    ok(
+      askHtml.includes(translate('zh-CN', 'supportPromptStreakGreeting', { name: '耀', days: 5 })),
+      'streak eyebrow renders personalized greeting with active streak days'
+    );
+    ok(
+      askHtml.includes('support-heart-svg'),
+      'Positive choice card includes hover-illuminated heart icon'
+    );
+    ok(
+      askHtml.includes(translate('zh-CN', 'supportPromptPositiveBtn')) &&
+        askHtml.includes(translate('zh-CN', 'supportPromptNegativeBtn')),
+      'default ask stage renders two-step Positive/Negative choice cards'
+    );
+    ok(
+      !askHtml.includes(translate('zh-CN', 'supportPromptAlreadyLikedBtn')) &&
+        !askHtml.includes(translate('zh-CN', 'supportPromptLaterBtn')),
+      'Step 1 default ask stage omits premature "already liked" and redundant "maybe later" links'
+    );
 
     setAppState({
-      dashboard: {
-        ...prev.dashboard,
-        streak: { ...prev.dashboard.streak, current: 2 },
+      supportPrompt: {
+        status: 'opened_unconfirmed',
+        promptCount: 1,
+        lastPromptedAt: NOW - SUPPORT_PROMPT_COOLDOWN_SECOND_SEC,
+        lastVersion: '1.7.3',
       },
     });
-    const belowStreakHtml = renderToStaticMarkup(React.createElement(ReviewerView));
+    const returnAskHtml = renderToStaticMarkup(React.createElement(SupportPromptModal));
     ok(
-      !belowStreakHtml.includes('reviewer-support-note'),
-      'streak === 2 must not render support note'
-    );
-
-    setAppState({
-      supportPromptStatus: 'dismissed',
-      dashboard: {
-        ...prev.dashboard,
-        streak: { ...prev.dashboard.streak, current: 7 },
-      },
-    });
-    const dismissedHtml = renderToStaticMarkup(React.createElement(ReviewerView));
-    ok(
-      !dismissedHtml.includes('reviewer-support-note'),
-      'dismissed status must not render support note even with high streak'
+      returnAskHtml.includes(translate('zh-CN', 'supportPromptReturnAskTitle')) &&
+        returnAskHtml.includes(translate('zh-CN', 'supportPromptConfirmLikedBtn')) &&
+        returnAskHtml.includes(translate('zh-CN', 'supportPromptOptOutBtn')),
+      'opened_unconfirmed re-prompt renders return-check question and explicit Opt-Out link'
     );
   } finally {
     setAppState(snapshot);
@@ -243,7 +380,6 @@ test('answerCurrentCard advances Day-2 streak to Day-3 on first review without d
   };
 
   try {
-    // Non-last cards keep answerCurrentCard & undoLastReview completely synchronous.
     setAppState({
       inReviewMode: true,
       isSessionComplete: false,

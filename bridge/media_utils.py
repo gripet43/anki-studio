@@ -265,6 +265,76 @@ def restore_rendered_io_rects(raw_html: str) -> str:
 
 
 
+# Anki 原生 Image Occlusion 的 stock kind 常量（anki.notetypes_pb2.StockNotetype.KIND_IMAGE_OCCLUSION）。
+NATIVE_IO_STOCK_KIND = 5
+
+_IO_MODEL_NAME_KEYWORDS = (
+    "image occlusion",
+    "图片遮盖",
+    "圖片遮蓋",
+    "图像遮挡",
+    "圖片遮擋",
+    "图片遮挡",
+    "画像穴埋め",
+    "이미지 가리기",
+)
+_IO_HEADER_FIELD_NAMES = {
+    "header",
+    "标题",
+    "標題",
+    "ヘッダー",
+    "머리글",
+    "kopfzeile",
+    "en-tête",
+    "encabezado",
+    "cabeçalho",
+    "intestazione",
+    "заголовок",
+    "nagłówek",
+    "başlık",
+    "tiêu đề",
+    "koptekst",
+    "العنوان",
+}
+
+
+def is_image_occlusion_model(model: Any) -> bool:
+    """语言无关地判断某个卡型是否为 Anki 原生（或兼容）图片遮盖卡型。
+
+    非英文界面 Anki 创建的原生图片遮盖卡型会本地化卡型名与字段名（例如中文
+    ``图片遮盖``、字段 ``遮盖 / 图片 / 标题 / 背面额外 / 注释``），不能只靠英文
+    ``Image Occlusion`` 或 ``Occlusion`` / ``Image`` 硬编码识别。
+    """
+    if not isinstance(model, dict):
+        return False
+    try:
+        if int(model.get("originalStockKind", 0) or 0) == NATIVE_IO_STOCK_KIND:
+            return True
+    except (TypeError, ValueError):
+        pass
+    name = str(model.get("name", "") or "").strip().lower()
+    if any(kw in name for kw in _IO_MODEL_NAME_KEYWORDS):
+        return True
+    for tmpl in (model.get("tmpls") or []):
+        if not isinstance(tmpl, dict):
+            continue
+        blob = (
+            f"{tmpl.get('qfmt', '') or ''}\n{tmpl.get('afmt', '') or ''}"
+        ).lower()
+        if (
+            "anki.imageocclusion" in blob
+            or "image-occlusion-canvas" in blob
+            or "image-occlusion-container" in blob
+        ):
+            return True
+    fld_names = {
+        str(f.get("name", "") or "").strip().lower()
+        for f in (model.get("flds") or [])
+        if isinstance(f, dict)
+    }
+    return "occlusion" in fld_names and "image" in fld_names
+
+
 def _io_shape_props(raw: str) -> dict:
     """``left=.1:top=.2:width=.08:height=.06:oi=1`` → dict。"""
     props: dict = {}
@@ -276,13 +346,124 @@ def _io_shape_props(raw: str) -> dict:
     return props
 
 
+def _extract_native_io_fields(note) -> tuple[str, str, str]:
+    """语言无关地从原生 Image Occlusion 笔记提取 ``(occlusion, image, header)``。
+
+    中文/日文/德文/法文等非英文版 Anki 会将默认字段名本地化（如 ``遮盖`` / ``图片`` /
+    ``标题``），因此不再硬编码 ``note["Occlusion"]`` / ``note["Image"]``：
+    1. 先在所有字段中定位包含 ``{{cN::image-occlusion:...}}`` 指令的遮盖字段；
+    2. 再定位包含 ``<img>`` 标签的底图字段（优先匹配 ``Image``，其次遮盖字段后紧邻字段，
+       最后任意非遮盖的含图字段）；
+    3. 标题字段优先匹配常见英文/多语种标题键名；若符合 Anki 全球统一原生字段序
+       （第 0 栏遮盖、第 1 栏图片），则取第 2 栏作为标题。
+    """
+    if note is None or not hasattr(note, "items"):
+        return "", "", ""
+    try:
+        items = [(str(k), str(v or "")) for k, v in note.items()]
+    except Exception:
+        return "", "", ""
+    if not items:
+        return "", "", ""
+
+    occ_idx = -1
+    occlusion = ""
+    for idx, (_k, val) in enumerate(items):
+        if val and IO_SHAPE_RE.search(val):
+            occ_idx = idx
+            occlusion = val
+            break
+    if occ_idx < 0:
+        return "", "", ""
+
+    img_idx = -1
+    image = ""
+    # 1. 优先精确匹配英文 Image 字段（兼顾 dict 键顺序任意的单测）
+    for idx, (k, val) in enumerate(items):
+        if idx == occ_idx:
+            continue
+        if k.strip().lower() == "image" and IMG_TAG_RE.search(val):
+            img_idx = idx
+            image = val.strip()
+            break
+    # 2. 其次检查原生标准顺位（紧随遮盖字段之后）
+    if img_idx < 0 and occ_idx + 1 < len(items):
+        candidate = items[occ_idx + 1][1]
+        if IMG_TAG_RE.search(candidate):
+            img_idx = occ_idx + 1
+            image = candidate.strip()
+    # 3. 兜底扫描其余任意包含 <img> 的字段
+    if img_idx < 0:
+        for idx, (_k, val) in enumerate(items):
+            if idx == occ_idx:
+                continue
+            if IMG_TAG_RE.search(val):
+                img_idx = idx
+                image = val.strip()
+                break
+    if img_idx < 0 or not image:
+        return "", "", ""
+
+    header = ""
+    for idx, (k, val) in enumerate(items):
+        if idx in (occ_idx, img_idx):
+            continue
+        if k.strip().lower() in _IO_HEADER_FIELD_NAMES:
+            header = val.strip()
+            break
+    if not header and occ_idx == 0 and img_idx == 1 and len(items) >= 3:
+        header = items[2][1].strip()
+
+    return occlusion, image, header
+
+
+def _parse_io_polygon(props: dict) -> tuple[float, float, float, float, str] | None:
+    """解析原生 IO ``polygon`` 形状的 ``points`` 顶点串为百分比包围盒与 ``clip-path``。"""
+    raw_points = str(props.get("points", "") or "").strip()
+    if not raw_points:
+        return None
+    pts: List[Tuple[float, float]] = []
+    for pair in raw_points.split():
+        if "," not in pair:
+            continue
+        x_s, y_s = pair.split(",", 1)
+        try:
+            pts.append((float(x_s), float(y_s)))
+        except (TypeError, ValueError):
+            continue
+    if len(pts) < 3:
+        return None
+    min_x = min(p[0] for p in pts)
+    max_x = max(p[0] for p in pts)
+    min_y = min(p[1] for p in pts)
+    max_y = max(p[1] for p in pts)
+    span_x = max_x - min_x
+    span_y = max_y - min_y
+    if span_x <= 0 or span_y <= 0:
+        return None
+    try:
+        left = float(props.get("left", min_x)) * 100
+        top = float(props.get("top", min_y)) * 100
+    except (TypeError, ValueError):
+        return None
+    width = span_x * 100
+    height = span_y * 100
+    rel_vertices = [
+        f"{((px - min_x) / span_x) * 100:.2f}% {((py - min_y) / span_y) * 100:.2f}%"
+        for px, py in pts
+    ]
+    return left, top, width, height, f"clip-path:polygon({','.join(rel_vertices)});"
+
+
 def render_native_image_occlusion(note) -> tuple[str, str, str]:
     """把 Anki 原生 Image Occlusion 笔记转成插件自己的静态遮罩结构。
 
-    原生 ``Occlusion`` 字段是 ``{{cN::image-occlusion:rect:left=…:top=…:width=…:height=…}}``
-    这样的文本指令，坐标是 0–1 小数。Anki 官方复习界面会用 ``anki.imageOcclusion.setup()``
-    把它画进 canvas，而本插件的 WebView 不执行模板里的 script，所以这里直接换算成百分比，
-    生成 ``.anki-io-wrap`` + ``span.anki-io-rect``，复用既有的静态遮罩渲染链路。
+    原生遮盖字段是 ``{{cN::image-occlusion:rect:left=…:top=…:width=…:height=…}}``
+    这样的文本指令（也支持 ``ellipse`` 与 ``polygon`` 及可选旋转角 ``angle``），
+    坐标是 0–1 小数。Anki 官方复习界面会用 ``anki.imageOcclusion.setup()`` 把它画进
+    canvas，而本插件的常规渲染链路不执行模板脚本，因此这里直接按内容与原生字段结构
+    语言无关地提取字段并换算成百分比，生成 ``.anki-io-wrap`` + ``span.anki-io-rect``，
+    复用既有的静态遮罩渲染链路。
 
     ``data-io-rect`` 与内层 ``{{cN::}}`` 都保留**原始 ordinal**（同一个组的多个遮罩共用
     同一个 N），不要改写成「第几个遮罩」。下游 ``_resolve_rich_html_and_audio`` 靠
@@ -291,42 +472,71 @@ def render_native_image_occlusion(note) -> tuple[str, str, str]:
 
     返回 ``(front, back, title)``；不是原生遮挡卡时返回三个空串。
     """
-    try:
-        image = (note["Image"] or "").strip()
-        occlusion = note["Occlusion"] or ""
-        header = (note["Header"] or "").strip()
-    except (KeyError, TypeError, IndexError):
-        return "", "", ""
-
+    occlusion, image, header = _extract_native_io_fields(note)
     if not image or not occlusion:
-        return "", "", header
+        return "", "", ""
 
     spans = []
     occlude_flags = []
     for token in IO_SHAPE_RE.finditer(occlusion):
         num = token.group(1)
+        shape_kind = (token.group(2) or "rect").strip().lower()
         props = _io_shape_props(token.group(3))
-        try:
-            left = float(props.get("left", 0)) * 100
-            top = float(props.get("top", 0)) * 100
-            width = float(props.get("width", 0)) * 100
-            height = float(props.get("height", 0)) * 100
-        except (TypeError, ValueError):
+        extra_style = ""
+        shape_attr = ""
+        if shape_kind == "ellipse":
+            try:
+                left = float(props.get("left", 0)) * 100
+                top = float(props.get("top", 0)) * 100
+                width = float(props.get("rx", 0)) * 200
+                height = float(props.get("ry", 0)) * 200
+            except (TypeError, ValueError):
+                continue
+            shape_attr = ' data-io-shape="ellipse"'
+        elif shape_kind == "polygon":
+            parsed_poly = _parse_io_polygon(props)
+            if parsed_poly is None:
+                continue
+            left, top, width, height, extra_style = parsed_poly
+            shape_attr = ' data-io-shape="polygon"'
+        elif shape_kind == "rect":
+            try:
+                left = float(props.get("left", 0)) * 100
+                top = float(props.get("top", 0)) * 100
+                width = float(props.get("width", 0)) * 100
+                height = float(props.get("height", 0)) * 100
+            except (TypeError, ValueError):
+                continue
+        else:
+            # 诸如 `text` 标注节点本身不是矩形遮罩，跳过即可，避免干扰其它有效遮罩。
             continue
+
         if width <= 0 or height <= 0:
             continue
         left = max(0.0, min(99.0, left))
         top = max(0.0, min(99.0, top))
         width = max(0.5, min(100.0 - left, width))
         height = max(0.5, min(100.0 - top, height))
+
+        angle_style = ""
+        raw_angle = props.get("angle")
+        if raw_angle is not None and raw_angle != "":
+            try:
+                angle_val = float(raw_angle)
+                if abs(angle_val) >= 0.05:
+                    angle_style = f"transform-origin:0 0;transform:rotate({angle_val:.2f}deg);"
+            except (TypeError, ValueError):
+                pass
+
         # `oi=1` 是 Anki 用来区分两种模式的唯一开关（原生编辑器由 hideAllGuessOne 直接决定
         # 写不写它）：带 oi 的遮罩在「不是当前这张卡」时也要盖住 → 隐藏全部、猜一个；
         # 不带 oi → 只盖当前这张卡的那组，其余组露出来 → 隐藏一个、猜一个。
         occlude_flags.append(str(props.get("oi", "")).strip().lower() in ("1", "true", "yes"))
         spans.append(
-            f'<span class="anki-io-rect" data-io-rect="{num}" '
+            f'<span class="anki-io-rect" data-io-rect="{num}"{shape_attr} '
             f'style="position:absolute;left:{left:.2f}%;top:{top:.2f}%;'
-            f'width:{width:.2f}%;height:{height:.2f}%;">{{{{c{num}::{num}}}}}</span>'
+            f'width:{width:.2f}%;height:{height:.2f}%;{angle_style}{extra_style}">'
+            f"{{{{c{num}::{num}}}}}</span>"
         )
 
     if not spans:
@@ -1326,15 +1536,7 @@ def render_sandbox_card_sides(
                     else None
                 )
                 if isinstance(model_obj, dict):
-                    f_names = {
-                        str(f.get("name", "") or "").strip().lower()
-                        for f in (model_obj.get("flds") or [])
-                        if isinstance(f, dict)
-                    }
-                    m_name = str(model_obj.get("name", "") or "").strip().lower()
-                    is_io_card = "image occlusion" in m_name or (
-                        "occlusion" in f_names and "image" in f_names
-                    )
+                    is_io_card = is_image_occlusion_model(model_obj)
             except Exception:
                 is_io_card = False
 

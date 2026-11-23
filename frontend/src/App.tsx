@@ -12,6 +12,7 @@ import { StatsView } from './components/stats/StatsView';
 import { CustomStudyModal } from './components/study/CustomStudyModal';
 import { VacationModal } from './components/vacation/VacationModal';
 import { IcuRescueModal } from './components/vacation/IcuRescueModal';
+import { SupportPromptModal } from './components/common/SupportPromptModal';
 import { ZenHomeView } from './components/zen/ZenHomeView';
 import { ZenReviewView } from './components/zen/ZenReviewView';
 import { ZenThresholdOverlay } from './components/zen/ZenThresholdOverlay';
@@ -39,6 +40,7 @@ export const App: React.FC = () => {
     vacationModalOpen,
     icuModalOpen,
     customStudyModalOpen,
+    supportPromptModalOpen,
     inlineEditing,
     theme,
     systemDark,
@@ -303,7 +305,8 @@ export const App: React.FC = () => {
           !settingsOpen &&
           !vacationModalOpen &&
           !icuModalOpen &&
-          !customStudyModalOpen
+          !customStudyModalOpen &&
+          !supportPromptModalOpen
         ) {
           e.preventDefault();
           appActions.toggleZenMode();
@@ -356,7 +359,8 @@ export const App: React.FC = () => {
           !settingsOpen &&
           !vacationModalOpen &&
           !icuModalOpen &&
-          !customStudyModalOpen
+          !customStudyModalOpen &&
+          !supportPromptModalOpen
         ) {
           e.preventDefault();
           appActions.toggleSidebar();
@@ -387,6 +391,7 @@ export const App: React.FC = () => {
         !cmdKOpen &&
         !quickAddOpen &&
         !settingsOpen &&
+        !supportPromptModalOpen &&
         e.key.toLowerCase() === 'n'
       ) {
         e.preventDefault();
@@ -401,6 +406,7 @@ export const App: React.FC = () => {
         !cmdKOpen &&
         !quickAddOpen &&
         !settingsOpen &&
+        !supportPromptModalOpen &&
         !e.ctrlKey &&
         !e.metaKey &&
         !e.altKey &&
@@ -425,6 +431,7 @@ export const App: React.FC = () => {
     vacationModalOpen,
     icuModalOpen,
     customStudyModalOpen,
+    supportPromptModalOpen,
   ]);
 
   const rootBg =
@@ -486,6 +493,9 @@ export const App: React.FC = () => {
 
           {/* Custom Study, Mistake Drill & Flag/Tag Cram Modal */}
           <CustomStudyModal />
+
+          {/* Celebratory AnkiWeb Support & Feedback Modal */}
+          <SupportPromptModal />
         </>
       )}
 
