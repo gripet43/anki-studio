@@ -545,3 +545,52 @@ test('P1 physics & polish: 1.5 slope cone, top-arrival settle, velocity fly dura
   assert.equal(cancelState.hapticFiredForSide, null);
   assert.equal(cancelActiveSwipeDrag(cancelState), false);
 });
+
+test('Linux X11 touchpad phase unlocks mouse lock, syncs OS inverted flag, and preserves silence-timer release', () => {
+  const st = createSwipeGestureState(false);
+
+  // First, a Linux external mouse horizontal wheel locks swipe gestures
+  stepNativeWheelPhase(st, 'mouse', false, true, 100);
+  assert.equal(st.nativeDeviceIsMouse, true);
+  assert.equal(
+    stepSwipeWheel(st, {
+      deltaX: 60,
+      deltaY: 0,
+      deltaMode: 0,
+      isCardFlipped: true,
+      atScrollTop: true,
+      timestampMs: 110,
+    }).handled,
+    false
+  );
+
+  // Switching back to a Linux X11 precision trackpad unlocks mouse lock without requiring native ScrollEnd
+  stepNativeWheelPhase(st, 'touchpad', true, true, 200);
+  assert.equal(st.nativeDeviceIsMouse, false);
+  assert.equal(st.nativeWheelActive, false);
+  assert.equal(st.nativePhaseInFlight, false);
+  assert.equal(st.inverted, true);
+
+  // Subsequent trackpad swipe (progressive precision pixel deltas) moves smoothly with synced inverted=true
+  let move = stepSwipeWheel(st, {
+    deltaX: -28,
+    deltaY: 0,
+    deltaMode: 0,
+    isCardFlipped: true,
+    atScrollTop: true,
+    timestampMs: 220,
+  });
+  for (let i = 1; i <= 3; i++) {
+    move = stepSwipeWheel(st, {
+      deltaX: -28,
+      deltaY: 0,
+      deltaMode: 0,
+      isCardFlipped: true,
+      atScrollTop: true,
+      timestampMs: 220 + i * 16,
+    });
+  }
+  assert.equal(move.handled, true);
+  assert.equal(move.pose.axis, 'horizontal');
+  assert.ok(move.pose.visualX > 0, 'synced natural scrolling moves visualX rightward on negative deltaX');
+});

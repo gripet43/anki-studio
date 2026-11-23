@@ -346,16 +346,58 @@ def _io_shape_props(raw: str) -> dict:
     return props
 
 
+def _locate_native_io_field_indices(items: list[tuple[str, str]]) -> tuple[int, int, int]:
+    """语言无关地定位原生 Image Occlusion 笔记的 ``(occ_idx, img_idx, header_idx)``。"""
+    occ_idx = -1
+    for idx, (_k, val) in enumerate(items):
+        if val and IO_SHAPE_RE.search(val):
+            occ_idx = idx
+            break
+    if occ_idx < 0:
+        return -1, -1, -1
+
+    img_idx = -1
+    # 1. 优先精确匹配英文 Image 字段（兼顾 dict 键顺序任意的单测）
+    for idx, (k, val) in enumerate(items):
+        if idx == occ_idx:
+            continue
+        if k.strip().lower() == "image" and IMG_TAG_RE.search(val):
+            img_idx = idx
+            break
+    # 2. 其次检查原生标准顺位（紧随遮盖字段之后）
+    if img_idx < 0 and occ_idx + 1 < len(items):
+        candidate = items[occ_idx + 1][1]
+        if IMG_TAG_RE.search(candidate):
+            img_idx = occ_idx + 1
+    # 3. 兜底扫描其余任意包含 <img> 的字段
+    if img_idx < 0:
+        for idx, (_k, val) in enumerate(items):
+            if idx == occ_idx:
+                continue
+            if IMG_TAG_RE.search(val):
+                img_idx = idx
+                break
+    if img_idx < 0:
+        return occ_idx, -1, -1
+
+    header_idx = -1
+    for idx, (k, val) in enumerate(items):
+        if idx in (occ_idx, img_idx):
+            continue
+        if k.strip().lower() in _IO_HEADER_FIELD_NAMES:
+            header_idx = idx
+            break
+    if header_idx < 0 and occ_idx == 0 and img_idx == 1 and len(items) >= 3:
+        header_idx = 2
+
+    return occ_idx, img_idx, header_idx
+
+
 def _extract_native_io_fields(note) -> tuple[str, str, str]:
     """语言无关地从原生 Image Occlusion 笔记提取 ``(occlusion, image, header)``。
 
     中文/日文/德文/法文等非英文版 Anki 会将默认字段名本地化（如 ``遮盖`` / ``图片`` /
-    ``标题``），因此不再硬编码 ``note["Occlusion"]`` / ``note["Image"]``：
-    1. 先在所有字段中定位包含 ``{{cN::image-occlusion:...}}`` 指令的遮盖字段；
-    2. 再定位包含 ``<img>`` 标签的底图字段（优先匹配 ``Image``，其次遮盖字段后紧邻字段，
-       最后任意非遮盖的含图字段）；
-    3. 标题字段优先匹配常见英文/多语种标题键名；若符合 Anki 全球统一原生字段序
-       （第 0 栏遮盖、第 1 栏图片），则取第 2 栏作为标题。
+    ``标题``），因此不再硬编码 ``note["Occlusion"]`` / ``note["Image"]``。
     """
     if note is None or not hasattr(note, "items"):
         return "", "", ""
@@ -366,55 +408,46 @@ def _extract_native_io_fields(note) -> tuple[str, str, str]:
     if not items:
         return "", "", ""
 
-    occ_idx = -1
-    occlusion = ""
-    for idx, (_k, val) in enumerate(items):
-        if val and IO_SHAPE_RE.search(val):
-            occ_idx = idx
-            occlusion = val
-            break
-    if occ_idx < 0:
+    occ_idx, img_idx, header_idx = _locate_native_io_field_indices(items)
+    if occ_idx < 0 or img_idx < 0:
         return "", "", ""
-
-    img_idx = -1
-    image = ""
-    # 1. 优先精确匹配英文 Image 字段（兼顾 dict 键顺序任意的单测）
-    for idx, (k, val) in enumerate(items):
-        if idx == occ_idx:
-            continue
-        if k.strip().lower() == "image" and IMG_TAG_RE.search(val):
-            img_idx = idx
-            image = val.strip()
-            break
-    # 2. 其次检查原生标准顺位（紧随遮盖字段之后）
-    if img_idx < 0 and occ_idx + 1 < len(items):
-        candidate = items[occ_idx + 1][1]
-        if IMG_TAG_RE.search(candidate):
-            img_idx = occ_idx + 1
-            image = candidate.strip()
-    # 3. 兜底扫描其余任意包含 <img> 的字段
-    if img_idx < 0:
-        for idx, (_k, val) in enumerate(items):
-            if idx == occ_idx:
-                continue
-            if IMG_TAG_RE.search(val):
-                img_idx = idx
-                image = val.strip()
-                break
-    if img_idx < 0 or not image:
+    occlusion = items[occ_idx][1]
+    image = items[img_idx][1].strip()
+    if not image:
         return "", "", ""
-
-    header = ""
-    for idx, (k, val) in enumerate(items):
-        if idx in (occ_idx, img_idx):
-            continue
-        if k.strip().lower() in _IO_HEADER_FIELD_NAMES:
-            header = val.strip()
-            break
-    if not header and occ_idx == 0 and img_idx == 1 and len(items) >= 3:
-        header = items[2][1].strip()
-
+    header = items[header_idx][1].strip() if header_idx >= 0 else ""
     return occlusion, image, header
+
+
+def extract_native_io_extra_html(note) -> str:
+    """提取原生 Image Occlusion 笔记的背面补充字段（``Back Extra / 背面额外 / Comments / 注释`` 等）。
+
+    复习页翻面时，上方 ``frontAnswerHtml`` 已直接揭开图片遮罩并标出绿色答案框，
+    下方答案区只应展示用户的文字/媒体补充说明，不再把裸底图重复渲染第二遍。
+    """
+    if note is None or not hasattr(note, "items"):
+        return ""
+    try:
+        items = [(str(k), str(v or "")) for k, v in note.items()]
+    except Exception:
+        return ""
+    if not items:
+        return ""
+    occ_idx, img_idx, header_idx = _locate_native_io_field_indices(items)
+    if occ_idx < 0 or img_idx < 0:
+        return ""
+    skip = {occ_idx, img_idx}
+    if header_idx >= 0:
+        skip.add(header_idx)
+    extras: list[str] = []
+    for idx, (_k, val) in enumerate(items):
+        if idx in skip:
+            continue
+        cleaned = val.strip()
+        if not cleaned or cleaned in ("<br>", "<br/>", "<br />"):
+            continue
+        extras.append(f'<div class="anki-io-extra">{cleaned}</div>')
+    return "".join(extras)
 
 
 def _parse_io_polygon(props: dict) -> tuple[float, float, float, float, str] | None:
@@ -577,6 +610,151 @@ ANY_TAG_RE = re.compile(r"<[^>]+>")
 MEDIA_PLACEHOLDER_RE = re.compile(r"\[anki:(?:play|tts):[^\]]*\]", flags=re.I)
 SOUND_TAG_RE = re.compile(r"\[sound:([^\]]+)\]")
 CLOZE_RE = re.compile(r"\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}")
+_CLOZE_OPEN_RE = re.compile(r"\{\{c(\d+)::", flags=re.I)
+
+
+def iter_cloze_spans(text: str) -> list[tuple[int, int, str, str, str | None]]:
+    """以栈深度解析顶层平衡的 Anki Cloze 片段 ``(start, end, ord_str, answer, hint)``。
+
+    支持 Anki 2.1.56+ / 26.x 的嵌套挖空（如 ``{{c1::outer {{c2::inner}}}}``），避免单层
+    非贪婪正则在内层 ``}}`` 处提前截断，同时与 Anki 原生 Rust 解析器保持一致：
+    仅在顶层深度（``depth == 1``）识别第一个 ``::`` 作为提示分隔符。
+    """
+    if not text or "{{c" not in text.lower():
+        return []
+    spans: list[tuple[int, int, str, str, str | None]] = []
+    n = len(text)
+    cursor = 0
+    while cursor < n:
+        m = _CLOZE_OPEN_RE.search(text, cursor)
+        if not m:
+            break
+        start = m.start()
+        ord_str = m.group(1)
+        body_start = m.end()
+        pos = body_start
+        depth = 1
+        hint_sep = -1
+        while pos < n and depth > 0:
+            if text[pos : pos + 2] == "{{":
+                nested = _CLOZE_OPEN_RE.match(text, pos)
+                if nested:
+                    depth += 1
+                    pos = nested.end()
+                    continue
+            if text[pos : pos + 2] == "}}":
+                depth -= 1
+                if depth == 0:
+                    close_pos = pos
+                    end = pos + 2
+                    if hint_sep != -1:
+                        ans = text[body_start:hint_sep]
+                        hint: str | None = text[hint_sep + 2 : close_pos]
+                    else:
+                        ans = text[body_start:close_pos]
+                        hint = None
+                    spans.append((start, end, ord_str, ans, hint))
+                    cursor = end
+                    break
+                pos += 2
+                continue
+            if depth == 1 and hint_sep == -1 and text[pos : pos + 2] == "::":
+                hint_sep = pos
+                pos += 2
+                continue
+            pos += 1
+        else:
+            # 未闭合的残缺 `{{cN::...`：跳过开标签，避免吞掉后方合法挖空
+            cursor = body_start
+    return spans
+
+
+def extract_cloze_ordinals(text: str) -> list[int]:
+    """递归提取文本（含嵌套挖空）中全部正整数 Cloze 序号并去重排序。"""
+    found: set[int] = set()
+
+    def _walk(chunk: str) -> None:
+        for _s, _e, ord_str, ans, hint in iter_cloze_spans(chunk):
+            try:
+                num = int(ord_str)
+                if num >= 1:
+                    found.add(num)
+            except (TypeError, ValueError):
+                pass
+            if ans:
+                _walk(ans)
+            if hint:
+                _walk(hint)
+
+    if text:
+        _walk(text)
+    return sorted(found)
+
+
+def strip_cloze_markup(text: str) -> str:
+    """递归剥离所有（含嵌套）``{{cN::answer::hint}}`` 标记，仅保留纯答案文本。"""
+    if not text or "{{c" not in text.lower():
+        return text or ""
+    spans = iter_cloze_spans(text)
+    if not spans:
+        return text
+    out: list[str] = []
+    last = 0
+    for start, end, _ord, ans, _hint in spans:
+        out.append(text[last:start])
+        out.append(strip_cloze_markup(ans))
+        last = end
+    out.append(text[last:])
+    return "".join(out)
+
+
+def render_cloze_html(
+    text: str, cloze_ord: int = 1, is_question_side: bool = False
+) -> str:
+    """递归将 Anki Cloze（含嵌套挖空）渲染为复习页安全 HTML。"""
+    if not text or "{{c" not in text.lower():
+        return text or ""
+    spans = iter_cloze_spans(text)
+    if not spans:
+        return text
+    target_idx = str(max(1, cloze_ord))
+    out: list[str] = []
+    last = 0
+    for start, end, c_num, c_ans, c_hint in spans:
+        out.append(text[last:start])
+        if c_num == target_idx:
+            if is_question_side:
+                hint_label = strip_cloze_markup(c_hint) if c_hint else "..."
+                out.append(f'<span class="anki-cloze-question">[{hint_label}]</span>')
+            else:
+                inner = render_cloze_html(c_ans, cloze_ord=cloze_ord, is_question_side=False)
+                out.append(f'<span class="anki-cloze-answer">{inner}</span>')
+        else:
+            inner = render_cloze_html(
+                c_ans, cloze_ord=cloze_ord, is_question_side=is_question_side
+            )
+            out.append(f'<span class="cloze-inactive" data-ordinal="{c_num}">{inner}</span>')
+        last = end
+    out.append(text[last:])
+    return "".join(out)
+
+
+def render_cloze_library_html(text: str) -> str:
+    """递归将 Anki Cloze（含嵌套挖空）渲染为卡片库高亮摘要 HTML。"""
+    if not text or "{{c" not in text.lower():
+        return text or ""
+    spans = iter_cloze_spans(text)
+    if not spans:
+        return text
+    out: list[str] = []
+    last = 0
+    for start, end, _c_num, c_ans, _c_hint in spans:
+        out.append(text[last:start])
+        inner = strip_cloze_markup(c_ans)
+        out.append(f'<span class="anki-cloze-lib">{inner}</span>')
+        last = end
+    out.append(text[last:])
+    return "".join(out)
 
 # 日语振假名标注 ` 漢字[かんじ]` / `10[じゅう]`（仅匹配假名读音，不误伤英语音标 [ə'bændən] 或汉语拼音 [ài]）
 FURIGANA_BRACKET_RE = re.compile(
@@ -1469,41 +1647,57 @@ class SandboxRender(NamedTuple):
     css: str
 
 
-_SANDBOX_SAFE_CLOZE_RE = re.compile(
-    r"(<script\b[^>]*>[\s\S]*?</script\s*>|<style\b[^>]*>[\s\S]*?</style\s*>|<[^>]+>)"
-    r"|\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}",
+_SANDBOX_PROTECTED_BLOCK_RE = re.compile(
+    r"(<script\b[^>]*>[\s\S]*?</script\s*>|<style\b[^>]*>[\s\S]*?</style\s*>)",
     flags=re.I,
 )
+
+
+def _render_sandbox_cloze_chunk(
+    chunk: str, cloze_ord: int, is_question_side: bool
+) -> str:
+    spans = iter_cloze_spans(chunk)
+    if not spans:
+        return chunk
+    target_idx = str(max(1, cloze_ord))
+    out: list[str] = []
+    last = 0
+    for start, end, c_num, c_ans, c_hint in spans:
+        out.append(chunk[last:start])
+        if c_num == target_idx:
+            if is_question_side:
+                clean_hint = strip_cloze_markup(c_hint) if c_hint else ""
+                hint_label = html.escape(clean_hint) if clean_hint else "..."
+                clean_ans = strip_cloze_markup(c_ans)
+                cloze_attr = html.escape(plain_text_of(clean_ans) or clean_ans, quote=True)
+                out.append(
+                    f'<span class="cloze" data-cloze="{cloze_attr}" '
+                    f'data-ordinal="{c_num}">[{hint_label}]</span>'
+                )
+            else:
+                inner = _render_sandbox_cloze_chunk(c_ans, cloze_ord, False)
+                out.append(f'<span class="cloze" data-ordinal="{c_num}">{inner}</span>')
+        else:
+            inner = _render_sandbox_cloze_chunk(c_ans, cloze_ord, is_question_side)
+            out.append(f'<span class="cloze-inactive" data-ordinal="{c_num}">{inner}</span>')
+        last = end
+    out.append(chunk[last:])
+    return "".join(out)
 
 
 def _render_literal_cloze_for_sandbox(
     raw_html: str, cloze_ord: int = 1, is_question_side: bool = True
 ) -> str:
-    """为尚未转换的标准卡型保留字面 ``{{cN::...}}`` 时在兼容模式沙盒内渲染合法挖空状态，跳过脚本与样式块。"""
+    """为尚未转换的标准卡型保留字面 ``{{cN::...}}``（含嵌套挖空）时在兼容模式沙盒内渲染合法挖空状态，跳过脚本与样式块。"""
     if not raw_html or "{{c" not in raw_html.lower():
         return raw_html or ""
     if _NATIVE_CLOZE_OPEN_TAG_RE.search(raw_html):
         return raw_html
-    target_idx = str(max(1, cloze_ord))
-
-    def _repl(match: re.Match) -> str:
-        if match.group(1) is not None:
-            return match.group(0)
-        c_num = match.group(2)
-        c_ans = match.group(3) or ""
-        c_hint = match.group(4)
-        if c_num == target_idx:
-            if is_question_side:
-                hint_label = html.escape(c_hint) if c_hint else "..."
-                cloze_attr = html.escape(plain_text_of(c_ans) or c_ans, quote=True)
-                return (
-                    f'<span class="cloze" data-cloze="{cloze_attr}" '
-                    f'data-ordinal="{c_num}">[{hint_label}]</span>'
-                )
-            return f'<span class="cloze" data-ordinal="{c_num}">{c_ans}</span>'
-        return f'<span class="cloze-inactive" data-ordinal="{c_num}">{c_ans}</span>'
-
-    return _SANDBOX_SAFE_CLOZE_RE.sub(_repl, raw_html)
+    parts = _SANDBOX_PROTECTED_BLOCK_RE.split(raw_html)
+    for idx in range(0, len(parts), 2):
+        if parts[idx] and "{{c" in parts[idx].lower():
+            parts[idx] = _render_sandbox_cloze_chunk(parts[idx], cloze_ord, is_question_side)
+    return "".join(parts)
 
 
 def render_sandbox_card_sides(
@@ -1759,7 +1953,7 @@ def plain_text_of(raw_html: str) -> str:
     text = MDX_INDEX_MARKER_RE.sub(" ", text)
     if "[" in text and "]" in text:
         text = FURIGANA_BRACKET_RE.sub(r"\1", text)
-    text = CLOZE_RE.sub(lambda m: m.group(2) or "", text)
+    text = strip_cloze_markup(text)
     text = INLINE_FORMAT_TAG_RE.sub("", text)
     text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", html.unescape(text)).strip()

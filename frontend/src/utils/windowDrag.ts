@@ -1,10 +1,12 @@
 import React from 'react';
-import { appActions } from '../stores/useAppStore';
+import { appActions, getAppState } from '../stores/useAppStore';
 import { getClosestFromTarget } from './domTarget';
 
 /**
- * Handles window dragging from custom web titlebars / drag regions across macOS / desktop.
- * Uses high-performance requestAnimationFrame delta aggregation and calls native Qt mw.move.
+ * Handles window dragging from custom web titlebars / drag regions across desktop platforms.
+ * Prefers Qt 6 native `QWindow.startSystemMove()` (required on Wayland, smooth on macOS/Win/X11)
+ * and falls back to RAF-batched `mw.move(dx, dy)` only when native system move is unavailable
+ * on non-Linux platforms (Linux Wayland forbids `mw.move` and X11 jitters if both run).
  */
 export function startWindowDrag(e: React.MouseEvent) {
   // Only respond to primary left-click
@@ -18,63 +20,77 @@ export function startWindowDrag(e: React.MouseEvent) {
   // Prevent default browser text selection or image drag behavior
   e.preventDefault();
 
-  // 1. Attempt native system move if platform supports it
-  appActions.startSystemMove();
+  const isLinux = getAppState().envInfo.platform === 'linux';
+  const initialScreenX = e.screenX;
+  const initialScreenY = e.screenY;
 
-  // 2. Smooth, real-time RAF tracking for silky 60fps / 120fps window positioning
-  let lastScreenX = e.screenX;
-  let lastScreenY = e.screenY;
-  let pendingDx = 0;
-  let pendingDy = 0;
-  let rafId: number | null = null;
-
-  const flushMove = () => {
-    if (pendingDx !== 0 || pendingDy !== 0) {
-      appActions.moveWindow(pendingDx, pendingDy);
-      pendingDx = 0;
-      pendingDy = 0;
-    }
+  let released = false;
+  const onEarlyMouseUp = () => {
+    released = true;
   };
+  window.addEventListener('mouseup', onEarlyMouseUp, { once: true });
 
-  const onMouseMove = (moveEvent: MouseEvent) => {
-    // If the left mouse button was released outside the window
-    if (moveEvent.buttons !== 1) {
-      cleanup();
+  // 1. Prefer native OS window move (xdg_toplevel.move on Wayland, _NET_WM_MOVERESIZE on X11, Cocoa/Win32)
+  void appActions.startSystemMove().then((started) => {
+    window.removeEventListener('mouseup', onEarlyMouseUp);
+    if (started || released || isLinux) {
       return;
     }
 
-    const dx = moveEvent.screenX - lastScreenX;
-    const dy = moveEvent.screenY - lastScreenY;
-    lastScreenX = moveEvent.screenX;
-    lastScreenY = moveEvent.screenY;
+    // 2. Fallback RAF delta tracking when native system move is unsupported (e.g. older macOS/Windows Qt)
+    let lastScreenX = initialScreenX;
+    let lastScreenY = initialScreenY;
+    let pendingDx = 0;
+    let pendingDy = 0;
+    let rafId: number | null = null;
 
-    pendingDx += dx;
-    pendingDy += dy;
+    const flushMove = () => {
+      if (pendingDx !== 0 || pendingDy !== 0) {
+        appActions.moveWindow(pendingDx, pendingDy);
+        pendingDx = 0;
+        pendingDy = 0;
+      }
+    };
 
-    if (rafId === null) {
-      rafId = requestAnimationFrame(() => {
-        flushMove();
+    const cleanup = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
         rafId = null;
-      });
-    }
-  };
+      }
+      flushMove();
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
 
-  const cleanup = () => {
-    if (rafId !== null) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
-    }
-    flushMove();
-    window.removeEventListener('mousemove', onMouseMove);
-    window.removeEventListener('mouseup', onMouseUp);
-  };
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (moveEvent.buttons !== 1) {
+        cleanup();
+        return;
+      }
 
-  const onMouseUp = () => {
-    cleanup();
-  };
+      const dx = moveEvent.screenX - lastScreenX;
+      const dy = moveEvent.screenY - lastScreenY;
+      lastScreenX = moveEvent.screenX;
+      lastScreenY = moveEvent.screenY;
 
-  window.addEventListener('mousemove', onMouseMove);
-  window.addEventListener('mouseup', onMouseUp);
+      pendingDx += dx;
+      pendingDy += dy;
+
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          flushMove();
+          rafId = null;
+        });
+      }
+    };
+
+    const onMouseUp = () => {
+      cleanup();
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  });
 }
 
 /**

@@ -925,6 +925,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
 
         from anki_modern_os import (
             _is_qt_discrete_mouse_wheel,
+            _is_qt_linux_discrete_mouse_wheel,
             _is_qt_no_scroll_phase,
             _normalize_qt_wheel_phase,
         )
@@ -965,6 +966,39 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 SimpleNamespace(name="NoScrollPhase", value=0), (0, 0), (0, -120), 1
             )
         )
+        # Linux notched wheel (horizontal tilt & vertical) -> IS mouse!
+        self.assertTrue(
+            _is_qt_linux_discrete_mouse_wheel(
+                SimpleNamespace(name="NoScrollPhase", value=0), (0, 0), (120, 0), 0
+            )
+        )
+        self.assertTrue(
+            _is_qt_linux_discrete_mouse_wheel(
+                SimpleNamespace(name="NoScrollPhase", value=0), (0, 0), (0, -240), 0
+            )
+        )
+        # Linux X11 trackpad emitting fractional angleDelta without pixelDelta -> NOT mouse!
+        self.assertFalse(
+            _is_qt_linux_discrete_mouse_wheel(
+                SimpleNamespace(name="NoScrollPhase", value=0), (0, 0), (0, -18), 0
+            )
+        )
+        # Linux X11 precision trackpad with pixelDelta -> NOT mouse!
+        self.assertFalse(
+            _is_qt_linux_discrete_mouse_wheel(
+                SimpleNamespace(name="NoScrollPhase", value=0), (10, 0), (120, 0), 0
+            )
+        )
+
+        # Wayland backend defense: move_window must decline client-side mw.move on Wayland
+        fake_qt_mod = SimpleNamespace(
+            QGuiApplication=SimpleNamespace(platformName=lambda: "wayland")
+        )
+        with unittest.mock.patch.dict(sys.modules, {"aqt.qt": fake_qt_mod}):
+            wayland_res = self._call("move_window", {"dx": 10, "dy": 10})
+            self.assertEqual(wayland_res["status"], "success")
+            self.assertFalse(wayland_res["data"]["moved"])
+            self.assertEqual(wayland_res["data"].get("reason"), "wayland_unsupported")
 
         # Native top toolbar return pill uses inline Anki Studio dual-facet SVG logo instead of emoji
         from anki_modern_os import AnkiModernHost
@@ -2132,9 +2166,24 @@ class BridgeRouterAuditTest(unittest.TestCase):
             self.assertIn("box-sizing:border-box;overflow:hidden", serialized["frontHtml"])
             self.assertIn("anki-io-revealed", serialized["frontAnswerHtml"])
             self.assertEqual(serialized["front"], "H12-891 判断题")
-            self.assertIn("正确答案为对", serialized["extraHint"])
+            # 翻面答案区只展示「背面额外」等补充文本，绝不再把裸底图重复渲染第二遍，也不重复塞进 extraHint
+            self.assertIn("正确答案为对", serialized["backHtml"])
+            self.assertNotIn("<img", serialized["backHtml"])
+            self.assertEqual(serialized["extraHint"], "")
             self.assertNotIn("image-occlusion:", serialized["frontHtml"])
             self.assertNotIn("image-occlusion:", serialized["front"])
+
+            # 无「背面额外 / 注释」的纯遮挡卡：翻面后 backHtml / meaning / extraHint 全空，前端仅展示上方绿框揭底图
+            mock_note._fields["背面额外"] = ""
+            pure_serialized = self.router.review_service._serialize_review_card(
+                self.mock_col, zh_card_id, lang="zh-CN"
+            )
+            self.assertIsNotNone(pure_serialized)
+            self.assertIn("anki-io-revealed", pure_serialized["frontAnswerHtml"])
+            self.assertEqual(pure_serialized["backHtml"], "")
+            self.assertEqual(pure_serialized["meaning"], "")
+            self.assertEqual(pure_serialized["extraHint"], "")
+            mock_note._fields["背面额外"] = "正确答案为对"
 
             # 椭圆遮罩经过复习序列化应输出圆角 50%
             ellipse_resolved, _ = self.router.review_service._resolve_rich_html_and_audio(
@@ -2151,6 +2200,84 @@ class BridgeRouterAuditTest(unittest.TestCase):
             self.assertEqual(lib_item["front"], "H12-891 判断题")
         finally:
             self.mock_col._cards.pop(zh_card_id, None)
+
+    def test_22c_nested_cloze_stack_parser(self):
+        """嵌套挖空 {{c1::outer {{c2::inner}}}} 在复习、卡片库、纯文本、沙盒与序号提取全链路不得错位或漏出 }}。"""
+        from bridge.media_utils import (
+            _render_literal_cloze_for_sandbox,
+            extract_cloze_ordinals,
+            iter_cloze_spans,
+            plain_text_of,
+            render_cloze_html,
+            render_cloze_library_html,
+            strip_cloze_markup,
+        )
+
+        nested = "Before {{c1::outer {{c2::inner}}}} after"
+        spans = iter_cloze_spans(nested)
+        self.assertEqual(len(spans), 1)
+        self.assertEqual(spans[0][2], "1")
+        self.assertEqual(spans[0][3], "outer {{c2::inner}}")
+        self.assertIsNone(spans[0][4])
+
+        # 序号提取必须同时识别外层 c1 与内层 c2，防止编辑保存时误删 c2 卡片
+        self.assertEqual(extract_cloze_ordinals(nested), [1, 2])
+        self.assertEqual(strip_cloze_markup(nested), "Before outer inner after")
+        self.assertEqual(plain_text_of(nested), "Before outer inner after")
+
+        # 卡片 1 正面隐藏整块 c1（绝不剧透内层 inner 或漏出 }}）
+        q1 = render_cloze_html(nested, cloze_ord=1, is_question_side=True)
+        self.assertEqual(q1, 'Before <span class="anki-cloze-question">[...]</span> after')
+        self.assertNotIn("}}", q1)
+        self.assertNotIn("inner", q1)
+
+        # 卡片 1 背面揭开 c1，内层 c2 以 cloze-inactive 呈现
+        a1 = render_cloze_html(nested, cloze_ord=1, is_question_side=False)
+        self.assertEqual(
+            a1,
+            'Before <span class="anki-cloze-answer">outer '
+            '<span class="cloze-inactive" data-ordinal="2">inner</span></span> after',
+        )
+
+        # 卡片 2 正面保留外层 outer，仅遮住内层 c2
+        q2 = render_cloze_html(nested, cloze_ord=2, is_question_side=True)
+        self.assertEqual(
+            q2,
+            'Before <span class="cloze-inactive" data-ordinal="1">outer '
+            '<span class="anki-cloze-question">[...]</span></span> after',
+        )
+        a2 = render_cloze_html(nested, cloze_ord=2, is_question_side=False)
+        self.assertEqual(
+            a2,
+            'Before <span class="cloze-inactive" data-ordinal="1">outer '
+            '<span class="anki-cloze-answer">inner</span></span> after',
+        )
+
+        # 外层带 hint 且内层嵌套挖空：外层 :: 正确识别为外层 hint，不被内层 {{c2:: 干扰
+        nested_hint = "{{c1::alpha {{c2::beta}}::outer hint}}"
+        self.assertEqual(
+            render_cloze_html(nested_hint, cloze_ord=1, is_question_side=True),
+            '<span class="anki-cloze-question">[outer hint]</span>',
+        )
+        self.assertEqual(extract_cloze_ordinals(nested_hint), [1, 2])
+
+        # 卡片库高亮摘要不得残留 }} 或 {{c2
+        lib_html = render_cloze_library_html(nested)
+        self.assertEqual(lib_html, 'Before <span class="anki-cloze-lib">outer inner</span> after')
+
+        # 普通 URL 单冒号 :// 保持原样
+        url_cloze = "{{c1::https://example.com/a?x=1}}"
+        self.assertEqual(
+            render_cloze_html(url_cloze, cloze_ord=1, is_question_side=False),
+            '<span class="anki-cloze-answer">https://example.com/a?x=1</span>',
+        )
+
+        # 兼容模式沙盒字面 Cloze 渲染：保留 <script> 内容，同时正确渲染嵌套挖空
+        sb_html = "<script>const x='{{c1::keep}}';</script><div>{{c1::outer {{c2::inner}}}}</div>"
+        sb_out = _render_literal_cloze_for_sandbox(sb_html, cloze_ord=2, is_question_side=True)
+        self.assertIn("const x='{{c1::keep}}';", sb_out)
+        self.assertIn('data-ordinal="2">[...]</span>', sb_out)
+        self.assertNotIn("}}", sb_out.split("</script>", 1)[1])
 
 
     def test_23_sync_no_changes_checked_timestamp_and_requires_login(self):

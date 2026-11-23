@@ -294,7 +294,7 @@ export function buildSandboxSrcDoc({
     padding: 0;
     background: transparent;
     color: ${textColor};
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans", "Microsoft YaHei", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", "WenQuanYi Micro Hei", sans-serif;
     overscroll-behavior-x: none;
   }
   .card {
@@ -385,7 +385,7 @@ export function buildSandboxSrcDoc({
     font-style: normal;
   }
   .anki-math-text {
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
     font-style: normal;
   }
   .anki-math-frac {

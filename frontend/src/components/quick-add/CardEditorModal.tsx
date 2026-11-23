@@ -2049,11 +2049,14 @@ export const CardEditorModal: React.FC = () => {
               <div className="my-auto flex flex-col items-center justify-center w-full py-2">
                 {isEditMode &&
                 !hasChanges &&
-                editingCardData?.backHtml &&
+                (editingCardData?.backHtml || (readOnlyImageOcclusion && editingCardData?.frontHtml)) &&
                 (readOnlyImageOcclusion || (!isCloze && clozeOrdinals.length === 0)) ? (
                   (() => {
                     const nativeReplace = Boolean((editingCardData as ReviewCardItem).replaceFrontOnFlip);
-                    const rawFrontHtml = editingCardData.frontHtml || '';
+                    const rawFrontHtml =
+                      previewFlipped && readOnlyImageOcclusion
+                        ? (editingCardData as ReviewCardItem).frontAnswerHtml || editingCardData.frontHtml || ''
+                        : editingCardData.frontHtml || '';
                     const rawBackHtml = editingCardData.backHtml || '';
                     // 复习卡的正/反 HTML 自带对应的 <style>（后端 wrap_card_with_styles
                     // 的产物，正面是 .anki-native-card-front、背面是 .anki-native-card）；
@@ -2100,7 +2103,7 @@ export const CardEditorModal: React.FC = () => {
                             dangerouslySetInnerHTML={{ __html: nativeFrontHtml }}
                           />
                         )}
-                        {previewFlipped && (
+                        {previewFlipped && rawBackHtml.trim().length > 0 && (
                           <div
                             className={`w-full select-text break-words text-[16px] leading-relaxed ui-answer-reveal ${
                               nativeReplace ? '' : 'mt-6 pt-6 relative'

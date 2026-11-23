@@ -1175,7 +1175,8 @@ export const ReviewerView: React.FC = () => {
       if (
         detail.phase === 'momentum' ||
         detail.phase === 'end' ||
-        detail.phase === 'mouse'
+        detail.phase === 'mouse' ||
+        detail.phase === 'touchpad'
       ) {
         if (nativeWatchdogTimerRef.current) {
           clearTimeout(nativeWatchdogTimerRef.current);
@@ -3616,7 +3617,19 @@ export const ReviewerView: React.FC = () => {
                       );
                     })()}
 
-                    {isCardFlipped ? (
+                    {isCardFlipped ? (() => {
+                      const backHtmlContent = currentCard.backHtml || currentCard.meaning || '';
+                      const hasBackBody = backHtmlContent.trim().length > 0;
+                      const hasExtraHints = Boolean(
+                        currentCard.etymology || currentCard.example || currentCard.extraHint
+                      );
+                      if (!hasBackBody && !hasExtraHints) {
+                        return null;
+                      }
+                      const isNativeStyledBack = Boolean(
+                        (currentCard.backHtml || '').includes('anki-native-card')
+                      );
+                      return (
                       <div className="ui-answer-reveal">
                         {!currentCard.replaceFrontOnFlip && (
                           <div
@@ -3627,12 +3640,7 @@ export const ReviewerView: React.FC = () => {
                         )}
 
                         {/* Meaning */}
-                        {(() => {
-                          const backHtmlContent = currentCard.backHtml || currentCard.meaning;
-                          const isNativeStyledBack = Boolean(
-                            (currentCard.backHtml || '').includes('anki-native-card')
-                          );
-                          return (
+                        {hasBackBody && (
                             <div
                               style={
                                 isNativeStyledBack
@@ -3654,11 +3662,11 @@ export const ReviewerView: React.FC = () => {
                                 __html: renderMathAndRichHtml(backHtmlContent),
                               }}
                             />
-                          );
-                        })()}
+                        )}
 
                         {/* Progressive Hints */}
-                        <div className="mt-5 space-y-2.5">
+                        {hasExtraHints && (
+                        <div className={hasBackBody ? 'mt-5 space-y-2.5' : 'space-y-2.5'}>
                           {currentCard.etymology && (
                             <div
                               style={{ fontSize: `${Math.round(13 * scaleFactor * 10) / 10}px` }}
@@ -3718,8 +3726,10 @@ export const ReviewerView: React.FC = () => {
                             </button>
                           ) : null}
                         </div>
+                        )}
                       </div>
-                    ) : (
+                      );
+                    })() : (
                       <div
                         className={`py-3 flex flex-col items-center justify-center border-t border-dashed mt-3.5 ${
                           isDark ? 'border-white/[0.06]' : 'border-black/[0.07]'

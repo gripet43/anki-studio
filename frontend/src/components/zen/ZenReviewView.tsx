@@ -941,12 +941,21 @@ export const ZenReviewView: React.FC = () => {
                   </div>
                 )}
 
-                {isCardFlipped && (
+                {isCardFlipped && (() => {
+                  const hasZenBackBody = Boolean(renderedBackHtml && renderedBackHtml.trim());
+                  const hasZenHints = Boolean(
+                    currentCard.etymology || currentCard.example || currentCard.extraHint
+                  );
+                  if (!hasZenBackBody && !hasZenHints) {
+                    return null;
+                  }
+                  return (
                   <div className="zen-ink-reveal">
                     {!currentCard.replaceFrontOnFlip && (
                       <div className="zen-paper-divider my-7" />
                     )}
 
+                    {hasZenBackBody && (
                     <div
                       style={
                         isNativeStyledBack
@@ -968,6 +977,7 @@ export const ZenReviewView: React.FC = () => {
                         __html: renderedBackHtml,
                       }}
                     />
+                    )}
 
                     {(currentCard.etymology || currentCard.example || currentCard.extraHint) && (
                       <div className="mt-6 space-y-2.5 text-[var(--text-secondary)]">
@@ -1001,7 +1011,8 @@ export const ZenReviewView: React.FC = () => {
                       </div>
                     )}
                   </div>
-                )}
+                  );
+                })()}
               </>
             )}
           </article>

@@ -1996,4 +1996,16 @@ assert(
   'SupportPromptModal must use native <dialog closedby="closerequest"> with emoji thumbs-up hero, merged Rate This CTA button, no redundant Maybe Later or dev Dashboard test button, and clean AnkiWeb URL in both source and compiled web/'
 );
 
+const linuxSandboxFrameSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/reviewer/SandboxCardFrame.tsx')
+);
+assert(
+  windowDragSrc.includes("platform === 'linux'") &&
+    windowDragSrc.includes('if (started || released || isLinux)') &&
+    cssBundle.includes('Noto Sans CJK SC') &&
+    cssBundle.includes('Noto Color Emoji') &&
+    linuxSandboxFrameSrc.includes('Noto Sans CJK SC'),
+  'Linux compatibility guards (Wayland/X11 drag fallback skip, CJK & Color Emoji font fallbacks) must exist in source and compiled web/'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

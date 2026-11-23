@@ -4478,9 +4478,13 @@ export const appActions = {
     }
   },
 
-  startSystemMove() {
-    if (isAnkiNativeEnv()) {
-      callAnki('start_system_move', {}).catch(() => {});
+  async startSystemMove(): Promise<boolean> {
+    if (!isAnkiNativeEnv()) return false;
+    try {
+      const res = await callAnki<{ started?: boolean }>('start_system_move', {});
+      return Boolean(res?.started);
+    } catch {
+      return false;
     }
   },
 

@@ -649,7 +649,7 @@ export const Sidebar: React.FC = () => {
               <button
                 type="button"
                 onClick={() => appActions.setActiveTab('decks')}
-                className={`btn-ghost !text-[11px] !h-auto !ps-2 !pe-0 !py-0.5 ${
+                className={`btn-ghost !text-[11px] !h-auto !px-2 -me-2 !py-0.5 ${
                   activeTab === 'decks'
                     ? '!bg-[var(--brand-soft)] !text-[var(--brand-text)] font-semibold'
                     : '!text-[var(--brand-text)]'

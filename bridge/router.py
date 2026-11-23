@@ -1152,6 +1152,15 @@ class BridgeRouter:
         mw = self._get_mw()
         if mw is None:
             return {"moved": False}
+        # Wayland forbids client-side top-level window moves (only startSystemMove is supported).
+        try:
+            from aqt.qt import QGuiApplication
+
+            plat_name = str(QGuiApplication.platformName() or "").strip().lower()
+            if plat_name.startswith("wayland"):
+                return {"moved": False, "reason": "wayland_unsupported"}
+        except Exception:
+            pass
         try:
             dx = int(data.get("dx", 0))
             dy = int(data.get("dy", 0))

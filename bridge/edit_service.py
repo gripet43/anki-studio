@@ -22,9 +22,11 @@ from .media_utils import (
     CLOZE_RE,
     HR_ANSWER_RE,
     IO_SHAPE_RE,
+    extract_cloze_ordinals,
     get_media_dir,
     is_image_occlusion_model,
     normalize_media_html_for_storage,
+    strip_cloze_markup,
 )
 
 _TEMPLATE_TOKEN_RE = re.compile(r"\{\{([^{}]+)\}\}")
@@ -300,10 +302,10 @@ class EditService:
             return []
 
         valid_ords = {
-            int(m.group(1)) - 1
+            num - 1
             for _, val in note.items()
-            for m in CLOZE_RE.finditer(str(val or ""))
-            if int(m.group(1)) >= 1
+            for num in extract_cloze_ordinals(str(val or ""))
+            if num >= 1
         }
         if not valid_ords:
             return []
@@ -718,7 +720,7 @@ class EditService:
         if not raw_html:
             return ""
         s = _DUP_SOUND_RE.sub("", str(raw_html))
-        s = _DUP_CLOZE_RE.sub(r"\1", s)
+        s = strip_cloze_markup(s)
         s = _DUP_BR_RE.sub(" ", s)
         s = _DUP_TAG_RE.sub("", s)
         s = _html.unescape(s)

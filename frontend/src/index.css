@@ -17,8 +17,8 @@
       color-scheme: light;
     }
 
-    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Inter", system-ui, sans-serif;
-    --font-mono: "SF Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Inter", "Noto Sans CJK SC", "Source Han Sans SC", "WenQuanYi Micro Hei", system-ui, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Noto Sans Mono", "DejaVu Sans Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
     /* Unified Motion Duration & Easing Tokens (Spatial Scale Hierarchy) */
     --dur-instant: 90ms;
@@ -4731,6 +4731,7 @@ dialog.support-dialog[open]:where(:not([data-closing]))::backdrop {
 
 .support-like-hero-emoji {
   display: inline-block;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   font-size: 2rem;
   line-height: 1;
   transform: translateY(-0.0625rem);

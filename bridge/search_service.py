@@ -22,6 +22,7 @@ from .media_utils import (
     get_media_dir,
     is_custom_styled_cloze_model,
     plain_text_of,
+    render_cloze_library_html,
     render_native_card_sides,
     render_native_image_occlusion,
     resolve_front_field_name,
@@ -1951,7 +1952,7 @@ class SearchService:
                     ),
                     s,
                 )
-        s = CLOZE_RE.sub(lambda m: f'<span class="anki-cloze-lib">{m.group(2)}</span>', s)
+        s = render_cloze_library_html(s)
         return s.strip(), audios
 
     @staticmethod

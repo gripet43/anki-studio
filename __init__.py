@@ -208,6 +208,20 @@ def _qt_point_is_nonzero(pt: Any) -> bool:
     return False
 
 
+def _qt_point_xy(pt: Any) -> Tuple[int, int]:
+    """Extracts integer (x, y) coordinates from a QPoint or 2-tuple safely."""
+    if pt is None:
+        return (0, 0)
+    try:
+        if hasattr(pt, "x") and hasattr(pt, "y"):
+            return (int(pt.x()), int(pt.y()))
+        if isinstance(pt, (tuple, list)) and len(pt) >= 2:
+            return (int(pt[0]), int(pt[1]))
+    except Exception:
+        return (0, 0)
+    return (0, 0)
+
+
 def _is_qt_discrete_mouse_wheel(
     raw_phase: Any,
     pixel_delta: Any,
@@ -236,6 +250,24 @@ def _is_qt_discrete_mouse_wheel(
     if _qt_point_is_nonzero(pixel_delta):
         return False
     return _qt_point_is_nonzero(angle_delta)
+
+
+def _is_qt_linux_discrete_mouse_wheel(
+    raw_phase: Any,
+    pixel_delta: Any,
+    angle_delta: Any,
+    source: Any = None,
+) -> bool:
+    """Classifies a notched physical mouse wheel on Linux (Wayland & X11).
+
+    In addition to `_is_qt_discrete_mouse_wheel`, requires standard 120-unit
+    mechanical wheel detents so X11 trackpad drivers emitting fractional
+    angleDeltas without pixelDelta are not misclassified as mice.
+    """
+    if not _is_qt_discrete_mouse_wheel(raw_phase, pixel_delta, angle_delta, source):
+        return False
+    ax, ay = _qt_point_xy(angle_delta)
+    return (ax == 0 or abs(ax) % 120 == 0) and (ay == 0 or abs(ay) % 120 == 0)
 
 
 # Official Anki Studio dual-facet open knowledge prism SVG (mirrors AnkiStudioLogo.tsx)
@@ -1345,10 +1377,11 @@ class AnkiModernHost:
                             raw_phase = event.phase() if hasattr(event, "phase") else None
                             phase = _normalize_qt_wheel_phase(raw_phase)
                             if phase is None:
-                                # On macOS, only classify as an external physical mouse wheel when
-                                # phase == NoScrollPhase, pixelDelta is null, and angleDelta is non-zero
-                                # (never misclassify zero-delta trackpad MayBegin/Cancelled events).
-                                if sys.platform.startswith("darwin"):
+                                # On macOS and Linux, isolate external notched physical mouse wheels
+                                # (NoScrollPhase + null pixelDelta + non-zero angleDelta) from trackpad swipes.
+                                is_mac_host = sys.platform.startswith("darwin")
+                                is_linux_host = sys.platform.startswith("linux")
+                                if is_mac_host or is_linux_host:
                                     px_delta = (
                                         event.pixelDelta()
                                         if hasattr(event, "pixelDelta")
@@ -1362,9 +1395,16 @@ class AnkiModernHost:
                                     ev_source = (
                                         event.source() if hasattr(event, "source") else None
                                     )
-                                    if _is_qt_discrete_mouse_wheel(
-                                        raw_phase, px_delta, ang_delta, ev_source
-                                    ):
+                                    is_mouse = (
+                                        _is_qt_discrete_mouse_wheel(
+                                            raw_phase, px_delta, ang_delta, ev_source
+                                        )
+                                        if is_mac_host
+                                        else _is_qt_linux_discrete_mouse_wheel(
+                                            raw_phase, px_delta, ang_delta, ev_source
+                                        )
+                                    )
+                                    if is_mouse:
                                         if state["phase"] != "mouse":
                                             state["phase"] = "mouse"
                                             inverted = (
@@ -1375,6 +1415,21 @@ class AnkiModernHost:
                                             host._emit_js_event(
                                                 "anki:wheel-phase",
                                                 {"phase": "mouse", "inverted": inverted},
+                                            )
+                                    elif is_linux_host and _qt_point_is_nonzero(px_delta):
+                                        # Linux X11 precision trackpads send NoScrollPhase + pixelDelta:
+                                        # unlock any prior mouse lock and sync OS natural scrolling direction
+                                        # without forcing native ScrollEnd phase tracking.
+                                        if state["phase"] != "touchpad":
+                                            state["phase"] = "touchpad"
+                                            inverted = (
+                                                bool(event.inverted())
+                                                if hasattr(event, "inverted")
+                                                else False
+                                            )
+                                            host._emit_js_event(
+                                                "anki:wheel-phase",
+                                                {"phase": "touchpad", "inverted": inverted},
                                             )
                                 return False
                             if phase == "update":

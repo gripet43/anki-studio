@@ -30,7 +30,7 @@ export const TOP_ARRIVAL_SETTLE_MS = 220;
 
 export type SwipeGestureAxis = 'idle' | 'horizontal' | 'pull_flip';
 export type SwipeDirection = 'left' | 'right' | 'down' | null;
-export type NativeWheelPhase = 'begin' | 'update' | 'end' | 'momentum' | 'mouse';
+export type NativeWheelPhase = 'begin' | 'update' | 'end' | 'momentum' | 'mouse' | 'touchpad';
 
 export interface SwipeVisualPose {
   visualX: number;
@@ -508,6 +508,16 @@ export function stepNativeWheelPhase(
   isCardFlipped: boolean,
   timestampMs: number
 ): SwipeReleaseDecision {
+  if (phase === 'touchpad') {
+    // Linux X11 precision trackpad (NoScrollPhase + non-zero pixelDelta):
+    // unlock mouse isolation and sync OS natural-scroll direction while keeping JS silence-timer release active.
+    state.nativeDeviceIsMouse = false;
+    state.nativeWheelActive = false;
+    state.nativePhaseInFlight = false;
+    state.inverted = Boolean(inverted);
+    return { kind: 'none', pose: computeDragVisuals(state, isCardFlipped) };
+  }
+
   state.nativeWheelActive = true;
   state.inverted = Boolean(inverted);
 

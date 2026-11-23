@@ -25,11 +25,14 @@ from .media_utils import (
     SandboxRender,
     _av_filenames,
     convert_furigana_to_ruby,
+    extract_native_io_extra_html,
     find_sandbox_preload_scripts,
     get_media_dir,
     get_media_http_base_url,
     is_custom_styled_cloze_model,
+    iter_cloze_spans,
     plain_text_of,
+    render_cloze_html,
     render_native_card_sides,
     render_native_image_occlusion,
     render_sandbox_card_sides,
@@ -889,19 +892,10 @@ class ReviewService:
 
             processed = IO_RECT_SPAN_RE.sub(_io_rect_replacer, processed)
 
-        if CLOZE_RE.search(processed):
-            target_idx = str(max(1, cloze_ord))
-
-            def _cloze_replacer(match):
-                c_num, c_ans, c_hint = match.group(1), match.group(2), match.group(3)
-                if c_num == target_idx:
-                    if is_question_side:
-                        hint_label = c_hint if c_hint else "..."
-                        return f'<span class="anki-cloze-question">[{hint_label}]</span>'
-                    return f'<span class="anki-cloze-answer">{c_ans}</span>'
-                return f'<span class="cloze-inactive" data-ordinal="{c_num}">{c_ans}</span>'
-
-            processed = CLOZE_RE.sub(_cloze_replacer, processed)
+        if "{{c" in processed.lower():
+            processed = render_cloze_html(
+                processed, cloze_ord=cloze_ord, is_question_side=is_question_side
+            )
 
         return processed.strip(), audio_files
 
@@ -1131,7 +1125,10 @@ class ReviewService:
                 )
 
             if io_front:
-                front_raw, back_raw = io_front, io_back
+                # 上方 frontAnswerHtml 已直接揭开遮罩并高亮绿色答案框；
+                # 下方 back_raw 只放「背面额外 / 注释」等补充字段，绝不重复输出第二张裸底图。
+                front_raw = io_front
+                back_raw = extract_native_io_extra_html(note)
             else:
                 # 正面取“模板真正显示的那个字段”——第一个字段未必是它。
                 # eggrolls-JLPT10k 把 NoteID 排在第一位，按 fields[0] 直出就是一串 uuid。
@@ -1319,6 +1316,7 @@ class ReviewService:
                 plain_override=io_title,
                 native_question=native.question,
                 has_native_answer=bool(native.answer),
+                is_image_occlusion=bool(io_front),
             )
 
             predictions = self._predict_intervals(col, card, lang)
@@ -1466,6 +1464,7 @@ class ReviewService:
         plain_override: str = "",
         native_question: str = "",
         has_native_answer: bool = False,
+        is_image_occlusion: bool = False,
     ) -> Dict[str, str]:
         empty_front = "未命名卡片" if lang == "zh-CN" else "Untitled Card"
         empty_back = "（点击编辑补充背面释义）" if lang == "zh-CN" else "(Click to add back content)"
@@ -1514,16 +1513,29 @@ class ReviewService:
             if hint_raw and self._plain_text_summary(hint_raw) in back_plain:
                 hint_raw = ""
 
+        if is_image_occlusion:
+            # 原生图片遮挡卡的「背面额外 / 注释」已由 extract_native_io_extra_html 汇总至 backHtml，
+            # 不再重复追加到底部 extraHint 徽标区；无额外字段时答案区留空，仅展示上方揭底图。
+            hint_raw = ""
+
         etymology_html, _ = self._resolve_rich_html_and_audio(etymology_raw, media_dir)
         example_html, _ = self._resolve_rich_html_and_audio(example_raw, media_dir)
         hint_html, _ = self._resolve_rich_html_and_audio(hint_raw, media_dir)
 
         return {
             "frontPlain": front_plain,
-            "meaningPlain": back_plain if back_plain else (front_plain if is_cloze else empty_back),
+            "meaningPlain": (
+                back_plain
+                if is_image_occlusion
+                else (back_plain if back_plain else (front_plain if is_cloze else empty_back))
+            ),
             "frontHtml": front_rich_q or front_plain,
             "frontAnswerHtml": front_rich_a or front_rich_q or front_plain,
-            "backHtml": back_rich if back_rich else (front_rich_a if is_cloze else ""),
+            "backHtml": (
+                back_rich
+                if is_image_occlusion
+                else (back_rich if back_rich else (front_rich_a if is_cloze else ""))
+            ),
             "reading": reading_plain,
             "etymology": etymology_html,
             "example": example_html,
@@ -1677,14 +1689,14 @@ class ReviewService:
                         }
                     )
 
-            matches = list(CLOZE_RE.finditer(text))
-            if matches:
+            spans = iter_cloze_spans(text)
+            if spans:
                 valid_cloze_fields.append(field_name)
-                if any("<" in (m.group(2) or "") or "<" in (m.group(3) or "") for m in matches):
+                if any("<" in (ans or "") or "<" in (hint or "") for _s, _e, _o, ans, hint in spans):
                     html_inside_cloze_fields.append(field_name)
 
-            # Collect start offsets of valid matches so broken {{c...}} openers stand out.
-            matched_spans = [(m.start(), m.end()) for m in matches]
+            # Collect start offsets of valid balanced spans (including nested clozes) so broken {{c...}} openers stand out.
+            matched_spans = [(s, e) for s, e, _o, _a, _h in spans]
             for cand in CLOZE_START_CANDIDATE_RE.finditer(text):
                 pos = cand.start()
                 if not any(s <= pos < e for s, e in matched_spans):
