@@ -224,11 +224,16 @@ def run_checks(runner: ScenarioRunner) -> None:
 
     def dashboard(payload: dict) -> None:
         data = runner.expect_success(payload)
-        for key in ("decks", "heatmap", "todayStats", "streak", "vacation", "preferences"):
+        for key in ("decks", "heatmap", "todayStats", "streak", "vacation", "preferences", "dayBoundary", "allTags"):
             if key not in data:
                 raise KeyError(f"dashboard 缺字段 {key}")
         if not isinstance(data["decks"], list):
             raise TypeError("decks 不是列表")
+        if not isinstance(data["allTags"], list):
+            raise TypeError("allTags 不是列表")
+        db_info = data["dayBoundary"]
+        if not isinstance(db_info, dict) or not db_info.get("logicalDate"):
+            raise AssertionError(f"dayBoundary 异常：{db_info!r}")
         # 牌组数与库里的实际分布一致（默认牌组可能没有卡，允许 <=）
         distinct = runner.sqlite_count("select count(distinct did) from cards")
         if distinct and len(data["decks"]) < distinct:
@@ -262,6 +267,13 @@ def run_checks(runner: ScenarioRunner) -> None:
             raise KeyError("search 结果缺 total")
         if total != cards:
             raise AssertionError(f"全库搜索返回 {total}，实际 {cards}")
+        facets = data.get("facetCounts") or {}
+        if not isinstance(facets.get("deckCounts"), dict) or not isinstance(facets.get("deckAllCount"), int):
+            raise AssertionError(f"facetCounts 缺 deckCounts / deckAllCount：{sorted(facets)}")
+        items = data.get("cards") or []
+        ids = [int(c.get("id", 0) or 0) for c in items]
+        if any(ids[i] > ids[i - 1] for i in range(1, len(ids))):
+            raise AssertionError("默认排序（缺省 sortBy）未按最新添加（id 降序）返回")
 
     runner.check("search_cards", search_all, {"query": ""})
 
@@ -284,13 +296,27 @@ def run_checks(runner: ScenarioRunner) -> None:
     def preferences(payload: dict) -> None:
         data = runner.expect_success(payload)
         prefs = data.get("preferences") if isinstance(data.get("preferences"), dict) else data
-        for key in ("autoPlayFrontAudio", "autoPlayBackAudio"):
+        if prefs.get("theme") not in ("auto", "light", "dark"):
+            raise AssertionError(f"theme 非法（应为 auto/light/dark）：{prefs.get('theme')!r}")
+        for key in (
+            "autoPlayFrontAudio",
+            "autoPlayBackAudio",
+            "compatMode",
+            "reviewSwipeGestures",
+            "sidebarCollapsed",
+            "showIllustrations",
+            "continuousCardCreation",
+        ):
             if not isinstance(prefs.get(key), bool):
                 raise AssertionError(f"preferences.{key} 应为 bool，实际 {prefs.get(key)!r}")
         if prefs.get("reviewStageWidth") not in ("standard", "auto", "wide", "full"):
             raise AssertionError(f"reviewStageWidth 非法：{prefs.get('reviewStageWidth')!r}")
         if int(prefs.get("reviewContentScale") or 0) not in (90, 100, 115, 130, 150):
             raise AssertionError(f"reviewContentScale 非法：{prefs.get('reviewContentScale')!r}")
+        if prefs.get("reviewDockPosition") not in ("bottom", "side"):
+            raise AssertionError(f"reviewDockPosition 非法：{prefs.get('reviewDockPosition')!r}")
+        if not isinstance(prefs.get("supportPrompt"), dict):
+            raise AssertionError(f"supportPrompt 应为 dict，实际 {prefs.get('supportPrompt')!r}")
 
     runner.check("get_preferences", preferences)
 
@@ -533,11 +559,16 @@ def run_native_io_checks(runner: ScenarioRunner) -> None:
         cards = data.get("cards") or []
         if not cards:
             raise AssertionError("复习队列为空")
-        front = cards[0].get("frontHtml") or ""
+        first = cards[0]
+        front = first.get("frontHtml") or ""
+        back = first.get("backHtml") or ""
         if "anki-io-wrap" not in front or "anki-io-rect" not in front:
             raise AssertionError("复习界面的原生遮挡未渲染成静态遮罩")
         if 'src="file://' not in front:
             raise AssertionError("复习界面底图路径未重写")
+        # v1.7.4 原生 IO 翻面去重守卫：无额外备注图时背面不得重复出现裸图或第二套遮挡容器
+        if "<img" in back.lower() or "anki-io-wrap" in back:
+            raise AssertionError(f"原生遮挡复习背面重复渲染了底图：{back[:160]}")
 
     runner.check("start_review", review_card, {}, label="native-io:review")
 
@@ -854,14 +885,30 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
     def record(label: str, ok: bool, detail: str = "") -> None:
         runner.results.append(CheckResult(runner.key, label, ok, detail))
 
-    # ---- 只读：复习队列与卡片调试诊断
+    # ---- 只读：复习队列、跨日检测与卡片调试诊断
     def review_queue(payload: dict) -> None:
         data = runner.expect_success(payload)
         for key in ("cards", "totalDue"):
             if key not in data:
                 raise KeyError(f"复习队列缺 {key}（实际：{sorted(data)}）")
+        for item in data.get("cards") or []:
+            ord_val = item.get("cardOrd")
+            if not isinstance(ord_val, int) or ord_val < 1:
+                raise AssertionError(f"复习卡片缺合法 1-based cardOrd：{ord_val!r}")
+            if not isinstance(item.get("needsSandbox"), bool):
+                raise AssertionError(f"复习卡片缺 bool needsSandbox：{item.get('needsSandbox')!r}")
 
     runner.check("get_review_queue", review_queue, {"limit": 5})
+
+    def day_rollover(payload: dict) -> None:
+        data = runner.expect_success(payload)
+        if not isinstance(data.get("changed"), bool):
+            raise AssertionError(f"check_day_rollover 缺 bool changed：{data!r}")
+        boundary = data.get("dayBoundary") or {}
+        if not isinstance(boundary, dict) or not boundary.get("logicalDate"):
+            raise AssertionError(f"check_day_rollover 缺合法 dayBoundary：{boundary!r}")
+
+    runner.check("check_day_rollover", day_rollover, {"source": "smoke"}, label="day-rollover")
 
     probe_cid = runner.sqlite_count("select min(id) from cards")
     if probe_cid:
@@ -881,12 +928,20 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
                     raise KeyError(f"get_card_debug_info 缺 {key}")
             if not isinstance(data["noteTypeInfo"].get("activeTemplate"), dict):
                 raise KeyError("noteTypeInfo 缺 activeTemplate")
+            det = data["noteTypeInfo"].get("templateDetectionFlags") or {}
+            for key in ("hasClozeOverlappingKeyword", "questionHidesBodyWithoutScript"):
+                if key not in det:
+                    raise KeyError(f"templateDetectionFlags 缺 {key}")
             snap = data["runtime"].get("configSnapshot") or {}
             for key in (
                 "autoPlayFrontAudio",
                 "autoPlayBackAudio",
                 "reviewStageWidth",
                 "reviewContentScale",
+                "reviewDockPosition",
+                "reviewSwipeGestures",
+                "compatMode",
+                "showIllustrations",
             ):
                 if key not in snap:
                     raise KeyError(f"configSnapshot 缺 {key}")
@@ -951,7 +1006,7 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
     else:
         runner.warn("duplicate:skip", "首条笔记正文去标签后为空，查重分支未被覆盖")
 
-    # ---- 偏好往返（含主题、音频双开关与视图双维调节）
+    # ---- 偏好往返（含主题含旧 oled 迁移、音频双开关、视图/侧栏控制栏、兼容模式、手势与连续制卡）
     def save_pref(payload: dict) -> None:
         data = runner.expect_success(payload)
         if data.get("saved") is False:
@@ -961,11 +1016,17 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
         "save_preferences",
         save_pref,
         {
-            "theme": "dark",
+            "theme": "oled",
             "autoPlayFrontAudio": True,
             "autoPlayBackAudio": False,
             "reviewStageWidth": "wide",
             "reviewContentScale": 115,
+            "reviewDockPosition": "side",
+            "reviewSwipeGestures": False,
+            "compatMode": True,
+            "sidebarCollapsed": True,
+            "showIllustrations": False,
+            "continuousCardCreation": True,
         },
         label="preferences:save",
     )
@@ -974,7 +1035,7 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
         data = runner.expect_success(payload)
         prefs = data.get("preferences") if isinstance(data.get("preferences"), dict) else data
         if prefs.get("theme") != "dark":
-            raise AssertionError(f"写 dark 读回 {prefs.get('theme')}")
+            raise AssertionError(f"旧值 oled 应归一化为 dark，实际读回 {prefs.get('theme')}")
         if prefs.get("autoPlayFrontAudio") is not True or prefs.get("autoPlayBackAudio") is not False:
             raise AssertionError(
                 f"音频自动播放开关往返不一致：{prefs.get('autoPlayFrontAudio')}/{prefs.get('autoPlayBackAudio')}"
@@ -983,6 +1044,16 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
             raise AssertionError(
                 f"视图宽度/缩放往返不一致：{prefs.get('reviewStageWidth')}/{prefs.get('reviewContentScale')}"
             )
+        if prefs.get("reviewDockPosition") != "side":
+            raise AssertionError(f"右侧全高控制栏往返不一致：{prefs.get('reviewDockPosition')}")
+        if (
+            prefs.get("reviewSwipeGestures") is not False
+            or prefs.get("compatMode") is not True
+            or prefs.get("sidebarCollapsed") is not True
+            or prefs.get("showIllustrations") is not False
+            or prefs.get("continuousCardCreation") is not True
+        ):
+            raise AssertionError(f"扩展偏好布尔项往返不一致：{prefs}")
 
     runner.check("get_preferences", read_pref, label="preferences:roundtrip")
 
@@ -1012,6 +1083,18 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
     if bury_cid:
         runner.check("toggle_bury", bury, {"cardId": str(bury_cid)}, label="cards:bury")
         runner.call("toggle_bury", {"cardId": str(bury_cid), "bury": False})
+
+        # ---- 重置进度（forget_cards）：复习卡重置为新卡并落库，再撤销恢复
+        def forget(payload: dict) -> None:
+            data = runner.expect_success(payload)
+            if not data.get("changed"):
+                raise AssertionError(f"forget_cards 返回 changed=False：{data}")
+            row = runner._sqlite_rows(f"select type, queue from cards where id={bury_cid}")
+            if not row or row[0] != (0, 0):
+                raise AssertionError(f"重置进度后 (type, queue)={row}，期望 (0, 0)")
+
+        runner.check("forget_cards", forget, {"cardIds": [str(bury_cid)]}, label="cards:forget")
+        runner.call("undo", {})
 
     # ---- 编辑：内容必须写进 notes.flds
     edit_cid = runner.sqlite_count("select min(id) from cards")
@@ -1069,6 +1152,39 @@ def run_remaining_checks(runner: ScenarioRunner) -> None:
                     "back": "smoke companion back",
                 },
                 label="editor:companion-cloze",
+            )
+
+            # ---- 嵌套 Cloze 栈式解析（v1.7.4）：编辑保存保留 c2 子卡且渲染无残余 }}
+            def nested_cloze(payload: dict) -> None:
+                data = runner.expect_success(payload)
+                if not data.get("saved"):
+                    raise AssertionError(f"嵌套挖空编辑保存失败：{data}")
+                sib_rows = runner._sqlite_rows(
+                    f"select id, ord from cards where nid={int(added_nid)} order by ord"
+                )
+                ords = [int(r[1]) for r in sib_rows]
+                if ords != [0, 1]:
+                    raise AssertionError(f"嵌套挖空应保留 c1/c2 两张卡（ord [0,1]），实际 {ords}")
+                q_res = runner.expect_success(
+                    runner.call("get_review_queue", {"cardIds": [str(r[0]) for r in sib_rows]})
+                )
+                q_cards = q_res.get("cards") or []
+                if len(q_cards) != 2:
+                    raise AssertionError(f"嵌套挖空序列化张数异常：{len(q_cards)}")
+                for item in q_cards:
+                    if "}}" in (item.get("frontHtml") or "") or "{{" in (item.get("frontHtml") or ""):
+                        raise AssertionError(f"嵌套挖空 frontHtml 残留原始标记：{item.get('frontHtml')}")
+
+            runner.check(
+                "update_card_inline",
+                nested_cloze,
+                {
+                    "cardId": str(added_cid),
+                    "noteId": str(added_nid),
+                    "front": "嵌套测试 {{c1::外层 {{c2::内层}}}} 结束",
+                    "back": "smoke companion back",
+                },
+                label="editor:nested-cloze",
             )
 
     # ---- 粘贴图片：素材必须真的落盘
