@@ -237,3 +237,25 @@ test('buildSandboxSrcDoc installs an in-memory localStorage/sessionStorage shim 
   ss.setItem('k', 'v');
   assert.equal(ss.getItem('k'), 'v');
 });
+
+test('buildSandboxSrcDoc forwards inner vertical scroller detection and sticky horizontal preventDefault', () => {
+  const doc = buildSandboxSrcDoc({
+    cardId: 'scroll-1',
+    initialBody: '<div style="overflow-y:auto;height:80px">scroll</div>',
+    cssText: '',
+    isDark: false,
+    initialZoom: 1,
+  });
+  assert.ok(
+    doc.includes('function hasInnerVerticalScroller(target, rawDeltaY)'),
+    'sandbox iframe script must detect nested vertical scrollers'
+  );
+  assert.ok(
+    doc.includes('hasInnerVScroll: innerVScroll'),
+    'sandbox wheel message must forward hasInnerVScroll flag'
+  );
+  assert.ok(
+    doc.includes('horizPreventUntil'),
+    'sandbox wheel handler must guard mid-swipe wobble with sticky horizPreventUntil'
+  );
+});

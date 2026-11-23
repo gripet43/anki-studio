@@ -17,8 +17,16 @@ export const PULL_FLIP_FLICK_MIN_VELOCITY_PX_MS = 0.75;
 export const PULL_FLIP_MAX_VISUAL_PX = 58;
 
 export const WHEEL_SILENCE_RELEASE_MS = 95;
+export const WHEEL_NATIVE_WATCHDOG_MS = 1400;
+export const UNFLIPPED_WOBBLE_WATCHDOG_MS = 180;
 export const POST_COMMIT_COOLDOWN_MS = 380;
+export const POST_COMMIT_INERTIA_GUARD_MS = 260;
+export const CARD_MOUNT_GESTURE_GUARD_MS = 160;
 export const SPRING_BACK_DURATION_MS = 280;
+export const HORIZONTAL_LOCK_MIN_PX = 9;
+export const HORIZONTAL_LOCK_SLOPE_RATIO = 1.5;
+export const VERTICAL_LOCK_MIN_PX = 10;
+export const TOP_ARRIVAL_SETTLE_MS = 220;
 
 export type SwipeGestureAxis = 'idle' | 'horizontal' | 'pull_flip';
 export type SwipeDirection = 'left' | 'right' | 'down' | null;
@@ -44,12 +52,17 @@ export interface SwipeGestureState {
   velocityY: number;
   lastEventTs: number;
   lastWheelSeenTs: number;
+  lastScrolledDownTs: number;
   hapticFiredForSide: 'left' | 'right' | 'pull' | null;
   momentumLocked: boolean;
   verticalScrollLocked: boolean;
   nativeWheelActive: boolean;
+  nativePhaseInFlight: boolean;
   nativeDeviceIsMouse: boolean;
+  gestureEpoch: number;
+  committedEpoch: number;
   cooldownUntilTs: number;
+  commitGuardUntilTs: number;
   inverted: boolean;
 }
 
@@ -63,15 +76,24 @@ export interface SwipeWheelStepInput {
   hasHorizontalScrollableAncestor?: boolean;
 }
 
+export type SwipeHapticPattern = 'generic' | 'strong' | 'alignment';
+
 export interface SwipeWheelStepResult {
   handled: boolean;
   pose: SwipeVisualPose;
-  hapticPattern: 'alignment' | null;
+  hapticPattern: SwipeHapticPattern | null;
 }
 
 export type SwipeReleaseDecision =
-  | { kind: 'rate'; ease: 1 | 3; dir: 'left' | 'right'; pose: SwipeVisualPose }
-  | { kind: 'flip'; pose: SwipeVisualPose }
+  | {
+      kind: 'rate';
+      ease: 1 | 3;
+      dir: 'left' | 'right';
+      pose: SwipeVisualPose;
+      velocityX: number;
+      hapticPattern?: SwipeHapticPattern | null;
+    }
+  | { kind: 'flip'; pose: SwipeVisualPose; hapticPattern?: SwipeHapticPattern | null }
   | { kind: 'spring'; pose: SwipeVisualPose }
   | { kind: 'none'; pose: SwipeVisualPose };
 
@@ -89,8 +111,8 @@ function rubberBand(absDist: number, linearCap: number, maxCap: number): number 
 export function detectDefaultNaturalScrolling(): boolean {
   if (typeof navigator === 'undefined') return true;
   const plat = `${navigator.platform || ''} ${navigator.userAgent || ''}`;
-  // Default true on macOS; falls back to false elsewhere until native QWheelEvent reports exact flag.
-  return /Mac|Darwin/i.test(plat);
+  // Default true on macOS and Windows Precision Touchpads; falls back to false elsewhere until native QWheelEvent reports exact flag.
+  return /Mac|Darwin|Win/i.test(plat);
 }
 
 export function createSwipeGestureState(inverted?: boolean): SwipeGestureState {
@@ -102,14 +124,26 @@ export function createSwipeGestureState(inverted?: boolean): SwipeGestureState {
     velocityY: 0,
     lastEventTs: 0,
     lastWheelSeenTs: 0,
+    lastScrolledDownTs: 0,
     hapticFiredForSide: null,
     momentumLocked: false,
     verticalScrollLocked: false,
     nativeWheelActive: false,
+    nativePhaseInFlight: false,
     nativeDeviceIsMouse: false,
+    gestureEpoch: 0,
+    committedEpoch: -1,
     cooldownUntilTs: 0,
+    commitGuardUntilTs: 0,
     inverted: typeof inverted === 'boolean' ? inverted : detectDefaultNaturalScrolling(),
   };
+}
+
+export function computeSwipeFlyDurationMs(velocityX: number): number {
+  const absV = Number.isFinite(velocityX) ? Math.abs(velocityX) : 0;
+  // Map release speed (px/ms, clamped 0..1.8) smoothly from 205ms down to 115ms.
+  const t = clamp(absV / 1.8, 0, 1);
+  return Math.round(205 - t * (205 - 115));
 }
 
 export function computeDragVisuals(
@@ -201,18 +235,23 @@ export function stepSwipeWheel(
   if (input.deltaMode !== 0) return noOp();
   if (state.nativeDeviceIsMouse) return noOp();
 
+  if (!input.atScrollTop) {
+    state.lastScrolledDownTs = input.timestampMs;
+  }
+
   const gapMs =
     state.lastWheelSeenTs > 0 ? input.timestampMs - state.lastWheelSeenTs : Number.POSITIVE_INFINITY;
-  const idleRecoveryMs = state.nativeWheelActive ? 500 : 120;
-  if (gapMs >= idleRecoveryMs) {
+  const scrollLockRecoveryMs = state.nativePhaseInFlight ? 500 : 120;
+  const momentumRecoveryMs = state.nativeWheelActive ? 500 : 120;
+  if (gapMs >= scrollLockRecoveryMs) {
     state.verticalScrollLocked = false;
     if (state.axis === 'idle') {
       state.rawX = 0;
       state.rawY = 0;
     }
-    if (state.momentumLocked && input.timestampMs >= state.cooldownUntilTs) {
-      state.momentumLocked = false;
-    }
+  }
+  if (gapMs >= momentumRecoveryMs && state.momentumLocked && input.timestampMs >= state.cooldownUntilTs) {
+    state.momentumLocked = false;
   }
   state.lastWheelSeenTs = input.timestampMs;
 
@@ -246,18 +285,24 @@ export function stepSwipeWheel(
   if (state.axis === 'idle') {
     const candX = state.rawX + dx;
     const candY = state.rawY + dy;
+    const topSettled =
+      state.lastScrolledDownTs <= 0 ||
+      input.timestampMs - state.lastScrolledDownTs >= TOP_ARRIVAL_SETTLE_MS;
 
-    if (!input.isCardFlipped && input.atScrollTop) {
-      // On unflipped front side at top: prioritize downward pull-to-flip over decorative horizontal wobble.
+    if (!input.isCardFlipped && input.atScrollTop && topSettled) {
+      // On unflipped front side after settling at top: prioritize downward pull-to-flip.
       if (candY >= 6 && candY > Math.abs(candX) * 1.15) {
         state.axis = 'pull_flip';
         state.rawX = 0;
         state.rawY = candY;
-      } else if (Math.abs(candX) >= 8 && Math.abs(candX) > Math.abs(candY) * 1.35) {
+      } else if (
+        Math.abs(candX) >= HORIZONTAL_LOCK_MIN_PX &&
+        Math.abs(candX) > Math.abs(candY) * HORIZONTAL_LOCK_SLOPE_RATIO
+      ) {
         state.axis = 'horizontal';
         state.rawX = candX;
         state.rawY = 0;
-      } else if (Math.hypot(candX, candY) >= 14) {
+      } else if (Math.abs(candY) >= VERTICAL_LOCK_MIN_PX || Math.hypot(candX, candY) >= 14) {
         state.verticalScrollLocked = true;
         state.rawX = 0;
         state.rawY = 0;
@@ -271,11 +316,14 @@ export function stepSwipeWheel(
           hapticPattern: null,
         };
       }
-    } else if (Math.abs(candX) > Math.abs(candY) * 1.15 && Math.abs(candX) >= 5) {
+    } else if (
+      Math.abs(candX) > Math.abs(candY) * HORIZONTAL_LOCK_SLOPE_RATIO &&
+      Math.abs(candX) >= HORIZONTAL_LOCK_MIN_PX
+    ) {
       state.axis = 'horizontal';
       state.rawX = candX;
       state.rawY = 0;
-    } else if (Math.hypot(candX, candY) >= 14) {
+    } else if (Math.abs(candY) >= VERTICAL_LOCK_MIN_PX || Math.hypot(candX, candY) >= 14) {
       // Committed to normal vertical scrolling for this gesture; lock horizontal until next gesture.
       state.verticalScrollLocked = true;
       state.rawX = 0;
@@ -283,7 +331,8 @@ export function stepSwipeWheel(
       return noOp();
     } else {
       state.rawX = candX;
-      state.rawY = candY;
+      // Do not accumulate downward pull deltas until scrolled-up settle window has elapsed.
+      state.rawY = !input.isCardFlipped && input.atScrollTop && !topSettled ? 0 : candY;
       return {
         handled: false,
         pose: computeDragVisuals(state, input.isCardFlipped),
@@ -302,7 +351,7 @@ export function stepSwipeWheel(
     state.rawY = Math.max(0, state.rawY + dy);
   }
 
-  let hapticPattern: 'alignment' | null = null;
+  let hapticPattern: SwipeHapticPattern | null = null;
 
   if (state.axis === 'horizontal') {
     if (state.lastEventTs > 0) {
@@ -320,7 +369,7 @@ export function stepSwipeWheel(
       if (absRaw >= SWIPE_COMMIT_THRESHOLD_PX) {
         if (state.hapticFiredForSide !== side) {
           state.hapticFiredForSide = side;
-          hapticPattern = 'alignment';
+          hapticPattern = 'strong';
         }
       } else if (absRaw < SWIPE_COMMIT_THRESHOLD_PX * SWIPE_HAPTIC_HYSTERESIS_RATIO) {
         state.hapticFiredForSide = null;
@@ -338,7 +387,7 @@ export function stepSwipeWheel(
     if (state.rawY >= PULL_FLIP_THRESHOLD_PX) {
       if (state.hapticFiredForSide !== 'pull') {
         state.hapticFiredForSide = 'pull';
-        hapticPattern = 'alignment';
+        hapticPattern = 'generic';
       }
     } else if (state.rawY < PULL_FLIP_THRESHOLD_PX * SWIPE_HAPTIC_HYSTERESIS_RATIO) {
       state.hapticFiredForSide = null;
@@ -363,6 +412,16 @@ function clearActiveDragFields(state: SwipeGestureState): void {
   state.verticalScrollLocked = false;
 }
 
+export function cancelActiveSwipeDrag(state: SwipeGestureState): boolean {
+  const wasActive =
+    state.axis !== 'idle' ||
+    state.rawX !== 0 ||
+    state.rawY !== 0 ||
+    state.hapticFiredForSide !== null;
+  clearActiveDragFields(state);
+  return wasActive;
+}
+
 export function stepSwipeRelease(
   state: SwipeGestureState,
   isCardFlipped: boolean,
@@ -375,6 +434,7 @@ export function stepSwipeRelease(
   const rawY = state.rawY;
   const vx = state.velocityX;
   const vy = state.velocityY;
+  const prevHapticSide = state.hapticFiredForSide;
 
   if (activeAxis === 'idle') {
     clearActiveDragFields(state);
@@ -395,10 +455,12 @@ export function stepSwipeRelease(
       rawY >= PULL_FLIP_FLICK_MIN_DISTANCE_PX && vy >= PULL_FLIP_FLICK_MIN_VELOCITY_PX_MS;
     if (!isCardFlipped && (distanceFlip || flickFlip)) {
       state.momentumLocked = true;
+      state.nativePhaseInFlight = false;
       if (!state.nativeWheelActive) {
         state.cooldownUntilTs = timestampMs + 180;
       }
-      return { kind: 'flip', pose };
+      state.commitGuardUntilTs = Math.max(state.commitGuardUntilTs, timestampMs + 140);
+      return { kind: 'flip', pose, hapticPattern: prevHapticSide === 'pull' ? null : 'generic' };
     }
     return { kind: 'spring', pose };
   }
@@ -422,8 +484,18 @@ export function stepSwipeRelease(
     // Mode A fixed directional mapping: Left = Again (1), Right = Good (3).
     const ease: 1 | 3 = dir === 'left' ? 1 : 3;
     state.momentumLocked = true;
+    state.nativePhaseInFlight = false;
+    state.committedEpoch = state.gestureEpoch;
     state.cooldownUntilTs = timestampMs + POST_COMMIT_COOLDOWN_MS;
-    return { kind: 'rate', ease, dir, pose };
+    state.commitGuardUntilTs = timestampMs + POST_COMMIT_INERTIA_GUARD_MS;
+    return {
+      kind: 'rate',
+      ease,
+      dir,
+      pose,
+      velocityX: vx,
+      hapticPattern: prevHapticSide === dir ? null : 'strong',
+    };
   }
 
   return { kind: 'spring', pose };
@@ -441,6 +513,7 @@ export function stepNativeWheelPhase(
 
   if (phase === 'mouse') {
     state.nativeDeviceIsMouse = true;
+    state.nativePhaseInFlight = false;
     if (state.axis !== 'idle') {
       clearActiveDragFields(state);
       return { kind: 'spring', pose: computeDragVisuals(state, isCardFlipped) };
@@ -449,21 +522,36 @@ export function stepNativeWheelPhase(
   }
 
   if (phase === 'begin') {
-    clearActiveDragFields(state);
     state.nativeDeviceIsMouse = false;
+    if (timestampMs < state.commitGuardUntilTs) {
+      // Ignore stray MayBegin / trailing-finger ScrollBegin during the post-commit guard
+      // window so the incoming card never absorbs the outgoing card's kinetic inertia.
+      return { kind: 'none', pose: computeDragVisuals(state, isCardFlipped) };
+    }
+    clearActiveDragFields(state);
+    state.nativePhaseInFlight = true;
+    state.gestureEpoch += 1;
     state.momentumLocked = false;
     state.cooldownUntilTs = 0;
     return { kind: 'none', pose: computeDragVisuals(state, isCardFlipped) };
   }
 
   if (phase === 'momentum') {
-    // Finger lifted into kinetic coasting: evaluate release immediately and lock inertia.
-    return stepSwipeRelease(state, isCardFlipped, timestampMs, true);
+    state.nativePhaseInFlight = false;
+    // Finger lifted into kinetic coasting: evaluate release immediately and ALWAYS lock inertia
+    // (even when axis was already idle, e.g. if ScrollEnd preceded ScrollMomentum).
+    const decision = stepSwipeRelease(state, isCardFlipped, timestampMs, true);
+    state.momentumLocked = true;
+    state.lastWheelSeenTs = Math.max(state.lastWheelSeenTs, timestampMs);
+    return decision;
   }
 
   if (phase === 'end') {
+    state.nativePhaseInFlight = false;
     if (state.axis === 'idle') {
-      state.momentumLocked = false;
+      if (timestampMs >= state.commitGuardUntilTs) {
+        state.momentumLocked = false;
+      }
       state.verticalScrollLocked = false;
       return { kind: 'none', pose: computeDragVisuals(state, isCardFlipped) };
     }
@@ -479,13 +567,24 @@ export function resetSwipeForCardChange(
   timestampMs: number,
   options?: { preserveCooldown?: boolean }
 ): void {
+  state.lastScrolledDownTs = 0;
+  state.committedEpoch = -1;
+  state.nativePhaseInFlight = false;
   clearActiveDragFields(state);
   if (options?.preserveCooldown) {
     state.momentumLocked = true;
-    state.cooldownUntilTs = Math.max(state.cooldownUntilTs, timestampMs + POST_COMMIT_COOLDOWN_MS);
-  } else {
-    state.cooldownUntilTs = Math.max(state.cooldownUntilTs, timestampMs + 140);
+    state.lastWheelSeenTs = Math.max(state.lastWheelSeenTs, timestampMs);
+    state.cooldownUntilTs = Math.max(
+      state.cooldownUntilTs,
+      timestampMs + CARD_MOUNT_GESTURE_GUARD_MS
+    );
+    state.commitGuardUntilTs = Math.max(
+      state.commitGuardUntilTs,
+      timestampMs + CARD_MOUNT_GESTURE_GUARD_MS
+    );
+    return;
   }
+  state.cooldownUntilTs = Math.max(state.cooldownUntilTs, timestampMs + 140);
 }
 
 export function hasScrollableHorizontalAncestor(

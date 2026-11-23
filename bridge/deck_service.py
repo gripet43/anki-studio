@@ -360,6 +360,12 @@ class DeckService:
         return "side" if raw == "side" else "bottom"
 
     @staticmethod
+    def _normalize_support_prompt_status(cfg: Dict[str, Any]) -> str:
+        """Normalizes one-time AnkiWeb support prompt status to a safe enum value."""
+        raw = str((cfg or {}).get("support_prompt_status") or "idle").strip().lower()
+        return raw if raw in ("idle", "liked", "feedback", "dismissed") else "idle"
+
+    @staticmethod
     def _studio_version() -> str:
         """Reads the add-on version from manifest.json (single source of truth)."""
         try:
@@ -579,10 +585,12 @@ class DeckService:
                     "reviewStageWidth": review_stage_width,
                     "reviewContentScale": review_content_scale,
                     "reviewDockPosition": review_dock_position,
+                    "reviewSwipeGestures": self._coerce_bool(cfg.get("review_swipe_gestures"), True),
                     "zenSoundEnabled": zen_sound_enabled,
                     "zenSfxVolume": zen_sfx_volume,
                     "zenAmbienceVolume": zen_ambience_volume,
                     "zenAmbience": zen_ambience,
+                    "supportPromptStatus": self._normalize_support_prompt_status(cfg),
                     "debugMode": bool(cfg.get("debug_mode", False)),
                 },
                 "vacation": {
@@ -2069,10 +2077,12 @@ class DeckService:
                 "tipsHiddenOn": str(cfg.get("dashboard_tips_hidden_on") or "").strip(),
                 "autoPlayFrontAudio": cls._normalize_review_audio_prefs(cfg)[0],
                 "autoPlayBackAudio": cls._normalize_review_audio_prefs(cfg)[1],
+                "reviewSwipeGestures": cls._coerce_bool(cfg.get("review_swipe_gestures"), True),
                 "zenSoundEnabled": cls._normalize_zen_audio_prefs(cfg)[0],
                 "zenSfxVolume": cls._normalize_zen_audio_prefs(cfg)[1],
                 "zenAmbienceVolume": cls._normalize_zen_audio_prefs(cfg)[2],
                 "zenAmbience": cls._normalize_zen_audio_prefs(cfg)[3],
+                "supportPromptStatus": cls._normalize_support_prompt_status(cfg),
                 "debugMode": bool(cfg.get("debug_mode", False)),
             },
             "vacation": {

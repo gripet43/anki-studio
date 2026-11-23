@@ -1,16 +1,23 @@
 import assert from 'node:assert/strict';
 import { section, test } from '../harness';
 import {
+  cancelActiveSwipeDrag,
   computeDragVisuals,
+  computeSwipeFlyDurationMs,
   createSwipeGestureState,
+  detectDefaultNaturalScrolling,
+  HORIZONTAL_LOCK_MIN_PX,
+  HORIZONTAL_LOCK_SLOPE_RATIO,
   PULL_FLIP_THRESHOLD_PX,
   resetSwipeForCardChange,
   stepNativeWheelPhase,
   stepSwipeRelease,
   stepSwipeWheel,
   SWIPE_COMMIT_THRESHOLD_PX,
+  TOP_ARRIVAL_SETTLE_MS,
   UNFLIPPED_MAX_WOBBLE_DEG,
   UNFLIPPED_MAX_WOBBLE_PX,
+  VERTICAL_LOCK_MIN_PX,
 } from '../../../frontend/src/utils/reviewSwipeGesture';
 
 section('ReviewSwipeGesture — macOS trackpad state machine & physics');
@@ -60,14 +67,17 @@ test('unflipped two-finger pull-down flips at threshold when at top of card', ()
     });
     assert.equal(res.handled, true);
     assert.equal(res.pose.axis, 'pull_flip');
-    if (res.hapticPattern === 'alignment') hapticCount += 1;
+    if (res.hapticPattern === 'generic') hapticCount += 1;
   }
 
   assert.ok(state.rawY >= PULL_FLIP_THRESHOLD_PX);
-  assert.equal(hapticCount, 1, 'should fire alignment haptic once at threshold');
+  assert.equal(hapticCount, 1, 'should fire firm generic haptic once at pull-flip threshold');
 
   const flipDecision = stepSwipeRelease(state, false, 2120, true);
   assert.equal(flipDecision.kind, 'flip');
+  if (flipDecision.kind === 'flip') {
+    assert.equal(flipDecision.hapticPattern, null, 'must not double-fire on release after threshold haptic');
+  }
   assert.equal(state.momentumLocked, true, 'must latch momentum lock across flip');
 
   // If pulled down while already scrolled mid-card, leave normal vertical scroll untouched
@@ -97,9 +107,9 @@ test('flipped swipe maps Left -> Again (1) and Right -> Good (3) with hysteresis
       isCardFlipped: true,
       atScrollTop: true,
     });
-    if (res.hapticPattern === 'alignment') rightHaptics += 1;
+    if (res.hapticPattern === 'strong') rightHaptics += 1;
   }
-  assert.equal(rightHaptics, 1, 'haptic should fire once on threshold cross');
+  assert.equal(rightHaptics, 1, 'strong haptic should fire once on rating threshold cross');
 
   // Slight wobble back still inside hysteresis (> 0.78 * 110 = 85.8px), then back past 110px: still 0 extra haptics
   stepSwipeWheel(rightState, {
@@ -137,13 +147,14 @@ test('flipped swipe maps Left -> Again (1) and Right -> Good (3) with hysteresis
     isCardFlipped: true,
     atScrollTop: true,
   });
-  assert.equal(reCrossAfterReset.hapticPattern, 'alignment');
+  assert.equal(reCrossAfterReset.hapticPattern, 'strong');
 
   const rateRight = stepSwipeRelease(rightState, true, 4300, true);
   assert.equal(rateRight.kind, 'rate');
   if (rateRight.kind === 'rate') {
     assert.equal(rateRight.ease, 3);
     assert.equal(rateRight.dir, 'right');
+    assert.equal(rateRight.hapticPattern, null, 'must not re-fire haptic on release after threshold cross');
     assert.ok(rateRight.pose.visualX >= SWIPE_COMMIT_THRESHOLD_PX);
   }
 
@@ -196,6 +207,13 @@ test('flipped fast flick commits below 110px while slow partial drag springs bac
   });
   const flickDecision = stepSwipeRelease(flickState, true, 6030, true);
   assert.equal(flickDecision.kind, 'rate');
+  if (flickDecision.kind === 'rate') {
+    assert.equal(
+      flickDecision.hapticPattern,
+      'strong',
+      'fast flick commit below 110px threshold should still trigger strong haptic'
+    );
+  }
 
   // Slow drag (75px total spaced 50ms apart -> ~0.30 px/ms, below 110px threshold)
   const slowState = createSwipeGestureState(false);
@@ -369,4 +387,161 @@ test('brisk macOS pull-down (e.g. -56px tick), slight diagonal pull, and post-pa
   const recovered = stepSwipeWheel(recoveryState, { deltaX: 0, deltaY: -24, deltaMode: 0, timestampMs: 12200, isCardFlipped: false, atScrollTop: true });
   assert.equal(recovered.handled, true);
   assert.equal(recovered.pose.axis, 'pull_flip');
+});
+
+test('P0 reliability: nativePhaseInFlight tracking, rapid-fire gestureEpoch, lightbox cooldown, and Windows natural scroll', () => {
+  // 1. nativePhaseInFlight tracks begin -> end/momentum/mouse accurately
+  const state = createSwipeGestureState(true);
+  assert.equal(state.nativePhaseInFlight, false);
+  stepNativeWheelPhase(state, 'begin', true, true, 100);
+  assert.equal(state.nativePhaseInFlight, true);
+  stepNativeWheelPhase(state, 'end', true, true, 120);
+  assert.equal(state.nativePhaseInFlight, false);
+
+  stepNativeWheelPhase(state, 'begin', true, true, 200);
+  assert.equal(state.nativePhaseInFlight, true);
+  stepNativeWheelPhase(state, 'mouse', true, true, 210);
+  assert.equal(state.nativePhaseInFlight, false);
+  assert.equal(state.nativeDeviceIsMouse, true);
+
+  // 2. Post-commit inertia guard: stray begin/end during fly-off or right after Card 2 mount
+  //    must NOT leak kinetic inertia onto the incoming card, while a real begin after guard unlocks cleanly.
+  const rapid = createSwipeGestureState(true);
+  stepNativeWheelPhase(rapid, 'begin', true, true, 1000);
+  stepSwipeWheel(rapid, { deltaX: -75, deltaY: 0, deltaMode: 0, timestampMs: 1016, isCardFlipped: true, atScrollTop: true });
+  stepSwipeWheel(rapid, { deltaX: -75, deltaY: 0, deltaMode: 0, timestampMs: 1032, isCardFlipped: true, atScrollTop: true });
+  const commit = stepNativeWheelPhase(rapid, 'momentum', true, true, 1040);
+  assert.equal(commit.kind, 'rate');
+  assert.ok(commit.velocityX > 0, 'rate release carries horizontal release velocityX');
+
+  // Stray ScrollBegin / finger-lift ScrollEnd during fly-off must NOT clear momentumLocked
+  stepNativeWheelPhase(rapid, 'begin', true, true, 1100);
+  stepNativeWheelPhase(rapid, 'end', true, true, 1110);
+  assert.equal(rapid.momentumLocked, true, 'stray begin/end during post-commit guard must keep inertia locked');
+  assert.equal(rapid.nativePhaseInFlight, false);
+
+  // Card 2 mounts after 115ms fly-off; lingering macOS kinetic inertia ticks must NEVER tilt Card 2
+  resetSwipeForCardChange(rapid, 1155, { preserveCooldown: true });
+  stepNativeWheelPhase(rapid, 'begin', true, false, 1180); // still within 160ms mount guard
+  const leakedInertia = stepSwipeWheel(rapid, {
+    deltaX: -65,
+    deltaY: 0,
+    deltaMode: 0,
+    timestampMs: 1200,
+    isCardFlipped: false,
+    atScrollTop: true,
+  });
+  assert.equal(leakedInertia.handled, false, 'incoming unflipped card must never tilt from previous card inertia');
+  assert.equal(rapid.axis, 'idle');
+
+  // Genuine new user gesture after 160ms mount guard (1155 + 160 = 1315) unlocks immediately without waiting 555ms
+  stepNativeWheelPhase(rapid, 'begin', true, false, 1340);
+  assert.equal(rapid.momentumLocked, false);
+  assert.equal(rapid.cooldownUntilTs, 0);
+  const card2Pull = stepSwipeWheel(rapid, {
+    deltaX: 0,
+    deltaY: -24,
+    deltaMode: 0,
+    timestampMs: 1356,
+    isCardFlipped: false,
+    atScrollTop: true,
+  });
+  assert.equal(card2Pull.handled, true);
+  assert.equal(card2Pull.pose.axis, 'pull_flip');
+
+  // Idle momentum phase (e.g. ScrollEnd preceded ScrollMomentum) must still latch momentumLocked
+  const idleMom = createSwipeGestureState(true);
+  stepNativeWheelPhase(idleMom, 'momentum', true, false, 1500);
+  assert.equal(idleMom.momentumLocked, true);
+  const blockedIdleMom = stepSwipeWheel(idleMom, {
+    deltaX: -40,
+    deltaY: 0,
+    deltaMode: 0,
+    timestampMs: 1516,
+    isCardFlipped: false,
+    atScrollTop: true,
+  });
+  assert.equal(blockedIdleMom.handled, false);
+
+  // 3. Non-commit lightbox close with preserveCooldown still latches momentumLocked + cooldown
+  const lightbox = createSwipeGestureState(true);
+  stepNativeWheelPhase(lightbox, 'begin', true, true, 2000);
+  stepNativeWheelPhase(lightbox, 'end', true, true, 2020);
+  assert.equal(lightbox.committedEpoch, -1);
+  resetSwipeForCardChange(lightbox, 2100, { preserveCooldown: true });
+  assert.equal(lightbox.momentumLocked, true);
+  assert.ok(lightbox.cooldownUntilTs >= 2240);
+
+  // 4. Windows Precision Touchpad defaults natural scrolling to true
+  const origNavDesc = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  try {
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        platform: 'Win32',
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      },
+    });
+    assert.equal(detectDefaultNaturalScrolling(), true);
+  } finally {
+    if (origNavDesc) {
+      Object.defineProperty(globalThis, 'navigator', origNavDesc);
+    } else {
+      delete (globalThis as Record<string, unknown>).navigator;
+    }
+  }
+});
+
+test('P1 physics & polish: 1.5 slope cone, top-arrival settle, velocity fly duration, and cancelActiveSwipeDrag', () => {
+  assert.equal(HORIZONTAL_LOCK_MIN_PX, 9);
+  assert.equal(HORIZONTAL_LOCK_SLOPE_RATIO, 1.5);
+  assert.equal(VERTICAL_LOCK_MIN_PX, 10);
+  assert.equal(TOP_ARRIVAL_SETTLE_MS, 220);
+
+  // Diagonal 38-deg stroke on flipped card (ratio 10/8 = 1.25 < 1.5) locks vertically instead of horizontally
+  const diag = createSwipeGestureState(true);
+  const d1 = stepSwipeWheel(diag, { deltaX: -10, deltaY: 8, deltaMode: 0, timestampMs: 1000, isCardFlipped: true, atScrollTop: true });
+  const d2 = stepSwipeWheel(diag, { deltaX: -10, deltaY: 8, deltaMode: 0, timestampMs: 1016, isCardFlipped: true, atScrollTop: true });
+  assert.equal(d1.handled, false);
+  assert.equal(d2.handled, false);
+  assert.equal(diag.verticalScrollLocked, true);
+
+  // Crisp horizontal swipe on flipped card locks horizontal immediately
+  const horiz = createSwipeGestureState(true);
+  const h1 = stepSwipeWheel(horiz, { deltaX: -10, deltaY: 2, deltaMode: 0, timestampMs: 1000, isCardFlipped: true, atScrollTop: true });
+  assert.equal(h1.handled, true);
+  assert.equal(horiz.axis, 'horizontal');
+
+  // Top-arrival settle prevents accidental pull_flip immediately after scrolling up to top
+  const settle = createSwipeGestureState(true);
+  stepSwipeWheel(settle, { deltaX: 0, deltaY: -24, deltaMode: 0, timestampMs: 1000, isCardFlipped: false, atScrollTop: false });
+  const prematurePull = stepSwipeWheel(settle, { deltaX: 0, deltaY: -18, deltaMode: 0, timestampMs: 1120, isCardFlipped: false, atScrollTop: true });
+  assert.equal(prematurePull.handled, false);
+  assert.notEqual(settle.axis, 'pull_flip');
+  // After TOP_ARRIVAL_SETTLE_MS + scroll-lock pause recovery, downward pull engages pull_flip cleanly
+  const settledPull = stepSwipeWheel(settle, { deltaX: 0, deltaY: -18, deltaMode: 0, timestampMs: 1300, isCardFlipped: false, atScrollTop: true });
+  assert.equal(settledPull.handled, true);
+  assert.equal(settledPull.pose.axis, 'pull_flip');
+
+  // Velocity-adaptive fly duration: slow -> 205ms, fast -> 115ms, monotonic
+  assert.equal(computeSwipeFlyDurationMs(0), 205);
+  assert.equal(computeSwipeFlyDurationMs(1.8), 115);
+  assert.equal(computeSwipeFlyDurationMs(-3.2), 115);
+  assert.ok(computeSwipeFlyDurationMs(0.6) > computeSwipeFlyDurationMs(1.2));
+
+  // cancelActiveSwipeDrag resets every transient field cleanly
+  const cancelState = createSwipeGestureState(true);
+  assert.equal(cancelActiveSwipeDrag(cancelState), false);
+  stepSwipeWheel(cancelState, { deltaX: -30, deltaY: 0, deltaMode: 0, timestampMs: 5000, isCardFlipped: true, atScrollTop: true });
+  stepSwipeWheel(cancelState, { deltaX: -30, deltaY: 0, deltaMode: 0, timestampMs: 5016, isCardFlipped: true, atScrollTop: true });
+  cancelState.velocityY = 0.75;
+  assert.equal(cancelActiveSwipeDrag(cancelState), true);
+  assert.equal(cancelState.axis, 'idle');
+  assert.equal(cancelState.rawX, 0);
+  assert.equal(cancelState.rawY, 0);
+  assert.equal(cancelState.velocityX, 0);
+  assert.equal(cancelState.velocityY, 0);
+  assert.equal(cancelState.lastEventTs, 0);
+  assert.equal(cancelState.hapticFiredForSide, null);
+  assert.equal(cancelActiveSwipeDrag(cancelState), false);
 });

@@ -709,6 +709,7 @@ const DASHBOARD_HTML = `<!doctype html>
       card_delete: "删除卡片",
       sandbox_compat: "原生兼容沙盒",
       image_lightbox: "图片灯箱缩放",
+      swipe_gesture: "卡片滑动手势",
       view_tuning: "复习画幅/字号",
       theme_change: "切换主题/配色",
       language_change: "切换界面语言",

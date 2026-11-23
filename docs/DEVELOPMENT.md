@@ -103,7 +103,7 @@ anki_modern_os/
 
 Anki 的 `mw.addonManager.getConfig / writeConfig` 全局共用同一份 `meta.json`。为防止不同账号的数据互串，[`bridge/profile_config.py`](../bridge/profile_config.py) 将配置严格划分为两层：
 
-- **全局偏好（存顶层）**：`theme`、`accent_color`、`language`、`show_shortcut_hints`、`show_dashboard_tips`、`continuous_card_creation`、`auto_play_front_audio`、`auto_play_back_audio`、`review_content_scale`、`review_stage_width`、`answer_button_mode` 等跨账号通用的界面习惯。
+- **全局偏好（存顶层）**：`theme`、`accent_color`、`language`、`show_shortcut_hints`、`show_dashboard_tips`、`continuous_card_creation`、`auto_play_front_audio`、`auto_play_back_audio`、`review_content_scale`、`review_stage_width`、`answer_button_mode`、`review_dock_position`、`review_swipe_gestures`、`support_prompt_status` 等跨账号通用的界面习惯。
 - **Profile 专属状态（`PROFILE_SCOPED_KEYS`，存 `profile_states[profile_key]`）**：
   - `vacation_state`、`vacation_history`、`vacation_frozen_dates`
   - `last_rescue_receipt`、`rescue_history`、`safety_ticket`

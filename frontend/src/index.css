@@ -814,6 +814,46 @@ ruby rt {
 
 .dashboard-analytics-grid {
   align-items: stretch;
+  /* Unified calm ambient chart ramp shared by the left Activity Heatmap and
+     right Weekly Rhythm bar chart. Static fallbacks apply on legacy engines;
+     modern engines upgrade via @supports to perceptual oklab mixing onto the
+     card's active paper/dark substrate (--bg-card) so both panels always share
+     the exact same warmth and restrained chroma ceiling (~68% light / 72% dark). */
+  --dashboard-chart-0: var(--heatmap-0);
+  --dashboard-chart-1: var(--heatmap-1);
+  --dashboard-chart-2: var(--heatmap-2);
+  --dashboard-chart-3: var(--heatmap-3);
+  --dashboard-chart-4: var(--heatmap-4);
+  --dashboard-chart-4-hover: var(--brand);
+  --dashboard-chart-line: var(--brand-border);
+  --dashboard-chart-pill-bg: var(--brand-soft);
+  --dashboard-chart-success-pill-bg: var(--status-success-soft);
+}
+
+@supports (color: color-mix(in oklab, red 50%, white)) {
+  .dashboard-analytics-grid {
+    --dashboard-chart-0: color-mix(in oklab, var(--border-subtle) 58%, var(--bg-card));
+    --dashboard-chart-1: color-mix(in oklab, var(--brand) 14%, var(--bg-card));
+    --dashboard-chart-2: color-mix(in oklab, var(--brand) 28%, var(--bg-card));
+    --dashboard-chart-3: color-mix(in oklab, var(--brand) 46%, var(--bg-card));
+    --dashboard-chart-4: color-mix(in oklab, var(--brand) 68%, var(--bg-card));
+    --dashboard-chart-4-hover: color-mix(in oklab, var(--brand) 80%, var(--bg-card));
+    --dashboard-chart-line: color-mix(in oklab, var(--brand) 30%, var(--bg-card));
+    --dashboard-chart-pill-bg: color-mix(in oklab, var(--brand) 11%, var(--bg-card));
+    --dashboard-chart-success-pill-bg: color-mix(in oklab, var(--status-success) 11%, var(--bg-card));
+  }
+
+  .dark .dashboard-analytics-grid {
+    --dashboard-chart-0: color-mix(in oklab, var(--border-subtle) 65%, var(--bg-card));
+    --dashboard-chart-1: color-mix(in oklab, var(--brand) 16%, var(--bg-card));
+    --dashboard-chart-2: color-mix(in oklab, var(--brand) 32%, var(--bg-card));
+    --dashboard-chart-3: color-mix(in oklab, var(--brand) 50%, var(--bg-card));
+    --dashboard-chart-4: color-mix(in oklab, var(--brand) 72%, var(--bg-card));
+    --dashboard-chart-4-hover: color-mix(in oklab, var(--brand) 84%, var(--bg-card));
+    --dashboard-chart-line: color-mix(in oklab, var(--brand) 36%, var(--bg-card));
+    --dashboard-chart-pill-bg: color-mix(in oklab, var(--brand) 16%, var(--bg-card));
+    --dashboard-chart-success-pill-bg: color-mix(in oklab, var(--status-success) 16%, var(--bg-card));
+  }
 }
 
 .dashboard-heatmap-viewport {
@@ -836,59 +876,68 @@ ruby rt {
 }
 
 .dashboard-heatmap-cell[data-level="0"] {
-  background-color: var(--heatmap-0);
-  background-color: color-mix(in oklab, var(--border-subtle) 58%, var(--bg-card));
+  background-color: var(--dashboard-chart-0);
 }
 
 .dashboard-heatmap-cell[data-level="1"] {
-  background-color: var(--heatmap-1);
-  background-color: color-mix(in oklab, var(--brand) 14%, var(--bg-card));
+  background-color: var(--dashboard-chart-1);
 }
 
 .dashboard-heatmap-cell[data-level="2"] {
-  background-color: var(--heatmap-2);
-  background-color: color-mix(in oklab, var(--brand) 28%, var(--bg-card));
+  background-color: var(--dashboard-chart-2);
 }
 
 .dashboard-heatmap-cell[data-level="3"] {
-  background-color: var(--heatmap-3);
-  background-color: color-mix(in oklab, var(--brand) 46%, var(--bg-card));
+  background-color: var(--dashboard-chart-3);
 }
 
 .dashboard-heatmap-cell[data-level="4"] {
-  background-color: var(--heatmap-4);
-  background-color: color-mix(in oklab, var(--brand) 68%, var(--bg-card));
+  background-color: var(--dashboard-chart-4);
 }
 
-.dark .dashboard-heatmap-cell[data-level="0"] {
-  background-color: var(--heatmap-0);
-  background-color: color-mix(in oklab, var(--border-subtle) 65%, var(--bg-card));
+/* Weekly Rhythm bar chart aligned 1:1 with the Heatmap's calm oklab ramp:
+   past days sit at level 2 (hover steps up to level 3), today anchors at
+   level 4 (hover deepens subtly), and the avg line & pills share the same
+   substrate-mixed warmth. */
+.dashboard-rhythm-bar {
+  background-color: var(--dashboard-chart-2);
 }
 
-.dark .dashboard-heatmap-cell[data-level="1"] {
-  background-color: var(--heatmap-1);
-  background-color: color-mix(in oklab, var(--brand) 16%, var(--bg-card));
+.dashboard-rhythm-bar[data-hovered="true"] {
+  background-color: var(--dashboard-chart-3);
 }
 
-.dark .dashboard-heatmap-cell[data-level="2"] {
-  background-color: var(--heatmap-2);
-  background-color: color-mix(in oklab, var(--brand) 32%, var(--bg-card));
+.dashboard-rhythm-bar[data-today="true"] {
+  background-color: var(--dashboard-chart-4);
 }
 
-.dark .dashboard-heatmap-cell[data-level="3"] {
-  background-color: var(--heatmap-3);
-  background-color: color-mix(in oklab, var(--brand) 50%, var(--bg-card));
+.dashboard-rhythm-bar[data-today="true"][data-hovered="true"] {
+  background-color: var(--dashboard-chart-4-hover);
 }
 
-.dark .dashboard-heatmap-cell[data-level="4"] {
-  background-color: var(--heatmap-4);
-  background-color: color-mix(in oklab, var(--brand) 72%, var(--bg-card));
+.dashboard-rhythm-avg-line {
+  border-top: 1px dashed var(--dashboard-chart-line);
+}
+
+.dashboard-chart-pill {
+  background-color: var(--dashboard-chart-pill-bg);
+  color: var(--brand-text);
+}
+
+.dashboard-chart-pill--success {
+  background-color: var(--dashboard-chart-success-pill-bg);
+  color: var(--status-success-text);
 }
 
 @media (forced-colors: active) {
-  .dashboard-heatmap-cell {
+  .dashboard-heatmap-cell,
+  .dashboard-rhythm-bar {
     border: 1px solid CanvasText;
     box-shadow: none;
+  }
+
+  .dashboard-rhythm-bar[data-today="true"] {
+    background-color: Highlight;
   }
 }
 
@@ -1992,7 +2041,7 @@ ruby rt {
     }
     100% {
       opacity: 0;
-      transform: translate3d(-115%, -18px, 0) rotate(-13deg) scale(0.95);
+      transform: translate3d(calc(-100% - 120px), -18px, 0) rotate(-13deg) scale(0.95);
     }
   }
 
@@ -2004,7 +2053,7 @@ ruby rt {
     }
     100% {
       opacity: 0;
-      transform: translate3d(115%, -18px, 0) rotate(13deg) scale(0.95);
+      transform: translate3d(calc(100% + 120px), -18px, 0) rotate(13deg) scale(0.95);
     }
   }
 
@@ -2049,6 +2098,11 @@ ruby rt {
     animation: reviewer-card-fly-right var(--swipe-fly-dur, 260ms) cubic-bezier(0.32, 0.04, 0.22, 1) both;
   }
 
+  .reviewer-card-swipe-left[data-swipe-from-gesture="true"],
+  .reviewer-card-swipe-right[data-swipe-from-gesture="true"] {
+    animation-timing-function: cubic-bezier(0.16, 0.85, 0.3, 1);
+  }
+
   [dir="rtl"] .reviewer-card-swipe-left:not([data-swipe-from-gesture="true"]) {
     animation-name: reviewer-card-fly-right;
   }
@@ -2060,9 +2114,14 @@ ruby rt {
 
 @media (prefers-reduced-motion: reduce) {
   .reviewer-card-dragging,
-  .reviewer-card-spring-back {
+  .reviewer-card-spring-back,
+  .reviewer-pull-flip-icon {
     animation: none !important;
     transition: none !important;
+  }
+  .reviewer-swipe-stamp,
+  .reviewer-pull-flip-pill {
+    will-change: opacity;
   }
 }
 
@@ -2096,6 +2155,9 @@ ruby rt {
   top: 20px;
   z-index: 20;
   pointer-events: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   border-width: 2px;
   border-style: solid;
   border-radius: 12px;
@@ -2107,6 +2169,13 @@ ruby rt {
   opacity: 0;
   visibility: hidden;
   will-change: opacity, transform;
+}
+
+.reviewer-swipe-stamp-ivl {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  opacity: 0.82;
 }
 
 .reviewer-swipe-stamp--good {
@@ -2132,8 +2201,8 @@ ruby rt {
 .reviewer-pull-flip-pill {
   position: absolute;
   left: 50%;
-  top: -16px;
-  z-index: 20;
+  top: 14px;
+  z-index: 30;
   pointer-events: none;
   display: inline-flex;
   align-items: center;
@@ -2150,13 +2219,22 @@ ruby rt {
   font-weight: 600;
   opacity: 0;
   visibility: hidden;
+  transform: translate3d(-50%, 0, 0);
   will-change: opacity, transform;
+}
+
+.reviewer-pull-flip-icon {
+  transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .reviewer-pull-flip-pill[data-ready="true"] {
   border-color: var(--brand);
   background: color-mix(in srgb, var(--brand-soft) 92%, var(--bg-surface));
   color: var(--brand-text);
+}
+
+.reviewer-pull-flip-pill[data-ready="true"] .reviewer-pull-flip-icon {
+  transform: rotate(180deg);
 }
 
 .reviewer-bottom-dock[data-gesture-active-side="left"] .reviewer-cta-again,
@@ -4001,6 +4079,8 @@ html.zen-vt-exiting::view-transition-new(root) {
   .reviewer-popover-link,
   .reviewer-complete-stat,
   .reviewer-complete-btn,
+  .reviewer-support-note,
+  .reviewer-support-btn,
   .reviewer-side-rail,
   .reviewer-inspector {
     border: 1px solid ButtonBorder;
@@ -4020,12 +4100,13 @@ html.zen-vt-exiting::view-transition-new(root) {
     outline-offset: 2px;
   }
   .reviewer-cta-btn--solid,
-  .reviewer-complete-btn--primary {
+  .reviewer-complete-btn--primary,
+  .reviewer-support-btn--primary {
     background-color: Highlight;
     color: HighlightText;
     border-color: ButtonText;
   }
-  :is(.reviewer-toolbar-btn, .reviewer-cta-btn, .reviewer-popover-item, .reviewer-scale-segment, .reviewer-complete-btn):focus-visible {
+  :is(.reviewer-toolbar-btn, .reviewer-cta-btn, .reviewer-popover-item, .reviewer-scale-segment, .reviewer-complete-btn, .reviewer-support-btn):focus-visible {
     outline: 2px solid Highlight;
   }
 }
@@ -4033,6 +4114,8 @@ html.zen-vt-exiting::view-transition-new(root) {
 /* Session Complete Celebration Card (Container Queries + Subgrid + Equal-Height Actions) */
 .reviewer-complete-main {
   display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
   flex: 1 1 auto;
   min-block-size: 0;
   overflow-y: auto;
@@ -4040,16 +4123,17 @@ html.zen-vt-exiting::view-transition-new(root) {
   align-items: safe center;
   justify-content: safe center;
   padding: clamp(1rem, 3vw, 1.75rem);
+  padding-block: clamp(0.75rem, 2vh, 1.5rem);
 }
 
 .reviewer-complete-card {
   container: session-complete / inline-size;
   inline-size: min(100%, 33.75rem);
-  padding: clamp(1.5rem, 6cqi, 2.25rem) clamp(1.25rem, 6cqi, 2.5rem);
+  padding: clamp(1.125rem, 2.5vh, 2.125rem) clamp(1.25rem, 6cqi, 2.5rem);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.5rem;
+  gap: clamp(0.875rem, 2vh, 1.45rem);
   text-align: center;
 }
 
@@ -4218,6 +4302,101 @@ html.zen-vt-exiting::view-transition-new(root) {
 .reviewer-complete-btn:focus-visible {
   outline: 2px solid var(--brand-text);
   outline-offset: 2px;
+}
+
+.reviewer-support-note {
+  inline-size: min(100%, 33.75rem);
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-card);
+  box-shadow: var(--dashboard-shadow-card);
+}
+
+.dark .reviewer-support-note {
+  border-color: rgba(255, 255, 255, 0.09);
+  background-color: #1A1B21;
+}
+
+.reviewer-support-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-block-size: 2rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-std),
+    border-color var(--dur-fast) var(--ease-std),
+    color var(--dur-fast) var(--ease-std),
+    box-shadow var(--dur-fast) var(--ease-std),
+    transform var(--dur-instant) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-std);
+}
+
+.reviewer-support-btn:focus-visible {
+  outline: 2px solid var(--brand-text);
+  outline-offset: 2px;
+}
+
+.reviewer-support-btn--tinted {
+  border: 1px solid var(--brand-border);
+  background-color: var(--brand-soft);
+  color: var(--brand-text);
+}
+
+.reviewer-support-btn--primary {
+  padding-inline: 0.875rem;
+  border: 1px solid transparent;
+  background-color: var(--brand);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.reviewer-support-btn--primary:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--brand);
+}
+
+.reviewer-support-btn--ghost {
+  padding-inline: 0.625rem;
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: var(--text-secondary);
+}
+
+.reviewer-support-btn--muted {
+  color: var(--text-muted);
+}
+
+@media (hover: hover) {
+  .reviewer-support-btn--tinted:hover {
+    background-color: var(--brand-soft-strong);
+  }
+  .reviewer-support-btn--primary:hover {
+    background-color: var(--brand-hover);
+  }
+  .reviewer-support-btn--ghost:hover {
+    background-color: var(--brand-soft);
+    color: var(--brand-text);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reviewer-support-note {
+    animation: ui-fade-in var(--dur-reveal) var(--ease-out) both;
+  }
+  .reviewer-support-btn:active {
+    transform: scale(0.98);
+  }
 }
 
 .reviewer-complete-btn--primary:focus-visible {

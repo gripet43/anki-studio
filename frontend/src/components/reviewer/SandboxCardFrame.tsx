@@ -554,6 +554,32 @@ ${preloadScriptTags}
     return false;
   }
 
+  function hasInnerVerticalScroller(target, rawDeltaY) {
+    var node = target && target.nodeType === 1 ? target : (target && target.parentElement ? target.parentElement : null);
+    while (node && node !== document.documentElement) {
+      if (node.scrollHeight > node.clientHeight + 1) {
+        var ov = '';
+        try {
+          ov = window.getComputedStyle(node).overflowY || '';
+        } catch (err) {}
+        if (ov === 'auto' || ov === 'scroll' || ov === 'overlay') {
+          var maxTop = node.scrollHeight - node.clientHeight;
+          if (rawDeltaY > 0 && node.scrollTop < maxTop - 1) return true;
+          if (rawDeltaY < 0 && node.scrollTop > 1) return true;
+          if (node.scrollTop > 1 && node.scrollTop < maxTop - 1) return true;
+        }
+      }
+      node = node.parentElement;
+    }
+    var se = document.scrollingElement || document.documentElement;
+    if (se && se.scrollHeight > se.clientHeight + 1 && se.scrollTop > 1) {
+      return true;
+    }
+    return false;
+  }
+
+  var horizPreventUntil = 0;
+
   window.addEventListener('wheel', function(e) {
     if (e.ctrlKey || e.metaKey) {
       parent.postMessage({
@@ -568,11 +594,21 @@ ${preloadScriptTags}
       t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
     );
     if (isTyping) return;
+    var now = Date.now();
     var absX = Math.abs(e.deltaX || 0);
     var absY = Math.abs(e.deltaY || 0);
+    var dy = e.deltaY || 0;
     var innerHScroll = absX >= 0.01 ? hasInnerHorizontalScroller(t, e.deltaX || 0) : false;
-    if (!innerHScroll && absX > absY * 1.1 && absX >= 0.4) {
+    var innerVScroll = absY >= 0.01 ? hasInnerVerticalScroller(t, dy) : false;
+    var strongHoriz = !innerHScroll && absX > absY * 1.35 && absX >= 0.8;
+    if (strongHoriz) {
+      horizPreventUntil = now + 220;
       e.preventDefault();
+    } else if (!innerHScroll && now < horizPreventUntil && absX >= 0.25 && absX >= absY * 0.45) {
+      horizPreventUntil = now + 180;
+      e.preventDefault();
+    } else if (absY > absX * 1.35 && absY >= 4) {
+      horizPreventUntil = 0;
     }
     parent.postMessage({
       type: 'anki-sandbox-wheel',
@@ -580,7 +616,8 @@ ${preloadScriptTags}
       deltaX: Number(e.deltaX || 0),
       deltaY: Number(e.deltaY || 0),
       deltaMode: Number(e.deltaMode || 0),
-      hasInnerHScroll: innerHScroll
+      hasInnerHScroll: innerHScroll,
+      hasInnerVScroll: innerVScroll
     }, '*');
   }, { passive: false });
 
@@ -829,6 +866,7 @@ export const SandboxCardFrame: React.FC<SandboxCardFrameProps> = ({
               deltaY: Number(data.deltaY || 0),
               deltaMode: Number(data.deltaMode || 0),
               hasInnerHScroll: Boolean(data.hasInnerHScroll),
+              hasInnerVScroll: Boolean(data.hasInnerVScroll),
             },
           })
         );

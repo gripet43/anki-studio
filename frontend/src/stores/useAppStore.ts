@@ -32,6 +32,7 @@ import {
   ReviewContentScale,
   ReviewDockPosition,
   ReviewStageWidth,
+  SupportPromptStatus,
   UserPreferences,
 } from '../bridge/pycmd';
 
@@ -50,6 +51,7 @@ export type {
   ReviewContentScale,
   ReviewDockPosition,
   ReviewStageWidth,
+  SupportPromptStatus,
 };
 import {
   AvatarImageError,
@@ -58,6 +60,7 @@ import {
   DEFAULT_CUSTOM_AVATAR,
   normalizeCustomAvatarConfig,
 } from '../utils/avatarImage';
+import { normalizeSupportPromptStatus } from '../utils/supportPrompt';
 import { EMPTY_ADVANCED_STATS, EMPTY_DASHBOARD } from '../data/mockData';
 import {
   detectBrowserLanguage,
@@ -105,6 +108,7 @@ export interface UndoSnapshot {
   previousQueue: ReviewCardItem[];
   previousDecks: DeckItem[];
   previousTodayStats: DashboardData['todayStats'];
+  previousStreak?: DashboardData['streak'];
   sessionStudied: number;
   sessionCorrect: number;
   sessionTotalTimeMs: number;
@@ -217,6 +221,10 @@ export interface AppState {
   reviewContentScale: ReviewContentScale;
   /** 学习模式操作栏位置（bottom | side）。 */
   reviewDockPosition: ReviewDockPosition;
+  /** 学习页面双指滑动快捷手势开关（默认开启）。 */
+  reviewSwipeGestures: boolean;
+  /** 复习完成页支持提示状态（全局一次性持久化）。 */
+  supportPromptStatus: SupportPromptStatus;
   envInfo: EnvInfo;
 
   // Dashboard, Decks & Statistics
@@ -391,6 +399,8 @@ const initialState: AppState = {
   reviewStageWidth: 'auto',
   reviewContentScale: 100,
   reviewDockPosition: 'bottom',
+  reviewSwipeGestures: true,
+  supportPromptStatus: 'idle',
   envInfo: {
     platform: initialPlatform,
     osName: initialPlatform === 'mac' ? 'macOS' : initialPlatform === 'win' ? 'Windows' : 'Linux',
@@ -817,6 +827,7 @@ function buildReviewUndoSnapshot(
     previousQueue: [...cur.reviewQueue],
     previousDecks: cur.decks.map((d) => ({ ...d })),
     previousTodayStats: { ...cur.dashboard.todayStats },
+    previousStreak: { ...cur.dashboard.streak },
     sessionStudied: cur.sessionStudiedCount,
     sessionCorrect: cur.sessionCorrectCount,
     sessionTotalTimeMs: cur.sessionTotalTimeMs,
@@ -1007,6 +1018,10 @@ export const appActions = {
           prefs?.reviewDockPosition === 'side' || prefs?.reviewDockPosition === 'bottom'
             ? prefs.reviewDockPosition
             : state.reviewDockPosition,
+        reviewSwipeGestures:
+          prefs?.reviewSwipeGestures !== undefined
+            ? Boolean(prefs.reviewSwipeGestures)
+            : state.reviewSwipeGestures,
         zenSoundEnabled:
           prefs?.zenSoundEnabled !== undefined
             ? Boolean(prefs.zenSoundEnabled)
@@ -1023,6 +1038,10 @@ export const appActions = {
           prefs?.zenAmbience && ['silent', 'rain', 'wind', 'warmth'].includes(prefs.zenAmbience)
             ? prefs.zenAmbience
             : state.zenAmbience,
+        supportPromptStatus:
+          prefs?.supportPromptStatus !== undefined
+            ? normalizeSupportPromptStatus(prefs.supportPromptStatus)
+            : state.supportPromptStatus,
         debugModeUnlocked: Boolean(prefs?.debugMode) || state.debugModeUnlocked,
         envInfo: dash?.envInfo || state.envInfo,
         lastSyncedTimestamp: genuineSyncTs,
@@ -1257,6 +1276,8 @@ export const appActions = {
     reviewStageWidth?: ReviewStageWidth;
     reviewContentScale?: ReviewContentScale;
     reviewDockPosition?: ReviewDockPosition;
+    reviewSwipeGestures?: boolean;
+    supportPromptStatus?: SupportPromptStatus;
   }): Promise<boolean> {
     const normalizedTheme = patch.theme !== undefined ? normalizeThemeMode(patch.theme) : undefined;
     const nextLangPref = patch.language !== undefined ? patch.language : state.languagePref;
@@ -1307,6 +1328,12 @@ export const appActions = {
       ...(patch.reviewStageWidth !== undefined ? { reviewStageWidth: patch.reviewStageWidth } : {}),
       ...(patch.reviewContentScale !== undefined ? { reviewContentScale: patch.reviewContentScale } : {}),
       ...(patch.reviewDockPosition !== undefined ? { reviewDockPosition: patch.reviewDockPosition } : {}),
+      ...(patch.reviewSwipeGestures !== undefined
+        ? { reviewSwipeGestures: Boolean(patch.reviewSwipeGestures) }
+        : {}),
+      ...(patch.supportPromptStatus !== undefined
+        ? { supportPromptStatus: normalizeSupportPromptStatus(patch.supportPromptStatus) }
+        : {}),
     });
 
     if (isAnkiNativeEnv()) {
@@ -1347,6 +1374,7 @@ export const appActions = {
           patch.reviewStageWidth !== undefined ||
           patch.reviewContentScale !== undefined ||
           patch.reviewDockPosition !== undefined ||
+          patch.reviewSwipeGestures !== undefined ||
           patch.answerButtonMode !== undefined
         ) {
           trackAnalytics('feature_use', { feature: 'view_tuning' });
@@ -3309,48 +3337,63 @@ export const appActions = {
       };
     });
 
-    setAppState((prev) => ({
-      undoStack: [...prev.undoStack, snapshot],
-      reviewQueue: rolloverMergedCards ?? continuation ?? nextQueue,
-      decks: updatedDecks,
-      currentCardIndex:
-        rolloverMergedCards !== null || continuation
-          ? 0
-          : isLastCard
-          ? prev.currentCardIndex
-          : prev.currentCardIndex + 1,
-      isSessionComplete:
-        rolloverMergedCards !== null
-          ? rolloverMergedCards.length === 0
-          : continuation
-          ? false
-          : isLastCard,
-      pendingDayRollover: rolloverMergedCards !== null ? null : prev.pendingDayRollover,
-      reviewSessionDayKey:
-        rolloverMergedCards !== null && prev.dayBoundary?.available
-          ? prev.dayBoundary.schedToday
-          : prev.reviewSessionDayKey,
-      isCardFlipped: false,
-      cardShownAtMs: Date.now(),
-      revealedHintsCount: 2,
-      sessionStudiedCount: prev.sessionStudiedCount + 1,
-      sessionCorrectCount: prev.sessionCorrectCount + (isCorrect ? 1 : 0),
-      sessionTotalTimeMs: prev.sessionTotalTimeMs + realElapsedMs,
-      dashboard: {
-        ...prev.dashboard,
+    setAppState((prev) => {
+      const nextStreak =
+        !isPreview && prev.dashboard.todayStats.completed === 0
+          ? (() => {
+              const nextCurrent = prev.dashboard.streak.current + 1;
+              return {
+                ...prev.dashboard.streak,
+                current: nextCurrent,
+                longest: Math.max(prev.dashboard.streak.longest, nextCurrent),
+              };
+            })()
+          : prev.dashboard.streak;
+
+      return {
+        undoStack: [...prev.undoStack, snapshot],
+        reviewQueue: rolloverMergedCards ?? continuation ?? nextQueue,
         decks: updatedDecks,
-        todayStats: {
-          ...prev.dashboard.todayStats,
-          completed: nextCompleted,
-          totalTodayWorkload: nextTotalWorkload,
-          dailyGoal: nextTotalWorkload,
-          remainingForGoal: nextTotalPending,
-          dueNew: nextDueNew,
-          dueReview: nextDueReview,
-          totalPending: nextTotalPending,
+        currentCardIndex:
+          rolloverMergedCards !== null || continuation
+            ? 0
+            : isLastCard
+            ? prev.currentCardIndex
+            : prev.currentCardIndex + 1,
+        isSessionComplete:
+          rolloverMergedCards !== null
+            ? rolloverMergedCards.length === 0
+            : continuation
+            ? false
+            : isLastCard,
+        pendingDayRollover: rolloverMergedCards !== null ? null : prev.pendingDayRollover,
+        reviewSessionDayKey:
+          rolloverMergedCards !== null && prev.dayBoundary?.available
+            ? prev.dayBoundary.schedToday
+            : prev.reviewSessionDayKey,
+        isCardFlipped: false,
+        cardShownAtMs: Date.now(),
+        revealedHintsCount: 2,
+        sessionStudiedCount: prev.sessionStudiedCount + 1,
+        sessionCorrectCount: prev.sessionCorrectCount + (isCorrect ? 1 : 0),
+        sessionTotalTimeMs: prev.sessionTotalTimeMs + realElapsedMs,
+        dashboard: {
+          ...prev.dashboard,
+          decks: updatedDecks,
+          streak: nextStreak,
+          todayStats: {
+            ...prev.dashboard.todayStats,
+            completed: nextCompleted,
+            totalTodayWorkload: nextTotalWorkload,
+            dailyGoal: nextTotalWorkload,
+            remainingForGoal: nextTotalPending,
+            dueNew: nextDueNew,
+            dueReview: nextDueReview,
+            totalPending: nextTotalPending,
+          },
         },
-      },
-    }));
+      };
+    });
 
     if (rolloverMergedCards !== null) {
       if (rolloverMergedCards.length > 0 && epoch === reviewTransitionEpoch && state.inReviewMode) {
@@ -3477,6 +3520,7 @@ export const appActions = {
             ...prev.dashboard,
             decks: last.previousDecks,
             todayStats: last.previousTodayStats,
+            streak: last.previousStreak ?? prev.dashboard.streak,
           },
     }));
     if (crossedDay && isAnkiNativeEnv()) {

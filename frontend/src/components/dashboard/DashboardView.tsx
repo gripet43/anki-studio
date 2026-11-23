@@ -241,10 +241,10 @@ export const DashboardView: React.FC = () => {
   const wowChangeStr = String(dashboard.heatmap.wowChange || '');
   const wowToneClass =
     wowChangeStr.includes('+') && !/\+0(?:\.0+)?%/.test(wowChangeStr)
-      ? 'bg-[var(--status-success-soft)] text-[var(--status-success-text)]'
+      ? 'dashboard-chart-pill--success'
       : wowChangeStr.includes('-')
       ? 'bg-[var(--bg-subtle)] text-[var(--text-secondary)]'
-      : 'bg-[var(--brand-soft)] text-[var(--brand-text)]';
+      : 'dashboard-chart-pill';
   const displayName = dashboard.userName
     ? /[\u4e00-\u9fff]/.test(dashboard.greeting)
       ? `，${dashboard.userName}`
@@ -1646,7 +1646,7 @@ export const DashboardView: React.FC = () => {
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-[14.5px] font-semibold tracking-tight">{t('weeklyRhythmTitle')}</h3>
                     {todayRhythmDay && (
-                      <span className="px-2 py-0.5 rounded-md bg-[var(--brand-soft)] text-[var(--brand-text)] text-[11px] font-semibold tabular-nums shrink-0">
+                      <span className="dashboard-chart-pill px-2 py-0.5 rounded-md text-[11px] font-semibold tabular-nums shrink-0">
                         {t('todayLabel')} {todayRhythmDay.count.toLocaleString()} {t('cardsUnit')}
                       </span>
                     )}
@@ -1752,7 +1752,7 @@ export const DashboardView: React.FC = () => {
                         <div
                           aria-hidden="true"
                           style={{ bottom: `${weeklyAvgLinePct}%` }}
-                          className="pointer-events-none absolute inset-x-0 border-t border-dashed border-[var(--brand)]/35 z-10"
+                          className="dashboard-rhythm-avg-line pointer-events-none absolute inset-x-0 z-10"
                         />
                       )}
 
@@ -1804,15 +1804,11 @@ export const DashboardView: React.FC = () => {
                           >
                             {day.count > 0 ? (
                               <div
-                                style={{
-                                  height: `${heightPct}%`,
-                                  backgroundColor:
-                                    day.isToday || isHovered
-                                      ? brandHex
-                                      : accentScale.brandMutedBar,
-                                }}
-                                className={`w-full max-w-[30px] rounded-t-[8px] transition-[height,background-color,opacity,transform,filter] duration-200 ${
-                                  isHovered ? 'scale-x-105 brightness-105' : ''
+                                data-today={day.isToday ? 'true' : undefined}
+                                data-hovered={isHovered ? 'true' : undefined}
+                                style={{ height: `${heightPct}%` }}
+                                className={`dashboard-rhythm-bar w-full max-w-[30px] rounded-t-[8px] transition-[height,background-color,opacity,transform] duration-200 ${
+                                  isHovered ? 'motion-safe:scale-x-[1.04]' : ''
                                 }`}
                               />
                             ) : isFutureDay ? (

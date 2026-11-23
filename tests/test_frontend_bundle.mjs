@@ -1932,4 +1932,34 @@ assert(
   'Card Library Load More button must provide immediate disabled/aria-busy/SpinnerIcon loading feedback and yield a paint frame before synchronous Qt search_cards pagination'
 );
 
+assert(
+  dashboardSrc.includes('dashboard-rhythm-bar') &&
+    dashboardSrc.includes('dashboard-rhythm-avg-line') &&
+    dashboardSrc.includes('dashboard-chart-pill') &&
+    !dashboardSrc.includes('accentScale.brandMutedBar') &&
+    cssBundle.includes('--dashboard-chart-2') &&
+    cssBundle.includes('--dashboard-chart-4') &&
+    cssBundle.includes('.dashboard-rhythm-bar'),
+  'Dashboard Weekly Rhythm chart must share the unified oklab --dashboard-chart-* ramp with the Activity Heatmap across all themes'
+);
+
+const supportUtilSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/utils/supportPrompt.ts')
+);
+const settingsModalSrc = readText(
+  path.resolve(ADDON_ROOT, 'frontend/src/components/settings/SettingsModal.tsx')
+);
+assert(
+  supportUtilSrc.includes('https://ankiweb.net/shared/info/1071937836') &&
+    !supportUtilSrc.includes('?cb=') &&
+    !settingsModalSrc.includes('?cb=') &&
+    reviewerSrc.includes('reviewer-support-note') &&
+    settingsModalSrc.includes('aboutAnkiwebLikeHint') &&
+    storeSrc.includes('supportPromptStatus') &&
+    cssBundle.includes('.reviewer-support-note') &&
+    jsBundle.includes('reviewer-support-note') &&
+    jsBundle.includes('aboutAnkiwebLikeHint'),
+  'Support prompt and About AnkiWeb like guide must be wired end-to-end with clean AnkiWeb URL in both source and compiled web/'
+);
+
 console.log('[Part 1 Guardrails + 9 UX Enhancements Audit Suite] ALL CHECKS PASSED!');

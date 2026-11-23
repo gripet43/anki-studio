@@ -295,3 +295,48 @@ test('simplified dashboard omits redundant chrome labels and zero-card placehold
   ok(html.includes('今日暂无到期卡片'), 'Completed 0/0 deck card displays single caught-up indicator');
   ok(!html.includes('最近 7 天 · 单位：张'), 'Weekly rhythm card should omit redundant subtitle');
 });
+
+test('weekly rhythm bars, avg line, and analytics pills share unified dashboard chart classes', () => {
+  const prev = getAppState();
+  try {
+    setAppState({
+      isLoading: false,
+      isInitialSyncing: false,
+      syncing: false,
+      resolvedLang: 'zh-CN',
+      accentColor: 'emerald',
+      dashboard: {
+        ...prev.dashboard,
+        vacation: { ...prev.dashboard.vacation, isActive: false },
+        heatmap: {
+          ...prev.dashboard.heatmap,
+          wowChange: '较上周 +39%',
+        },
+        weeklyRhythm: {
+          avgSecondsPerCard: 12,
+          longestSessionMinutes: 33,
+          days: [
+            { label: '一', date: '2026-11-16', count: 74, minutes: 15, isToday: false },
+            { label: '日', date: '2026-11-22', count: 68, minutes: 14, isToday: true },
+          ],
+        },
+      },
+    });
+    const html = renderToStaticMarkup(React.createElement(DashboardView));
+    ok(html.includes('dashboard-rhythm-bar'), 'Weekly rhythm bars must use .dashboard-rhythm-bar');
+    ok(html.includes('data-today="true"'), 'Today bar must expose data-today="true"');
+    ok(html.includes('dashboard-rhythm-avg-line'), 'Weekly average line must use .dashboard-rhythm-avg-line');
+    ok(html.includes('dashboard-chart-pill'), 'Today pill must use .dashboard-chart-pill');
+    ok(html.includes('dashboard-chart-pill--success'), 'Positive WoW pill must use .dashboard-chart-pill--success');
+    ok(!html.includes('background-color:#247A4F') && !html.includes('background-color:#BBE2CD'), 'Weekly rhythm bars must not hardcode inline sRGB hexes');
+  } finally {
+    setAppState({
+      isLoading: prev.isLoading,
+      isInitialSyncing: prev.isInitialSyncing,
+      syncing: prev.syncing,
+      resolvedLang: prev.resolvedLang,
+      accentColor: prev.accentColor,
+      dashboard: prev.dashboard,
+    });
+  }
+});

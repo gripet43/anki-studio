@@ -6,6 +6,22 @@
 
 ---
 
+## [v1.7.4] - 2026-11-23
+
+- **[Antigravity] 学习页 Tinder 滑动手势全面打磨（P0+P1+P2）、macOS Taptic 震动增强与飞卡惯性切卡零残留修复**（改 [`config.default.json`](config.default.json)、[`config.md`](config.md)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`bridge/router.py`](bridge/router.py)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/utils/reviewSwipeGesture.ts`](frontend/src/utils/reviewSwipeGesture.ts)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/reviewer/SandboxCardFrame.tsx`](frontend/src/components/reviewer/SandboxCardFrame.tsx)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、全量 16 语种词典、[`docs/INTERACTION.md`](docs/INTERACTION.md)、[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) 及对应前后端单测）：
+  - **飞卡惯性隔离与下一张卡片即时归位**：解决甩飞当前卡片后 macOS 触控板残余惯性与迟到相位事件泄露到下一张卡片导致新卡斜偏 `±2.2°` 的问题——同步锁死飞出期相位、切卡时 `useLayoutEffect` 同步复位变换与冷却护栏（`commitGuardUntilTs`）、无条件锁住 `momentum` 余波，并增设未翻面微晃 `180ms` / 翻面与下拉 `1400ms` 静默看门狗及窗口失焦自动回弹。
+  - **手势质感、沙盒兼容与全局开关**：拉出翻面胶囊移至外层防长卡/右侧栏裁切并配 180° 旋转指示；印章内联展示 FSRS 预测间隔并随进度动态缩放、按出手速度自适应飞出时长（`205ms → 115ms`）；收紧翻面横滑轴锁与滚回顶部防误触稳定窗，补齐沙盒内层纵向滚动感知及横向手势粘滞防回退；新增全局「触控板双指滑卡手势」开关（`review_swipe_gestures`，默认开启，覆盖 16 语种），支持「设置 → 答题设置」一键启停。
+  - **macOS 触控板震动力度增强**：[`bridge/router.py`](bridge/router.py) 将 Cocoa `NSHapticFeedbackManager` 触发时机切换为即时 `NSHapticFeedbackPerformanceTimeNow (1)`，新增 `strong` 强振模式（立即 `generic` 脉冲 + `26ms` 非阻塞二次加强脉冲），左右滑卡评分越阈升级为 `strong`、下拉翻面升级为 `generic`，并为未过线快甩提交补齐松手即时触觉反馈。
+
+- **[Antigravity] 首页「本周学习节奏」图表统一接入 oklab 语义色阶，并与热力图视觉一致**（改 [`frontend/src/components/dashboard/DashboardView.tsx`](frontend/src/components/dashboard/DashboardView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、[`tests/frontend/specs/dashboardRing.spec.ts`](tests/frontend/specs/dashboardRing.spec.ts) 与 [`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：
+  - 移除周柱状图内联 sRGB 十六进制硬编码，改为共享 `.dashboard-rhythm-bar` / `.dashboard-rhythm-avg-line` / `.dashboard-chart-pill`（`--dashboard-chart-*` oklab 色阶），在全套主题色与深浅模式下与活跃度热力图保持柔和统一。
+
+- **[Antigravity] 新增温和一次性 AnkiWeb 点赞支持引导与「关于」页支持入口**（新增 [`frontend/src/utils/supportPrompt.ts`](frontend/src/utils/supportPrompt.ts)、[`tests/frontend/specs/supportPrompt.spec.ts`](tests/frontend/specs/supportPrompt.spec.ts)；改 [`config.default.json`](config.default.json)、[`config.md`](config.md)、[`bridge/deck_service.py`](bridge/deck_service.py)、[`bridge/router.py`](bridge/router.py)、[`frontend/src/bridge/pycmd.ts`](frontend/src/bridge/pycmd.ts)、[`frontend/src/stores/useAppStore.ts`](frontend/src/stores/useAppStore.ts)、[`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/components/settings/SettingsModal.tsx`](frontend/src/components/settings/SettingsModal.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、16 语种词典与单测）：
+  - 连续学习满 3 天且完成本轮非预览复习后，在完成页展示一次性克制支持条（全局 `support_prompt_status` 持久化，点击点赞/反馈或关闭后永不再扰；中/英文自动分流小红书与 GitHub Issues 反馈渠道），同步在「设置 → 关于」提供清晰 AnkiWeb 点赞指引。
+
+- **[Antigravity] 为复习页卡片滑动手势（左滑/右滑评分与滑动翻面）补齐 `swipe_gesture` 匿名功能埋点并同步统计看板**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx) 与 [`scripts/analytics-worker/worker.js`](scripts/analytics-worker/worker.js)）：
+  - 在 `ReviewerView.tsx` 的手势评分（`triggerRateWithSwipe` 且 `fromGesture === true`）与手势翻面（`decision.kind === 'flip'`）分支上报 `swipe_gesture`（沿用按天每设备去重机制）；同步在看板 `FEATURE_NAMES` 补充「卡片滑动手势」中文映射并部署上线。
+
 ## [v1.7.3] - 2026-11-22
 
 - **[Antigravity] 学习页底栏单行三栏瘦身与外层边距自适应收紧**（改 [`frontend/src/components/reviewer/ReviewerView.tsx`](frontend/src/components/reviewer/ReviewerView.tsx)、[`frontend/src/index.css`](frontend/src/index.css)、[`tests/frontend/specs/render.spec.tsx`](tests/frontend/specs/render.spec.tsx) 与 [`tests/test_frontend_bundle.mjs`](tests/test_frontend_bundle.mjs)）：

@@ -329,6 +329,7 @@ export interface EnvInfo {
 
 export type ReviewStageWidth = 'standard' | 'auto' | 'wide' | 'full';
 export type ReviewDockPosition = 'bottom' | 'side';
+export type SupportPromptStatus = 'idle' | 'liked' | 'feedback' | 'dismissed';
 export type ReviewContentScale = 90 | 100 | 115 | 130 | 150;
 export const REVIEW_CONTENT_SCALES: readonly ReviewContentScale[] = [90, 100, 115, 130, 150] as const;
 
@@ -396,6 +397,8 @@ export interface UserPreferences {
   reviewContentScale?: ReviewContentScale;
   /** 学习模式操作栏位置：'bottom'（底部，默认）或 'side'（右侧栏）。 */
   reviewDockPosition?: ReviewDockPosition;
+  /** 学习页面双指滑动手势（左滑遗忘 / 右滑记得 / 下拉翻面），默认开启。 */
+  reviewSwipeGestures?: boolean;
   /** 禅模式音效开关（默认开启）。 */
   zenSoundEnabled?: boolean;
   /** 禅模式音效音量（0–1，默认 0.5）。 */
@@ -404,6 +407,8 @@ export interface UserPreferences {
   zenAmbienceVolume?: number;
   /** 禅模式背景声景（silent / rain / wind / warmth）。 */
   zenAmbience?: 'silent' | 'rain' | 'wind' | 'warmth';
+  /** 复习完成页支持提示状态（全局生效、一次性）。 */
+  supportPromptStatus?: SupportPromptStatus;
 }
 
 export interface SafetyWarning {
@@ -783,7 +788,7 @@ export async function callAnki<T = any>(
   });
 }
 
-export type NativeHapticPattern = 'alignment' | 'generic' | 'level_change';
+export type NativeHapticPattern = 'alignment' | 'generic' | 'level_change' | 'strong';
 
 /**
  * Fires a subtle native macOS Taptic Engine pulse (no-op on Web / Linux / Windows).

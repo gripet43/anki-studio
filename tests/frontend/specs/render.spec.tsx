@@ -29,6 +29,7 @@ import {
   ThemedDeckEmblem,
 } from '../../../frontend/src/components/common/ThemeIllustrations';
 import { ACCENT_COLOR_LIST } from '../../../frontend/src/utils/themeTokens';
+import { translate } from '../../../frontend/src/i18n/translations';
 import { getAppState, setAppState } from '../../../frontend/src/stores/useAppStore';
 import {
   ChartTooltipContent,
@@ -508,8 +509,10 @@ test('about tab renders only version info, creator info, and accessible anonymou
     ok(
       html.includes('rel="noopener noreferrer"') &&
         html.includes('github.com/gripet43/anki-studio') &&
-        html.includes('https://ankiweb.net/shared/info/1071937836?cb=1794962974753'),
-      'expected secure external links including AnkiWeb upvote link'
+        html.includes('https://ankiweb.net/shared/info/1071937836') &&
+        !html.includes('?cb=1794962974753') &&
+        html.includes(translate('zh-CN', 'aboutAnkiwebLikeHint')),
+      'expected secure external links including clean AnkiWeb upvote link and login/bottom hint'
     );
     ok(
       html.includes('type="checkbox"') && html.includes('switch=""') && html.includes('aria-describedby='),
@@ -693,11 +696,24 @@ test('ReviewerView side dock renders full-height reading stage, right control ra
     ok(unflippedHtml.includes('reviewer-side-rail'), 'expected right-side control rail');
     ok(unflippedHtml.includes('reviewer-side-stage'), 'expected full-height left reading stage');
     ok(unflippedHtml.includes('reviewer-side-cta-flip'), 'expected full-width Show Answer action in rail');
+    ok(unflippedHtml.includes('reviewer-pull-flip-icon'), 'expected rotatable pull-flip chevron icon');
+    ok(
+      unflippedHtml.indexOf('reviewer-pull-flip-pill') !== -1 &&
+        unflippedHtml.indexOf('reviewer-pull-flip-pill') <
+          unflippedHtml.indexOf('reviewer-gesture-stage'),
+      'pull-to-flip pill must mount outside scrollable stageScrollRef container'
+    );
     ok(!unflippedHtml.includes('reviewer-bottom-dock'), 'side mode must not render bottom dock');
     ok(!unflippedHtml.includes('reviewer-header'), 'side mode must not render top header bar');
 
     setAppState({ isCardFlipped: true, answerButtonMode: 'binary' });
     const binaryHtml = renderToStaticMarkup(React.createElement(ReviewerView));
+    ok(
+      binaryHtml.includes('reviewer-swipe-stamp-ivl') &&
+        binaryHtml.includes('5d') &&
+        binaryHtml.includes('&lt;10m'),
+      'swipe stamps should render FSRS interval predictions'
+    );
     ok(
       binaryHtml.includes('bg-[var(--status-success-soft)]') &&
         binaryHtml.includes('text-[var(--status-success)]'),
@@ -807,6 +823,13 @@ test('SettingsModal enforces ARIA tablist semantics, de-noised tabs, schematics,
     doesNotMatch(ansHtml, /max-w-md|1 · 2/, 'answer mode cards should span full width with schematics instead of 1 · 2 text');
     ok(ansHtml.includes('恢复默认'), 'expected contextual reset link when scale or width is customized');
     doesNotMatch(ansHtml, /揭示答案时自动播放背面音频/, 'answer audio toggles must avoid duplicate stacked subtitles');
+    ok(ansHtml.includes('触控板滑动手势'), 'expected Trackpad Swipe Gestures toggle card in Answer tab');
+    ok(
+      ansHtml.includes('class="anki-switch shrink-0"') && ansHtml.includes('aria-checked="true"'),
+      'swipe gestures switch should render as accessible enabled anki-switch'
+    );
+    doesNotMatch(ansHtml, /\btitle="/, 'SettingsModal Answer tab must never emit raw HTML title= attributes');
+    doesNotMatch(ansHtml, /backdrop-blur/, 'SettingsModal Answer tab must not mount live backdrop-blur layers');
 
     // 3. Shortcuts tab
     setAppState({ settingsInitialTab: 'shortcuts' });

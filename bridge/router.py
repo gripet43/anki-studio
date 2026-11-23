@@ -68,18 +68,22 @@ def trigger_cocoa_haptic_feedback(pattern: str = "alignment") -> bool:
     """Triggers a macOS Taptic Engine haptic pulse via NSHapticFeedbackManager.
 
     Safe no-op on non-macOS platforms or machines without AppKit haptics.
-    Uses explicit ARM64-safe `ctypes.CFUNCTYPE` signatures for `objc_msgSend`.
+    Uses explicit ARM64-safe `ctypes.CFUNCTYPE` signatures for `objc_msgSend`,
+    firing immediately via `NSHapticFeedbackPerformanceTimeNow` (= 1).
+    `"strong"` adds a tight non-blocking 26ms generic follow-up pulse for firmer feedback.
     """
     global _COCOA_HAPTIC_CACHE
     if not sys.platform.startswith("darwin"):
         return False
 
+    raw = str(pattern or "alignment").strip().lower()
     pattern_map = {
         "generic": 0,
         "alignment": 1,
         "level_change": 2,
+        "strong": 0,
     }
-    pattern_code = pattern_map.get(str(pattern or "alignment").lower(), 1)
+    pattern_code = pattern_map.get(raw, 1)
 
     try:
         import ctypes
@@ -128,11 +132,31 @@ def trigger_cocoa_haptic_feedback(pattern: str = "alignment") -> bool:
             }
 
         cache = _COCOA_HAPTIC_CACHE
-        performer = cache["msg_id"](cache["mgr_cls"], cache["sel_default"])
-        if not performer:
+
+        def _fire_once(code: int) -> bool:
+            performer = cache["msg_id"](cache["mgr_cls"], cache["sel_default"])
+            if not performer:
+                return False
+            # NSHapticFeedbackPerformanceTimeNow = 1 (fires immediately without waiting for DrawCompleted)
+            cache["msg_perform"](performer, cache["sel_perform"], code, 1)
+            return True
+
+        if not _fire_once(pattern_code):
             return False
-        # NSHapticFeedbackPerformanceTimeDefault = 0
-        cache["msg_perform"](performer, cache["sel_perform"], pattern_code, 0)
+
+        if raw == "strong":
+            try:
+                from aqt.qt import QTimer
+
+                def _reinforce() -> None:
+                    try:
+                        _fire_once(0)
+                    except Exception:
+                        pass
+
+                QTimer.singleShot(26, _reinforce)
+            except Exception:
+                pass
         return True
     except Exception:
         return False
@@ -491,10 +515,12 @@ class BridgeRouter:
             "reviewStageWidth": review_stage_width,
             "reviewContentScale": review_content_scale,
             "reviewDockPosition": review_dock_position,
+            "reviewSwipeGestures": self.deck_service._coerce_bool(cfg.get("review_swipe_gestures"), True),
             "zenSoundEnabled": zen_sound_enabled,
             "zenSfxVolume": zen_sfx_volume,
             "zenAmbienceVolume": zen_ambience_volume,
             "zenAmbience": zen_ambience,
+            "supportPromptStatus": self.deck_service._normalize_support_prompt_status(cfg),
             "envInfo": self.deck_service._resolve_platform_and_version(),
         }
 
@@ -560,6 +586,10 @@ class BridgeRouter:
         if "reviewDockPosition" in data:
             dock_pos = str(data["reviewDockPosition"] or "bottom").strip().lower()
             patch["review_dock_position"] = "side" if dock_pos == "side" else "bottom"
+        if "reviewSwipeGestures" in data:
+            patch["review_swipe_gestures"] = self.deck_service._coerce_bool(
+                data["reviewSwipeGestures"], True
+            )
         if "showDashboardTips" in data:
             show_tips = self.deck_service._coerce_bool(data["showDashboardTips"], True)
             patch["show_dashboard_tips"] = show_tips
@@ -594,6 +624,11 @@ class BridgeRouter:
             scene_val = str(data["zenAmbience"] or "silent").strip().lower()
             patch["zen_ambience"] = (
                 scene_val if scene_val in ("silent", "rain", "wind", "warmth") else "silent"
+            )
+        if "supportPromptStatus" in data:
+            status_val = str(data["supportPromptStatus"] or "idle").strip().lower()
+            patch["support_prompt_status"] = (
+                status_val if status_val in ("idle", "liked", "feedback", "dismissed") else "idle"
             )
 
         has_avatar_update = "customAvatar" in data
@@ -660,10 +695,14 @@ class BridgeRouter:
                 "reviewStageWidth": review_stage_width,
                 "reviewContentScale": review_content_scale,
                 "reviewDockPosition": self.deck_service._normalize_review_dock_position(saved),
+                "reviewSwipeGestures": self.deck_service._coerce_bool(
+                    saved.get("review_swipe_gestures"), True
+                ),
                 "zenSoundEnabled": zen_sound_enabled,
                 "zenSfxVolume": zen_sfx_volume,
                 "zenAmbienceVolume": zen_ambience_volume,
                 "zenAmbience": zen_ambience,
+                "supportPromptStatus": self.deck_service._normalize_support_prompt_status(saved),
             },
         }
 
@@ -884,6 +923,9 @@ class BridgeRouter:
                 "reviewStageWidth": review_stage_width,
                 "reviewContentScale": review_content_scale,
                 "reviewDockPosition": review_dock_position,
+                "reviewSwipeGestures": self.deck_service._coerce_bool(
+                    cfg.get("review_swipe_gestures"), True
+                ),
                 "compatMode": self.deck_service._resolve_compat_mode(cfg),
                 "sandboxNoteTypeIds": sandbox_ids,
                 "showIllustrations": self.deck_service._coerce_bool(cfg.get("show_illustrations"), True),
@@ -1154,9 +1196,9 @@ class BridgeRouter:
             return {"hidden": hidden, "applied": False}
 
     def action_trigger_haptic(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Triggers a subtle macOS Taptic Engine feedback pulse when supported."""
+        """Triggers a macOS Taptic Engine feedback pulse when supported."""
         raw_pattern = str(data.get("pattern", "alignment") or "alignment").strip().lower()
-        if raw_pattern not in {"alignment", "generic", "level_change"}:
+        if raw_pattern not in {"alignment", "generic", "level_change", "strong"}:
             raw_pattern = "alignment"
         applied = trigger_cocoa_haptic_feedback(raw_pattern)
         return {"pattern": raw_pattern, "applied": bool(applied)}

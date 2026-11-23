@@ -32,10 +32,18 @@ import {
 } from '../../utils/cardDebugInfo';
 import { getClosestFromTarget, isTypingTarget } from '../../utils/domTarget';
 import {
+  ANKIWEB_ADDON_URL,
+  openExternalUrl,
+  resolveFeedbackChannel,
+  shouldShowSupportPrompt,
+} from '../../utils/supportPrompt';
+import {
   resolveManualPlayAudioFiles,
   resolveVisibleAudioFiles,
 } from '../../utils/reviewAudio';
 import {
+  cancelActiveSwipeDrag,
+  computeSwipeFlyDurationMs,
   createSwipeGestureState,
   hasScrollableHorizontalAncestor,
   type NativeWheelPhase,
@@ -46,6 +54,8 @@ import {
   stepSwipeWheel,
   type SwipeReleaseDecision,
   type SwipeVisualPose,
+  UNFLIPPED_WOBBLE_WATCHDOG_MS,
+  WHEEL_NATIVE_WATCHDOG_MS,
   WHEEL_SILENCE_RELEASE_MS,
 } from '../../utils/reviewSwipeGesture';
 import { getAccentScale, resolveThemeMode } from '../../utils/themeTokens';
@@ -248,6 +258,8 @@ export const ReviewerView: React.FC = () => {
     reviewStageWidth,
     reviewContentScale,
     reviewDockPosition,
+    reviewSwipeGestures,
+    supportPromptStatus,
     dashboard,
     undoStack,
     dayBoundary,
@@ -283,11 +295,14 @@ export const ReviewerView: React.FC = () => {
   const [lightboxTarget, setLightboxTarget] = useState<LightboxTarget | null>(null);
   const [swipingDir, setSwipingDir] = useState<'left' | 'right' | null>(null);
   const [swipeFromGesture, setSwipeFromGesture] = useState(false);
+  const [supportPromptStage, setSupportPromptStage] = useState<'ask' | 'like' | 'feedback'>('ask');
   const [gestureFlyPose, setGestureFlyPose] = useState<SwipeVisualPose | null>(null);
+  const [gestureFlyDurMs, setGestureFlyDurMs] = useState<number>(175);
   const swipeMachineRef = useRef(createSwipeGestureState());
   const swipeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const springTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wheelSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nativeWatchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragRafRef = useRef<number | null>(null);
   const pendingPoseRef = useRef<SwipeVisualPose | null>(null);
   const reducedMotionRef = useRef<boolean>(false);
@@ -302,7 +317,7 @@ export const ReviewerView: React.FC = () => {
   const cardHeaderMetaRef = useRef<HTMLDivElement>(null);
   const pullPillRef = useRef<HTMLDivElement>(null);
   const dockFooterRef = useRef<HTMLElement>(null);
-  const lastCardChangeReasonRef = useRef<'gesture' | 'other'>('other');
+  const lastCardChangeReasonRef = useRef<'gesture' | 'already_reset' | 'other'>('other');
   const inspectorPresence = usePresence(inspectorOpen, 180);
   const lastLightboxTargetRef = useRef<LightboxTarget | null>(null);
   if (lightboxTarget) {
@@ -404,6 +419,12 @@ export const ReviewerView: React.FC = () => {
   }, [fieldsDraft, originalFieldsDraft]);
 
   useEffect(() => {
+    if (!isSessionComplete) {
+      setSupportPromptStage('ask');
+    }
+  }, [isSessionComplete]);
+
+  useEffect(() => {
     setConfirmingDelete(false);
     setConfirmingForget(false);
     closePopoverEl(audioPopoverRef.current);
@@ -425,6 +446,10 @@ export const ReviewerView: React.FC = () => {
       clearTimeout(wheelSilenceTimerRef.current);
       wheelSilenceTimerRef.current = null;
     }
+    if (nativeWatchdogTimerRef.current) {
+      clearTimeout(nativeWatchdogTimerRef.current);
+      nativeWatchdogTimerRef.current = null;
+    }
     if (dragRafRef.current !== null) {
       cancelAnimationFrame(dragRafRef.current);
       dragRafRef.current = null;
@@ -433,9 +458,12 @@ export const ReviewerView: React.FC = () => {
     setSwipingDir(null);
     setSwipeFromGesture(false);
     setGestureFlyPose(null);
-    resetSwipeForCardChange(swipeMachineRef.current, performance.now(), {
-      preserveCooldown: lastCardChangeReasonRef.current === 'gesture',
-    });
+    setGestureFlyDurMs(175);
+    if (lastCardChangeReasonRef.current !== 'already_reset') {
+      resetSwipeForCardChange(swipeMachineRef.current, performance.now(), {
+        preserveCooldown: lastCardChangeReasonRef.current === 'gesture',
+      });
+    }
     lastCardChangeReasonRef.current = 'other';
     if (dockFooterRef.current) {
       dockFooterRef.current.dataset.gestureActiveSide = 'none';
@@ -577,7 +605,10 @@ export const ReviewerView: React.FC = () => {
         const isRight = pose.direction === 'right';
         const isLeft = pose.direction === 'left';
         const stampAlpha = pose.progress > 0.08 ? Math.min(1, pose.progress * 1.15) : 0;
-        const stampScale = pose.overThreshold ? 1.04 : 0.94;
+        const stampScale = pose.overThreshold
+          ? 1.05
+          : Number((0.86 + pose.progress * 0.14).toFixed(3));
+        const reduceMotion = reducedMotionRef.current;
 
         if (cardGlowGoodRef.current) {
           cardGlowGoodRef.current.style.opacity = isRight ? pose.progress.toFixed(3) : '0';
@@ -593,7 +624,7 @@ export const ReviewerView: React.FC = () => {
           sg.style.visibility = showGood ? 'visible' : 'hidden';
           sg.dataset.visible = showGood ? 'true' : 'false';
           if (showGood) {
-            sg.style.transform = `rotate(-10deg) scale(${stampScale})`;
+            sg.style.transform = reduceMotion ? 'rotate(-10deg)' : `rotate(-10deg) scale(${stampScale})`;
           }
         }
 
@@ -604,7 +635,7 @@ export const ReviewerView: React.FC = () => {
           sa.style.visibility = showAgain ? 'visible' : 'hidden';
           sa.dataset.visible = showAgain ? 'true' : 'false';
           if (showAgain) {
-            sa.style.transform = `rotate(10deg) scale(${stampScale})`;
+            sa.style.transform = reduceMotion ? 'rotate(10deg)' : `rotate(10deg) scale(${stampScale})`;
           }
         }
 
@@ -637,9 +668,11 @@ export const ReviewerView: React.FC = () => {
           pill.dataset.visible = showPill ? 'true' : 'false';
           pill.dataset.ready = pose.pullFlipReady ? 'true' : 'false';
           if (showPill) {
-            pill.style.transform = `translate3d(-50%, ${Math.round(
-              pose.visualY * 0.42 - 8
-            )}px, 0) scale(${pose.pullFlipReady ? 1.04 : 0.96})`;
+            pill.style.transform = reducedMotionRef.current
+              ? 'translate3d(-50%, 0px, 0)'
+              : `translate3d(-50%, ${Math.round(
+                  pose.visualY * 0.42
+                )}px, 0) scale(${pose.pullFlipReady ? 1.04 : 0.96})`;
           }
         }
       } else {
@@ -727,10 +760,38 @@ export const ReviewerView: React.FC = () => {
     }
   }, [swipingDir]);
 
+  useLayoutEffect(() => {
+    resetDragDomImmediate();
+  }, [currentCard?.id, resetDragDomImmediate]);
+
+  const gestureGuardRef = useRef({
+    isSessionComplete,
+    currentCardId: currentCard?.id || '',
+    isCardFlipped,
+    inlineEditing,
+    lightboxOpen: Boolean(lightboxTarget),
+    popoverOpen: flagPopoverOpen || displayPopoverOpen || audioPopoverOpen,
+    swipingDir,
+    reviewSwipeGestures,
+  });
+  gestureGuardRef.current = {
+    isSessionComplete,
+    currentCardId: currentCard?.id || '',
+    isCardFlipped,
+    inlineEditing,
+    lightboxOpen: Boolean(lightboxTarget),
+    popoverOpen: flagPopoverOpen || displayPopoverOpen || audioPopoverOpen,
+    swipingDir,
+    reviewSwipeGestures,
+  };
+
   const triggerRateWithSwipe = useCallback(
-    (ease: 1 | 2 | 3 | 4, gesturePose?: SwipeVisualPose | null) => {
-      if (swipingDir) return;
+    (ease: 1 | 2 | 3 | 4, gesturePose?: SwipeVisualPose | null, velocityX?: number) => {
+      if (swipingDir || gestureGuardRef.current.swipingDir) return;
       const fromGesture = Boolean(gesturePose);
+      if (fromGesture) {
+        appActions.trackFeature('swipe_gesture');
+      }
       if (reducedMotionRef.current) {
         resetDragDomImmediate();
         if (fromGesture) {
@@ -757,37 +818,38 @@ export const ReviewerView: React.FC = () => {
           : ease <= 2
           ? 'left'
           : 'right';
-      const flyDurationMs = fromGesture ? 175 : 260;
+      const flyDurationMs = fromGesture ? computeSwipeFlyDurationMs(velocityX ?? 0) : 260;
+      setGestureFlyDurMs(flyDurationMs);
+      gestureGuardRef.current.swipingDir = dir;
       setSwipingDir(dir);
       swipeTimerRef.current = setTimeout(() => {
         swipeTimerRef.current = null;
+        if (dragRafRef.current !== null) {
+          cancelAnimationFrame(dragRafRef.current);
+          dragRafRef.current = null;
+        }
+        pendingPoseRef.current = null;
+        if (wheelSilenceTimerRef.current) {
+          clearTimeout(wheelSilenceTimerRef.current);
+          wheelSilenceTimerRef.current = null;
+        }
+        if (nativeWatchdogTimerRef.current) {
+          clearTimeout(nativeWatchdogTimerRef.current);
+          nativeWatchdogTimerRef.current = null;
+        }
+        resetSwipeForCardChange(swipeMachineRef.current, performance.now(), {
+          preserveCooldown: fromGesture,
+        });
+        lastCardChangeReasonRef.current = 'already_reset';
         setSwipingDir(null);
         setSwipeFromGesture(false);
         setGestureFlyPose(null);
+        setGestureFlyDurMs(175);
         appActions.answerCurrentCard(ease);
       }, flyDurationMs);
     },
     [swipingDir, resetDragDomImmediate]
   );
-
-  const gestureGuardRef = useRef({
-    isSessionComplete,
-    currentCardId: currentCard?.id || '',
-    isCardFlipped,
-    inlineEditing,
-    lightboxOpen: Boolean(lightboxTarget),
-    popoverOpen: flagPopoverOpen || displayPopoverOpen || audioPopoverOpen,
-    swipingDir,
-  });
-  gestureGuardRef.current = {
-    isSessionComplete,
-    currentCardId: currentCard?.id || '',
-    isCardFlipped,
-    inlineEditing,
-    lightboxOpen: Boolean(lightboxTarget),
-    popoverOpen: flagPopoverOpen || displayPopoverOpen || audioPopoverOpen,
-    swipingDir,
-  };
 
   const applySwipeReleaseDecision = useCallback(
     (decision: SwipeReleaseDecision) => {
@@ -795,19 +857,30 @@ export const ReviewerView: React.FC = () => {
         clearTimeout(wheelSilenceTimerRef.current);
         wheelSilenceTimerRef.current = null;
       }
+      if (nativeWatchdogTimerRef.current) {
+        clearTimeout(nativeWatchdogTimerRef.current);
+        nativeWatchdogTimerRef.current = null;
+      }
       if (decision.kind === 'rate') {
         if (dragRafRef.current !== null) {
           cancelAnimationFrame(dragRafRef.current);
           dragRafRef.current = null;
         }
         pendingPoseRef.current = null;
-        // Flush final pose stamps/glows cleanly so they stay visible during the 175ms fly-off.
+        // Flush final pose stamps/glows cleanly so they stay visible during fly-off.
         applyPoseToDom(decision.pose, true);
-        triggerRateWithSwipe(decision.ease, decision.pose);
+        if (decision.hapticPattern) {
+          triggerNativeHaptic(decision.hapticPattern);
+        }
+        triggerRateWithSwipe(decision.ease, decision.pose, decision.velocityX);
         return;
       }
       if (decision.kind === 'flip') {
+        if (decision.hapticPattern) {
+          triggerNativeHaptic(decision.hapticPattern);
+        }
         resetDragDomImmediate();
+        appActions.trackFeature('swipe_gesture');
         appActions.flipCard();
         return;
       }
@@ -822,22 +895,38 @@ export const ReviewerView: React.FC = () => {
   applySwipeReleaseRef.current = applySwipeReleaseDecision;
   const applyPoseToDomRef = useRef(applyPoseToDom);
   applyPoseToDomRef.current = applyPoseToDom;
+  const startSpringBackRef = useRef(startSpringBackDom);
+  startSpringBackRef.current = startSpringBackDom;
 
   useEffect(() => {
     if (wheelSilenceTimerRef.current) {
       clearTimeout(wheelSilenceTimerRef.current);
       wheelSilenceTimerRef.current = null;
     }
-    const machine = swipeMachineRef.current;
-    if (machine.axis !== 'idle') {
-      machine.axis = 'idle';
-      machine.rawX = 0;
-      machine.rawY = 0;
-      machine.velocityX = 0;
-      machine.hapticFiredForSide = null;
+    if (nativeWatchdogTimerRef.current) {
+      clearTimeout(nativeWatchdogTimerRef.current);
+      nativeWatchdogTimerRef.current = null;
     }
+    cancelActiveSwipeDrag(swipeMachineRef.current);
     resetDragDomImmediate();
   }, [isCardFlipped, resetDragDomImmediate]);
+
+  useEffect(() => {
+    if (reviewSwipeGestures) return;
+    if (wheelSilenceTimerRef.current) {
+      clearTimeout(wheelSilenceTimerRef.current);
+      wheelSilenceTimerRef.current = null;
+    }
+    if (nativeWatchdogTimerRef.current) {
+      clearTimeout(nativeWatchdogTimerRef.current);
+      nativeWatchdogTimerRef.current = null;
+    }
+    const machine = swipeMachineRef.current;
+    cancelActiveSwipeDrag(machine);
+    machine.nativePhaseInFlight = false;
+    machine.momentumLocked = false;
+    resetDragDomImmediate();
+  }, [reviewSwipeGestures, resetDragDomImmediate]);
 
   useEffect(() => {
     const isOpen = Boolean(lightboxTarget);
@@ -857,6 +946,7 @@ export const ReviewerView: React.FC = () => {
     const isBlocked = (eventTarget?: EventTarget | null): boolean => {
       const g = gestureGuardRef.current;
       if (
+        !g.reviewSwipeGestures ||
         g.isSessionComplete ||
         !g.currentCardId ||
         g.inlineEditing ||
@@ -912,8 +1002,33 @@ export const ReviewerView: React.FC = () => {
         clearTimeout(wheelSilenceTimerRef.current);
         wheelSilenceTimerRef.current = null;
       }
+      if (nativeWatchdogTimerRef.current) {
+        clearTimeout(nativeWatchdogTimerRef.current);
+        nativeWatchdogTimerRef.current = null;
+      }
       const machine = swipeMachineRef.current;
-      if (machine.nativeWheelActive) return;
+      if (machine.nativePhaseInFlight) {
+        // Watchdog recovery if Qt6 ScrollEnd is dropped. Unflipped horizontal wobble
+        // cannot commit, so snap it back crisply in 180ms; flipped/pull-flip allow 1400ms hold.
+        const watchdogMs =
+          !gestureGuardRef.current.isCardFlipped && machine.axis === 'horizontal'
+            ? UNFLIPPED_WOBBLE_WATCHDOG_MS
+            : WHEEL_NATIVE_WATCHDOG_MS;
+        nativeWatchdogTimerRef.current = setTimeout(() => {
+          nativeWatchdogTimerRef.current = null;
+          const m = swipeMachineRef.current;
+          if (!m.nativePhaseInFlight) return;
+          m.nativePhaseInFlight = false;
+          const decision = stepSwipeRelease(
+            m,
+            gestureGuardRef.current.isCardFlipped,
+            performance.now(),
+            false
+          );
+          applySwipeReleaseRef.current(decision);
+        }, watchdogMs);
+        return;
+      }
       wheelSilenceTimerRef.current = setTimeout(() => {
         wheelSilenceTimerRef.current = null;
         const g = gestureGuardRef.current;
@@ -921,7 +1036,7 @@ export const ReviewerView: React.FC = () => {
           swipeMachineRef.current,
           g.isCardFlipped,
           performance.now(),
-          true
+          !swipeMachineRef.current.nativeWheelActive
         );
         applySwipeReleaseRef.current(decision);
       }, WHEEL_SILENCE_RELEASE_MS);
@@ -941,6 +1056,7 @@ export const ReviewerView: React.FC = () => {
         deltaY: number;
         deltaMode: number;
         hasHorizontalScrollableAncestor: boolean;
+        hasVerticalScrollableAncestor?: boolean;
       },
       preventDefault?: () => void
     ) => {
@@ -948,8 +1064,11 @@ export const ReviewerView: React.FC = () => {
       const machine = swipeMachineRef.current;
       const stageEl = stageScrollRef.current;
       // Only read scrollTop before axis locks to avoid synchronous layout thrashing during drag.
+      const stageAtTop = stageEl ? stageEl.scrollTop <= 1 : true;
       const atScrollTop =
-        machine.axis === 'idle' ? (stageEl ? stageEl.scrollTop <= 1 : true) : true;
+        machine.axis === 'idle'
+          ? stageAtTop && !params.hasVerticalScrollableAncestor
+          : true;
       const res = stepSwipeWheel(machine, {
         deltaX: params.deltaX,
         deltaY: params.deltaY,
@@ -978,12 +1097,7 @@ export const ReviewerView: React.FC = () => {
     const notePinchActivity = () => {
       lastPinchTsRef.current = performance.now();
       const machine = swipeMachineRef.current;
-      if (machine.axis !== 'idle') {
-        machine.axis = 'idle';
-        machine.rawX = 0;
-        machine.rawY = 0;
-        machine.velocityX = 0;
-        machine.hapticFiredForSide = null;
+      if (cancelActiveSwipeDrag(machine)) {
         applySwipeReleaseRef.current({
           kind: 'spring',
           pose: {
@@ -1049,6 +1163,7 @@ export const ReviewerView: React.FC = () => {
             deltaY?: number;
             deltaMode?: number;
             hasInnerHScroll?: boolean;
+            hasInnerVScroll?: boolean;
           }
         | undefined;
       if (!detail || detail.cardId !== gestureGuardRef.current.currentCardId) return;
@@ -1058,6 +1173,7 @@ export const ReviewerView: React.FC = () => {
         deltaY: Number(detail.deltaY || 0),
         deltaMode: Number(detail.deltaMode || 0),
         hasHorizontalScrollableAncestor: Boolean(detail.hasInnerHScroll),
+        hasVerticalScrollableAncestor: Boolean(detail.hasInnerVScroll),
       });
     };
 
@@ -1066,7 +1182,22 @@ export const ReviewerView: React.FC = () => {
         | { phase?: NativeWheelPhase; inverted?: boolean }
         | undefined;
       if (!detail || !detail.phase) return;
+      if (
+        detail.phase === 'momentum' ||
+        detail.phase === 'end' ||
+        detail.phase === 'mouse'
+      ) {
+        if (nativeWatchdogTimerRef.current) {
+          clearTimeout(nativeWatchdogTimerRef.current);
+          nativeWatchdogTimerRef.current = null;
+        }
+      }
       const g = gestureGuardRef.current;
+      // While the outgoing card is mid-fly-off, ignore begin/momentum/end so stray trailing
+      // touches or finger-lift End phases never clear momentum lock before the next card mounts.
+      if (g.swipingDir !== null && detail.phase !== 'mouse') {
+        return;
+      }
       if (
         isBlocked() &&
         detail.phase !== 'begin' &&
@@ -1085,18 +1216,50 @@ export const ReviewerView: React.FC = () => {
       applySwipeReleaseRef.current(decision);
     };
 
+    const abortInFlightGesture = () => {
+      if (wheelSilenceTimerRef.current) {
+        clearTimeout(wheelSilenceTimerRef.current);
+        wheelSilenceTimerRef.current = null;
+      }
+      if (nativeWatchdogTimerRef.current) {
+        clearTimeout(nativeWatchdogTimerRef.current);
+        nativeWatchdogTimerRef.current = null;
+      }
+      if (gestureGuardRef.current.swipingDir) return;
+      const machine = swipeMachineRef.current;
+      machine.nativePhaseInFlight = false;
+      machine.momentumLocked = false;
+      if (cancelActiveSwipeDrag(machine)) {
+        startSpringBackRef.current();
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        abortInFlightGesture();
+      }
+    };
+
     window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('blur', abortInFlightGesture);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('anki:sandbox-wheel', onSandboxWheel as EventListener);
     window.addEventListener('anki:sandbox-pinch', onSandboxPinch as EventListener);
     window.addEventListener('anki:wheel-phase', onNativeWheelPhase as EventListener);
     return () => {
       window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('blur', abortInFlightGesture);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('anki:sandbox-wheel', onSandboxWheel as EventListener);
       window.removeEventListener('anki:sandbox-pinch', onSandboxPinch as EventListener);
       window.removeEventListener('anki:wheel-phase', onNativeWheelPhase as EventListener);
       if (wheelSilenceTimerRef.current) {
         clearTimeout(wheelSilenceTimerRef.current);
         wheelSilenceTimerRef.current = null;
+      }
+      if (nativeWatchdogTimerRef.current) {
+        clearTimeout(nativeWatchdogTimerRef.current);
+        nativeWatchdogTimerRef.current = null;
       }
       if (springTimerRef.current) {
         clearTimeout(springTimerRef.current);
@@ -1582,6 +1745,16 @@ export const ReviewerView: React.FC = () => {
 
   // ============== SESSION COMPLETE CELEBRATION SCREEN (Light & Dark Adapted) ==============
   if (isSessionComplete || !currentCard) {
+    const streakDays = dashboard.streak?.current ?? 0;
+    const showSupportPrompt = shouldShowSupportPrompt({
+      status: supportPromptStatus,
+      streakDays,
+      sessionStudiedCount,
+      isPreviewSession,
+      isNewDayReady,
+    });
+    const feedbackTarget = resolveFeedbackChannel(resolvedLang);
+
     return (
       <div className={`fixed inset-0 z-30 flex flex-col justify-between select-none overflow-hidden ui-view-enter ${screenBg}`}>
         <header
@@ -1736,6 +1909,150 @@ export const ReviewerView: React.FC = () => {
               )}
             </footer>
           </article>
+
+          {showSupportPrompt && (
+            <aside
+              aria-label={t('aboutAnkiwebLike')}
+              className="reviewer-support-note text-start"
+            >
+              {supportPromptStage === 'ask' && (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-7 h-7 rounded-lg bg-[var(--brand-soft)] text-[var(--status-danger-text)] flex items-center justify-center shrink-0">
+                      <svg
+                        className="w-3.5 h-3.5 shrink-0"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+                      </svg>
+                    </span>
+                    <span className="text-[12px] font-medium text-[var(--text-primary)] text-pretty">
+                      {t('supportPromptAskTitle', { days: streakDays })}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap ms-auto">
+                    <button
+                      type="button"
+                      onClick={() => setSupportPromptStage('like')}
+                      className="reviewer-support-btn reviewer-support-btn--tinted"
+                    >
+                      {t('supportPromptPositiveBtn')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSupportPromptStage('feedback')}
+                      className="reviewer-support-btn reviewer-support-btn--ghost"
+                    >
+                      {t('supportPromptNegativeBtn')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => appActions.updatePreferences({ supportPromptStatus: 'dismissed' })}
+                      className="reviewer-support-btn reviewer-support-btn--ghost reviewer-support-btn--muted"
+                    >
+                      {t('supportPromptDismissBtn')}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {supportPromptStage === 'like' && (
+                <div className="space-y-2.5">
+                  <p className="text-[12px] leading-relaxed text-[var(--text-primary)] text-pretty">
+                    {t('supportPromptLikeBody')}
+                  </p>
+                  <p className="text-[11.5px] leading-relaxed text-[var(--text-secondary)] text-pretty">
+                    {t('supportPromptLikeHint')}
+                  </p>
+                  <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        openExternalUrl(ANKIWEB_ADDON_URL);
+                        appActions.updatePreferences({ supportPromptStatus: 'liked' });
+                        showToast(t('supportPromptThanksToast'));
+                      }}
+                      className="reviewer-support-btn reviewer-support-btn--primary"
+                    >
+                      <span>{t('supportPromptLikeBtn')}</span>
+                      <svg
+                        className="w-3.5 h-3.5 shrink-0 opacity-85 rtl:scale-x-[-1]"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M7 17 17 7" />
+                        <path d="M7 7h10v10" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => appActions.updatePreferences({ supportPromptStatus: 'dismissed' })}
+                      className="reviewer-support-btn reviewer-support-btn--ghost reviewer-support-btn--muted"
+                    >
+                      {t('supportPromptLaterBtn')}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {supportPromptStage === 'feedback' && (
+                <div className="space-y-2.5">
+                  <p className="text-[12px] leading-relaxed text-[var(--text-primary)] text-pretty">
+                    {feedbackTarget.channel === 'xiaohongshu'
+                      ? t('supportPromptFeedbackBodyXhs')
+                      : t('supportPromptFeedbackBodyGithub')}
+                  </p>
+                  <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        openExternalUrl(feedbackTarget.url);
+                        appActions.updatePreferences({ supportPromptStatus: 'feedback' });
+                      }}
+                      className="reviewer-support-btn reviewer-support-btn--tinted"
+                    >
+                      <span>
+                        {feedbackTarget.channel === 'xiaohongshu'
+                          ? t('supportPromptFeedbackBtnXhs')
+                          : t('supportPromptFeedbackBtnGithub')}
+                      </span>
+                      <svg
+                        className="w-3.5 h-3.5 shrink-0 opacity-85 rtl:scale-x-[-1]"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M7 17 17 7" />
+                        <path d="M7 7h10v10" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => appActions.updatePreferences({ supportPromptStatus: 'dismissed' })}
+                      className="reviewer-support-btn reviewer-support-btn--ghost reviewer-support-btn--muted"
+                    >
+                      {t('supportPromptDismissBtn')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </aside>
+          )}
         </main>
 
         <footer
@@ -3019,6 +3336,17 @@ export const ReviewerView: React.FC = () => {
             isDark={isDark}
             inspectorOpen={inspectorOpen}
           />
+          <div
+            ref={pullPillRef}
+            role="status"
+            aria-hidden="true"
+            data-visible="false"
+            data-ready="false"
+            className="reviewer-pull-flip-pill"
+          >
+            <ChevronDownIcon className="w-3.5 h-3.5 reviewer-pull-flip-icon" />
+            <span>{t('showAnswerBtn')}</span>
+          </div>
           {/* Scrollable Center Pane for Flashcard */}
           <div
             ref={stageScrollRef}
@@ -3044,18 +3372,6 @@ export const ReviewerView: React.FC = () => {
               }
               className={`my-auto flex flex-col items-center w-full relative transition-[max-width] duration-200 ${stageMaxWidthClass}`}
             >
-              <div
-                ref={pullPillRef}
-                role="status"
-                aria-hidden="true"
-                data-visible="false"
-                data-ready="false"
-                className="reviewer-pull-flip-pill"
-              >
-                <ChevronDownIcon className="w-3.5 h-3.5" />
-                <span>{t('showAnswerBtn')}</span>
-              </div>
-
               {/* Floating Flashcard — Strict Light/Dark Adaptation + Trackpad Drag & Directional Swipe-Out */}
               <div
                 ref={cardShellRef}
@@ -3082,7 +3398,7 @@ export const ReviewerView: React.FC = () => {
                         ['--swipe-from-x' as string]: `${gestureFlyPose.visualX.toFixed(1)}px`,
                         ['--swipe-from-y' as string]: `${gestureFlyPose.visualY.toFixed(1)}px`,
                         ['--swipe-from-rot' as string]: `${gestureFlyPose.rotationDeg.toFixed(2)}deg`,
-                        ['--swipe-fly-dur' as string]: '175ms',
+                        ['--swipe-fly-dur' as string]: `${gestureFlyDurMs}ms`,
                       } as React.CSSProperties)
                     : undefined
                 }
@@ -3117,7 +3433,10 @@ export const ReviewerView: React.FC = () => {
                   data-visible="false"
                   className="reviewer-swipe-stamp reviewer-swipe-stamp--good"
                 >
-                  {t('rateGood')}
+                  <span>{t('rateGood')}</span>
+                  {currentCard.predictions?.good ? (
+                    <span className="reviewer-swipe-stamp-ivl">{currentCard.predictions.good}</span>
+                  ) : null}
                 </div>
                 <div
                   ref={stampAgainRef}
@@ -3126,7 +3445,10 @@ export const ReviewerView: React.FC = () => {
                   data-visible="false"
                   className="reviewer-swipe-stamp reviewer-swipe-stamp--again"
                 >
-                  {t('rateAgain')}
+                  <span>{t('rateAgain')}</span>
+                  {currentCard.predictions?.again ? (
+                    <span className="reviewer-swipe-stamp-ivl">{currentCard.predictions.again}</span>
+                  ) : null}
                 </div>
             {inlineEditing ? (
               <div className="space-y-4">

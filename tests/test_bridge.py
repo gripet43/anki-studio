@@ -717,6 +717,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 "reviewStageWidth": "wide",
                 "reviewContentScale": 130,
                 "reviewDockPosition": "side",
+                "reviewSwipeGestures": False,
                 "zenSoundEnabled": False,
                 "zenSfxVolume": 0.35,
                 "zenAmbienceVolume": 0.65,
@@ -737,6 +738,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(prefs_res["data"]["preferences"]["reviewStageWidth"], "wide")
         self.assertEqual(prefs_res["data"]["preferences"]["reviewContentScale"], 130)
         self.assertEqual(prefs_res["data"]["preferences"]["reviewDockPosition"], "side")
+        self.assertFalse(prefs_res["data"]["preferences"]["reviewSwipeGestures"])
         self.assertFalse(prefs_res["data"]["preferences"]["zenSoundEnabled"])
         self.assertEqual(prefs_res["data"]["preferences"]["zenSfxVolume"], 0.35)
         self.assertEqual(prefs_res["data"]["preferences"]["zenAmbienceVolume"], 0.65)
@@ -755,6 +757,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(get_prefs["data"]["reviewStageWidth"], "wide")
         self.assertEqual(get_prefs["data"]["reviewContentScale"], 130)
         self.assertEqual(get_prefs["data"]["reviewDockPosition"], "side")
+        self.assertFalse(get_prefs["data"]["reviewSwipeGestures"])
         self.assertFalse(get_prefs["data"]["zenSoundEnabled"])
         self.assertEqual(get_prefs["data"]["zenSfxVolume"], 0.35)
         self.assertEqual(get_prefs["data"]["zenAmbienceVolume"], 0.65)
@@ -769,6 +772,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertFalse(dash_prefs["autoPlayBackAudio"])
         self.assertTrue(dash_prefs["continuousCardCreation"])
         self.assertEqual(dash_prefs["reviewDockPosition"], "side")
+        self.assertFalse(dash_prefs["reviewSwipeGestures"])
         self.assertFalse(dash_prefs["zenSoundEnabled"])
         self.assertEqual(dash_prefs["zenSfxVolume"], 0.35)
         self.assertEqual(dash_prefs["zenAmbienceVolume"], 0.65)
@@ -790,6 +794,7 @@ class BridgeRouterAuditTest(unittest.TestCase):
                 "reviewStageWidth": "invalid-width",
                 "reviewContentScale": 999,
                 "reviewDockPosition": "invalid-pos",
+                "reviewSwipeGestures": "1",
             },
         )
         self.assertEqual(fallback_res["data"]["preferences"]["theme"], "auto")
@@ -798,6 +803,12 @@ class BridgeRouterAuditTest(unittest.TestCase):
         self.assertEqual(fallback_res["data"]["preferences"]["reviewStageWidth"], "auto")
         self.assertEqual(fallback_res["data"]["preferences"]["reviewContentScale"], 100)
         self.assertEqual(fallback_res["data"]["preferences"]["reviewDockPosition"], "bottom")
+        self.assertTrue(fallback_res["data"]["preferences"]["reviewSwipeGestures"])
+        self.assertFalse(
+            self._call("save_preferences", {"reviewSwipeGestures": "false"})["data"]["preferences"][
+                "reviewSwipeGestures"
+            ]
+        )
 
         batch_unsuspend = self._call("batch_action", {"actionType": "unsuspend", "cardIds": ["201"]})
         self.assertEqual(batch_unsuspend["status"], "success")
@@ -894,6 +905,16 @@ class BridgeRouterAuditTest(unittest.TestCase):
             self.assertEqual(res_hap["data"]["pattern"], "alignment")
             self.assertTrue(res_hap["data"]["applied"])
             mocked_haptic.assert_called_once_with("alignment")
+
+            res_hap_strong = self._call("trigger_haptic", {"pattern": "strong"})
+            self.assertEqual(res_hap_strong["status"], "success")
+            self.assertEqual(res_hap_strong["data"]["pattern"], "strong")
+            self.assertTrue(res_hap_strong["data"]["applied"])
+
+            res_hap_generic = self._call("trigger_haptic", {"pattern": "generic"})
+            self.assertEqual(res_hap_generic["status"], "success")
+            self.assertEqual(res_hap_generic["data"]["pattern"], "generic")
+            self.assertTrue(res_hap_generic["data"]["applied"])
 
             res_hap_bad = self._call("trigger_haptic", {"pattern": "invalid_xyz"})
             self.assertEqual(res_hap_bad["status"], "success")
@@ -4856,6 +4877,27 @@ class BridgeRouterAuditTest(unittest.TestCase):
             self.assertEqual([c["id"] for c in p_front["cards"]], ["501", "502", "503"])
         finally:
             conn.close()
+
+    def test_55_support_prompt_status_global_persistence(self):
+        """support_prompt_status must persist globally across profiles and sanitize invalid values to idle."""
+        from anki_modern_os.bridge.profile_config import PROFILE_SCOPED_KEYS
+
+        self.assertNotIn("support_prompt_status", PROFILE_SCOPED_KEYS)
+        self.assertEqual(self._call("get_preferences")["data"]["supportPromptStatus"], "idle")
+        self.assertEqual(self._call("get_dashboard")["data"]["preferences"]["supportPromptStatus"], "idle")
+
+        for valid_status in ("liked", "feedback", "dismissed"):
+            saved = self._call("save_preferences", {"supportPromptStatus": valid_status})
+            self.assertEqual(saved["status"], "success")
+            self.assertEqual(saved["data"]["preferences"]["supportPromptStatus"], valid_status)
+            self.assertEqual(self._call("get_preferences")["data"]["supportPromptStatus"], valid_status)
+            self.assertEqual(self._call("get_dashboard")["data"]["preferences"]["supportPromptStatus"], valid_status)
+            self.assertEqual(self.config_store.get("support_prompt_status"), valid_status)
+
+        bad = self._call("save_preferences", {"supportPromptStatus": "not-valid"})
+        self.assertEqual(bad["status"], "success")
+        self.assertEqual(bad["data"]["preferences"]["supportPromptStatus"], "idle")
+        self.assertEqual(self.config_store.get("support_prompt_status"), "idle")
 
 
 if __name__ == "__main__":

@@ -46,12 +46,12 @@ import {
   getAccentScale,
   resolveThemeMode,
 } from '../../utils/themeTokens';
-
-const XIAOHONGSHU_PROFILE_URL =
-  'https://www.xiaohongshu.com/user/profile/6496d6f8000000001001ff0f';
-const GITHUB_REPO_URL = 'https://github.com/gripet43/anki-studio';
-const ANKIWEB_ADDON_URL =
-  'https://ankiweb.net/shared/info/1071937836?cb=1794962974753';
+import {
+  ANKIWEB_ADDON_URL,
+  GITHUB_REPO_URL,
+  openExternalUrl,
+  XIAOHONGSHU_PROFILE_URL,
+} from '../../utils/supportPrompt';
 
 type SettingsTab = 'appearance' | 'answer' | 'shortcuts' | 'sync' | 'maintenance' | 'native' | 'about';
 
@@ -193,6 +193,8 @@ export const SettingsModal: React.FC = () => {
     reviewStageWidth,
     reviewContentScale,
     reviewDockPosition,
+    reviewSwipeGestures,
+    supportPromptStatus,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(settingsInitialTab || 'appearance');
@@ -225,6 +227,8 @@ export const SettingsModal: React.FC = () => {
   const tipsDescId = useId();
   const frontAudioSwitchId = useId();
   const backAudioSwitchId = useId();
+  const swipeGesturesSwitchId = useId();
+  const swipeGesturesDescId = useId();
   const shortcutHintsSwitchId = useId();
   const shortcutHintsDescId = useId();
   const analyticsSwitchId = useId();
@@ -232,18 +236,9 @@ export const SettingsModal: React.FC = () => {
 
   const supportsNativeSwitch =
     typeof HTMLInputElement !== 'undefined' && 'switch' in HTMLInputElement.prototype;
-  const studioVersion = envInfo.studioVersion || '1.7.2';
+  const studioVersion = envInfo.studioVersion || '1.7.4';
   const t = (key: any, params?: Record<string, string | number>) =>
     translate(resolvedLang, key, params);
-
-  // Open external URLs in the system browser because Qt WebView loads from file://
-  const openExternal = (url: string) => {
-    if (isAnkiNativeEnv()) {
-      callAnki('open_external_url', { url }).catch(() => {});
-    } else if (typeof window !== 'undefined') {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    }
-  };
 
   useEffect(() => {
     if (settingsOpen && settingsInitialTab) {
@@ -1399,6 +1394,40 @@ export const SettingsModal: React.FC = () => {
                   </div>
                 </div>
               </article>
+
+              {/* Toggle Switch Card: Trackpad Swipe Gestures */}
+              <article className={`rounded-xl border px-4 py-3.5 flex items-center justify-between gap-4 ${cardSurface}`}>
+                <div className="space-y-0.5 min-w-0">
+                  <label
+                    htmlFor={swipeGesturesSwitchId}
+                    className="block text-[13px] font-semibold cursor-pointer settings-heading"
+                  >
+                    {t('settingsReviewSwipeGesturesTitle')}
+                  </label>
+                  <p
+                    id={swipeGesturesDescId}
+                    className={`text-[11.5px] ${subText} leading-snug settings-helper-copy`}
+                  >
+                    {t('settingsReviewSwipeGesturesSub')}
+                  </p>
+                </div>
+
+                <input
+                  id={swipeGesturesSwitchId}
+                  type="checkbox"
+                  checked={reviewSwipeGestures}
+                  onChange={(e) => {
+                    appActions.updatePreferences({ reviewSwipeGestures: e.target.checked });
+                  }}
+                  aria-describedby={swipeGesturesDescId}
+                  {...({ switch: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+                  {...(supportsNativeSwitch
+                    ? {}
+                    : { role: 'switch', 'aria-checked': reviewSwipeGestures })}
+                  data-switch-fallback={supportsNativeSwitch ? 'false' : 'true'}
+                  className="anki-switch shrink-0"
+                />
+              </article>
             </div>
           )}
 
@@ -2008,9 +2037,33 @@ export const SettingsModal: React.FC = () => {
                 <ul role="list" className="about-creator-links">
                   {[
                     {
+                      key: 'aboutAnkiwebLike' as const,
+                      url: ANKIWEB_ADDON_URL,
+                      variant: 'primary' as const,
+                      onOpen: () => {
+                        if (supportPromptStatus === 'idle') {
+                          appActions.updatePreferences({ supportPromptStatus: 'liked' });
+                        }
+                      },
+                      icon: (
+                        <svg
+                          className="w-3.5 h-3.5 shrink-0 text-[var(--status-danger-text)] transition-transform duration-150 motion-safe:group-hover:scale-110 motion-reduce:transition-none"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+                        </svg>
+                      ),
+                    },
+                    {
                       key: 'aboutXiaohongshu' as const,
                       url: XIAOHONGSHU_PROFILE_URL,
-                      variant: 'primary' as const,
+                      variant: 'neutral' as const,
                       icon: (
                         <svg
                           className="w-3.5 h-3.5 shrink-0 opacity-85"
@@ -2042,25 +2095,6 @@ export const SettingsModal: React.FC = () => {
                         </svg>
                       ),
                     },
-                    {
-                      key: 'aboutAnkiwebLike' as const,
-                      url: ANKIWEB_ADDON_URL,
-                      variant: 'like' as const,
-                      icon: (
-                        <svg
-                          className="w-3.5 h-3.5 shrink-0 text-[var(--status-danger-text)] transition-transform duration-150 group-hover:scale-110 motion-reduce:transition-none motion-reduce:transform-none"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-                        </svg>
-                      ),
-                    },
                   ].map((link) => (
                     <li key={link.key}>
                       <a
@@ -2069,7 +2103,8 @@ export const SettingsModal: React.FC = () => {
                         rel="noopener noreferrer"
                         onClick={(e) => {
                           e.preventDefault();
-                          openExternal(link.url);
+                          openExternalUrl(link.url);
+                          link.onOpen?.();
                         }}
                         className={`group about-creator-link rounded-xl border text-[12px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand-text)] focus-visible:outline-offset-2 ${
                           link.variant === 'primary'
@@ -2101,6 +2136,10 @@ export const SettingsModal: React.FC = () => {
                     </li>
                   ))}
                 </ul>
+
+                <p className={`mt-2.5 text-[11.5px] leading-relaxed ${subText} text-pretty`}>
+                  {t('aboutAnkiwebLikeHint')}
+                </p>
               </article>
 
               {/* Anonymous Feedback Settings Card */}

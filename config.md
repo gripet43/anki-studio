@@ -41,12 +41,16 @@
 - `sandbox_notetype_ids`：历史按卡型记录的兼容模式 ID 数组（保留用于向后兼容与升级迁移，一般不需要手动修改）。
 - `review_dock_position`：`"bottom"` | `"side"`（默认 `"bottom"`）
   学习页面操作栏位置。设为 `"side"` 时，控制区与评分按钮会固定在右侧栏，让左侧卡片阅读区域获得接近全屏高度的纵向阅读空间。
+- `review_swipe_gestures`：`true` / `false`（默认 `true`）
+  学习页面双指滑动快捷手势开关（未翻面下拉翻面、翻面后左滑遗忘 / 右滑记得）。关闭后仅保留常规上下滚动与按钮/键盘操作。
 - `zen_sound_enabled`：`true` / `false`（默认 `true`）
   禅模式仪式与触感音效开关（燃香、颂钵、法鼓、和纸翻面与落卡声），与环境声景独立控制。
 - `zen_sfx_volume` / `zen_ambience_volume`：`0.0` ~ `1.0`（默认 `0.5`）
   禅模式仪式音效与背景环境声景的独立音量。
 - `zen_ambience`：`"silent"` | `"rain"` | `"wind"` | `"warmth"`（默认 `"silent"`）
   禅模式可选离线环境声景（静默 / 檐雨 / 松风 / 暖寂），退出禅模式时淡出、再次进入时自动恢复。
+- `support_prompt_status`：`"idle"` | `"liked"` | `"feedback"` | `"dismissed"`（默认 `"idle"`）
+  复习完成页支持提示的一次性状态（全局生效、跨账号共享）；交互或关闭后自动写入，不再重复打扰。
 
 ## 匿名使用统计（可选）
 
